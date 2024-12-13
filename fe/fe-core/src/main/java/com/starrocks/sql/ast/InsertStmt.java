@@ -29,6 +29,10 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.Arrays;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -53,6 +57,10 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTY_MATCH_COLUMN_BY = "match_column_by";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
@@ -63,6 +71,10 @@ public class InsertStmt extends DmlStmt {
     private boolean usePartialUpdate = false;
     private QueryStatement queryStatement;
     private String label = null;
+<<<<<<< HEAD
+=======
+    private String targetBranch = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // set after parse all columns and expr in query statement
     // this result expr in the order of target table's columns
@@ -95,6 +107,7 @@ public class InsertStmt extends DmlStmt {
 
     private boolean isVersionOverwrite = false;
 
+<<<<<<< HEAD
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
         this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
@@ -102,6 +115,17 @@ public class InsertStmt extends DmlStmt {
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+=======
+    // column match by position or name
+    private ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.POSITION;
+
+    // create partition if not exists
+    private boolean isDynamicOverwrite = false;
+
+    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
+                      QueryStatement queryStatement, boolean isOverwrite, Map<String, String> insertProperties,
+                      NodePosition pos) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -109,6 +133,10 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
         this.isOverwrite = isOverwrite;
+<<<<<<< HEAD
+=======
+        this.properties.putAll(insertProperties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
@@ -184,6 +212,17 @@ public class InsertStmt extends DmlStmt {
         return isVersionOverwrite;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsDynamicOverwrite(boolean isDynamicOverwrite) {
+        this.isDynamicOverwrite = isDynamicOverwrite;
+    }
+
+    public boolean isDynamicOverwrite() {
+        return isDynamicOverwrite;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
@@ -255,6 +294,17 @@ public class InsertStmt extends DmlStmt {
         this.targetPartitionIds = targetPartitionIds;
     }
 
+<<<<<<< HEAD
+=======
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Long> getTargetPartitionIds() {
         return targetPartitionIds;
     }
@@ -327,4 +377,37 @@ public class InsertStmt extends DmlStmt {
         List<Column> columns = collectSelectedFieldsFromQueryStatement();
         return new TableFunctionTable(columns, getTableFunctionProperties(), sessionVariable);
     }
+<<<<<<< HEAD
+=======
+
+    public enum ColumnMatchPolicy {
+        POSITION,
+        NAME;
+
+        public static ColumnMatchPolicy fromString(String value) {
+            for (ColumnMatchPolicy policy : values()) {
+                if (policy.name().equalsIgnoreCase(value)) {
+                    return policy;
+                }
+            }
+            return null;
+        }
+
+        public static List<String> getCandidates() {
+            return Arrays.stream(values()).map(p -> p.name().toLowerCase()).collect(Collectors.toList());
+        }
+    }
+
+    public boolean isColumnMatchByPosition() {
+        return columnMatchPolicy == ColumnMatchPolicy.POSITION;
+    }
+
+    public boolean isColumnMatchByName() {
+        return columnMatchPolicy == ColumnMatchPolicy.NAME;
+    }
+
+    public void setColumnMatchPolicy(ColumnMatchPolicy columnMatchPolicy) {
+        this.columnMatchPolicy = columnMatchPolicy;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

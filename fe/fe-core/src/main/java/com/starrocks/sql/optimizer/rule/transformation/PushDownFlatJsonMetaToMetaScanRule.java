@@ -105,8 +105,15 @@ public class PushDownFlatJsonMetaToMetaScanRule extends TransformationRule {
             newAggGroupBys.add(metaRef);
         }
 
+<<<<<<< HEAD
         LogicalMetaScanOperator newMetaScan =
                 new LogicalMetaScanOperator(metaScan.getTable(), newScanColumnRefs, aggColumnIdToNames);
+=======
+        LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder().withOperator(metaScan)
+                .setColRefToColumnMetaMap(newScanColumnRefs)
+                .setAggColumnIdToNames(aggColumnIdToNames)
+                .build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(
                 agg.getType(), newAggGroupBys, newAggCalls);

@@ -59,6 +59,10 @@ private:
     bool _is_sink_complete = false;
 
     ChunksPartitionerPtr _chunks_partitioner;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<MemPool> _mem_pool;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ChunkPipelineAccumulator _acc;
 };

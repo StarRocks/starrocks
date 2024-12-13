@@ -12,16 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Strings;
+=======
+package com.starrocks.connector.hive;
+
+import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.Table;
@@ -29,6 +39,10 @@ import com.starrocks.connector.CacheUpdateProcessor;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.RemoteFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.RemoteFileScanContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
@@ -95,10 +109,16 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
 
     @Override
     public void refreshTable(String dbName, Table table, boolean onlyCachedPartitions) {
+<<<<<<< HEAD
         if (table instanceof HiveMetaStoreTable) {
             HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
             metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
             refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions);
+=======
+        if (table.isHMSTable()) {
+            metastore.refreshTable(table.getCatalogDBName(), table.getCatalogTableName(), onlyCachedPartitions);
+            refreshRemoteFiles(table, Operator.UPDATE, getExistPaths(table), onlyCachedPartitions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
                 processSchemaChange(dbName, (HiveTable) table);
             }
@@ -109,22 +129,38 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
     }
 
     public void refreshTableBackground(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
+<<<<<<< HEAD
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         List<HivePartitionName> refreshPartitionNames = metastore.refreshTableBackground(
                 hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
 
         if (refreshPartitionNames != null) {
             Map<BasePartitionInfo, Partition> updatedPartitions = getUpdatedPartitions(hmsTbl, refreshPartitionNames);
+=======
+        List<HivePartitionName> refreshPartitionNames = metastore.refreshTableBackground(
+                table.getCatalogDBName(), table.getCatalogTableName(), onlyCachedPartitions);
+
+        if (refreshPartitionNames != null) {
+            Map<BasePartitionInfo, Partition> updatedPartitions = getUpdatedPartitions(table, refreshPartitionNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!updatedPartitions.isEmpty()) {
                 // update partition remote files cache
                 List<String> updatedPaths = updatedPartitions.values().stream().map(Partition::getFullPath)
                         .map(path -> path.endsWith("/") ? path : path + "/")
                         .collect(Collectors.toList());
+<<<<<<< HEAD
                 refreshRemoteFilesBackground(hmsTbl.getTableLocation(), updatedPaths, onlyCachedPartitions, executor);
 
                 LOG.info("{}.{}.{} partitions has updated, updated partition size is {}, " +
                                 "refresh partition and file success", hmsTbl.getCatalogName(), hmsTbl.getDbName(),
                         hmsTbl.getTableName(), updatedPartitions.size());
+=======
+                refreshRemoteFilesBackground(table, updatedPaths, onlyCachedPartitions, executor);
+
+                LOG.info("{}.{}.{} partitions has updated, updated partition size is {}, " +
+                                "refresh partition and file success", table.getCatalogName(), table.getCatalogDBName(),
+                        table.getCatalogTableName(), updatedPartitions.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             // update partitionUpdatedTimes
@@ -145,10 +181,16 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         }
     }
 
+<<<<<<< HEAD
     private Map<BasePartitionInfo, Partition> getUpdatedPartitions(HiveMetaStoreTable table,
                                                                    List<HivePartitionName> refreshPartitionNames) {
         String dbName = table.getDbName();
         String tblName = table.getTableName();
+=======
+    private Map<BasePartitionInfo, Partition> getUpdatedPartitions(Table table, List<HivePartitionName> refreshPartitionNames) {
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<BasePartitionInfo, Partition> toCheckUpdatedPartitionInfoMap = Maps.newHashMap();
         if (table.isUnPartitioned()) {
@@ -160,7 +202,11 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             for (Map.Entry<HivePartitionName, Partition> partitionEntry : partitions.entrySet()) {
                 Optional<String> partitionName = partitionEntry.getKey().getPartitionNames();
                 partitionName.ifPresent(s -> toCheckUpdatedPartitionInfoMap.put(new BasePartitionInfo(dbName, tblName, s),
+<<<<<<< HEAD
                                 partitionEntry.getValue()));
+=======
+                        partitionEntry.getValue()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -180,10 +226,17 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         return updatedPartitions;
     }
 
+<<<<<<< HEAD
     private List<String> getExistPaths(HiveMetaStoreTable table) {
         List<String> existPaths;
         String dbName = table.getDbName();
         String tblName = table.getTableName();
+=======
+    private List<String> getExistPaths(Table table) {
+        List<String> existPaths;
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (table.isUnPartitioned()) {
             String path = metastore.getPartition(dbName, tblName, Lists.newArrayList()).getFullPath();
@@ -201,9 +254,14 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
     }
 
     public void refreshPartition(Table table, List<String> hivePartitionNames) {
+<<<<<<< HEAD
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
         String hiveDbName = hmsTable.getDbName();
         String hiveTableName = hmsTable.getTableName();
+=======
+        String hiveDbName = table.getCatalogDBName();
+        String hiveTableName = table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<HivePartitionName> partitionNames = hivePartitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(hiveDbName, hiveTableName, partitionName))
                 .collect(Collectors.toList());
@@ -211,18 +269,33 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
 
         if (remoteFileIO.isPresent()) {
             Map<String, Partition> partitions = metastore.getPartitionsByNames(hiveDbName, hiveTableName, hivePartitionNames);
+<<<<<<< HEAD
             Optional<String> hudiBasePath = table.isHiveTable() ? Optional.empty() : Optional.of(hmsTable.getTableLocation());
             List<RemotePathKey> remotePathKeys = partitions.values().stream()
                     .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiBasePath))
                     .collect(Collectors.toList());
             remotePathKeys.forEach(path -> remoteFileIO.get().updateRemoteFiles(path));
+=======
+            List<RemotePathKey> remotePathKeys = partitions.values().stream()
+                    .map(partition -> RemotePathKey.of(partition.getFullPath(), isRecursive))
+                    .collect(Collectors.toList());
+            RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
+            remotePathKeys.forEach(path -> {
+                path.setScanContext(scanContext);
+                remoteFileIO.get().updateRemoteFiles(path);
+            });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     private void processSchemaChange(String srDbName, HiveTable hiveTable) {
         boolean isSchemaChange = false;
         HiveTable resourceMappingCatalogTable = (HiveTable) metastore.getTable(
+<<<<<<< HEAD
                 hiveTable.getDbName(), hiveTable.getTableName());
+=======
+                hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Column column : resourceMappingCatalogTable.getColumns()) {
             Column baseColumn = hiveTable.getColumn(column.getName());
             if (baseColumn == null) {
@@ -240,13 +313,21 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         }
     }
 
+<<<<<<< HEAD
     private void refreshRemoteFilesBackground(String tableLocation, List<String> updatePaths,
+=======
+    private void refreshRemoteFilesBackground(Table table, List<String> updatePaths,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                               boolean onlyCachedPartitions, ExecutorService refreshExecutor) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey = updatePaths.stream().map(path -> RemotePathKey.of(path, isRecursive))
                     .collect(Collectors.toList());
             if (onlyCachedPartitions) {
+<<<<<<< HEAD
                 List<RemotePathKey> cachedPathKey = remoteFileIO.get().getPresentPathKeyInCache(tableLocation,
+=======
+                List<RemotePathKey> cachedPathKey = remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         isRecursive);
                 presentPathKey = cachedPathKey.stream().filter(pathKey -> {
                     String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
@@ -254,16 +335,28 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                 }).collect(Collectors.toList());
             }
 
+<<<<<<< HEAD
             refreshRemoteFilesImpl(tableLocation, presentPathKey, Lists.newArrayList(), refreshExecutor);
         }
     }
 
     private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
+=======
+            refreshRemoteFilesImpl(table, presentPathKey, Lists.newArrayList(), refreshExecutor);
+        }
+    }
+
+    private void refreshRemoteFiles(Table table, Operator operator, List<String> existPaths,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     boolean onlyCachedPartitions) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey;
             if (onlyCachedPartitions) {
+<<<<<<< HEAD
                 presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive);
+=======
+                presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(), isRecursive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 presentPathKey = existPaths.stream()
                         .map(path -> RemotePathKey.of(path, isRecursive))
@@ -271,9 +364,13 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             }
             List<RemotePathKey> updateKeys = Lists.newArrayList();
             List<RemotePathKey> invalidateKeys = Lists.newArrayList();
+<<<<<<< HEAD
             RemotePathKey.HudiContext hudiContext = new RemotePathKey.HudiContext();
             presentPathKey.forEach(pathKey -> {
                 pathKey.setHudiContext(hudiContext);
+=======
+            presentPathKey.forEach(pathKey -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
                 if (operator == Operator.UPDATE && existPaths.contains(pathWithSlash)) {
                     updateKeys.add(pathKey);
@@ -281,6 +378,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                     invalidateKeys.add(pathKey);
                 }
             });
+<<<<<<< HEAD
 
             refreshRemoteFilesImpl(tableLocation, updateKeys, invalidateKeys, executor);
         }
@@ -294,12 +392,38 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                 remoteFileIO.get().updateRemoteFiles(pathKey))));
         invalidateKeys.forEach(pathKey -> futures.add(refreshExecutor.submit(() ->
                 remoteFileIO.get().invalidatePartition(pathKey))));
+=======
+            refreshRemoteFilesImpl(table, updateKeys, invalidateKeys, executor);
+        }
+    }
+
+    private void refreshRemoteFilesImpl(Table table, List<RemotePathKey> updateKeys,
+                                        List<RemotePathKey> invalidateKeys,
+                                        ExecutorService refreshExecutor) {
+        Preconditions.checkArgument(remoteFileIO.isPresent());
+        RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
+        List<Future<?>> futures = Lists.newArrayList();
+        updateKeys.forEach(pathKey -> {
+            pathKey.setScanContext(scanContext);
+            futures.add(refreshExecutor.submit(() ->
+                    remoteFileIO.get().updateRemoteFiles(pathKey)));
+        });
+        invalidateKeys.forEach(pathKey -> {
+            pathKey.setScanContext(scanContext);
+            futures.add(refreshExecutor.submit(() ->
+                    remoteFileIO.get().invalidatePartition(pathKey)));
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (Future<?> future : futures) {
             try {
                 future.get();
             } catch (InterruptedException | ExecutionException e) {
+<<<<<<< HEAD
                 LOG.error("Failed to update remote files on [{}]", tableLocation, e);
+=======
+                LOG.error("Failed to update remote files on [{}]", table.getTableLocation(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksConnectorException("Failed to update remote files", e);
             }
         }
@@ -315,7 +439,11 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
 
     public void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {
         ((CachingHiveMetastore) metastore).refreshTableByEvent(updatedHiveTable, commonStats, partition);
+<<<<<<< HEAD
         refreshRemoteFiles(updatedHiveTable.getTableLocation(), Operator.UPDATE, getExistPaths(updatedHiveTable), true);
+=======
+        refreshRemoteFiles(updatedHiveTable, Operator.UPDATE, getExistPaths(updatedHiveTable), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void refreshPartitionByEvent(HivePartitionName hivePartitionName, HiveCommonStats commonStats, Partition partion) {
@@ -331,6 +459,7 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         remoteFileIO.ifPresent(CachingRemoteFileIO::invalidateAll);
     }
 
+<<<<<<< HEAD
     public void invalidateTable(String dbName, String tableName, String originLocation) {
         String tableLocation;
         if (!Strings.isNullOrEmpty(originLocation)) {
@@ -341,6 +470,15 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
                 tableLocation = ((HiveMetaStoreTable) metastore.getTable(dbName, tableName)).getTableLocation();
             } catch (Exception e) {
                 LOG.error("Can't get table location from cache or hive metastore. ignore it");
+=======
+    public void invalidateTable(String dbName, String tableName, Table table) {
+        if (table == null) {
+            LOG.warn("table [{}.{}] is null", dbName, tableName);
+            try {
+                table = metastore.getTable(dbName, tableName);
+            } catch (Exception e) {
+                LOG.error("Can't get table from cache or hive metastore. ignore it");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return;
             }
         }
@@ -348,7 +486,11 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
         metastore.invalidateTable(dbName, tableName);
 
         if (remoteFileIO.isPresent()) {
+<<<<<<< HEAD
             refreshRemoteFiles(tableLocation, Operator.DROP, Lists.newArrayList(), true);
+=======
+            refreshRemoteFiles(table, Operator.DROP, Lists.newArrayList(), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -419,5 +561,9 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             return Objects.hashCode(dbName, tableName, partitionName);
         }
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

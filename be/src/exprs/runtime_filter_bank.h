@@ -35,6 +35,13 @@
 #include "types/logical_type.h"
 #include "util/blocking_queue.hpp"
 
+<<<<<<< HEAD
+=======
+namespace starrocks::pipeline {
+class RuntimeBloomFilterBuildParam;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 class RowDescriptor;
 class MemTracker;
@@ -57,7 +64,14 @@ public:
     static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type);
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, JoinRuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
+<<<<<<< HEAD
 
+=======
+    static Status fill_runtime_bloom_filter(const std::vector<ColumnPtr>& column, LogicalType type,
+                                            JoinRuntimeFilter* filter, size_t column_offset, bool eq_null);
+    static Status fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
+                                            LogicalType type, JoinRuntimeFilter* filter, size_t column_offset);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
                                                                             Chunk* chunk);
 

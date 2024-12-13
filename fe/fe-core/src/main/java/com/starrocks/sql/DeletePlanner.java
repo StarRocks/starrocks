@@ -24,7 +24,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
@@ -86,7 +91,11 @@ public class DeletePlanner {
 
             OlapTable table = (OlapTable) deleteStatement.getTable();
             for (Column column : table.getBaseSchema()) {
+<<<<<<< HEAD
                 if (column.isKey()) {
+=======
+                if (column.isKey() || column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                     slotDescriptor.setIsMaterialized(true);
                     slotDescriptor.setType(column.getType());
@@ -120,10 +129,16 @@ public class DeletePlanner {
             Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
                     catalogDbTable.getDb());
             try {
+<<<<<<< HEAD
                 olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(),
                         ConnectContext.get().getSessionVariable().getQueryTimeoutS());
                 olapTableSink.complete();
             } catch (UserException e) {
+=======
+                olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
+                olapTableSink.complete();
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new SemanticException(e.getMessage());
             }
 

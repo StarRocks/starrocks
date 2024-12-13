@@ -20,7 +20,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
+=======
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
+import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
@@ -29,7 +35,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
 import com.starrocks.common.proc.ExternalDbsProcDir;
@@ -45,15 +54,21 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.ImageWriter;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+<<<<<<< HEAD
 import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -62,9 +77,12 @@ import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -101,6 +119,14 @@ public class CatalogMgr {
         createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
     }
 
+<<<<<<< HEAD
+=======
+    public void createCatalogForRestore(Catalog catalog) throws DdlException {
+        dropCatalogForRestore(catalog, false);
+        createCatalog(catalog.getType(), catalog.getName(), catalog.getComment(), catalog.getConfig());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // please keep connector and catalog create together, they need keep in consistent asap.
     public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
             throws DdlException {
@@ -161,6 +187,19 @@ public class CatalogMgr {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
+        if (!isReplay && catalogExists(catalog.getName())) {
+            DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
+            dropCatalog(stmt);
+        } else if (isReplay) {
+            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalog.getName());
+            replayDropCatalog(dropCatalogLog);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
         readLock();
@@ -278,8 +317,12 @@ public class CatalogMgr {
                 readUnlock();
             }
 
+<<<<<<< HEAD
             Map<String, String> properties = catalog.getConfig();
             String serviceName = properties.get("ranger.plugin.hive.service.name");
+=======
+            String serviceName = config.get("ranger.plugin.hive.service.name");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
@@ -363,6 +406,7 @@ public class CatalogMgr {
         }
     }
 
+<<<<<<< HEAD
     public long loadCatalogs(DataInputStream dis, long checksum) throws IOException, DdlException {
         int catalogCount = 0;
         try {
@@ -386,6 +430,8 @@ public class CatalogMgr {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void loadResourceMappingCatalog() {
         LOG.info("start to replay resource mapping catalog");
 
@@ -409,6 +455,7 @@ public class CatalogMgr {
         LOG.info("finished replaying resource mapping catalogs from resources");
     }
 
+<<<<<<< HEAD
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
         SerializeData data = new SerializeData();
         data.catalogs = catalogs.entrySet().stream()
@@ -426,6 +473,8 @@ public class CatalogMgr {
         public Map<String, Catalog> catalogs;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<List<String>> getCatalogsInfo() {
         return procNode.fetchResult().getRows();
     }

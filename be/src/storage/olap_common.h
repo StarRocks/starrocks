@@ -149,10 +149,18 @@ enum ReaderType {
     READER_BASE_COMPACTION = 2,
     READER_CUMULATIVE_COMPACTION = 3,
     READER_CHECKSUM = 4,
+<<<<<<< HEAD
 };
 
 inline bool is_query(ReaderType reader_type) {
     return reader_type == READER_QUERY;
+=======
+    READER_BYPASS_QUERY = 5,
+};
+
+inline bool is_query(ReaderType reader_type) {
+    return reader_type == READER_QUERY || reader_type == READER_BYPASS_QUERY;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 inline bool is_compaction(ReaderType reader_type) {
@@ -253,6 +261,10 @@ struct OlapReaderStatistics {
     int64_t rows_after_key_range = 0;
     int64_t rows_key_range_num = 0;
     int64_t rows_stats_filtered = 0;
+<<<<<<< HEAD
+=======
+    int64_t rows_vector_index_filtered = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t rows_bf_filtered = 0;
     int64_t rows_del_filtered = 0;
     int64_t del_filter_ns = 0;
@@ -262,6 +274,12 @@ struct OlapReaderStatistics {
 
     int64_t rows_bitmap_index_filtered = 0;
     int64_t bitmap_index_filter_timer = 0;
+<<<<<<< HEAD
+=======
+    int64_t get_row_ranges_by_vector_index_timer = 0;
+    int64_t vector_search_timer = 0;
+    int64_t process_vector_distance_and_id_timer = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int64_t rows_del_vec_filtered = 0;
 
@@ -308,6 +326,16 @@ struct OlapReaderStatistics {
     std::unordered_map<std::string, int64_t> flat_json_hits;
     std::unordered_map<std::string, int64_t> merge_json_hits;
     std::unordered_map<std::string, int64_t> dynamic_json_hits;
+<<<<<<< HEAD
+=======
+
+    // Counters for data sampling
+    int64_t sample_time_ns = 0;               // Records the time to prepare sample, actual IO time is not included
+    int64_t sample_size = 0;                  // Records the number of hits in the sample. Granularity can be BLOCK/PAGE
+    int64_t sample_population_size = 0;       // Records the total number of samples. Granularity can be BLOCK/PAGE
+    int64_t sample_build_histogram_count = 0; // Records the number of histogram built for sampling
+    int64_t sample_build_histogram_time_ns = 0; // Records the time to build histogram
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // OlapWriterStatistics used to collect statistics when write data to storage

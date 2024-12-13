@@ -74,7 +74,11 @@ static void fill_rowset_row(Columns& columns, const RowsetMetadataPB& rowset) {
         opts.pretty_json = false;
         std::string json;
         (void)json2pb::ProtoMessageToJson(rowset.delete_predicate(), &json, opts);
+<<<<<<< HEAD
         (void)columns[5]->append_strings({json});
+=======
+        (void)columns[5]->append_strings(std::vector<Slice>{Slice{json}});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

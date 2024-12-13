@@ -177,9 +177,15 @@ public:
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
     // Return true if it's the last prober, which need to perform the right join task
+<<<<<<< HEAD
     bool finish_probe(int32_t driver_seq, const std::vector<uint8_t>& build_match_flags);
 
     const std::vector<uint8_t> get_shared_build_match_flag() const;
+=======
+    bool finish_probe(int32_t driver_seq, const Filter& build_match_flags);
+
+    const Filter get_shared_build_match_flag() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const SpillProcessChannelFactoryPtr& spill_channel_factory() { return _spill_process_factory_ptr; }
     NLJoinBuildChunkStreamBuilder& builder() { return _build_stream_builder; }
@@ -206,7 +212,11 @@ private:
     std::vector<ChunkPtr> _build_chunks; // Normalized chunks of _input_chunks
     int _build_chunk_desired_size = 0;
     int _num_post_probers = 0;
+<<<<<<< HEAD
     std::vector<uint8_t> _shared_build_match_flag;
+=======
+    Filter _shared_build_match_flag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // conjuncts in cross join, used for generate runtime_filter
     std::vector<ExprContext*> _rf_conjuncts_ctx;

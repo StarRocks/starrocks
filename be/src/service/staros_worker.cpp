@@ -343,10 +343,22 @@ Status to_status(const absl::Status& absl_status) {
     }
 }
 
+<<<<<<< HEAD
 void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
         return;
     }
+=======
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache) {
+    if (g_starlet.get() != nullptr) {
+        return;
+    }
+
+    if (star_cache) {
+        (void)fslib::set_star_cache(star_cache);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // skip staros reinit aws sdk
     staros::starlet::fslib::skip_aws_init_api = true;
 

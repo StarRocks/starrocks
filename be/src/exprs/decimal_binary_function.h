@@ -205,6 +205,10 @@ struct DecimalBinaryFunction {
         }
     }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Module& module, llvm::Value* l, llvm::Value* r,
                                     int l_scale, int r_scale) {
@@ -217,6 +221,10 @@ struct DecimalBinaryFunction {
 
         return nullptr;
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr const_const(const ColumnPtr& lhs, const ColumnPtr& rhs) {

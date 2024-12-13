@@ -38,6 +38,7 @@ public:
         return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
     }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
+<<<<<<< HEAD
     [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
     [[nodiscard]] Status prepare(RuntimeState* state) override;
@@ -46,11 +47,22 @@ public:
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+=======
+    Status set_finishing(RuntimeState* state) override;
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool releaseable() const override { return true; }
     void set_execute_mode(int performance_level) override;
 
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
+<<<<<<< HEAD
     [[nodiscard]] Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
@@ -64,6 +76,20 @@ private:
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
     [[nodiscard]] Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+=======
+    Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
+
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
+    Status _push_chunk_by_force_preaggregation(const ChunkPtr& chunk, const size_t chunk_size);
+
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
+    Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
+
+    Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build);
+
+    // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
+    Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is

@@ -12,9 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.connector;
 
+=======
+package com.starrocks.connector;
+
+import com.starrocks.connector.hive.RemoteFileInputFormat;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.TimeUnit;
 
 public interface PartitionInfo {
@@ -23,4 +30,15 @@ public interface PartitionInfo {
     default TimeUnit getModifiedTimeUnit()  {
         return TimeUnit.SECONDS;
     }
+<<<<<<< HEAD
+=======
+
+    default RemoteFileInputFormat getFileFormat() {
+        throw new UnsupportedOperationException("");
+    }
+
+    default String getFullPath() {
+        throw new UnsupportedOperationException("");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

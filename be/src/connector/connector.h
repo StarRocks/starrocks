@@ -172,6 +172,7 @@ public:
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+<<<<<<< HEAD
             size_t num_total_scan_ranges, size_t scan_dop = 0);
 
     bool could_split() const { return _could_split; }
@@ -179,6 +180,10 @@ public:
     bool could_split_physically() const { return _could_split_physically; }
 
     int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
+=======
+            size_t num_total_scan_ranges, size_t scan_parallelism = 0);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t get_scan_dop() const { return scan_dop; }
 
     // possible physical distribution optimize of data source
@@ -189,9 +194,12 @@ public:
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
+<<<<<<< HEAD
     bool _could_split = false;
     bool _could_split_physically = false;
     int64_t splitted_scan_rows = 0;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t scan_dop = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;

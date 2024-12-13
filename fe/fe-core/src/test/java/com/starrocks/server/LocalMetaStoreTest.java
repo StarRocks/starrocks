@@ -25,7 +25,11 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.PhysicalPartitionImpl;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.system.SystemId;
@@ -80,17 +84,29 @@ public class LocalMetaStoreTest {
         starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
+<<<<<<< HEAD
                 .withTable(
                         "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
         UtFrameUtils.PseudoImage.setUpImageVersion();
+=======
+                    .withTable(
+                                "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
+                                            " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testGetNewPartitionsFromPartitions() throws DdlException {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         Table table = db.getTable("t1");
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         Partition sourcePartition = olapTable.getPartition("t1");
@@ -102,8 +118,13 @@ public class LocalMetaStoreTest {
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());
         Set<Long> tabletIdSet = Sets.newHashSet();
         List<Partition> newPartitions = localMetastore.getNewPartitionsFromPartitions(db,
+<<<<<<< HEAD
                 olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
                 null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+=======
+                    olapTable, sourcePartitionIds, origPartitions, copiedTable, "_100", tabletIdSet, tmpPartitionIds,
+                    null, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(sourcePartitionIds.size(), newPartitions.size());
         Assert.assertEquals(1, newPartitions.size());
         Partition newPartition = newPartitions.get(0);
@@ -112,8 +133,13 @@ public class LocalMetaStoreTest {
 
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         partitionInfo.addPartition(newPartition.getId(), partitionInfo.getDataProperty(sourcePartition.getId()),
+<<<<<<< HEAD
                 partitionInfo.getReplicationNum(sourcePartition.getId()),
                 partitionInfo.getIsInMemory(sourcePartition.getId()));
+=======
+                    partitionInfo.getReplicationNum(sourcePartition.getId()),
+                    partitionInfo.getIsInMemory(sourcePartition.getId()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         olapTable.replacePartition("t1", "t1_100");
 
         Assert.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
@@ -122,6 +148,7 @@ public class LocalMetaStoreTest {
     @Test
     public void testGetPartitionIdToStorageMediumMap() throws Exception {
         starRocksAssert.withMaterializedView(
+<<<<<<< HEAD
                 "CREATE MATERIALIZED VIEW test.mv1\n" +
                         "distributed by hash(k1) buckets 3\n" +
                         "refresh async\n" +
@@ -131,6 +158,17 @@ public class LocalMetaStoreTest {
                         "as\n" +
                         "select k1,k2 from test.t1;");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+                    "CREATE MATERIALIZED VIEW test.mv1\n" +
+                                "distributed by hash(k1) buckets 3\n" +
+                                "refresh async\n" +
+                                "properties(\n" +
+                                "'replication_num' = '1'\n" +
+                                ")\n" +
+                                "as\n" +
+                                "select k1,k2 from test.t1;");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<PartitionInfo>() {
             @Mock
             public DataProperty getDataProperty(long partitionId) {
@@ -141,7 +179,12 @@ public class LocalMetaStoreTest {
             @Mock
             public void logModifyPartition(ModifyPartitionInfo info) {
                 Assert.assertNotNull(info);
+<<<<<<< HEAD
                 Assert.assertTrue(db.getTable(info.getTableId()).isOlapTableOrMaterializedView());
+=======
+                Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId())
+                            .isOlapTableOrMaterializedView());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
                 Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
             }
@@ -156,8 +199,13 @@ public class LocalMetaStoreTest {
     @Test
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().getRecycleBin(),
                 GlobalStateMgr.getCurrentState().getColocateTableIndex());
+=======
+                    GlobalStateMgr.getCurrentState().getRecycleBin(),
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         localMetaStore.save(image.getImageWriter());
@@ -174,6 +222,7 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testReplayAddSubPartition() throws DdlException {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t1");
         Partition p = table.getPartitions().stream().findFirst().get();
@@ -184,6 +233,18 @@ public class LocalMetaStoreTest {
         index.addTablet(new LocalTablet(0), tabletMeta);
         PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
                 db.getId(), table.getId(), p.getId(), new PhysicalPartitionImpl(123, "", p.getId(), 0, index));
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+        PhysicalPartition p = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition();
+        int schemaHash = table.getSchemaHashByIndexId(p.getBaseIndex().getId());
+        MaterializedIndex index = new MaterializedIndex();
+        TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), p.getId(),
+                    index.getId(), schemaHash, table.getPartitionInfo().getDataProperty(p.getParentId()).getStorageMedium());
+        index.addTablet(new LocalTablet(0), tabletMeta);
+        PhysicalPartitionPersistInfoV2 info = new PhysicalPartitionPersistInfoV2(
+                    db.getId(), table.getId(), p.getParentId(), new PhysicalPartition(123, "", p.getId(), index));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.replayAddSubPartition(info);
@@ -191,8 +252,13 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testReplayTruncateTable() throws DdlException {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t1");
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Partition p = table.getPartitions().stream().findFirst().get();
         TruncateTableInfo info = new TruncateTableInfo(db.getId(), table.getId(), Lists.newArrayList(p), false);
 
@@ -202,11 +268,19 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testModifyAutomaticBucketSize() throws DdlException {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t1");
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Map<String, String> properties = Maps.newHashMap();
             LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
@@ -214,15 +288,24 @@ public class LocalMetaStoreTest {
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
             localMetastore.modifyTableAutomaticBucketSize(db, table, properties);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.WRITE);
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Test
     public void testCreateTableIfNotExists() throws Exception {
         // create table if not exists, if the table already exists, do nothing
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         Table table = db.getTable("t1");
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(table instanceof OlapTable);
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
 
@@ -239,6 +322,7 @@ public class LocalMetaStoreTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         // with IF NOT EXIST
         starRocksAssert.useDatabase("test").withTable(
+<<<<<<< HEAD
                 "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
                         " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
@@ -247,12 +331,27 @@ public class LocalMetaStoreTest {
                 starRocksAssert.useDatabase("test").withTable(
                         "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
+=======
+                    "CREATE TABLE IF NOT EXISTS test.t1(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+
+        // w/o IF NOT EXIST
+        Assert.assertThrows(AnalysisException.class, () ->
+                    starRocksAssert.useDatabase("test").withTable(
+                                "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
+                                            " distributed by hash(k1) buckets 3 properties('replication_num' = '1');"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAlterTableProperties() throws Exception {
+<<<<<<< HEAD
         Database db = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) db.getTable("t1");
+=======
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, String> properties = Maps.newHashMap();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "abcd");
@@ -277,7 +376,11 @@ public class LocalMetaStoreTest {
         }
 
         Database db = localMetastore.getDb("test");
+<<<<<<< HEAD
         Table table = db.getTable("t1");
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             localMetastore.renameColumn(new Database(1, "_statistics_"), table, null);
             Assert.fail("should not happen");

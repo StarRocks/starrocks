@@ -88,11 +88,19 @@ public class OptimizerTraceUtil {
     public static void logMVRewrite(MaterializationContext mvContext, String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
+<<<<<<< HEAD
                     mvContext.getMv().getName(),
                     mvContext.getOptimizerContext().isInMemoPhase(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
             return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] {}",
+=======
+                    mvContext.getOptimizerContext().isInMemoPhase(),
+                    mvContext.getMv().getName(),
+                    MessageFormatter.arrayFormat(format, object).getMessage()
+            };
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE] [InMemo:{}] [{}] {}",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     args).getMessage();
         });
     }
@@ -102,11 +110,19 @@ public class OptimizerTraceUtil {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
                     mvRewriteContext.getRule().type().name(),
+<<<<<<< HEAD
                     mvContext.getMv().getName(),
                     mvRewriteContext.getMaterializationContext().getOptimizerContext().isInMemoPhase(),
                     MessageFormatter.arrayFormat(format, object).getMessage()
             };
             return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] [InMemo:{}] {}",
+=======
+                    mvRewriteContext.getMaterializationContext().getOptimizerContext().isInMemoPhase(),
+                    mvContext.getMv().getName(),
+                    MessageFormatter.arrayFormat(format, object).getMessage()
+            };
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] [InMemo:{}] [{}] {}",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     args).getMessage();
         });
     }

@@ -417,6 +417,12 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
+<<<<<<< HEAD
+=======
+    _stats.write_count += 1;
+    _stats.row_count += size;
+    SCOPED_RAW_TIMER(&_stats.write_time_ns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
@@ -465,6 +471,10 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     } else if (full) {
         st = flush_memtable_async();
         _reset_mem_table();
+<<<<<<< HEAD
+=======
+        _stats.memtable_full_count += 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (!st.ok()) {
         _set_state(kAborted, st);
@@ -497,6 +507,7 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
         RETURN_IF_ERROR(_rowset_writer->flush_segment(segment_pb, data));
     }
     auto io_stat = scope.current_scoped_tls_io();
+<<<<<<< HEAD
     StarRocksMetrics::instance()->segment_flush_total.increment(1);
     StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
     auto io_time_us = (io_stat.write_time_ns + io_stat.sync_time_ns) / 1000;
@@ -504,11 +515,31 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
     StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
     VLOG(2) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
             << ", duration: " << duration_ns / 1000 << "us, io_time: " << io_time_us << "us";
+=======
+    auto io_time_ns = io_stat.write_time_ns + io_stat.sync_time_ns;
+
+    _stats.add_segment_count += 1;
+    _stats.row_count += segment_pb.num_rows();
+    _stats.add_segment_data_size += segment_pb.data_size();
+    _stats.add_segment_time_ns += duration_ns;
+    _stats.add_segment_io_time_ns += io_time_ns;
+
+    StarRocksMetrics::instance()->segment_flush_total.increment(1);
+    StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
+    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_time_ns / 1000);
+    StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
+    VLOG(2) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
+            << ", duration: " << duration_ns / 1000 << "us, io_time: " << (io_time_ns / 1000) << "us";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
 Status DeltaWriter::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+<<<<<<< HEAD
+=======
+    SCOPED_RAW_TIMER(&_stats.close_time_ns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto state = get_state();
     switch (state) {
     case kUninitialized:
@@ -625,7 +656,14 @@ Status DeltaWriter::_flush_memtable() {
     MonotonicStopWatch watch;
     watch.start();
     Status st = _flush_token->wait();
+<<<<<<< HEAD
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(watch.elapsed_time() / 1000);
+=======
+    auto elapsed_time = watch.elapsed_time();
+    _stats.memory_exceed_count += 1;
+    _stats.write_wait_flush_tims_ns += elapsed_time;
+    StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(elapsed_time / 1000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return st;
 }
 
@@ -721,6 +759,10 @@ Status DeltaWriter::commit() {
         _set_state(kAborted, res.status());
         return res.status();
     }
+<<<<<<< HEAD
+=======
+    auto rowset_build_ts = watch.elapsed_time();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
@@ -742,6 +784,10 @@ Status DeltaWriter::commit() {
 
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
+<<<<<<< HEAD
+=======
+    auto commit_txn_ts = watch.elapsed_time();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (!res.ok()) {
         _storage_engine->update_manager()->on_rowset_cancel(_tablet.get(), _cur_rowset.get());
@@ -761,6 +807,15 @@ Status DeltaWriter::commit() {
         }
     }
     VLOG(2) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
+<<<<<<< HEAD
+=======
+    _stats.commit_time_ns += watch.elapsed_time();
+    _stats.commit_wait_flush_time_ns += flush_ts;
+    _stats.commit_rowset_build_time_ns += rowset_build_ts - flush_ts;
+    _stats.commit_finish_pk_time_ns += pk_finish_ts - rowset_build_ts;
+    _stats.commit_wait_replica_time_ns += replica_ts - pk_finish_ts;
+    _stats.commit_txn_commit_time_ns += commit_txn_ts - replica_ts;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StarRocksMetrics::instance()->delta_writer_wait_flush_duration_us.increment(flush_ts / 1000);
     StarRocksMetrics::instance()->delta_writer_wait_replica_duration_us.increment((replica_ts - pk_finish_ts) / 1000);
     return Status::OK();
@@ -852,7 +907,11 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
     // 2. probe index
     RETURN_IF_ERROR(_tablet->updates()->get_rss_rowids_by_pk(_tablet.get(), *upserts, nullptr, &rss_rowids));
 
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     uint32_t gen_num = 0;
     for (unsigned long v : rss_rowids) {
         uint32_t rssid = v >> 32;

@@ -31,11 +31,14 @@ if [[ -z ${STARROCKS_THIRDPARTY} ]]; then
     export STARROCKS_THIRDPARTY=${STARROCKS_HOME}/thirdparty
 fi
 
+<<<<<<< HEAD
 # set cachelib dir
 if [[ -z ${CACHELIB_DIR} ]]; then
     export CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
 fi
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 # check python
 if [[ -z ${PYTHON} ]]; then
     export PYTHON=python3

@@ -46,7 +46,11 @@ public:
 
     DISALLOW_COPY_AND_MOVE(AsyncDeltaWriterImpl);
 
+<<<<<<< HEAD
     [[nodiscard]] Status open();
+=======
+    Status open();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void write(const Chunk* chunk, const uint32_t* indexes, uint32_t indexes_size, Callback cb);
 
@@ -66,7 +70,11 @@ public:
 
     [[nodiscard]] bool is_immutable() const { return _writer->is_immutable(); }
 
+<<<<<<< HEAD
     [[nodiscard]] Status check_immutable() { return _writer->check_immutable(); }
+=======
+    Status check_immutable() { return _writer->check_immutable(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] int64_t last_write_ts() const { return _writer->last_write_ts(); }
 
@@ -163,7 +171,11 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         case kFlushTask: {
             auto flush_task = std::static_pointer_cast<FlushTask>(task_ptr);
             if (st.ok()) {
+<<<<<<< HEAD
                 st.update(delta_writer->flush());
+=======
+                st.update(delta_writer->manual_flush());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             flush_task->cb(st);
             break;
@@ -171,7 +183,11 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         case kFinishTask: {
             auto finish_task = std::static_pointer_cast<FinishTask>(task_ptr);
             if (st.ok()) {
+<<<<<<< HEAD
                 auto res = delta_writer->finish(finish_task->finish_mode);
+=======
+                auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 st.update(res.status());
                 LOG_IF(ERROR, !st.ok()) << "Fail to finish write. tablet_id: " << delta_writer->tablet_id()
                                         << " txn_id: " << delta_writer->txn_id() << ": " << st;
@@ -300,6 +316,10 @@ void AsyncDeltaWriter::flush(Callback cb) {
 }
 
 void AsyncDeltaWriter::finish(DeltaWriterFinishMode mode, FinishCallback cb) {
+<<<<<<< HEAD
+=======
+    TEST_SYNC_POINT_CALLBACK("AsyncDeltaWriter:enter_finish", this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _impl->finish(mode, std::move(cb));
 }
 

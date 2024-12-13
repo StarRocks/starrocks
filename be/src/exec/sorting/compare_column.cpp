@@ -327,7 +327,11 @@ int compare_column(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs
     return compare.get_equal_count();
 }
 
+<<<<<<< HEAD
 void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
+=======
+void compare_columns(const Columns& columns, CompareVector& cmp_vector, const Buffer<Datum>& rhs_values,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                      const SortDescs& sort_desc) {
     if (columns.empty()) {
         return;

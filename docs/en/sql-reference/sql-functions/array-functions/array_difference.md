@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_difference
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the difference between every two neighboring elements of an array by subtracting each element from its following element and returns an array that consists of the differences.
 

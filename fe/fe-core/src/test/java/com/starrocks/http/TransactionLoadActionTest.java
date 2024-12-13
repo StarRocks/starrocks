@@ -15,12 +15,19 @@
 package com.starrocks.http;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+<<<<<<< HEAD
 import com.fasterxml.jackson.core.type.TypeReference;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
@@ -51,7 +58,10 @@ import okhttp3.MediaType;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+<<<<<<< HEAD
 import okhttp3.ResponseBody;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import okio.BufferedSink;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
@@ -76,7 +86,10 @@ import java.util.function.BiConsumer;
 
 import static com.starrocks.common.jmockit.Deencapsulation.setField;
 import static org.junit.Assert.assertEquals;
+<<<<<<< HEAD
 import static org.junit.Assert.assertNotNull;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.junit.Assert.assertTrue;
 
 @FixMethodOrder(MethodSorters.JVM)
@@ -291,7 +304,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             anyString, anyString, anyString, anyString, anyString,
                             anyLong, anyInt, anyInt, (TransactionResult) any);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("begin load task error");
+=======
+                    result = new StarRocksException("begin load task error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -401,7 +418,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
+<<<<<<< HEAD
                                                     TransactionResult resp) throws UserException {
+=======
+                                                    TransactionResult resp) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             resp.setErrorMsg("prepare load task error");
                         }
 
@@ -433,7 +454,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
+<<<<<<< HEAD
                                                     TransactionResult resp) throws UserException {
+=======
+                                                    TransactionResult resp) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             resp.setOKMsg("");
                         }
 
@@ -441,7 +466,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     streamLoadMgr.tryPrepareLoadTaskTxn(anyString, (TransactionResult) any);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("try prepare load task txn error");
+=======
+                    result = new StarRocksException("try prepare load task txn error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -469,7 +498,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                         public void prepareLoadTask(String label,
                                                     int channelId,
                                                     HttpHeaders headers,
+<<<<<<< HEAD
                                                     TransactionResult resp) throws UserException {
+=======
+                                                    TransactionResult resp) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             resp.setOKMsg("");
                         }
 
@@ -479,7 +512,12 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
+<<<<<<< HEAD
                         public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws UserException {
+=======
+                        public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) throws
+                                StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -594,7 +632,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                             (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("prepare transaction error");
+=======
+                    result = new StarRocksException("prepare transaction error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 }
             };
@@ -655,7 +697,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.commitLoadTask(anyString, (TransactionResult) any);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("commit load task error");
+=======
+                    result = new StarRocksException("commit load task error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -680,7 +726,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
+<<<<<<< HEAD
                         public void commitLoadTask(String label, TransactionResult resp) throws UserException {
+=======
+                        public void commitLoadTask(String label, TransactionResult resp) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -835,7 +885,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("commit prepared transaction error");
+=======
+                    result = new StarRocksException("commit prepared transaction error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -985,7 +1039,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.commitPreparedTransaction((Database) any, anyLong, anyLong);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("commit prepared transaction error");
+=======
+                    result = new StarRocksException("commit prepared transaction error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -1122,7 +1180,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                 {
                     streamLoadMgr.rollbackLoadTask(anyString, (TransactionResult) any);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("rollback load task error");
+=======
+                    result = new StarRocksException("rollback load task error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -1147,7 +1209,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                     times = 1;
                     result = new Delegate<Void>() {
 
+<<<<<<< HEAD
                         public void rollbackLoadTask(String label, TransactionResult resp) throws UserException {
+=======
+                        public void rollbackLoadTask(String label, TransactionResult resp) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             resp.addResultEntry(TransactionResult.LABEL_KEY, label);
                         }
 
@@ -1302,7 +1368,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("abort transaction error");
+=======
+                    result = new StarRocksException("abort transaction error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -1451,7 +1521,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
 
                     globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString, (List<TabletFailInfo>) any);
                     times = 1;
+<<<<<<< HEAD
                     result = new UserException("abort transaction error");
+=======
+                    result = new StarRocksException("abort transaction error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             };
 
@@ -1513,7 +1587,11 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
                                 TransactionResult resp,
                                 String dbName,
                                 String tableName)
+<<<<<<< HEAD
                                 throws UserException {
+=======
+                                throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             resp.setErrorMsg("execute load task error");
                             return null;
                         }
@@ -1624,6 +1702,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         return String.format("http://localhost:%d/api/transaction/%s", HTTP_PORT, txnOpt.getValue());
     }
 
+<<<<<<< HEAD
     private static Map<String, Object> parseResponseBody(Response response) throws IOException {
         assertNotNull(response);
         ResponseBody body = response.body();
@@ -1634,6 +1713,8 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         });
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static TransactionState newTxnState(long txnId,
                                                 String label,
                                                 LoadJobSourceType sourceType,

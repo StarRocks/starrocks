@@ -53,7 +53,11 @@ public:
               _perm(perm) {}
 
     template <class Cmp, class LeftEqual, class RightEqual>
+<<<<<<< HEAD
     [[nodiscard]] Status do_merge(Cmp cmp, LeftEqual equal_left, RightEqual equal_right) {
+=======
+    Status do_merge(Cmp cmp, LeftEqual equal_left, RightEqual equal_right) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::vector<EqualRange> next_ranges;
         next_ranges.reserve(_equal_ranges->size());
 
@@ -117,7 +121,11 @@ public:
 
     // General implementation
     template <class ColumnType>
+<<<<<<< HEAD
     [[nodiscard]] Status do_visit_slow(const ColumnType&) {
+=======
+    Status do_visit_slow(const ColumnType&) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto cmp = [&](size_t lhs_index, size_t rhs_index) {
             int x = _left_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first);
             if (_sort_order == -1) {
@@ -135,7 +143,11 @@ public:
     }
 
     template <class Container, class ValueType>
+<<<<<<< HEAD
     [[nodiscard]] Status merge_ordinary_column(const Container& left_data, const Container& right_data) {
+=======
+    Status merge_ordinary_column(const Container& left_data, const Container& right_data) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto cmp = [&](size_t lhs_index, size_t rhs_index) {
             int x = SorterComparator<ValueType>::compare(left_data[lhs_index], right_data[rhs_index]);
             if (_sort_order == -1) {
@@ -153,13 +165,21 @@ public:
     }
 
     template <class ColumnType>
+<<<<<<< HEAD
     [[nodiscard]] Status do_visit(const ColumnType& _) {
+=======
+    Status do_visit(const ColumnType& _) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return do_visit_slow(_);
     }
 
     // Specific version for FixedlengthColumn
     template <class T>
+<<<<<<< HEAD
     [[nodiscard]] Status do_visit(const FixedLengthColumn<T>& _) {
+=======
+    Status do_visit(const FixedLengthColumn<T>& _) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         using ColumnType = const FixedLengthColumn<T>;
         using Container = typename ColumnType::Container;
         auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
@@ -168,7 +188,11 @@ public:
     }
 
     template <typename SizeT>
+<<<<<<< HEAD
     [[nodiscard]] Status do_visit(const BinaryColumnBase<SizeT>& _) {
+=======
+    Status do_visit(const BinaryColumnBase<SizeT>& _) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         using ColumnType = const BinaryColumnBase<SizeT>;
         using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
         auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
@@ -176,7 +200,11 @@ public:
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status do_visit(const NullableColumn& _) {
+=======
+    Status do_visit(const NullableColumn& _) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Fast path
         if (!_left_col->has_null() && !_right_col->has_null()) {
             DCHECK(_left_col->is_nullable() && _right_col->is_nullable());
@@ -211,8 +239,13 @@ public:
     static constexpr int kLeftChunkIndex = 0;
     static constexpr int kRightChunkIndex = 1;
 
+<<<<<<< HEAD
     [[nodiscard]] static Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left_run,
                                                             const SortedRun& right_run, Permutation* output) {
+=======
+    static Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left_run,
+                                              const SortedRun& right_run, Permutation* output) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(!!left_run.chunk);
         DCHECK(!!right_run.chunk);
         DCHECK_EQ(left_run.num_columns(), right_run.num_columns());

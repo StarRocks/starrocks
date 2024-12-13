@@ -115,7 +115,11 @@ public:
             uint32_t seek_off = random() % size;
             ASSERT_TRUE(rle_page_decoder.seek_to_position_in_page(seek_off).ok());
             EXPECT_EQ((int32_t)(seek_off), rle_page_decoder.current_index());
+<<<<<<< HEAD
             CppType ret;
+=======
+            CppType ret{};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             copy_one<Type, RlePageDecoder<Type>>(&rle_page_decoder, &ret);
             EXPECT_EQ(values[seek_off], ret);
         }

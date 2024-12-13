@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
@@ -33,15 +36,28 @@ public class AnalyzeStmt extends StatementBase {
     private final boolean isSample;
     private boolean isAsync;
     private boolean isExternal = false;
+<<<<<<< HEAD
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
 
     public AnalyzeStmt(TableName tbl, List<Expr> columns, Map<String, String> properties,
+=======
+    private PartitionNames partitionNames;
+    private List<Long> partitionIds = null;
+    private Map<String, String> properties;
+    private final AnalyzeTypeDesc analyzeTypeDesc;
+
+    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionNames partitionNames, Map<String, String> properties,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                        boolean isSample, boolean isAsync,
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
         this.columns = columns;
+<<<<<<< HEAD
+=======
+        this.partitionNames = partitionNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.isSample = isSample;
         this.isAsync = isAsync;
         this.properties = properties;
@@ -100,6 +116,21 @@ public class AnalyzeStmt extends StatementBase {
         this.isExternal = isExternal;
     }
 
+<<<<<<< HEAD
+=======
+    public PartitionNames getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionIds(List<Long> partitionIds) {
+        this.partitionIds = partitionIds;
+    }
+
+    public List<Long> getPartitionIds() {
+        return partitionIds;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;

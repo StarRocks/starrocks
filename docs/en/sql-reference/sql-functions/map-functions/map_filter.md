@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # map_filter
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Filters key-value pairs in a map by applying a Boolean array or a [Lambda expression](../Lambda_expression.md) to each key-value pair. The pair that evaluates to `true` is returned.
 

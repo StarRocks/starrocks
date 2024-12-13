@@ -54,6 +54,13 @@ import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ShowTemporaryTableStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
+import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
@@ -61,6 +68,10 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -1020,6 +1031,13 @@ public interface AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+<<<<<<< HEAD
+=======
+    default R visitAlterWarehouseStatement(AlterWarehouseStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     default R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
@@ -1216,6 +1234,31 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+<<<<<<< HEAD
+=======
+    // ------------------------------------------- Branch/Tag ----------------------------------==------------------------
+    default R visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropBranchClause(DropBranchClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    default R visitDropTagClause(DropTagClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    // ------------------------------------------- Table Operation ----------------------------------==-----------------
+    default R visitAlterTableOperationClause(AlterTableOperationClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // ------------------------------------------- Relation ----------------------------------==------------------------
 
     default R visitRelation(Relation node, C context) {
@@ -1440,7 +1483,28 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
+<<<<<<< HEAD
     // ------------------------------------------- AST ---------------------------------------==------------------------
+=======
+    // ------------------------------------------- Plan Tuning Statement -----------------------------------------------
+    default R visitAddPlanAdvisorStatement(AddPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitClearPlanAdvisorStatement(ClearPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitDelPlanAdvisorStatement(DelPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    default R visitShowPlanAdvisorStatement(ShowPlanAdvisorStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    // ------------------------------------------- AST -----------------------------------------------------------------
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     default R visitLimitElement(LimitElement node, C context) {
         return null;
@@ -1469,4 +1533,8 @@ public interface AstVisitor<R, C> {
     default R visitUserVariableHint(UserVariableHint node, C context) {
         return visitNode(node, context);
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

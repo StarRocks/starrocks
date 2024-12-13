@@ -34,8 +34,11 @@
 
 package com.starrocks.common.io;
 
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.meta.MetaContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,17 +50,21 @@ public class DeepCopy {
     private static final Logger LOG = LogManager.getLogger(DeepCopy.class);
 
     public static <T> T copyWithGson(Object orig, Class<T> c) {
+<<<<<<< HEAD
         // Backup the current MetaContext before assigning a new one.
         MetaContext oldContext = MetaContext.get();
         MetaContext metaContext = new MetaContext();
         metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             String origJsonStr = GsonUtils.GSON.toJson(orig);
             return GsonUtils.GSON.fromJson(origJsonStr, c);
         } catch (Exception e) {
             LOG.warn("failed to copy object.", e);
             return null;
+<<<<<<< HEAD
         } finally {
             // Restore the old MetaContext.
             if (oldContext != null) {
@@ -65,6 +72,8 @@ public class DeepCopy {
             } else {
                 MetaContext.remove();
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

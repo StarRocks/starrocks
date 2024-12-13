@@ -19,11 +19,21 @@
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+<<<<<<< HEAD
 #include "exprs/jit/ir_helper.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
 #include "types/constexpr.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 #define CASE_TYPE_COLUMN(NODE_TYPE, CHECK_TYPE, LITERAL_VALUE)                              \
@@ -165,6 +175,11 @@ StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Ch
     return column;
 }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool VectorizedLiteral::is_compilable(RuntimeState* state) const {
     return IRHelper::support_jit(_type.type);
 }
@@ -187,6 +202,10 @@ StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JI
     }
     return datum;
 }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 std::string VectorizedLiteral::debug_string() const {
     std::stringstream out;

@@ -35,7 +35,11 @@
 #include "orc_schema_builder.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 #include "util/stack_util.cpp"
+=======
+#include "util/stack_util.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -190,6 +194,12 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader, const OrcPredic
         return Status::InternalError(s);
     }
 
+<<<<<<< HEAD
+=======
+    // _batch can't be reused because the schema between files may be different
+    _batch.reset();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
     RETURN_IF_ERROR(_init_cast_exprs());

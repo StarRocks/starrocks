@@ -14,9 +14,20 @@
 
 #include "formats/parquet/page_reader.h"
 
+<<<<<<< HEAD
 #include "common/config.h"
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
+=======
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <ostream>
+#include <vector>
+
+#include "common/compiler_util.h"
+#include "exec/hdfs_scanner.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
 

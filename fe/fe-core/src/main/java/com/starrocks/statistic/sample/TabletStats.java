@@ -17,12 +17,18 @@ package com.starrocks.statistic.sample;
 public class TabletStats {
 
     private final long tabletId;
+<<<<<<< HEAD
     private final long partitionId;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final long rowCount;
 
     public TabletStats(long tabletId, long partitionId, long rowCount) {
         this.tabletId = tabletId;
+<<<<<<< HEAD
         this.partitionId = partitionId;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.rowCount = rowCount;
     }
 
@@ -30,10 +36,13 @@ public class TabletStats {
         return tabletId;
     }
 
+<<<<<<< HEAD
     public long getPartitionId() {
         return partitionId;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getRowCount() {
         return rowCount;
     }

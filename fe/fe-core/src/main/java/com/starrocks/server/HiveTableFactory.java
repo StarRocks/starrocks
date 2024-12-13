@@ -44,8 +44,13 @@ public class HiveTableFactory extends ExternalTableFactory {
         tableBuilder
                 .setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
+<<<<<<< HEAD
                 .setHiveDbName(catalogTable.getDbName())
                 .setHiveTableName(catalogTable.getTableName())
+=======
+                .setHiveDbName(catalogTable.getCatalogDBName())
+                .setHiveTableName(catalogTable.getCatalogTableName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .setPartitionColumnNames(catalogTable.getPartitionColumnNames())
                 .setDataColumnNames(catalogTable.getDataColumnNames())
                 .setTableLocation(catalogTable.getTableLocation())

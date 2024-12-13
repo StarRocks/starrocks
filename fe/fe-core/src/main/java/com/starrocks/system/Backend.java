@@ -487,7 +487,11 @@ public class Backend extends ComputeNode {
     @Override
     public String toString() {
         return "Backend [id=" + getId() + ", host=" + getHost() + ", heartbeatPort=" + getHeartbeatPort()
+<<<<<<< HEAD
                 + ", alive=" + getIsAlive().get() + "]";
+=======
+                + ", alive=" + getIsAlive().get() + ", status=" + getStatus() + "]";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setTabletMaxCompactionScore(long compactionScore) {

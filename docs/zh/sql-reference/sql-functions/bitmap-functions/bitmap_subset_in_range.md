@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_subset_in_range
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从 Bitmap 中返回取值在指定范围内的元素。返回的元素是 Bitmap 的子集。
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从日期或时间日期表达式中截取日期部分。
 

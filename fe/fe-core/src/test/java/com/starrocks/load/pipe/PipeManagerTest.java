@@ -20,7 +20,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LabelAlreadyUsedException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
@@ -132,7 +136,11 @@ public class PipeManagerTest {
 
     @After
     public void after() {
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
     }
@@ -229,7 +237,11 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -339,10 +351,17 @@ public class PipeManagerTest {
             private int count = 0;
 
             @Mock
+<<<<<<< HEAD
             public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
                 count++;
                 if (count <= errorCount) {
                     throw new UserException("network connection error");
+=======
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws StarRocksException {
+                count++;
+                if (count <= errorCount) {
+                    throw new StarRocksException("network connection error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     List<FileStatus> res = new ArrayList<>();
                     res.add(new FileStatus(1024, false, 1, 1, 1, new Path("file1")));
@@ -813,7 +832,11 @@ public class PipeManagerTest {
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
         pipe = getPipe("p_crud");
+<<<<<<< HEAD
         Assert.assertEquals("{\"auto_ingest\":\"false\",\"BATCH_SIZE\":\"10GB\"}", pipe.getPropertiesJson());
+=======
+        Assert.assertEquals("{\"auto_ingest\":\"false\",\"batch_size\":\"10GB\"}", pipe.getPropertiesJson());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // drop
         sql = "drop pipe p_crud";
@@ -835,7 +858,11 @@ public class PipeManagerTest {
         sql = "create pipe p_crud1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
         Assert.assertEquals(0, pm.getPipesUnlock().size());
     }
@@ -957,18 +984,30 @@ public class PipeManagerTest {
     public void testTaskProperties() throws Exception {
         mockRepoExecutor();
         String pipeName = "p_task_properties";
+<<<<<<< HEAD
         createPipe("create pipe p_task_properties properties('task.query_timeout'='20') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         Pipe pipe = getPipe(pipeName);
         Assert.assertEquals("{\"task.query_timeout\":\"20\"}", pipe.getPropertiesJson());
         Assert.assertEquals(ImmutableMap.of("query_timeout", "20"), pipe.getTaskProperties());
+=======
+        createPipe("create pipe p_task_properties properties('task.insert_timeout'='20') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        Pipe pipe = getPipe(pipeName);
+        Assert.assertEquals("{\"task.insert_timeout\":\"20\"}", pipe.getPropertiesJson());
+        Assert.assertEquals(ImmutableMap.of("insert_timeout", "20"), pipe.getTaskProperties());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         dropPipe(pipeName);
 
         // default task execution variables
         createPipe("create pipe p_task_properties " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         pipe = getPipe(pipeName);
+<<<<<<< HEAD
         Assert.assertEquals(ImmutableMap.of("query_timeout", "3600"), pipe.getTaskProperties());
+=======
+        Assert.assertEquals(ImmutableMap.of(), pipe.getTaskProperties());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1030,7 +1069,11 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1

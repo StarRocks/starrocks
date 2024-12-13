@@ -48,6 +48,10 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.lake.LakeMaterializedView;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -663,7 +667,11 @@ public class MvRewritePreprocessor {
                 long dbId = indexMeta.getDbId();
                 String viewDefineSql = indexMeta.getViewDefineSql();
                 String mvName = olapTable.getIndexNameById(indexId);
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // distribution info
                 DistributionInfo baseTableDistributionInfo = olapTable.getDefaultDistributionInfo();
@@ -704,8 +712,20 @@ public class MvRewritePreprocessor {
                 // refresh schema
                 MaterializedView.MvRefreshScheme mvRefreshScheme =
                         new MaterializedView.MvRefreshScheme(MaterializedView.RefreshType.SYNC);
+<<<<<<< HEAD
                 MaterializedView mv = new MaterializedView(db, mvName, indexMeta, olapTable,
                         mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+=======
+                MaterializedView mv;
+                if (olapTable.isCloudNativeTable()) {
+                    mv = new LakeMaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                } else {
+                    mv = new MaterializedView(db, mvName, indexMeta, olapTable,
+                            mvPartitionInfo, mvDistributionInfo, mvRefreshScheme);
+                }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 mv.setViewDefineSql(viewDefineSql);
                 mv.setBaseIndexId(indexId);
                 relatedMvs.add(mv);
@@ -871,7 +891,11 @@ public class MvRewritePreprocessor {
 
         // Add mv info into dump info
         if (context.getDumpInfo() != null) {
+<<<<<<< HEAD
             String dbName = GlobalStateMgr.getCurrentState().getDb(mv.getDbId()).getFullName();
+=======
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId()).getFullName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             context.getDumpInfo().addTable(dbName, mv);
         }
 
@@ -986,7 +1010,11 @@ public class MvRewritePreprocessor {
             }
         }
         final PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
+<<<<<<< HEAD
 
+=======
+        // MV's selected partition ids/tablet ids are necessary for MV rewrite.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return LogicalOlapScanOperator.builder()
                 .setTable(mv)
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())

@@ -27,6 +27,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -62,9 +66,17 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+<<<<<<< HEAD
 
 import java.util.List;
 import java.util.Map;
+=======
+import org.apache.iceberg.Snapshot;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 
 // used in SPJG mv union rewrite
@@ -79,7 +91,11 @@ public class OptExpressionDuplicator {
     private final ReplaceColumnRefRewriter rewriter;
     private final boolean partialPartitionRewrite;
     private final OptimizerContext optimizerContext;
+<<<<<<< HEAD
     private final Map<Table, Column> mvRefBaseTableColumns;
+=======
+    private final Map<Table, List<Column>> mvRefBaseTableColumns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public OptExpressionDuplicator(MaterializationContext materializationContext) {
         this.columnRefFactory = materializationContext.getQueryRefFactory();
@@ -232,13 +248,24 @@ public class OptExpressionDuplicator {
                     Table refBaseTable = scanOperator.getTable();
                     IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
                     String catalogName = cachedIcebergTable.getCatalogName();
+<<<<<<< HEAD
                     String dbName = cachedIcebergTable.getRemoteDbName();
+=======
+                    String dbName = cachedIcebergTable.getCatalogDBName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     TableName tableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
                     Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName).orElse(null);
                     if (currentTable == null) {
                         return null;
                     }
                     scanBuilder.setTable(currentTable);
+<<<<<<< HEAD
+=======
+                    TableVersionRange versionRange = TableVersionRange.withEnd(
+                            Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
+                                    .map(Snapshot::snapshotId));
+                    scanBuilder.setTableVersionRange(versionRange);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -252,11 +279,21 @@ public class OptExpressionDuplicator {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
                 if (mvRefBaseTableColumns.containsKey(table)) {
+<<<<<<< HEAD
                     Column partitionColumn = mvRefBaseTableColumns.get(table);
                     if (!columnRefOperatorColumnMap.containsValue(partitionColumn) &&
                             newColumnMetaToColRefMap.containsKey(partitionColumn)) {
                         ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
                         columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+=======
+                    List<Column> partitionColumns = mvRefBaseTableColumns.get(table);
+                    for (Column partitionColumn : partitionColumns) {
+                        if (!columnRefOperatorColumnMap.containsValue(partitionColumn) &&
+                                newColumnMetaToColRefMap.containsKey(partitionColumn)) {
+                            ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
+                            columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+                        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }

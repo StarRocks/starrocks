@@ -14,12 +14,16 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
 // ------------------------------------------------------------------------------------
 // PredicateCompoundNode
 // ------------------------------------------------------------------------------------
@@ -102,6 +106,8 @@ bool PredicateCompoundNode<Type>::empty() const {
     return _col_children_map.empty() && _compound_children.empty();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template <CompoundNodeType Type>
 template <typename Vistor>
 void PredicateCompoundNode<Type>::partition_copy(Vistor&& cond, PredicateAndNode* true_pred_tree,

@@ -52,9 +52,15 @@ public:
 
     DISALLOW_COPY_AND_MOVE(Rowset);
 
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
 
     [[nodiscard]] StatusOr<size_t> get_read_iterator_num();
+=======
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+
+    StatusOr<size_t> get_read_iterator_num();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // only used for updatable tablets' rowset, for update state load, it wouldn't load delvec
     // simply get iterators to iterate all rows without complex options like predicates
@@ -62,9 +68,14 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema,
                                                                                     bool file_data_cache,
                                                                                     OlapReaderStatistics* stats);
+=======
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
+                                                                      OlapReaderStatistics* stats);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
@@ -73,8 +84,14 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
             const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats);
+=======
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(const Schema& schema, int64_t version,
+                                                                                  const MetaFileBuilder* builder,
+                                                                                  OlapReaderStatistics* stats);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
 
@@ -106,6 +123,7 @@ public:
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
 
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
@@ -116,12 +134,31 @@ public:
 
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
                                        bool fill_metadata_cache,
+=======
+    StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
+
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
+
+    // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
+    Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
+
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
 
     int64_t tablet_id() const { return _tablet_id; }
 
     [[nodiscard]] int64_t version() const { return metadata().version(); }
 
+<<<<<<< HEAD
+=======
+    bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
+
+    // no practical significance, just compatible interface
+    int64_t start_version() const override { return 0; }
+    int64_t end_version() const override { return 0; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;

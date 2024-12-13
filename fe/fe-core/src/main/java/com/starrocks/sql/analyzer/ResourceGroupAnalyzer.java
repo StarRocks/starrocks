@@ -84,7 +84,11 @@ public class ResourceGroupAnalyzer {
 
                     List<Long> databaseIds = new ArrayList<>();
                     for (String name : databases) {
+<<<<<<< HEAD
                         Database db = GlobalStateMgr.getCurrentState().getDb(name);
+=======
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (db == null) {
                             throw new SemanticException(String.format("Specified database not exists: %s", name));
                         }

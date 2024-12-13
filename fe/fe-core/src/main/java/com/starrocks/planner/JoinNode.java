@@ -50,7 +50,11 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
@@ -438,7 +442,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -532,11 +540,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return output.toString();
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public enum DistributionMode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),
@@ -604,4 +615,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public void setOutputSlots(List<Integer> outputSlots) {
         this.outputSlots = outputSlots;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -33,10 +33,15 @@
 // under the License.
 
 #pragma once
+<<<<<<< HEAD
 
 #include "common/statusor.h"
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
+=======
+#include "runtime/buffer_control_result_writer.h"
+#include "runtime/result_writer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -47,7 +52,11 @@ class RuntimeProfile;
 using TFetchDataResultPtr = std::unique_ptr<TFetchDataResult>;
 using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 // convert the row batch to mysql protocol row
+<<<<<<< HEAD
 class HttpResultWriter final : public ResultWriter {
+=======
+class HttpResultWriter final : public BufferControlResultWriter {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     HttpResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                      RuntimeProfile* parent_profile, TResultSinkFormatType::type format_type);
@@ -56,6 +65,7 @@ public:
 
     Status append_chunk(Chunk* chunk) override;
 
+<<<<<<< HEAD
     Status close() override;
 
     StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
@@ -80,6 +90,16 @@ private:
     RuntimeProfile::Counter* _result_send_timer = nullptr;
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
+=======
+    StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
+
+private:
+    Status _transform_row_to_json(const Columns& column, int idx);
+
+    const std::vector<ExprContext*>& _output_expr_ctxs;
+
+    raw::RawString _row_str;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const size_t _max_row_buffer_size = 1024 * 1024 * 1024;
 

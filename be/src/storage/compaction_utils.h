@@ -55,7 +55,11 @@ public:
                                        int64_t total_mem_footprint, size_t source_num);
 
     static Status construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
+<<<<<<< HEAD
                                                  CompactionAlgorithm algorithm, Version version,
+=======
+                                                 CompactionAlgorithm algorithm, Version version, int64_t gtid,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                  std::unique_ptr<RowsetWriter>* output_rowset_writer,
                                                  const TabletSchemaCSPtr& tablet_schema);
 

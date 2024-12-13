@@ -847,6 +847,7 @@ public class Utils {
     }
 
     /**
+<<<<<<< HEAD
      * Check if the operator has applied the rule
      * @param op input operator to be checked
      * @param ruleMask specific rule mask
@@ -886,12 +887,15 @@ public class Utils {
     }
 
     /**
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Check if the optExpression has applied the rule in recursively
      * @param optExpression input optExpression to be checked
      * @param ruleMask specific rule mask
      * @return true if the optExpression or its children have applied the rule, false otherwise
      */
     public static boolean isOptHasAppliedRule(OptExpression optExpression, int ruleMask) {
+<<<<<<< HEAD
         if (optExpression == null) {
             return false;
         }
@@ -900,6 +904,20 @@ public class Utils {
         }
         for (OptExpression child : optExpression.getInputs()) {
             if (isOptHasAppliedRule(child, ruleMask)) {
+=======
+        return isOptHasAppliedRule(optExpression, op -> op.isOpRuleBitSet(ruleMask));
+    }
+
+    public static boolean isOptHasAppliedRule(OptExpression optExpression, Predicate<Operator> pred) {
+        if (optExpression == null) {
+            return false;
+        }
+        if (pred.test(optExpression.getOp())) {
+            return true;
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            if (isOptHasAppliedRule(child, pred)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
         }

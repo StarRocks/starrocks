@@ -20,23 +20,69 @@
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
+<<<<<<< HEAD
+=======
+#include <arrow/result.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <gen_cpp/DataSinks_types.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
 
 #include <utility>
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+=======
+#include <parquet/file_writer.h>
+#include <parquet/platform.h>
+#include <parquet/properties.h>
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stdint.h>
+
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "column/chunk.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 #include "io/async_flush_output_stream.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
 #include "util/priority_thread_pool.hpp"
+=======
+#include "runtime/types.h"
+#include "util/priority_thread_pool.hpp"
+#include "util/runtime_profile.h"
+
+namespace parquet {
+class FileMetaData;
+} // namespace parquet
+namespace starrocks {
+class Chunk;
+class ExprContext;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 

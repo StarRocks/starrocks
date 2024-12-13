@@ -78,7 +78,11 @@ public class TriggerAction extends RestBaseAction {
             return;
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             response.appendContent("Database[" + dbName + "] does not exist");
             writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -91,10 +95,17 @@ public class TriggerAction extends RestBaseAction {
             DynamicPartitionScheduler dynamicPartitionScheduler = globalStateMgr.getDynamicPartitionScheduler();
             Table table = null;
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
             try {
                 if (!Strings.isNullOrEmpty(tableName)) {
                     table = db.getTable(tableName);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                if (!Strings.isNullOrEmpty(tableName)) {
+                    table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
 
                 if (table == null) {
@@ -103,7 +114,11 @@ public class TriggerAction extends RestBaseAction {
                     return;
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), table.getId());
             response.appendContent("Success");

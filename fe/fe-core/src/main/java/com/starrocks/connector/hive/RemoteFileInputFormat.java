@@ -72,6 +72,18 @@ public enum RemoteFileInputFormat {
         return INPUT_FORMAT_BACKEND_SPLITTABLE.getOrDefault(this, false);
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isTextFormat() {
+        switch (this) {
+            case TEXTFILE:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public THdfsFileFormat toThrift() {
         switch (this) {
             case PARQUET:

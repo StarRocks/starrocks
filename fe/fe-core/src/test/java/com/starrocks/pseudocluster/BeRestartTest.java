@@ -64,7 +64,11 @@ public class BeRestartTest {
             createTableSqls[i] = PseudoCluster.newCreateTableSqlBuilder().setTableName(name).build();
             insertSqls[i] = PseudoCluster.buildInsertSql("test", name);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
+<<<<<<< HEAD
             tableIds[i] = GlobalStateMgr.getCurrentState().getDb("test").getTable(name).getId();
+=======
+            tableIds[i] = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(name).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // insert 3 times -> version: 4
             tableVersions[i] = 4;
         }

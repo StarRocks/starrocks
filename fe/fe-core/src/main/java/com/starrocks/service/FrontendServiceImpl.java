@@ -48,6 +48,12 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -86,10 +92,17 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.ThriftServerContext;
+import com.starrocks.common.ThriftServerEventProcessor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
@@ -100,11 +113,24 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.WarehouseInfosBuilder;
+<<<<<<< HEAD
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
+=======
+import com.starrocks.journal.CheckpointException;
+import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.leader.CheckpointController;
+import com.starrocks.leader.LeaderImpl;
+import com.starrocks.load.EtlJobType;
+import com.starrocks.load.batchwrite.RequestLoadResult;
+import com.starrocks.load.batchwrite.TableId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -117,6 +143,10 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.streamload.StreamLoadKvParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
@@ -125,9 +155,12 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.DefaultCoordinator;
@@ -148,14 +181,27 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+=======
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.Property;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.staros.StarMgrServer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
@@ -188,6 +234,11 @@ import com.starrocks.thrift.TFeMemoryReq;
 import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TFinishCheckpointRequest;
+import com.starrocks.thrift.TFinishCheckpointResponse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
 import com.starrocks.thrift.TFinishSlotRequirementResponse;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -265,6 +316,11 @@ import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TMaterializedViewStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TMergeCommitRequest;
+import com.starrocks.thrift.TMergeCommitResult;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TObjectDependencyReq;
@@ -295,6 +351,11 @@ import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
 import com.starrocks.thrift.TShowVariableResult;
 import com.starrocks.thrift.TSnapshotLoaderReportRequest;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TStartCheckpointRequest;
+import com.starrocks.thrift.TStartCheckpointResponse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadInfo;
@@ -333,13 +394,20 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+<<<<<<< HEAD
 import java.util.HashMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.TimeUnit;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -493,7 +561,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(params.db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
@@ -503,10 +575,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         if (db != null) {
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
             try {
                 boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
+                List<Table> tables = listingViews ? db.getViews() :
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 OUTER:
                 for (Table table : tables) {
                     try {
@@ -563,7 +643,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return result;
@@ -603,7 +687,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
         TListPipesResult result = new TListPipesResult();
         for (Pipe pipe : pipes.values()) {
+<<<<<<< HEAD
             String databaseName = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId())
+=======
+            String databaseName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getPipeId().getDbId())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .map(Database::getOriginName)
                     .orElse(null);
 
@@ -651,7 +739,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             file.setPipe_id(record.pipeId);
             file.setDatabase_name(
                     mayPipe.flatMap(p ->
+<<<<<<< HEAD
                                     GlobalStateMgr.getCurrentState().mayGetDb(p.getDbAndName().first)
+=======
+                                    GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(p.getDbAndName().first)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                             .map(Database::getOriginName))
                             .orElse(""));
             file.setPipe_name(mayPipe.map(Pipe::getName).orElse(""));
@@ -699,7 +791,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
         result.setMaterialized_views(tablesResult);
         String dbName = params.getDb();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.warn("database not exists: {}", dbName);
             return result;
@@ -770,6 +866,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
                                                                    UserIdentity currentUser, TGetTablesParams params) {
         String dbName = params.getDb();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
         List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
@@ -777,6 +874,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         locker.lockDatabase(db, LockType.READ);
         try {
             for (Table table : db.getTables()) {
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        List<MaterializedView> materializedViews = Lists.newArrayList();
+        List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table.isMaterializedView()) {
                     filterAsynchronousMaterializedView(matcher, currentUser, dbName,
                             (MaterializedView) table, params, materializedViews);
@@ -793,7 +899,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ShowExecutor.listMaterializedViewStatus(dbName, materializedViews, singleTableMVs);
     }
@@ -917,7 +1027,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db != null) {
             Locker locker = new Locker();
             try {
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.READ);
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table table = metadataMgr.getTable(catalogName, params.db, params.table_name);
                 if (table == null) {
                     return result;
@@ -930,7 +1044,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
                 setColumnDesc(columns, table, limit, false, params.db, params.table_name);
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return result;
@@ -949,13 +1067,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (AccessDeniedException e) {
                 continue;
             }
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(fullName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db != null) {
                 Locker locker = new Locker();
                 for (String tableName : db.getTableNamesViewWithLock()) {
                     try {
+<<<<<<< HEAD
                         locker.lockDatabase(db, LockType.READ);
                         Table table = db.getTable(tableName);
+=======
+                        locker.lockDatabase(db.getId(), LockType.READ);
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (table == null) {
                             continue;
                         }
@@ -969,7 +1096,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                         reachLimit = setColumnDesc(columns, table, limit, true, fullName, tableName);
                     } finally {
+<<<<<<< HEAD
                         locker.unLockDatabase(db, LockType.READ);
+=======
+                        locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                     if (reachLimit) {
                         return;
@@ -1143,7 +1274,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -1197,7 +1331,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setStatus_code(TStatusCode.LABEL_ALREADY_EXISTS);
             status.addToError_msgs(e.getMessage());
             result.setJob_status(e.getJobStatus());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("failed to begin: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1210,7 +1348,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws UserException {
+=======
+    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
@@ -1220,17 +1362,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             long txnNumBe = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionNumByCoordinateBe(clientIp);
             LOG.info("streamload check txn num, be: {}, txn_num: {}, limit: {}", clientIp, txnNumBe, limit);
             if (txnNumBe >= limit) {
+<<<<<<< HEAD
                 throw new UserException("streamload txn num per be exceeds limit, be: "
+=======
+                throw new StarRocksException("streamload txn num per be exceeds limit, be: "
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         + clientIp + ", txn_num: " + txnNumBe + ", limit: " + limit);
             }
         }
         // check label
         if (Strings.isNullOrEmpty(request.getLabel())) {
+<<<<<<< HEAD
             throw new UserException("empty label in begin request");
+=======
+            throw new StarRocksException("empty label in begin request");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         // check database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
@@ -1238,6 +1389,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         Table table = db.getTable(request.getTbl());
         if (table == null) {
             throw new UserException("unknown table \"" + request.getDb() + "." + request.getTbl() + "\"");
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new StarRocksException("unknown database, database=" + dbName);
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+        if (table == null) {
+            throw new StarRocksException("unknown table \"" + request.getDb() + "." + request.getTbl() + "\"");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
@@ -1261,13 +1421,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
+<<<<<<< HEAD
             throw new UserException(resp.msg);
+=======
+            throw new StarRocksException(resp.msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
         // this should't open
         if (task == null || task.getTxnId() == -1) {
+<<<<<<< HEAD
             throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
+=======
+            throw new StarRocksException(String.format("Load label: {} begin transacton failed", request.getLabel()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return task.getTxnId();
     }
@@ -1302,7 +1470,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setStatus_code(TStatusCode.SR_EAGAIN);
             status.addToError_msgs(e.getMessage());
             result.setRetry_interval_ms(Math.max(allowCommitTime - System.currentTimeMillis(), 0));
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1316,7 +1488,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
+<<<<<<< HEAD
     void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException, LockTimeoutException {
+=======
+    void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws StarRocksException, LockTimeoutException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1327,9 +1503,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new StarRocksException("unknown database, database=" + dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
@@ -1361,7 +1543,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return;
         }
         // collect table-level metrics
+<<<<<<< HEAD
         Table tbl = db.getTable(request.getTbl());
+=======
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (null == tbl) {
             return;
         }
@@ -1423,7 +1609,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.warn("unknown database, database=" + dbName);
             result.setStatus(TTransactionStatus.UNKNOWN);
@@ -1462,7 +1652,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             loadTxnPrepareImpl(request);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("failed to prepare txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1475,7 +1669,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private void loadTxnPrepareImpl(TLoadTxnCommitRequest request) throws UserException {
+=======
+    private void loadTxnPrepareImpl(TLoadTxnCommitRequest request) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1486,9 +1684,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // get database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new StarRocksException("unknown database, database=" + dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
@@ -1524,7 +1728,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.TXN_NOT_EXISTS);
             status.addToError_msgs(e.getMessage());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1538,7 +1746,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private void loadTxnRollbackImpl(TLoadTxnRollbackRequest request) throws UserException {
+=======
+    private void loadTxnRollbackImpl(TLoadTxnRollbackRequest request) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1546,7 +1758,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     request.getTbl(), request.getUser_ip());
         }
         String dbName = request.getDb();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("db " + dbName + " does not exist");
         }
@@ -1607,7 +1823,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.TIMEOUT);
             status.addToError_msgs(e.getMessage());
+<<<<<<< HEAD
         } catch (UserException | StarRocksPlannerException e) {
+=======
+        } catch (StarRocksException | StarRocksPlannerException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1624,7 +1844,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new DefaultCoordinator.Factory();
     }
 
+<<<<<<< HEAD
     TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException, LockTimeoutException {
+=======
+    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws StarRocksException, LockTimeoutException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1632,6 +1856,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
@@ -1646,6 +1871,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         if (table instanceof MaterializedView) {
             throw new UserException(String.format(
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new StarRocksException("unknown database, database=" + dbName);
+        }
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+        if (table == null) {
+            throw new StarRocksException("unknown table, table=" + request.getTbl());
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new StarRocksException("load table type is not OlapTable, type=" + table.getClass());
+        }
+        if (table instanceof MaterializedView) {
+            throw new StarRocksException(String.format(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +
                             "and the data of materialized view must be consistent with the base table.",
                     table.getName(), table.getName()));
@@ -1657,7 +1898,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         timeoutMs = timeoutMs * 3 / 4;
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         if (!locker.tryLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ, timeoutMs)) {
+=======
+        if (!locker.tryLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ,
+                timeoutMs, TimeUnit.MILLISECONDS)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new LockTimeoutException(
                     "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
         }
@@ -1669,7 +1915,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                     getSyncSteamLoadTaskByTxnId(request.getTxnId());
             if (streamLoadTask == null) {
+<<<<<<< HEAD
                 throw new UserException("can not find stream load task by txnId " + request.getTxnId());
+=======
+                throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             streamLoadTask.setTUniqueId(request.getLoadId());
@@ -1685,7 +1935,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                             .getTransactionState(db.getId(), request.getTxnId());
             if (txnState == null) {
+<<<<<<< HEAD
                 throw new UserException("txn does not exist: " + request.getTxnId());
+=======
+                throw new StarRocksException("txn does not exist: " + request.getTxnId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             txnState.addTableIndexes((OlapTable) table);
             plan.setImport_label(txnState.getLabel());
@@ -1694,11 +1948,46 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             return plan;
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TMergeCommitResult requestMergeCommit(TMergeCommitRequest request) throws TException {
+        TMergeCommitResult result = new TMergeCommitResult();
+        try {
+            checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
+                    request.getTbl(), request.getUser_ip());
+            TableId tableId = new TableId(request.getDb(), request.getTbl());
+            StreamLoadKvParams params = new StreamLoadKvParams(request.getParams());
+            RequestLoadResult loadResult = GlobalStateMgr.getCurrentState()
+                    .getBatchWriteMgr().requestLoad(tableId, params, request.getBackend_id(), request.getBackend_host());
+            result.setStatus(loadResult.getStatus());
+            if (loadResult.isOk()) {
+                result.setLabel(loadResult.getValue());
+            }
+        } catch (AuthenticationException authenticationException) {
+            TStatus status = new TStatus();
+            status.setStatus_code(TStatusCode.NOT_AUTHORIZED);
+            status.addToError_msgs(authenticationException.getMessage());
+            result.setStatus(status);
+        } catch (Exception exception) {
+            TStatus status = new TStatus();
+            status.setStatus_code(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs(exception.getMessage());
+            result.setStatus(status);
+        }
+        return result;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TStatus snapshotLoaderReport(TSnapshotLoaderReportRequest request) throws TException {
         if (GlobalStateMgr.getCurrentState().getBackupHandler().report(request.getTask_type(), request.getJob_id(),
                 request.getTask_id(), request.getFinished_num(), request.getTotal_num())) {
@@ -1827,11 +2116,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TSetConfigResponse setConfig(TSetConfigRequest request) throws TException {
         try {
             Preconditions.checkState(request.getKeys().size() == request.getValues().size());
+<<<<<<< HEAD
             Map<String, String> configs = new HashMap<>();
             for (int i = 0; i < request.getKeys().size(); i++) {
                 String key = request.getKeys().get(i);
                 String value = request.getValues().get(i);
                 configs.put(key, value);
+=======
+            for (int i = 0; i < request.getKeys().size(); i++) {
+                String key = request.getKeys().get(i);
+                String value = request.getValues().get(i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if ("mysql_server_version".equalsIgnoreCase(key)) {
                     if (!Strings.isNullOrEmpty(value)) {
                         GlobalVariable.version = value;
@@ -1839,7 +2134,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
 
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs);
+=======
+            String key = request.getKeys().stream().findFirst().orElse("");
+            String value = request.getValues().stream().findFirst().orElse("");
+            AdminSetConfigStmt stmt = new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND,
+                    new Property(key, value), NodePosition.ZERO);
+            GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1910,13 +2213,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(TImmutablePartitionRequest request)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
         TImmutablePartitionResult result = new TImmutablePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             errorStatus.setError_msgs(
                     Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
@@ -1924,7 +2235,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
         Locker locker = new Locker();
+<<<<<<< HEAD
         Table table = db.getTable(tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             errorStatus.setError_msgs(
                     Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
@@ -1971,14 +2286,24 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             updatePartitionIds.add(p.getParentId());
             p.setImmutable(true);
 
+<<<<<<< HEAD
             List<PhysicalPartition> mutablePartitions = Lists.newArrayList();
             try {
                 locker.lockDatabase(db, LockType.READ);
+=======
+            List<PhysicalPartition> mutablePartitions;
+            try {
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 mutablePartitions = partition.getSubPartitions().stream()
                         .filter(physicalPartition -> !physicalPartition.isImmutable())
                         .collect(Collectors.toList());
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (mutablePartitions.size() <= 0) {
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -1996,7 +2321,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             long mutablePartitionNum = 0;
             try {
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.READ);
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     if (physicalPartition.isImmutable()) {
                         continue;
@@ -2012,7 +2341,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     buildTablets(physicalPartition, tablets, olapTable, warehouseId);
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         result.setPartitions(partitions);
@@ -2084,7 +2417,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
+<<<<<<< HEAD
                                      OlapTable olapTable, long warehouseId) throws UserException {
+=======
+                                     OlapTable olapTable, long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                 MaterializedIndex.IndexExtState.ALL)) {
@@ -2096,7 +2433,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                         tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
                     } catch (Exception exception) {
+<<<<<<< HEAD
                         throw new UserException("Check if any backend is down or not. tablet_id: " + tablet.getId());
+=======
+                        throw new StarRocksException("Check if any backend is down or not. tablet_id: " + tablet.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             } else {
@@ -2108,7 +2449,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             localTablet.getNormalReplicaBackendPathMap(
                                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
                     if (bePathsMap.keySet().size() < quorum) {
+<<<<<<< HEAD
                         throw new UserException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
+=======
+                        throw new StarRocksException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                         "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
                                         "BeReplicaSize:%s, quorum:%s", tablet.getId(), localTablet.getReplicaInfos(),
                                 bePathsMap.size(), quorum));
@@ -2162,14 +2507,29 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long tableId = request.getTable_id();
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+<<<<<<< HEAD
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        String partitionNamePrefix = null;
+        boolean isTemp = false;
+        if (request.isSetIs_temp() && request.isIs_temp()) {
+            isTemp = true;
+            partitionNamePrefix = "txn" + request.getTxn_id();
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d is not exists", dbId)));
             result.setStatus(errorStatus);
             return result;
         }
+<<<<<<< HEAD
         Table table = db.getTable(tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             errorStatus.setError_msgs(Lists.newArrayList(String.format("dbId=%d tableId=%d is not exists", dbId, tableId)));
             result.setStatus(errorStatus);
@@ -2199,20 +2559,35 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         AddPartitionClause addPartitionClause;
         List<String> partitionColNames = Lists.newArrayList();
+<<<<<<< HEAD
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
                 LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
                     request.partition_values);
+=======
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+                LockType.READ)) {
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable,
+                    request.partition_values, isTemp, partitionNamePrefix);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PartitionDesc partitionDesc = addPartitionClause.getPartitionDesc();
             if (partitionDesc instanceof RangePartitionDesc) {
                 partitionColNames = ((RangePartitionDesc) partitionDesc).getPartitionColNames();
             } else if (partitionDesc instanceof ListPartitionDesc) {
                 partitionColNames = ((ListPartitionDesc) partitionDesc).getPartitionColNames();
             }
+<<<<<<< HEAD
             if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_automatic_partition_number) {
                 throw new AnalysisException(" Automatically created partitions exceeded the maximum limit: " +
                         Config.max_automatic_partition_number + ". You can modify this restriction on by setting" +
                         " max_automatic_partition_number larger.");
+=======
+            if (olapTable.getNumberOfPartitions() + partitionColNames.size() > Config.max_partition_number_per_table) {
+                throw new AnalysisException("Table " + olapTable.getName() +
+                        " automatically created partitions exceeded the maximum limit: " +
+                        Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
+                        " max_partition_number_per_table larger.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } catch (AnalysisException ex) {
             errorStatus.setError_msgs(Lists.newArrayList(ex.getMessage()));
@@ -2230,6 +2605,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
+<<<<<<< HEAD
+=======
+        if (txnState.getPartitionNameToTPartition().size() > Config.max_partitions_in_one_batch) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
+                                    "You can modify this restriction on by setting" + " max_partitions_in_one_batch larger.",
+                            olapTable.getName(), Config.max_partitions_in_one_batch)));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<String> creatingPartitionNames = CatalogUtils.getPartitionNamesFromAddPartitionClause(addPartitionClause);
 
         try {
@@ -2266,7 +2653,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
+<<<<<<< HEAD
             try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+=======
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LockType.READ)) {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(ctx, addPartitionClause);
@@ -2299,11 +2690,20 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // update partition info snapshot for txn should be synchronized
         synchronized (txnState) {
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
             try {
                 return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionColNames);
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                return buildCreatePartitionResponse(
+                        olapTable, txnState, partitions, tablets, partitionColNames, isTemp);
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -2312,7 +2712,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                                                        TransactionState txnState,
                                                                        List<TOlapTablePartition> partitions,
                                                                        List<TTabletLocation> tablets,
+<<<<<<< HEAD
                                                                        List<String> partitionColNames) {
+=======
+                                                                       List<String> partitionColNames,
+                                                                       boolean isTemp) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
@@ -2331,6 +2736,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
+<<<<<<< HEAD
             Partition partition = olapTable.getPartition(partitionName);
             tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());
@@ -2338,6 +2744,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+=======
+            Partition partition = olapTable.getPartition(partitionName, isTemp);
+            tPartition = new TOlapTablePartition();
+            tPartition.setId(partition.getDefaultPhysicalPartition().getId());
+            buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
+            // tablet
+            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
                         LakeTablet cloudNativeTablet = (LakeTablet) tablet;
@@ -2450,7 +2866,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 tPartition.setIn_keys(inKeysExprNodes);
             }
         }
+<<<<<<< HEAD
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+=======
+        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             tPartition.addToIndexes(new TOlapTableIndexTablets(index.getId(), Lists.newArrayList(
                     index.getTablets().stream().map(Tablet::getId).collect(Collectors.toList()))));
             tPartition.setNum_buckets(index.getTablets().size());
@@ -2543,7 +2964,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     loads.add(job.toThrift());
                 }
             } else if (request.isSetDb()) {
+<<<<<<< HEAD
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
+=======
+                long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb()).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (request.isSetLabel()) {
                     loads.addAll(GlobalStateMgr.getCurrentState().getLoadMgr().getLoadJobsByDb(
                                     dbId, request.getLabel(), true).stream()
@@ -2791,11 +3216,19 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetDictQueryParamResponse getDictQueryParam(TGetDictQueryParamRequest request) throws TException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(request.getDb_name());
         if (db == null) {
             throw new SemanticException("Database %s is not found", request.getDb_name());
         }
         Table table = db.getTable(request.getTable_name());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.getDb_name());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", request.getDb_name());
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTable_name());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new SemanticException("dict table %s is not found", request.getTable_name());
         }
@@ -2824,7 +3257,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
             semanticException.initCause(e);
             throw semanticException;
@@ -2890,4 +3327,60 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request) throws TException {
         return QeProcessorImpl.INSTANCE.reportFragmentFinish(request);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public TStartCheckpointResponse startCheckpoint(TStartCheckpointRequest request) throws TException {
+        CheckpointWorker worker;
+        if (request.is_global_state_mgr) {
+            worker = GlobalStateMgr.getCurrentState().getCheckpointWorker();
+        } else {
+            worker = StarMgrServer.getCurrentState().getCheckpointWorker();
+        }
+
+        TStartCheckpointResponse response = new TStartCheckpointResponse();
+        try {
+            worker.setNextCheckpoint(request.getEpoch(), request.getJournal_id());
+            response.setStatus(new TStatus(OK));
+            return response;
+        } catch (CheckpointException e) {
+            LOG.warn("set next checkpoint failed", e);
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs(e.getMessage());
+            response.setStatus(status);
+            return response;
+        }
+    }
+
+    @Override
+    public TFinishCheckpointResponse finishCheckpoint(TFinishCheckpointRequest request) throws TException {
+        TFinishCheckpointResponse response = new TFinishCheckpointResponse();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs("current node is not leader");
+            response.setStatus(status);
+            return response;
+        }
+
+        CheckpointController controller;
+        if (request.is_global_state_mgr) {
+            controller = GlobalStateMgr.getCurrentState().getCheckpointController();
+        } else {
+            controller = StarMgrServer.getCurrentState().getCheckpointController();
+        }
+
+        try {
+            controller.finishCheckpoint(request.getJournal_id(), request.getNode_name());
+            response.setStatus(new TStatus(OK));
+            return response;
+        } catch (CheckpointException e) {
+            LOG.warn("finishCheckpoint failed", e);
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs(e.getMessage());
+            response.setStatus(status);
+            return response;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

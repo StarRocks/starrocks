@@ -141,7 +141,11 @@ class PlainPageDecoder : public PageDecoder {
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
 
+<<<<<<< HEAD
     [[nodiscard]] Status init() override {
+=======
+    Status init() override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK(!_parsed);
 
         if (_data.size < PLAIN_PAGE_HEADER_SIZE) {
@@ -166,7 +170,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+=======
+    Status seek_to_position_in_page(uint32_t pos) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK(_parsed) << "Must call init()";
 
         if (PREDICT_FALSE(_num_elems == 0)) {
@@ -180,7 +188,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+=======
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed) << "Must call init() firstly";
 
         if (_num_elems == 0) {
@@ -218,7 +230,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(size_t* count, Column* dst) override {
+=======
+    Status next_batch(size_t* count, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *count));
@@ -227,7 +243,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed);
 
         size_t to_read = range.span_size();

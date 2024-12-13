@@ -51,6 +51,10 @@ public class MaterializedViewOptimizer {
         optimizerConfig.disableRule(RuleType.TF_MV_TEXT_MATCH_REWRITE_RULE);
         optimizerConfig.disableRule(RuleType.TF_MV_TRANSPARENT_REWRITE_RULE);
         optimizerConfig.disableRule(RuleType.TF_ELIMINATE_AGG);
+<<<<<<< HEAD
+=======
+        optimizerConfig.disableRule(RuleType.TF_PULL_UP_PREDICATE_SCAN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.
         if (mv.getRefreshScheme().isSync()) {
             optimizerConfig.disableRule(RuleType.TF_MATERIALIZED_VIEW);
@@ -69,6 +73,7 @@ public class MaterializedViewOptimizer {
                     containsNonDeterministicFunctions.second);
             return new MvPlanContext(false, invalidPlanReason);
         }
+<<<<<<< HEAD
         // get optimized plan of mv's defined query
         Pair<OptExpression, LogicalPlan> plans =
                 MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
@@ -83,5 +88,31 @@ public class MaterializedViewOptimizer {
             invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
         }
         return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
+=======
+        int originAggPushDownMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
+        if (originAggPushDownMode != -1) {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+        }
+
+        try {
+            // get optimized plan of mv's defined query
+            Pair<OptExpression, LogicalPlan> plans =
+                    MvUtils.getRuleOptimizedLogicalPlan(stmt, columnRefFactory, connectContext, optimizerConfig, inlineView);
+            if (plans == null) {
+                return new MvPlanContext(false, "No query plan for it");
+            }
+            OptExpression mvPlan = plans.first;
+            boolean isValidPlan = MvUtils.isValidMVPlan(mvPlan);
+            // not set it invalid plan if text match rewrite is on because text match rewrite can support all query pattern.
+            String invalidPlanReason = "";
+            if (!isValidPlan) {
+                invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
+            }
+            return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateMode(originAggPushDownMode);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

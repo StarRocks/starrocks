@@ -18,8 +18,13 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
 #include "column/datum.h"
+=======
+#include "column/datum.h"
+#include "common/config.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -67,7 +72,11 @@ private:
 class ProjectionIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
+<<<<<<< HEAD
     void TearDown() override { TEST_clear_all_columns_this_thread(); }
+=======
+    void TearDown() override {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // NOLINTNEXTLINE

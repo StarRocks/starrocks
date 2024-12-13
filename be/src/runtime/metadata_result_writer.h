@@ -14,8 +14,12 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
+=======
+#include "runtime/buffer_control_result_writer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -24,7 +28,11 @@ class MysqlRowBuffer;
 class BufferControlBlock;
 class RuntimeProfile;
 
+<<<<<<< HEAD
 class MetadataResultWriter final : public ResultWriter {
+=======
+class MetadataResultWriter final : public BufferControlResultWriter {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     MetadataResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                          RuntimeProfile* parent_profile, TResultSinkType::type _sink_type);
@@ -35,6 +43,7 @@ public:
 
     Status append_chunk(Chunk* chunk) override;
 
+<<<<<<< HEAD
     Status close() override;
 
     StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
@@ -44,11 +53,17 @@ public:
 private:
     void _init_profile();
 
+=======
+    StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
+
+private:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
     Status _fill_iceberg_metadata(const Columns& columns, const Chunk* chunk, TFetchDataResult* result) const;
 
 private:
+<<<<<<< HEAD
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;
 
@@ -60,6 +75,9 @@ private:
     RuntimeProfile::Counter* _serialize_timer = nullptr;
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
+=======
+    const std::vector<ExprContext*>& _output_expr_ctxs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TResultSinkType::type _sink_type;
 };
 

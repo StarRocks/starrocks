@@ -137,6 +137,12 @@ TabletColumn::TabletColumn(const TabletColumn& rhs)
     if (rhs._extra_fields != nullptr) {
         _extra_fields = new ExtraFields(*rhs._extra_fields);
     }
+<<<<<<< HEAD
+=======
+    if (rhs._agg_state_desc != nullptr) {
+        _agg_state_desc = new AggStateDesc(*rhs._agg_state_desc);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
@@ -149,8 +155,15 @@ TabletColumn::TabletColumn(TabletColumn&& rhs) noexcept
           _precision(rhs._precision),
           _scale(rhs._scale),
           _flags(rhs._flags),
+<<<<<<< HEAD
           _extra_fields(rhs._extra_fields) {
     rhs._extra_fields = nullptr;
+=======
+          _extra_fields(rhs._extra_fields),
+          _agg_state_desc(rhs._agg_state_desc) {
+    rhs._extra_fields = nullptr;
+    rhs._agg_state_desc = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TabletColumn::TabletColumn(const ColumnPB& column) {
@@ -163,6 +176,10 @@ TabletColumn::TabletColumn(const TColumn& column) {
 
 TabletColumn::~TabletColumn() {
     delete _extra_fields;
+<<<<<<< HEAD
+=======
+    delete _agg_state_desc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void TabletColumn::swap(TabletColumn* rhs) {
@@ -177,6 +194,10 @@ void TabletColumn::swap(TabletColumn* rhs) {
     swap(_scale, rhs->_scale);
     swap(_flags, rhs->_flags);
     swap(_extra_fields, rhs->_extra_fields);
+<<<<<<< HEAD
+=======
+    swap(_agg_state_desc, rhs->_agg_state_desc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TabletColumn& TabletColumn::operator=(const TabletColumn& rhs) {
@@ -243,6 +264,16 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
         sub_column.init_from_pb(column.children_columns(i));
         add_sub_column(std::move(sub_column));
     }
+<<<<<<< HEAD
+=======
+    // agg state type info
+    if (column.has_agg_state_desc()) {
+        VLOG(2) << "column contains agg state type info, add into extra fields";
+        auto& agg_state_desc_pb = column.agg_state_desc();
+        auto desc = AggStateDesc::from_protobuf(agg_state_desc_pb);
+        _agg_state_desc = new AggStateDesc(std::move(desc));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void TabletColumn::init_from_thrift(const TColumn& tcolumn) {
@@ -280,6 +311,14 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     for (int i = 0; i < subcolumn_count(); i++) {
         subcolumn(i).to_schema_pb(column->add_children_columns());
     }
+<<<<<<< HEAD
+=======
+    if (has_agg_state_desc()) {
+        auto* agg_state_desc = get_agg_state_desc();
+        auto* agg_state_pb = column->mutable_agg_state_desc();
+        agg_state_desc->to_protobuf(agg_state_pb);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void TabletSchema::append_column(TabletColumn column) {
@@ -659,6 +698,23 @@ size_t TabletSchema::field_index(std::string_view field_name) const {
     return -1;
 }
 
+<<<<<<< HEAD
+=======
+size_t TabletSchema::field_index(std::string_view field_name, std::string_view extra_column_name) const {
+    int ordinal = -1;
+    for (auto& column : _cols) {
+        ordinal++;
+        if (column.name() == field_name) {
+            return ordinal;
+        }
+    }
+    if (field_name == extra_column_name) {
+        return ordinal + 1;
+    }
+    return -1;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 int32_t TabletSchema::field_index(int32_t col_unique_id) const {
     const auto& found = _unique_id_to_index.find(col_unique_id);
     return (found == _unique_id_to_index.end()) ? -1 : found->second;

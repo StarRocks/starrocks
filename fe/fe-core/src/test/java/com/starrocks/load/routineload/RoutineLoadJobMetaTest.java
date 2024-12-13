@@ -18,7 +18,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
@@ -63,7 +67,11 @@ public class RoutineLoadJobMetaTest {
     @Test
     public void testMetaNotFound() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb("test");
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), 2L, "", "");
 
         Exception e = Assert.assertThrows(MetaNotFoundException.class,
@@ -73,11 +81,19 @@ public class RoutineLoadJobMetaTest {
     @Test
     public void testTxnNotFound() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb("test");
         Table table = db.getTable("site_access_auto");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), table.getId(), "", "");
 
         Exception e = Assert.assertThrows(UserException.class,
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_auto");
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), table.getId(), "", "");
+
+        Exception e = Assert.assertThrows(StarRocksException.class,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 }

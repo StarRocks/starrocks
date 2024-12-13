@@ -34,7 +34,11 @@ void convert_datum_rows_to_chunk(const std::vector<DatumRow>& rows, Chunk* chunk
 
 } // namespace
 
+<<<<<<< HEAD
 [[nodiscard]] Status DatumRowIterator::do_get_next(Chunk* chunk) {
+=======
+Status DatumRowIterator::do_get_next(Chunk* chunk) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!_is_eos) {
         convert_datum_rows_to_chunk(_rows, chunk);
         _is_eos = true;
@@ -43,6 +47,7 @@ void convert_datum_rows_to_chunk(const std::vector<DatumRow>& rows, Chunk* chunk
     return Status::EndOfFile("end of empty iterator");
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::prepare(RuntimeState* state) {
     return Status::OK();
 }
@@ -52,6 +57,17 @@ void convert_datum_rows_to_chunk(const std::vector<DatumRow>& rows, Chunk* chunk
 }
 
 [[nodiscard]] Status MemStateTable::commit(RuntimeState* state) {
+=======
+Status MemStateTable::prepare(RuntimeState* state) {
+    return Status::OK();
+}
+
+Status MemStateTable::open(RuntimeState* state) {
+    return Status::OK();
+}
+
+Status MemStateTable::commit(RuntimeState* state) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -65,7 +81,11 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     return true;
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::seek(const Columns& keys, StateTableResult& values) const {
+=======
+Status MemStateTable::seek(const Columns& keys, StateTableResult& values) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto num_rows = keys[0]->size();
     auto& found = values.found;
     auto& result_chunk = values.result_chunk;
@@ -81,14 +101,22 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     return Status::OK();
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::_append_null_to_chunk(ChunkPtr& result_chunk) const {
+=======
+Status MemStateTable::_append_null_to_chunk(ChunkPtr& result_chunk) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto& column : result_chunk->columns()) {
         column->append_nulls(1);
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::_append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const {
+=======
+Status MemStateTable::_append_datum_row_to_chunk(const DatumRow& v_row, ChunkPtr& result_chunk) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK_EQ(v_row.size(), result_chunk->num_columns());
     auto& columns = result_chunk->columns();
     for (size_t i = 0; i < result_chunk->num_columns(); i++) {
@@ -97,8 +125,12 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     return Status::OK();
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::seek(const Columns& keys, const std::vector<uint8_t>& selection,
                                          StateTableResult& values) const {
+=======
+Status MemStateTable::seek(const Columns& keys, const Filter& selection, StateTableResult& values) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK_LT(0, keys.size());
     auto num_rows = keys[0]->size();
     DCHECK_EQ(selection.size(), num_rows);
@@ -126,8 +158,13 @@ bool MemStateTable::_equal_keys(const DatumKeyRow& m_k, const DatumKeyRow& keys)
     return Status::OK();
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::seek(const Columns& keys, const std::vector<std::string>& projection_columns,
                                          StateTableResult& values) const {
+=======
+Status MemStateTable::seek(const Columns& keys, const std::vector<std::string>& projection_columns,
+                           StateTableResult& values) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::NotSupported("Seek with projection columns is not supported yet.");
 }
 
@@ -204,7 +241,11 @@ DatumKeyRow MemStateTable::_convert_columns_to_key(const Columns& cols, size_t i
     return key_row;
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::write(RuntimeState* state, const StreamChunkPtr& chunk) {
+=======
+Status MemStateTable::write(RuntimeState* state, const StreamChunkPtr& chunk) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(chunk);
     auto chunk_size = chunk->num_rows();
     if (StreamChunkConverter::has_ops_column(chunk)) {
@@ -231,7 +272,11 @@ DatumKeyRow MemStateTable::_convert_columns_to_key(const Columns& cols, size_t i
     return Status::OK();
 }
 
+<<<<<<< HEAD
 [[nodiscard]] Status MemStateTable::reset_epoch(RuntimeState* state) {
+=======
+Status MemStateTable::reset_epoch(RuntimeState* state) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 

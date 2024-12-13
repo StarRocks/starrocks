@@ -34,12 +34,22 @@
 
 #include "runtime/buffer_control_block.h"
 
+<<<<<<< HEAD
+=======
+#include <arrow/record_batch.h>
+#include <arrow/type.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <utility>
 
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "service/brpc.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/race_detect.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/thrift_util.h"
 
 namespace starrocks {
@@ -96,13 +106,25 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
           _is_cancelled(false),
           _buffer_bytes(0),
           _buffer_limit(buffer_size),
+<<<<<<< HEAD
           _packet_num(0) {}
+=======
+          _packet_num(0),
+          _arrow_rows_limit(buffer_size * 4096),
+          _arrow_rows(0) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 BufferControlBlock::~BufferControlBlock() {
     cancel();
 
     _batch_queue.clear();
+<<<<<<< HEAD
     _buffer_bytes = 0;
+=======
+    _arrow_batch_queue.clear();
+    _buffer_bytes = 0;
+    _arrow_rows = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status BufferControlBlock::init() {
@@ -132,6 +154,28 @@ Status BufferControlBlock::add_batch(TFetchDataResult* result, bool need_free) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status BufferControlBlock::add_arrow_batch(std::shared_ptr<arrow::RecordBatch>& result) {
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
+    }
+
+    std::unique_lock<std::mutex> l(_lock);
+    while ((_arrow_batch_queue.size() > _buffer_limit || _arrow_rows > _arrow_rows_limit) && !_is_cancelled) {
+        _data_removal.wait(l);
+    }
+
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::add_arrow_batch");
+    }
+
+    _process_arrow_batch_without_lock(result);
+
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StatusOr<std::unique_ptr<SerializeRes>> BufferControlBlock::_serialize_result(TFetchDataResult* result) {
     uint8_t* buf = nullptr;
     uint32_t len = 0;
@@ -160,6 +204,7 @@ void BufferControlBlock::_process_batch_without_lock(std::unique_ptr<SerializeRe
     }
 }
 
+<<<<<<< HEAD
 StatusOr<bool> BufferControlBlock::try_add_batch(std::unique_ptr<TFetchDataResult>& result) {
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
@@ -198,6 +243,31 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
     }
 
     l.lock();
+=======
+void BufferControlBlock::_process_arrow_batch_without_lock(std::shared_ptr<arrow::RecordBatch>& result) {
+    _arrow_rows += result->num_rows();
+    _arrow_batch_queue.push_back(std::move(result));
+    _data_arriaval.notify_one();
+}
+
+Status BufferControlBlock::add_to_result_buffer(std::vector<std::unique_ptr<TFetchDataResult>>&& results) {
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::add_batch");
+    }
+    for (auto& result : results) {
+        ASSIGN_OR_RETURN(auto ser_res, _serialize_result(result.get()));
+        result.reset();
+        {
+            std::unique_lock<std::mutex> l(_lock);
+            _buffer_bytes += ser_res->attachment.length();
+            _batch_queue.push_back(std::move(ser_res));
+            l.unlock();
+            _data_arriaval.notify_one();
+        }
+    }
+
+    std::unique_lock<std::mutex> l(_lock);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!_waiting_rpc.empty() && !_batch_queue.empty()) {
         std::unique_ptr<SerializeRes> ser = std::move(_batch_queue.front());
         _batch_queue.pop_front();
@@ -209,7 +279,34 @@ StatusOr<bool> BufferControlBlock::try_add_batch(std::vector<std::unique_ptr<TFe
         l.unlock();
         ctx->on_data(ser.get(), packet_num);
     }
+<<<<<<< HEAD
     return true;
+=======
+
+    return Status::OK();
+}
+
+bool BufferControlBlock::is_full() const {
+    if (_is_cancelled) {
+        return false;
+    }
+    std::unique_lock<std::mutex> l(_lock);
+    if ((_batch_queue.size() > _buffer_limit || _buffer_bytes > _max_memory_usage) && !_is_cancelled) {
+        return true;
+    }
+    if (_is_cancelled) {
+        return false;
+    }
+    return false;
+}
+
+void BufferControlBlock::cancel_pending_rpc() {
+    std::unique_lock<std::mutex> l(_lock);
+    while (!_batch_queue.empty()) {
+        _buffer_bytes -= _batch_queue.front()->attachment.length();
+        _batch_queue.pop_front();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // seems no use?
@@ -290,6 +387,43 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
     _waiting_rpc.push_back(ctx);
 }
 
+<<<<<<< HEAD
+=======
+Status BufferControlBlock::get_arrow_batch(std::shared_ptr<arrow::RecordBatch>* result) {
+    std::unique_lock<std::mutex> l(_lock);
+    if (!_status.ok()) {
+        return _status;
+    }
+
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
+    }
+
+    while (_arrow_batch_queue.empty() && !_is_close && !_is_cancelled) {
+        _data_arriaval.wait(l);
+    }
+
+    if (_is_cancelled) {
+        return Status::Cancelled("Cancelled BufferControlBlock::get_arrow_batch");
+    }
+
+    if (!_arrow_batch_queue.empty()) {
+        const auto batch = std::move(_arrow_batch_queue.front());
+        *result = batch;
+        _arrow_batch_queue.pop_front();
+        _arrow_rows -= batch->num_rows();
+        _data_removal.notify_one();
+        return Status::OK();
+    }
+
+    if (_is_close) {
+        return Status::OK();
+    }
+
+    return Status::InternalError("Internal error, BufferControlBlock::get_arrow_batch");
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status BufferControlBlock::close(Status exec_status) {
     std::unique_lock<std::mutex> l(_lock);
     if (_is_close) {

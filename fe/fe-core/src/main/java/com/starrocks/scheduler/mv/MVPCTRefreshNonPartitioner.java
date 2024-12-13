@@ -27,6 +27,10 @@ import com.starrocks.scheduler.TaskRunContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Set;
 
@@ -48,12 +52,22 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public Expr generatePartitionPredicate(Table table, Set<String> refBaseTablePartitionNames,
+<<<<<<< HEAD
                                            Expr mvPartitionSlotRef) {
         // do nothing
         return null;
     }
     @Override
     public Set<String> getMVPartitionsToRefreshWithForce(int partitionTTLNumber) {
+=======
+                                           List<Expr> mvPartitionSlotRefs) {
+        // do nothing
+        return null;
+    }
+
+    @Override
+    public Set<String> getMVPartitionsToRefreshWithForce() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return mv.getVisiblePartitionNames();
     }
 
@@ -72,7 +86,10 @@ public final class MVPCTRefreshNonPartitioner extends MVPCTRefreshPartitioner {
     @Override
     public Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
                                                   MVRefreshParams mvRefreshParams,
+<<<<<<< HEAD
                                                   int partitionTTLNumber,
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                   boolean isAutoRefresh) {
         return Sets.newHashSet();
     }

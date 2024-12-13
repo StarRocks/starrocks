@@ -25,3 +25,8 @@ ADD_BE_BENCH(${SRC_DIR}/bench/orc_column_reader_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hash_functions_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/binary_column_copy_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/hyperscan_vec_bench)
+<<<<<<< HEAD
+=======
+ADD_BE_BENCH(${SRC_DIR}/bench/mem_equal_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/bit_unpack_bench)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

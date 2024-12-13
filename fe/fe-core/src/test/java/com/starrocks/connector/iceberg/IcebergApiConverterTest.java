@@ -31,6 +31,10 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.catalog.Namespace;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.Test;
@@ -241,4 +245,14 @@ public class IcebergApiConverterTest {
         Type resType = fromIcebergType(icebergType);
         Assert.assertEquals(resType, timeType);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testConvertDbNameToNamespace() {
+        Assert.assertEquals(Namespace.of(""), IcebergApiConverter.convertDbNameToNamespace(""));
+        Assert.assertEquals(Namespace.of("a"), IcebergApiConverter.convertDbNameToNamespace("a"));
+        Assert.assertEquals(Namespace.of("a", "b", "c"), IcebergApiConverter.convertDbNameToNamespace("a.b.c"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

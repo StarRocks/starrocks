@@ -86,7 +86,11 @@ public:
     // init event buffer for all drivers in a single fragment instance
     void register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers);
 
+<<<<<<< HEAD
     [[nodiscard]] Status dump();
+=======
+    Status dump();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static void set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id,
                                       std::uintptr_t driver);

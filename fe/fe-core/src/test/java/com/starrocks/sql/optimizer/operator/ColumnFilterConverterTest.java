@@ -264,7 +264,11 @@ public class ColumnFilterConverterTest {
         argument.add(constantOperator);
         ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, argument);
 
+<<<<<<< HEAD
         Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("bill_detail");
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("bill_detail");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ExpressionRangePartitionInfoV2 partitionInfo = (ExpressionRangePartitionInfoV2) ((OlapTable) table).getPartitionInfo();
         ScalarOperator afterConvert = ColumnFilterConverter.convertPredicate(predicate, partitionInfo, table.getIdToColumn());
         Assert.assertEquals(2921712368984L, ((ConstantOperator) afterConvert.getChild(1)).getValue());

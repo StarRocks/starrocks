@@ -59,7 +59,10 @@ public class ExpressionRangePartitionInfoTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setUp() throws Exception {
         partitionExprs = Lists.newArrayList();
@@ -72,7 +75,11 @@ public class ExpressionRangePartitionInfoTest {
         fnChildren.add(slotRef2);
         functionCallExpr = new FunctionCallExpr("date_trunc", fnChildren);
         functionCallExpr.setFn(Expr.getBuiltinFunction(
+<<<<<<< HEAD
                 "date_trunc", new Type[] {Type.VARCHAR, Type.DATETIME}, Function.CompareMode.IS_IDENTICAL));
+=======
+                    "date_trunc", new Type[] {Type.VARCHAR, Type.DATETIME}, Function.CompareMode.IS_IDENTICAL));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
@@ -91,9 +98,15 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
         List<Column> schema = Collections.singletonList(k1);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(partitionExprs,
+<<<<<<< HEAD
                 schema, PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
                 MetaUtils.buildIdToColumn(schema));
+=======
+                    schema, PartitionType.RANGE);
+        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
+                    MetaUtils.buildIdToColumn(schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k1);
     }
@@ -103,9 +116,15 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(functionCallExpr));
         List<Column> schema = Collections.singletonList(k2);
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
+<<<<<<< HEAD
                 new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
                 MetaUtils.buildIdToColumn(schema));
+=======
+                    new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
+        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
+                    MetaUtils.buildIdToColumn(schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k2);
     }
@@ -118,9 +137,15 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(functionCallExpr));
         List<Column> schema = Arrays.asList(k1, k2);
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
+<<<<<<< HEAD
                 new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
                 MetaUtils.buildIdToColumn(schema));
+=======
+                    new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
+        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns(
+                    MetaUtils.buildIdToColumn(schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(partitionColumns.size(), 2);
         Assert.assertEquals(partitionColumns.get(0), k1);
         Assert.assertEquals(partitionColumns.get(1), k2);
@@ -136,15 +161,24 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
+<<<<<<< HEAD
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-128"))),
                 null));
+=======
+                    new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-128"))),
+                    null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema),
+<<<<<<< HEAD
                     singleRangePartitionDesc, 20000L, false);
+=======
+                        singleRangePartitionDesc, 20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -155,15 +189,24 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
+<<<<<<< HEAD
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-32768"))),
                 null));
+=======
+                    new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-32768"))),
+                    null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema),
+<<<<<<< HEAD
                     singleRangePartitionDesc, 20000L, false);
+=======
+                        singleRangePartitionDesc, 20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -174,15 +217,24 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1",
+<<<<<<< HEAD
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-2147483648"))),
                 null));
+=======
+                    new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-2147483648"))),
+                    null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -193,6 +245,7 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", new PartitionKeyDesc(Lists
+<<<<<<< HEAD
                 .newArrayList(new PartitionValue("-9223372036854775808"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("-9223372036854775806"))), null));
@@ -200,6 +253,15 @@ public class ExpressionRangePartitionInfoTest {
                 .newArrayList(new PartitionValue("0"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("9223372036854775806"))), null));
+=======
+                    .newArrayList(new PartitionValue("-9223372036854775808"))), null));
+        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", new PartitionKeyDesc(Lists
+                    .newArrayList(new PartitionValue("-9223372036854775806"))), null));
+        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", new PartitionKeyDesc(Lists
+                    .newArrayList(new PartitionValue("0"))), null));
+        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
+                    .newArrayList(new PartitionValue("9223372036854775806"))), null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
@@ -207,7 +269,11 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -218,6 +284,7 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(ColumnIdExpr.create(slotRef));
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", new PartitionKeyDesc(Lists
+<<<<<<< HEAD
                 .newArrayList(new PartitionValue("-9223372036854775806"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("-9223372036854775805"))), null));
@@ -225,6 +292,15 @@ public class ExpressionRangePartitionInfoTest {
                 .newArrayList(new PartitionValue("0"))), null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("9223372036854775806"))), null));
+=======
+                    .newArrayList(new PartitionValue("-9223372036854775806"))), null));
+        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", new PartitionKeyDesc(Lists
+                    .newArrayList(new PartitionValue("-9223372036854775805"))), null));
+        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", new PartitionKeyDesc(Lists
+                    .newArrayList(new PartitionValue("0"))), null));
+        singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
+                    .newArrayList(new PartitionValue("9223372036854775806"))), null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<Column> schema = Collections.singletonList(k1);
         partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, schema, PartitionType.RANGE);
@@ -232,7 +308,11 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -257,6 +337,7 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
+<<<<<<< HEAD
                 Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
                 Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
         PartitionKeyDesc p2 = new PartitionKeyDesc(
@@ -268,6 +349,19 @@ public class ExpressionRangePartitionInfoTest {
         PartitionKeyDesc p4 = new PartitionKeyDesc(
                 Lists.newArrayList(new PartitionValue("20190105"), new PartitionValue("100")),
                 Lists.newArrayList(new PartitionValue("20190120"), new PartitionValue("10000000000")));
+=======
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
+        PartitionKeyDesc p2 = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("20190105"), new PartitionValue("10")),
+                    Lists.newArrayList(new PartitionValue("20190107"), new PartitionValue("10")));
+        PartitionKeyDesc p3 = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("20181231"), new PartitionValue("10")),
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
+        PartitionKeyDesc p4 = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("20190105"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190120"), new PartitionValue("10000000000")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", p2, null));
@@ -280,7 +374,11 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -307,6 +405,7 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
+<<<<<<< HEAD
                 Lists.newArrayList(new PartitionValue("2019-02-01"), new PartitionValue("100"),
                         new PartitionValue("200")));
         PartitionKeyDesc p2 = new PartitionKeyDesc(
@@ -315,6 +414,16 @@ public class ExpressionRangePartitionInfoTest {
                 Lists.newArrayList(new PartitionValue("10000000000")));
         PartitionKeyDesc p3 = new PartitionKeyDesc(
                 Lists.newArrayList(new PartitionValue("2021-02-01")));
+=======
+                    Lists.newArrayList(new PartitionValue("2019-02-01"), new PartitionValue("100"),
+                                new PartitionValue("200")));
+        PartitionKeyDesc p2 = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("2020-02-01"), new PartitionValue("100"),
+                                new PartitionValue("200")),
+                    Lists.newArrayList(new PartitionValue("10000000000")));
+        PartitionKeyDesc p3 = new PartitionKeyDesc(
+                    Lists.newArrayList(new PartitionValue("2021-02-01")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", p2, null));
@@ -332,7 +441,11 @@ public class ExpressionRangePartitionInfoTest {
             }
             singleRangePartitionDesc.analyze(partitionExprs.size(), null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -354,7 +467,11 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(new ArrayList<>(),
+<<<<<<< HEAD
                 Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
+=======
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -364,7 +481,11 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -387,8 +508,13 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
+<<<<<<< HEAD
                 Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")),
                 new ArrayList<>());
+=======
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("200")),
+                    new ArrayList<>());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -398,7 +524,11 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -420,8 +550,13 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
+<<<<<<< HEAD
                 Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
                 Lists.newArrayList(new PartitionValue("20190201")));
+=======
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190201")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -431,7 +566,11 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -454,8 +593,13 @@ public class ExpressionRangePartitionInfoTest {
 
         //add RangePartitionDescs
         PartitionKeyDesc p1 = new PartitionKeyDesc(
+<<<<<<< HEAD
                 Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
                 Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
+=======
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")),
+                    Lists.newArrayList(new PartitionValue("20190101"), new PartitionValue("100")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
@@ -465,7 +609,11 @@ public class ExpressionRangePartitionInfoTest {
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
             partitionInfo.handleNewSinglePartitionDesc(MetaUtils.buildIdToColumn(schema), singleRangePartitionDesc,
+<<<<<<< HEAD
                     20000L, false);
+=======
+                        20000L, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -473,6 +621,7 @@ public class ExpressionRangePartitionInfoTest {
     public void testExpressionRangePartitionInfoSerialized_FunctionExpr() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE table_hitcount (\n" +
+<<<<<<< HEAD
                 "databaseName varchar(200) NULL COMMENT \"\",\n" +
                 "tableName varchar(200) NULL COMMENT \"\",\n" +
                 "queryTime varchar(50) NULL COMMENT \"\",\n" +
@@ -502,6 +651,37 @@ public class ExpressionRangePartitionInfoTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("table_hitcount");
+=======
+                    "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                    "tableName varchar(200) NULL COMMENT \"\",\n" +
+                    "queryTime varchar(50) NULL COMMENT \"\",\n" +
+                    "queryId varchar(50) NULL COMMENT \"\",\n" +
+                    "partitionHitSum int(11) NULL COMMENT \"\",\n" +
+                    "partitionSum int(11) NULL COMMENT \"\",\n" +
+                    "tabletHitNum int(11) NULL COMMENT \"\",\n" +
+                    "tabletSum int(11) NULL COMMENT \"\",\n" +
+                    "startHitPartition varchar(20) NULL COMMENT \"\",\n" +
+                    "dt date NULL COMMENT \"\",\n" +
+                    "clusterAddress varchar(50) NULL COMMENT \"\",\n" +
+                    "costTime int(11) NULL COMMENT \"\",\n" +
+                    "tableQueryCount int(11) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(databaseName, tableName)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY date_trunc('day', dt)\n" +
+                    "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"in_memory\" = \"false\",\n" +
+                    "\"enable_persistent_index\" = \"false\",\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"compression\" = \"LZ4\"\n" +
+                    ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "table_hitcount");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // serialize
         String json = GsonUtils.GSON.toJson(table);
         // deserialize
@@ -517,6 +697,7 @@ public class ExpressionRangePartitionInfoTest {
     public void testExpressionRangePartitionInfoSerialized_SlotRef() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test_table (\n" +
+<<<<<<< HEAD
                 "databaseName varchar(200) NULL COMMENT \"\",\n" +
                 "tableName varchar(200) NULL COMMENT \"\",\n" +
                 "queryTime varchar(50) NULL COMMENT \"\",\n" +
@@ -533,10 +714,29 @@ public class ExpressionRangePartitionInfoTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");";
+=======
+                    "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                    "tableName varchar(200) NULL COMMENT \"\",\n" +
+                    "queryTime varchar(50) NULL COMMENT \"\",\n" +
+                    "queryId varchar(50) NULL COMMENT \"\",\n" +
+                    "dt date NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(databaseName, tableName)\n" +
+                    "PARTITION BY RANGE (`dt`)\n" +
+                    "(\n" +
+                    "    PARTITION p1 values less than('2021-02-01'),\n" +
+                    "    PARTITION p2 values less than('2021-03-01')\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
         starRocksAssert.withMaterializedView("create materialized view test_mv1 " +
+<<<<<<< HEAD
                 " DISTRIBUTED BY HASH(dt, queryId) BUCKETS 4\n" +
                 " PARTITION BY dt\n" +
                 "PROPERTIES (\n" +
@@ -545,6 +745,16 @@ public class ExpressionRangePartitionInfoTest {
         );
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("test_mv1");
+=======
+                    " DISTRIBUTED BY HASH(dt, queryId) BUCKETS 4\n" +
+                    " PARTITION BY dt\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ") as select dt, queryId, count(1) from test_table group by dt, queryId"
+        );
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // serialize
         String json = GsonUtils.GSON.toJson(table);
         // deserialize
@@ -552,7 +762,11 @@ public class ExpressionRangePartitionInfoTest {
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs(readTable.getIdToColumn());
         Assert.assertTrue(readPartitionExprs.get(0) instanceof SlotRef);
+<<<<<<< HEAD
         SlotRef slotRef = (SlotRef)  readPartitionExprs.get(0);
+=======
+        SlotRef slotRef = (SlotRef) readPartitionExprs.get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(!slotRef.getType().isInvalid());
         Assert.assertTrue(slotRef.getType().isDateType());
         starRocksAssert.dropMaterializedView("test_mv1");
@@ -563,6 +777,7 @@ public class ExpressionRangePartitionInfoTest {
     public void testExpressionRangePartitionInfoV2SerializedWrongNotFailed() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE `game_log2` (\n" +
+<<<<<<< HEAD
                 "  `cloud_id` varchar(65533) NULL COMMENT \"\",\n" +
                 "  `user_id` varchar(65533) NULL COMMENT \"\",\n" +
                 "  `day` date NULL COMMENT \"\"\n" +
@@ -587,6 +802,33 @@ public class ExpressionRangePartitionInfoTest {
         expressionRangePartitionInfo.setPartitionExprs(Lists.newArrayList(
                 ColumnIdExpr.create(new FunctionCallExpr("abc", Lists.newArrayList(new SlotRef(
                         new TableName("test", "game_log2"), "cloud_id"))))));
+=======
+                    "  `cloud_id` varchar(65533) NULL COMMENT \"\",\n" +
+                    "  `user_id` varchar(65533) NULL COMMENT \"\",\n" +
+                    "  `day` date NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP \n" +
+                    "DUPLICATE KEY(`cloud_id`, `user_id`)\n" +
+                    "PARTITION BY RANGE(cast(substr(cloud_id, 3, 11) as bigint))()\n" +
+                    "DISTRIBUTED BY HASH(`cloud_id`, `user_id`) BUCKETS 1 \n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"in_memory\" = \"false\",\n" +
+                    "\"enable_persistent_index\" = \"false\",\n" +
+                    "\"replicated_storage\" = \"true\",\n" +
+                    "\"compression\" = \"ZSTD\"\n" +
+                    ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "game_log2");
+        ExpressionRangePartitionInfoV2 expressionRangePartitionInfo =
+                    (ExpressionRangePartitionInfoV2) olapTable.getPartitionInfo();
+        expressionRangePartitionInfo.setPartitionExprs(Lists.newArrayList(
+                    ColumnIdExpr.create(new FunctionCallExpr("abc", Lists.newArrayList(new SlotRef(
+                                new TableName("test", "game_log2"), "cloud_id"))))));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // serialize
         String json = GsonUtils.GSON.toJson(olapTable);
         // deserialize

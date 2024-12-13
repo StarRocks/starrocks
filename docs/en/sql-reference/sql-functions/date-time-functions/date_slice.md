@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_slice
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a given time into the beginning or end of a time interval based on the specified time granularity.
 

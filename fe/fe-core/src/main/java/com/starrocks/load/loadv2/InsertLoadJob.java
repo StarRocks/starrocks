@@ -37,7 +37,10 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.catalog.AuthorizationInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
@@ -46,7 +49,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
@@ -61,10 +68,15 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+=======
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 
 /**
@@ -121,13 +133,20 @@ public class InsertLoadJob extends LoadJob {
         }
         this.jobType = EtlJobType.INSERT;
         this.timeoutSecond = Config.insert_load_default_timeout_second;
+<<<<<<< HEAD
         this.authorizationInfo = gatherAuthInfo();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.loadingStatus.setTrackingUrl(trackingUrl);
         this.loadType = TLoadJobType.INSERT_QUERY;
         this.coordinator = coordinator;
     }
 
+<<<<<<< HEAD
     public void setLoadFinishOrCancel(String failMsg, String trackingUrl) throws UserException {
+=======
+    public void setLoadFinishOrCancel(String failMsg, String trackingUrl) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writeLock();
         try {
             this.finishTimestamp = System.currentTimeMillis();
@@ -139,11 +158,18 @@ public class InsertLoadJob extends LoadJob {
                 this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
                 this.progress = 0;
             }
+<<<<<<< HEAD
             this.authorizationInfo = gatherAuthInfo();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.loadingStatus.setTrackingUrl(trackingUrl);
             this.coordinator = null;
         } finally {
             writeUnlock();
+<<<<<<< HEAD
+=======
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
@@ -151,6 +177,7 @@ public class InsertLoadJob extends LoadJob {
                 this.loadStartTimestamp, this.finishTimestamp, this.state, this.failMsg));
     }
 
+<<<<<<< HEAD
     public AuthorizationInfo gatherAuthInfo() throws MetaNotFoundException {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
@@ -159,6 +186,8 @@ public class InsertLoadJob extends LoadJob {
         return new AuthorizationInfo(database.getFullName(), getTableNames(false));
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void updateProgress(TReportExecStatusParams params) {
         writeLock();
@@ -191,13 +220,21 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public Set<String> getTableNamesForShow() {
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (database == null) {
             return Sets.newHashSet(String.valueOf(tableId));
         }
         // The database will not be locked in here.
         // The getTable is a thread-safe method called without read lock of database
+<<<<<<< HEAD
         Table table = database.getTable(tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return Sets.newHashSet(String.valueOf(tableId));
         }
@@ -206,11 +243,19 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException {
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
         Table table = database.getTable(tableId);
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (database == null) {
+            throw new MetaNotFoundException("Database " + dbId + "has been deleted");
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             if (noThrow) {
                 return Sets.newHashSet();
@@ -223,12 +268,20 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public boolean hasTxn() {
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (database == null) {
             return true;
         }
 
+<<<<<<< HEAD
         Table table = database.getTable(tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return true;
         }
@@ -253,6 +306,7 @@ public class InsertLoadJob extends LoadJob {
         return Coordinator.getFailInfos(coordinator);
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -264,10 +318,19 @@ public class InsertLoadJob extends LoadJob {
         tableId = in.readLong();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setEstimateScanRow(long rows) {
         this.estimateScanRow = rows;
     }
 
+<<<<<<< HEAD
+=======
+    public void updateLoadingStatus(Map<String, String> counters) {
+        this.loadingStatus.getCounters().putAll(counters);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setTransactionId(long txnId) {
         this.transactionId = txnId;
     }
@@ -277,7 +340,11 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!txnOperated) {
             return;
         }
@@ -303,5 +370,8 @@ public class InsertLoadJob extends LoadJob {
     @Override
     public void replayOnVisible(TransactionState txnState) {
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

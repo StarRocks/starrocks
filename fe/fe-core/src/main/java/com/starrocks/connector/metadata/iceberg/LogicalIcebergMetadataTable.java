@@ -14,13 +14,19 @@
 
 package com.starrocks.connector.metadata.iceberg;
 
+<<<<<<< HEAD
 import com.google.common.base.Joiner;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.connector.ColumnTypeConverter;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -36,7 +42,11 @@ import static com.starrocks.catalog.Type.ARRAY_INT;
 import static com.starrocks.connector.metadata.TableMetaMetadata.METADATA_DB_NAME;
 
 public class LogicalIcebergMetadataTable extends MetadataTable {
+<<<<<<< HEAD
     public static final String ICEBERG_LOGICAL_METADATA_TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";
+=======
+    public static final String TABLE_NAME = "starrocks_connector_iceberg_logical_metadata_table";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public LogicalIcebergMetadataTable(String catalogName, long id, String name, TableType type,
                                        List<Column> baseSchema, String originDb, String originTable,
@@ -47,7 +57,11 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
     public static LogicalIcebergMetadataTable create(String catalogName, String originDb, String originTable) {
         return new LogicalIcebergMetadataTable(catalogName,
                 ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+<<<<<<< HEAD
                 ICEBERG_LOGICAL_METADATA_TABLE_NAME,
+=======
+                TABLE_NAME,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Table.TableType.METADATA,
                 builder()
                         .columns(PLACEHOLDER_COLUMNS)
@@ -71,19 +85,26 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                 MetadataTableType.LOGICAL_ICEBERG_METADATA);
     }
 
+<<<<<<< HEAD
     public List<Column> getPlaceHolderColumns() {
         return PLACEHOLDER_COLUMNS;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.LOGICAL_ICEBERG_METADATA_TABLE,
                 fullSchema.size() - PLACEHOLDER_COLUMNS.size(), 0, getName(), METADATA_DB_NAME);
+<<<<<<< HEAD
         THdfsTable hdfsTable = new THdfsTable();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = fullSchema.stream()
                 .filter(c -> !PLACEHOLDER_COLUMNS.contains(c))
                 .collect(Collectors.toList());
 
+<<<<<<< HEAD
         hdfsTable.setColumns(columns.stream().map(Column::toThrift).collect(Collectors.toList()));
         hdfsTable.setPartition_columnsIsSet(false);
 
@@ -100,4 +121,20 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
     }
+=======
+        THdfsTable hdfsTable = buildThriftTable(columns);
+        tTableDescriptor.setHdfsTable(hdfsTable);
+        return tTableDescriptor;
+    }
+
+    @Override
+    public boolean isTemporal() {
+        return true;
+    }
+
+    @Override
+    public boolean supportBuildPlan() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

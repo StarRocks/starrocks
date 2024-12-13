@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # char
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据输入的 ASCII 值返回对应的字符。
 

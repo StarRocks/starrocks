@@ -196,14 +196,22 @@ TEST_F(PosixFileSystemTest, encryption_io) {
         Slice slice2(mem + 9, 100);
         Slice slice3(mem + 9 + 100, 3);
 
+<<<<<<< HEAD
         ASSERT_EQ(slice1.size, rfile->read(slice1.data, slice1.size).value());
+=======
+        ASSERT_OK(rfile->read(slice1.data, slice1.size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_OK(rfile->read_fully(slice2.data, slice2.size));
         ASSERT_OK(rfile->read_at_fully(109, slice3.data, slice3.size));
         ASSERT_STREQ("123456789", std::string(slice1.data, slice1.size).c_str());
         ASSERT_STREQ("abc", std::string(slice3.data, slice3.size).c_str());
 
         auto st = rfile->read_at(112, mem, 3);
+<<<<<<< HEAD
         ASSERT_TRUE(st.ok());
+=======
+        ASSERT_TRUE(st.ok()) << st;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_STREQ("bcd", std::string(mem, 3).c_str());
 
         ASSERT_ERROR(rfile->read_at_fully(114, mem, 3));

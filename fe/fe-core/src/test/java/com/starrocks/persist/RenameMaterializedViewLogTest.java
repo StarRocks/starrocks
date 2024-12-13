@@ -65,10 +65,17 @@ public class RenameMaterializedViewLogTest {
         in.close();
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 result = db;
 
                 db.getTable(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                result = db;
+
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = table;
             }
         };

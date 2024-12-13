@@ -25,7 +25,10 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.DropCatalogStmt;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.MockUp;
@@ -34,11 +37,15 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+=======
+import java.io.File;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -124,6 +131,7 @@ public class CatalogMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testLoadCatalog() throws IOException, DdlException {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
@@ -144,11 +152,16 @@ public class CatalogMgrTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testLoadCatalogWithException() throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
         Assert.assertTrue(catalogMgr.catalogExists("hive_catalog"));
 
+<<<<<<< HEAD
         UtFrameUtils.PseudoImage.setUpImageVersion();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         catalogMgr.save(image.getImageWriter());
         SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());

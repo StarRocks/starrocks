@@ -856,11 +856,27 @@ public class NodeMgr {
             unlock();
 
             if (fe != null) {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+=======
+                dropFrontendHook(fe);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void dropFrontendHook(Frontend fe) {
+        GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+
+        GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        if (RunMode.isSharedDataMode()) {
+            StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void replayAddFrontend(Frontend fe) {
         tryLock(true);
         try {
@@ -1022,6 +1038,13 @@ public class NodeMgr {
         return frontends.get(name);
     }
 
+<<<<<<< HEAD
+=======
+    public Frontend getSelfFe() {
+        return frontends.get(nodeName);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getFollowerCnt() {
         int cnt = 0;
         for (Frontend fe : frontends.values()) {
@@ -1131,6 +1154,7 @@ public class NodeMgr {
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
+<<<<<<< HEAD
         setFrontendConfig(stmt.getConfig().getMap());
 
         List<Frontend> allFrontends = getFrontends(null);
@@ -1167,6 +1191,58 @@ public class NodeMgr {
         if (errMsg.length() > 0) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
         }
+=======
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            setFrontendConfig(stmt.getConfig().getMap());
+            List<Frontend> allFrontends = getFrontends(null);
+            int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+            StringBuilder errMsg = new StringBuilder();
+            for (Frontend fe : allFrontends) {
+                if (fe.getHost().equals(getSelfNode().first)) {
+                    continue;
+                }
+                errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
+            }
+            if (errMsg.length() > 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+            }
+        } else {
+            Pair<String, Integer> leaderIpAndRpcPort = getLeaderIpAndRpcPort();
+            Frontend fe = new Frontend(FrontendNodeType.LEADER, "leader", leaderIpAndRpcPort.first,
+                    leaderIpAndRpcPort.second);
+            StringBuilder errMsg =
+                    callFrontNodeSetConfig(stmt, fe, Config.thrift_rpc_timeout_ms, new StringBuilder());
+            if (errMsg.length() > 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+            }
+        }
+
+    }
+
+    private StringBuilder callFrontNodeSetConfig(AdminSetConfigStmt stmt, Frontend fe, int timeout, StringBuilder errMsg) {
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
+        request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
+        try {
+            TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                    timeout,
+                    client -> client.setConfig(request));
+            TStatus status = response.getStatus();
+            if (status.getStatus_code() != TStatusCode.OK) {
+                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
+                if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
+                    errMsg.append(String.join(",", status.getError_msgs()));
+                }
+                errMsg.append(";");
+            }
+        } catch (Exception e) {
+            LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
+            errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+        }
+        return errMsg;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setFrontendConfig(Map<String, String> configs) throws DdlException {

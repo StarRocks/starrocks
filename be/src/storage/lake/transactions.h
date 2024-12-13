@@ -59,13 +59,22 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 // Parameters:
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id Id of the tablet
+<<<<<<< HEAD
 // - txn_id ID of the transactions to abort
+=======
+// - txn_infos Transactions to apply
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // - log_version Version of the new file
 //
 // Return:
 // - Returns OK if the copy was successful, asynchronous deletion does not affect the return value.
+<<<<<<< HEAD
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids,
                            const int64_t* log_versions, int txns_size);
+=======
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
+                           const int64_t* log_versions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // Aborts a transaction with the specified transaction IDs on the given tablet.
 //

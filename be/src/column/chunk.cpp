@@ -132,6 +132,18 @@ void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
     check_or_die();
 }
 
+<<<<<<< HEAD
+=======
+void Chunk::append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id) {
+    DCHECK(!_cid_to_index.contains(field->id()));
+    _cid_to_index[field->id()] = _columns.size();
+    _slot_id_to_index[slot_id] = _columns.size();
+    _columns.emplace_back(std::move(column));
+    _schema->append(field);
+    check_or_die();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void Chunk::append_column(ColumnPtr column, SlotId slot_id) {
     DCHECK(!_slot_id_to_index.contains(slot_id)) << "slot_id:" + std::to_string(slot_id) << std::endl;
     if (UNLIKELY(_slot_id_to_index.contains(slot_id))) {

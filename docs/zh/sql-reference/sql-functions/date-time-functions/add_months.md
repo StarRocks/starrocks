@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # add_months
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 在给定的日期（DATE、DATETIME）上增加一个整数月，返回结果日期。
 

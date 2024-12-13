@@ -14,8 +14,30 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "formats/parquet/page_index_reader.h"
 #include "formats/parquet/stored_column_reader.h"
+=======
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "storage/range.h"
+
+namespace starrocks {
+class Column;
+class NullableColumn;
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 
@@ -44,8 +66,12 @@ public:
 
     Status get_dict_values(Column* column) override { return _inner_reader->get_dict_values(column); }
 
+<<<<<<< HEAD
     Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                            Column* column) override {
+=======
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return _inner_reader->get_dict_values(dict_codes, nulls, column);
     }
 

@@ -42,6 +42,10 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.combinator.AggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -140,6 +144,13 @@ public class Function implements Writable {
     @SerializedName(value = "checksum")
     protected String checksum = "";
 
+<<<<<<< HEAD
+=======
+    // aggStateDesc is used for combinator to generate the nested aggregated function.
+    @SerializedName(value = "aggStateDesc")
+    protected AggStateDesc aggStateDesc;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Function id, every function has a unique id. Now all built-in functions' id is 0
     private long id = 0;
     // User specified function name e.g. "Add"
@@ -220,7 +231,11 @@ public class Function implements Writable {
         id = other.id;
         name = other.name;
         retType = other.retType;
+<<<<<<< HEAD
         argTypes = other.argTypes;
+=======
+        argTypes = Arrays.copyOf(other.argTypes, other.argTypes.length);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         argNames = other.argNames;
         hasVarArgs = other.hasVarArgs;
         userVisible = other.userVisible;
@@ -232,6 +247,10 @@ public class Function implements Writable {
         couldApplyDictOptimize = other.couldApplyDictOptimize;
         isNullable = other.isNullable;
         isMetaFunction = other.isMetaFunction;
+<<<<<<< HEAD
+=======
+        aggStateDesc = other.aggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public FunctionName getFunctionName() {
@@ -348,6 +367,13 @@ public class Function implements Writable {
         return isPolymorphic;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPolymorphic(boolean isPolymorphic) {
+        this.isPolymorphic = isPolymorphic;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isMetaFunction() {
         return isMetaFunction;
     }
@@ -425,6 +451,21 @@ public class Function implements Writable {
         this.couldApplyDictOptimize = couldApplyDictOptimize;
     }
 
+<<<<<<< HEAD
+=======
+    public AggStateDesc getAggStateDesc() {
+        return aggStateDesc;
+    }
+
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
+    }
+
+    public void setFunctionName(FunctionName name) {
+        this.name = name;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Compares this to 'other' for mode.
     public boolean compare(Function other, CompareMode mode) {
         switch (mode) {
@@ -692,7 +733,29 @@ public class Function implements Writable {
             .build();
 
     public static String rectifyFunctionName(String s) {
+<<<<<<< HEAD
         return Optional.ofNullable(ACTUAL_NAMES.get(s)).orElse(s);
+=======
+        return Optional.ofNullable(ACTUAL_NAMES.get(s)).orElseGet(() -> {
+            Optional<String> optSuffix = Optional.empty();
+            if (s.endsWith(FunctionSet.AGG_STATE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_MERGE_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_MERGE_SUFFIX);
+            } else if (s.endsWith(FunctionSet.AGG_STATE_UNION_SUFFIX)) {
+                optSuffix = Optional.of(FunctionSet.AGG_STATE_UNION_SUFFIX);
+            }
+            if (optSuffix.isEmpty()) {
+                return s;
+            } else {
+                String suffix = optSuffix.get();
+                String prefix = s.substring(0, s.length() - suffix.length());
+                return Optional.ofNullable(ACTUAL_NAMES.get(prefix))
+                        .map(actualName -> actualName + suffix)
+                        .orElse(s);
+            }
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TFunction toThrift() {
@@ -710,6 +773,12 @@ public class Function implements Writable {
         if (!checksum.isEmpty()) {
             fn.setChecksum(checksum);
         }
+<<<<<<< HEAD
+=======
+        if (aggStateDesc != null) {
+            fn.setAgg_state_desc(aggStateDesc.toThrift());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         fn.setCould_apply_dict_optimize(couldApplyDictOptimize);
         return fn;
     }
@@ -969,5 +1038,8 @@ public class Function implements Writable {
 
         return this;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

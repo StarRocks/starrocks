@@ -28,3 +28,8 @@ Start Metabase and do as follows:
    The other parameters do not involve StarRocks. Configure them based on your business needs.
 
    ![Metabase - Configure database](../../_assets/Metabase/Metabase_3.png)
+<<<<<<< HEAD
+=======
+
+NOTE: Please avoid using DECIMAL data types as Metabase does not understand this StarRocks specific column data type
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -23,7 +23,11 @@
 #include "geo/geo_types.h"
 
 class WktParseContext;
+<<<<<<< HEAD
 void wkt_error(WktParseContext* ctx, const char* msg) {
+=======
+void wkt_error(void* scanner, WktParseContext* ctx, const char* msg) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 /* forword declare this class for wkt_parse declaration in yacc.y.cpp */
 %}
@@ -45,12 +49,20 @@ void wkt_error(WktParseContext* ctx, const char* msg) {
 /* we need WktParseContext to pass scaninfo to lexer */
 #include "geo/wkt_parse_ctx.h"
 
+<<<<<<< HEAD
 #define WKT_LEX_PARAM ctx->scaninfo
 }
 
 %define api.pure full
 %parse-param { WktParseContext* ctx }
 %lex-param { WKT_LEX_PARAM }
+=======
+}
+
+%define api.pure full
+%parse-param {void* scanner} { WktParseContext* ctx }
+%lex-param {void* scanner}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /* for multi-thread */
 %define api.prefix {wkt_}

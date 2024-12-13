@@ -48,6 +48,11 @@ public:
 
     void set_execute_mode(int performance_level) override { return _exchanger->enter_release_memory_mode(); }
 
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     bool _is_finished = false;
     const std::shared_ptr<MultiCastLocalExchanger> _exchanger;

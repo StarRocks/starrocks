@@ -27,6 +27,10 @@ import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.metadata.MetadataTableName;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.qe.ConnectContext;
@@ -36,6 +40,11 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+<<<<<<< HEAD
+=======
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -217,6 +226,12 @@ public class MetadataMgrTest {
                 metadataMgr.getDb("iceberg_catalog", "iceberg_db");
                 result = new com.starrocks.catalog.Database();
                 minTimes = 0;
+<<<<<<< HEAD
+=======
+
+                metadataMgr.tableExists("iceberg_catalog", "iceberg_db", "iceberg_table");
+                result = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -417,6 +432,7 @@ public class MetadataMgrTest {
         metadataMgr.dropDb("hive_catalog", "hive_db", false);
     }
 
+<<<<<<< HEAD
     @Test(expected = StarRocksConnectorException.class)
     public void testGetPrunedPartition() {
         MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
@@ -425,6 +441,17 @@ public class MetadataMgrTest {
 
     @Test
     public void testGetMetadataTable() throws Exception {
+=======
+    @Test
+    public void testGetMetadataTable() throws Exception {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);

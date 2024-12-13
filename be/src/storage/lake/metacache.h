@@ -35,8 +35,13 @@ class CombinedTxnLogPB;
 namespace starrocks::lake {
 
 using CacheValue = std::variant<std::shared_ptr<const TabletMetadataPB>, std::shared_ptr<const TxnLogPB>,
+<<<<<<< HEAD
                                 std::shared_ptr<const CombinedTxnLogPB>, std::shared_ptr<const TabletSchema>,
                                 std::shared_ptr<const DelVector>, std::shared_ptr<Segment>>;
+=======
+                                std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>,
+                                std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class Metacache {
 public:

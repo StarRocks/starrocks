@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # max_by
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the value of `x` associated with the maximum value of `y`.
 

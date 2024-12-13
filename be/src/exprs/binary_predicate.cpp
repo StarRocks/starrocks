@@ -14,22 +14,39 @@
 
 #include "exprs/binary_predicate.h"
 
+<<<<<<< HEAD
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Value.h>
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
+<<<<<<< HEAD
 #include "exprs/jit/ir_helper.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
+#include "exprs/jit/ir_helper.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 template <LogicalType ltype>
@@ -131,6 +148,10 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
@@ -215,6 +236,10 @@ public:
                _children[1]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
                type().debug_string();
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -426,6 +451,10 @@ public:
 
         return builder.build(ColumnHelper::is_all_const(list));
     }
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CMP) && IRHelper::support_jit(Type);
@@ -464,6 +493,10 @@ public:
         return "{" + _children[0]->jit_func_name(state) + "<=>" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;

@@ -22,7 +22,11 @@ import com.google.common.collect.Queues;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.NotImplementedException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.proto.AbortCompactionRequest;
@@ -49,6 +53,11 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.PFetchArrowSchemaRequest;
+import com.starrocks.proto.PFetchArrowSchemaResult;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -584,7 +593,11 @@ public class PseudoBackend {
         return ts;
     }
 
+<<<<<<< HEAD
     void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws UserException {
+=======
+    void handleCreateTablet(TAgentTaskRequest request, TFinishTaskRequest finish) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Ignore the initial disk usage of tablet
         if (request.create_tablet_req.tablet_type == TTabletType.TABLET_TYPE_LAKE) {
             lakeTabletManager.createTablet(request.create_tablet_req);
@@ -1060,6 +1073,14 @@ public class PseudoBackend {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Future<PFetchArrowSchemaResult> fetchArrowSchema(PFetchArrowSchemaRequest request) {
+            return null;
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
             ExecuteCommandResultPB result = new ExecuteCommandResultPB();
             StatusPB pStatus = new StatusPB();
@@ -1400,7 +1421,12 @@ public class PseudoBackend {
             void cancel() {
             }
 
+<<<<<<< HEAD
             void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+=======
+            void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (PTabletWithPartition tabletWithPartition : tablets) {
                     Tablet tablet = tabletManager.getTablet(tabletWithPartition.tabletId);
                     if (tablet == null) {
@@ -1440,7 +1466,11 @@ public class PseudoBackend {
             }
         }
 
+<<<<<<< HEAD
         void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws UserException {
+=======
+        void close(PTabletWriterAddChunkRequest request, PTabletWriterAddBatchResult result) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TabletsChannel tabletsChannel = indexToTabletsChannel.get(request.indexId);
             if (tabletsChannel == null) {
                 result.status =
@@ -1514,7 +1544,11 @@ public class PseudoBackend {
                 }
                 try {
                     channel.close(request, result);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.warn("error close load channel", e);
                     channel.cancel();
                     loadChannels.remove(loadIdString);

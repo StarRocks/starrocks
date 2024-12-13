@@ -736,6 +736,13 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                        base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
                 *sc_directly = true;
                 return Status::OK();
+<<<<<<< HEAD
+=======
+            } else if (new_schema->has_index(new_column.unique_id(), VECTOR) !=
+                       base_schema->has_index(ref_column.unique_id(), VECTOR)) {
+                *sc_directly = true;
+                return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }

@@ -13,7 +13,10 @@
 // limitations under the License.
 package com.starrocks.connector.partitiontraits;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
@@ -25,12 +28,15 @@ import java.util.Map;
 import java.util.Optional;
 
 public class HivePartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public String getDbName() {
         return ((HiveMetaStoreTable) table).getDbName();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
@@ -38,7 +44,11 @@ public class HivePartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
+<<<<<<< HEAD
         return ((HiveMetaStoreTable) table).getTableName();
+=======
+        return table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

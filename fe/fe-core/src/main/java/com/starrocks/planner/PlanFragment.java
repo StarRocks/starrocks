@@ -63,7 +63,10 @@ import org.roaringbitmap.RoaringBitmap;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Comparator;
 import java.util.Deque;
 import java.util.LinkedList;
@@ -72,7 +75,10 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
 import java.util.function.Consumer;
+<<<<<<< HEAD
 import java.util.function.Function;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -183,6 +189,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // Controls whether group execution is used for plan fragment execution.
     private List<ExecGroup> colocateExecGroups = Lists.newArrayList();
 
+<<<<<<< HEAD
+=======
+    private List<Integer> collectExecStatsIds;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -446,6 +457,17 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return parallelExecNum;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Integer> getCollectExecStatsIds() {
+        return collectExecStatsIds;
+    }
+
+    public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
+        this.collectExecStatsIds = collectExecStatsIds;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TPlanFragment toThrift() {
         TPlanFragment result = new TPlanFragment();
         if (planRoot != null) {

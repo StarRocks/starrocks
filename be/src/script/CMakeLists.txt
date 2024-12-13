@@ -21,6 +21,11 @@ set(EXEC_FILES
     ../thirdparty/wren/wren.c
 )
 
+<<<<<<< HEAD
+=======
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 add_library(Script STATIC ${EXEC_FILES})
 
 target_include_directories(Script PRIVATE ${SRC_DIR}/script ${SRC_DIR}/thirdparty/wren ${SRC_DIR}/thirdparty/wrenbind17)

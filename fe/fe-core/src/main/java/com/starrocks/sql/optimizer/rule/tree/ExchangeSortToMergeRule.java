@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.tree;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -50,7 +54,11 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                 OptExpression.Builder partialSortOptBuilder = OptExpression.builder()
                         .setOp(new PhysicalTopNOperator(topN.getOrderSpec(), topN.getLimit(), topN.getOffset(),
                                 topN.getPartitionByColumns(), topN.getPartitionLimit(), SortPhase.PARTIAL,
+<<<<<<< HEAD
                                 topN.getTopNType(), false, topN.isEnforced(), null, null))
+=======
+                                topN.getTopNType(), false, topN.isEnforced(), null, null, ImmutableMap.of()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .setInputs(optExpr.inputAt(0).getInputs())
                         .setLogicalProperty(optExpr.inputAt(0).getLogicalProperty())
                         .setStatistics(optExpr.getStatistics())
@@ -61,7 +69,11 @@ public class ExchangeSortToMergeRule extends OptExpressionVisitor<OptExpression,
                                         topN.getOrderSpec(), topN.getLimit(), topN.getOffset(), topN.getPartitionByColumns(),
                                         topN.getPartitionLimit(), SortPhase.FINAL, topN.getTopNType(), true,
                                         topN.isEnforced(), null,
+<<<<<<< HEAD
                                         topN.getProjection()))
+=======
+                                        topN.getProjection(), null))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .setInputs(Lists.newArrayList(partialSortOptBuilder.build()))
                         .setLogicalProperty(optExpr.getLogicalProperty())
                         .setStatistics(optExpr.getStatistics())

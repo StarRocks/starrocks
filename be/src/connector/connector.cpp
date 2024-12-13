@@ -110,6 +110,7 @@ void DataSource::update_profile(const Profile& profile) {
 StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+<<<<<<< HEAD
         size_t num_total_scan_ranges, size_t scan_dop) {
     peek_scan_ranges(scan_ranges);
 
@@ -122,6 +123,15 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
             morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
         }
     }
+=======
+        size_t num_total_scan_ranges, size_t scan_parallelism) {
+    peek_scan_ranges(scan_ranges);
+
+    pipeline::Morsels morsels;
+    bool has_more_morsel = false;
+    pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, accept_empty_scan_ranges(), &morsels,
+                                             &has_more_morsel);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (partition_order_hint().has_value()) {
         bool asc = partition_order_hint().value();
@@ -143,9 +153,15 @@ StatusOr<pipeline::MorselQueuePtr> DataSourceProvider::convert_scan_range_to_mor
         });
     }
 
+<<<<<<< HEAD
     auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
     if (scan_dop > 0) {
         morsel_queue->set_max_degree_of_parallelism(scan_dop);
+=======
+    auto morsel_queue = std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels), has_more_morsel);
+    if (scan_parallelism > 0) {
+        morsel_queue->set_max_degree_of_parallelism(scan_parallelism);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return morsel_queue;
 }

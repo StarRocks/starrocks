@@ -438,6 +438,14 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public OperatorStr visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "ICEBERG EQUALITY DELETE SCAN");
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public OperatorStr visitPhysicalPaimonScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "PAIMON SCAN");
         }

@@ -61,7 +61,10 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+<<<<<<< HEAD
 import static org.mockito.ArgumentMatchers.anyLong;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -182,14 +185,24 @@ public class MockedBase {
         when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
         when(globalStateMgr.getVariableMgr()).thenReturn(variableMgr);
         when(connectorMgr.getConnector(anyString())).thenReturn(new CatalogConnector(
+<<<<<<< HEAD
                 odpsConnector, new InformationSchemaConnector("catalog"), new TableMetaConnector("catalog")));
+=======
+                odpsConnector, new InformationSchemaConnector("catalog"), new TableMetaConnector("catalog", "odps")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
 
         RemoteFileInfo fileInfo = new RemoteFileInfo();
         fileInfo.setFiles(ImmutableList.of(OdpsRemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
+<<<<<<< HEAD
         when(metadataMgr.getRemoteFileInfos(any(), any(), any(), anyLong(), any(), any(), anyLong())).thenReturn(
                 ImmutableList.of(fileInfo));
         when(odpsMetadata.getRemoteFileInfos(any(), any(), anyLong(), any(), any(), anyLong(), any())).thenReturn(
+=======
+        when(metadataMgr.getRemoteFiles(any(), any())).thenReturn(
+                ImmutableList.of(fileInfo));
+        when(odpsMetadata.getRemoteFiles(any(), any(), any())).thenReturn(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ImmutableList.of(fileInfo));
     }
 }

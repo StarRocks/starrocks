@@ -139,10 +139,17 @@ public:
 
     int get_waiting_task_num();
 
+<<<<<<< HEAD
     void disable_table_compaction(int64_t table_id, int64_t deadline);
 
     ThreadPool* TEST_get_compaction_thread_pool() { return _compaction_pool.get(); }
 
+=======
+    ThreadPool* TEST_get_compaction_thread_pool() { return _compaction_pool.get(); }
+
+    void disable_table_compaction(int64_t table_id, int64_t deadline);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;

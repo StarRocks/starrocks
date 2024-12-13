@@ -236,7 +236,11 @@ public class StatisticsCollectionTrigger {
         TableCommitInfo tableCommitInfo = txnState.getIdToTableCommitInfos().get(table.getId());
         Locker locker = new Locker();
         if (useLock) {
+<<<<<<< HEAD
             locker.lockTablesWithIntensiveDbLock(db, List.of(table.getId()), LockType.READ);
+=======
+            locker.lockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         try {
             for (var entry : tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
@@ -252,7 +256,11 @@ public class StatisticsCollectionTrigger {
             }
         } finally {
             if (useLock) {
+<<<<<<< HEAD
                 locker.unLockTablesWithIntensiveDbLock(db, List.of(table.getId()), LockType.READ);
+=======
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         if (partitionIds.isEmpty()) {

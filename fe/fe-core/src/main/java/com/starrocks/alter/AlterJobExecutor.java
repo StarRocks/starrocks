@@ -41,7 +41,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -89,7 +93,10 @@ import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
@@ -136,8 +143,16 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         TableName tableName = statement.getTbl();
         this.tableName = tableName;
 
+<<<<<<< HEAD
         Database db = MetaUtils.getDatabase(context, tableName);
         Table table = MetaUtils.getTable(tableName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             throw new SemanticException("Do not support alter non-native table/materialized-view[" + tableName + "]");
@@ -153,21 +168,36 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
         if (statement.hasSchemaChangeOp()) {
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
+=======
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
                 assert table instanceof OlapTable;
                 schemaChangeHandler.process(statement.getAlterClauseList(), db, (OlapTable) table);
+<<<<<<< HEAD
             } catch (UserException e) {
                 throw new AlterJobException(e.getMessage());
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db, table, LockType.WRITE);
+=======
+            } catch (StarRocksException e) {
+                throw new AlterJobException(e.getMessage());
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             isSynchronous = false;
         } else if (statement.hasRollupOp()) {
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
+=======
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getAlterJobMgr()
                         .getMaterializedViewHandler();
@@ -175,7 +205,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 ErrorReport.wrapWithRuntimeException(() ->
                         materializedViewHandler.process(statement.getAlterClauseList(), db, (OlapTable) table));
             } finally {
+<<<<<<< HEAD
                 locker.unLockTableWithIntensiveDbLock(db, table, LockType.WRITE);
+=======
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             isSynchronous = false;
@@ -190,8 +224,16 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
         TableName tableName = statement.getTableName();
+<<<<<<< HEAD
         Database db = MetaUtils.getDatabase(context, tableName);
         Table table = MetaUtils.getTable(tableName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(tableName.getDb(), tableName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (table.getType() != Table.TableType.VIEW) {
             throw new SemanticException("The specified table [" + tableName + "] is not a view");
@@ -208,15 +250,32 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
         // check db
         final TableName mvName = stmt.getMvName();
+<<<<<<< HEAD
         Database db = MetaUtils.getDatabase(context, mvName);
 
         Locker locker = new Locker();
         if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", mvName.getCatalogAndDb());
+        }
+
+        Locker locker = new Locker();
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new AlterJobException("alter materialized failed. database:" + db.getFullName() + " not exist");
         }
 
         try {
+<<<<<<< HEAD
             Table table = MetaUtils.getTable(mvName);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvName.getDb(), mvName.getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", mvName);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!table.isMaterializedView()) {
                 throw new SemanticException("The specified table [" + mvName + "] is not a view");
             }
@@ -235,7 +294,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
             return null;
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.WRITE);
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -256,12 +319,20 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             ErrorReport.wrapWithRuntimeException(() ->
                     GlobalStateMgr.getCurrentState().getLocalMetastore().renameTable(db, table, clause));
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }
@@ -269,12 +340,20 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitAlterTableCommentClause(AlterTableCommentClause clause, ConnectContext context) {
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             ErrorReport.wrapWithRuntimeException(() -> GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .alterTableComment(db, table, clause));
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }
@@ -283,12 +362,20 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     public Void visitSwapTableClause(SwapTableClause clause, ConnectContext context) {
         // must hold db write lock
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             OlapTable origTable = (OlapTable) table;
             String origTblName = origTable.getName();
             String newTblName = clause.getTblName();
+<<<<<<< HEAD
             Table newTbl = db.getTable(newTblName);
+=======
+            Table newTbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), newTblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (newTbl == null || !(newTbl.isOlapOrCloudNativeTable() || newTbl.isMaterializedView())) {
                 throw new AlterJobException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
             }
@@ -322,7 +409,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 throw new AlterJobException(e.getMessage(), e);
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -342,11 +433,19 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)) {
                 if (table.isCloudNativeTable()) {
                     Locker locker = new Locker();
+<<<<<<< HEAD
                     locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
                     try {
                         schemaChangeHandler.processLakeTableAlterMeta(clause, db, (OlapTable) table);
                     } finally {
                         locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+                    locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+                    try {
+                        schemaChangeHandler.processLakeTableAlterMeta(clause, db, (OlapTable) table);
+                    } finally {
+                        locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
 
                     isSynchronous = false;
@@ -366,6 +465,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.MUTABLE_BUCKET_NUM);
+<<<<<<< HEAD
+=======
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
+                schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
+                        TTabletMetaType.ENABLE_LOAD_PROFILE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
                 try {
                     GlobalStateMgr.getCurrentState().getCompactionControlScheduler().updateTableForbiddenTimeRanges(
@@ -377,9 +482,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     throw new DdlException("Failed to update base compaction forbidden time ranges for "
                             + tableName.getTbl() + ": " + e.getMessage());
                 }
+<<<<<<< HEAD
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE)) {
                 schemaChangeHandler.updateTableMeta(db, tableName.getTbl(), properties,
                         TTabletMetaType.ENABLE_LOAD_PROFILE);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)) {
@@ -393,7 +501,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 schemaChangeHandler.updateTableConstraint(db, tableName.getTbl(), properties);
             } else {
                 Locker locker = new Locker();
+<<<<<<< HEAD
                 locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
@@ -436,6 +548,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+<<<<<<< HEAD
+=======
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -448,12 +565,20 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         schemaChangeHandler.process(Lists.newArrayList(clause), db, olapTable);
                     }
                 } finally {
+<<<<<<< HEAD
                     locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+                    locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
 
                 isSynchronous = false;
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new AlterJobException(e.getMessage(), e);
         }
         return null;
@@ -493,7 +618,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     public Void visitColumnRenameClause(ColumnRenameClause clause, ConnectContext context) {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Set<String> modifiedColumns = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             modifiedColumns.add(clause.getColName());
@@ -501,7 +630,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     schemaChangeHandler.checkModifiedColumWithMaterializedViews((OlapTable) table, modifiedColumns));
             GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, clause);
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }
@@ -527,12 +660,20 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitRollupRenameClause(RollupRenameClause clause, ConnectContext context) {
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             ErrorReport.wrapWithRuntimeException(() ->
                     GlobalStateMgr.getCurrentState().getLocalMetastore().renameRollup(db, (OlapTable) table, clause));
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }
@@ -615,7 +756,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitPartitionRenameClause(PartitionRenameClause clause, ConnectContext context) {
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             if (clause.getPartitionName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                 throw new AlterJobException("Rename of shadow partitions is not allowed");
@@ -624,7 +769,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             ErrorReport.wrapWithRuntimeException(() ->
                     GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, clause));
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }
@@ -652,11 +801,19 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             }
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
             try {
                 modifyPartitionsProperty(db, (OlapTable) table, partitionNames, properties);
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.WRITE);
+=======
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            try {
+                modifyPartitionsProperty(db, (OlapTable) table, partitionNames, properties);
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } catch (DdlException | AnalysisException e) {
             throw new AlterJobException(e.getMessage());
@@ -674,7 +831,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                                           Map<String, String> properties)
             throws DdlException, AnalysisException {
         Locker locker = new Locker();
+<<<<<<< HEAD
         Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
+=======
+        Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {

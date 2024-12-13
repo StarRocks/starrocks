@@ -48,6 +48,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.mv.MVRangePartitionMapper;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections.CollectionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -88,9 +92,15 @@ public class SyncPartitionUtils {
 
     private static final String DEFAULT_PREFIX = "p";
 
+<<<<<<< HEAD
     public static RangePartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                     Map<String, Range<PartitionKey>> mvRangeMap,
                                                                     RangePartitionDiffer differ) {
+=======
+    public static PartitionDiff getRangePartitionDiffOfSlotRef(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                               Map<String, Range<PartitionKey>> mvRangeMap,
+                                                               RangePartitionDiffer differ) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // This synchronization method has a one-to-one correspondence
         // between the base table and the partition of the mv.
         RangeSet<PartitionKey> ranges = TreeRangeSet.create();
@@ -108,7 +118,11 @@ public class SyncPartitionUtils {
 
     public static boolean hasRangePartitionChanged(Map<String, Range<PartitionKey>> baseRangeMap,
                                                    Map<String, Range<PartitionKey>> mvRangeMap) {
+<<<<<<< HEAD
         RangePartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
+=======
+        PartitionDiff diff = RangePartitionDiffer.simpleDiff(baseRangeMap, mvRangeMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (MapUtils.isNotEmpty(diff.getAdds()) || MapUtils.isNotEmpty(diff.getDeletes())) {
             return true;
         }
@@ -116,10 +130,17 @@ public class SyncPartitionUtils {
     }
 
 
+<<<<<<< HEAD
     public static RangePartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                  Map<String, Range<PartitionKey>> mvRangeMap,
                                                                  FunctionCallExpr functionCallExpr,
                                                                  RangePartitionDiffer differ) {
+=======
+    public static PartitionDiff getRangePartitionDiffOfExpr(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                            Map<String, Range<PartitionKey>> mvRangeMap,
+                                                            FunctionCallExpr functionCallExpr,
+                                                            RangePartitionDiffer differ) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PrimitiveType partitionColumnType = functionCallExpr.getType().getPrimitiveType();
         Map<String, Range<PartitionKey>> rollupRange = Maps.newHashMap();
         if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
@@ -154,11 +175,19 @@ public class SyncPartitionUtils {
     }
 
     @NotNull
+<<<<<<< HEAD
     private static RangePartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
                                                             Map<String, Range<PartitionKey>> rollupRange,
                                                             RangePartitionDiffer differ) {
         // TODO: Callers may use `List<PartitionRange>` directly.
         RangePartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
+=======
+    private static PartitionDiff getRangePartitionDiff(Map<String, Range<PartitionKey>> mvRangeMap,
+                                                       Map<String, Range<PartitionKey>> rollupRange,
+                                                       RangePartitionDiffer differ) {
+        // TODO: Callers may use `List<PartitionRange>` directly.
+        PartitionDiff diff = differ != null ? differ.diff(rollupRange, mvRangeMap) :
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 RangePartitionDiffer.simpleDiff(rollupRange, mvRangeMap);
         return diff;
     }
@@ -716,11 +745,19 @@ public class SyncPartitionUtils {
         }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
 
+<<<<<<< HEAD
         Database baseDb = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
         if (baseDb == null) {
             return;
         }
         Table baseTable = baseDb.getTable(tableName.getTbl());
+=======
+        Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+        if (baseDb == null) {
+            return;
+        }
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(baseDb.getFullName(), tableName.getTbl());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (baseTable == null) {
             return;
         }
@@ -751,6 +788,17 @@ public class SyncPartitionUtils {
         if (StringUtils.isEmpty(tableName.getCatalog()) || InternalCatalog.isFromDefault(tableName)) {
             return;
         }
+<<<<<<< HEAD
+=======
+        List<Expr> mvPartitionRefTableExprs = mv.getPartitionRefTableExprs();
+        if (CollectionUtils.isEmpty(mvPartitionRefTableExprs)) {
+            return;
+        }
+        // TODO: support multiple partition columns
+        if (mvPartitionRefTableExprs.size() > 1) {
+            return;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Expr expr = mv.getPartitionRefTableExprs().get(0);
         Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());

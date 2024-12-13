@@ -37,6 +37,7 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status set_finishing(RuntimeState* state) override;
     [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
@@ -48,6 +49,19 @@ public:
 
 private:
     [[nodiscard]] StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
+=======
+    Status set_finishing(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
+
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+private:
+    StatusOr<ChunkPtr> _pull_spilled_chunk(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool _is_finished = false;
     bool _has_last_chunk = true;
@@ -64,7 +78,11 @@ public:
 
     ~SpillableAggregateBlockingSourceOperatorFactory() override = default;
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state) override;
+=======
+    Status prepare(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 

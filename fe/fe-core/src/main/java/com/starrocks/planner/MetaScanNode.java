@@ -20,6 +20,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Partition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -45,6 +49,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
@@ -52,20 +60,44 @@ public class MetaScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
     private final Map<Integer, String> columnIdToNames;
     private final OlapTable olapTable;
+<<<<<<< HEAD
     private List<Column> tableSchema = Lists.newArrayList();
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
                         Map<Integer, String> columnIdToNames, long warehouseId) {
+=======
+    private final List<Column> tableSchema;
+    private final List<String> selectPartitionNames;
+    private final List<TScanRangeLocations> result = Lists.newArrayList();
+
+    public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
+                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, long warehouseId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
+<<<<<<< HEAD
+=======
+        this.selectPartitionNames = selectPartitionNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.warehouseId = warehouseId;
     }
 
     public void computeRangeLocations() {
+<<<<<<< HEAD
         Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
+=======
+        Collection<PhysicalPartition> partitions;
+        if (selectPartitionNames.isEmpty()) {
+            partitions = olapTable.getPhysicalPartitions();
+        } else {
+            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
+                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
@@ -177,6 +209,12 @@ public class MetaScanNode extends ScanNode {
                     append(kv.getValue()).
                     append("\n");
         }
+<<<<<<< HEAD
+=======
+        if (!selectPartitionNames.isEmpty()) {
+            output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return output.toString();
     }
 

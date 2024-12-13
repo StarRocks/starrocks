@@ -42,6 +42,10 @@ public class CurrentQueryStatisticsProcDirTest {
         Map<String, QueryStatisticsItem> statistic = new HashMap<>();
         statistic.put("queryId1", new QueryStatisticsItem.Builder()
                 .queryStartTime(1)
+<<<<<<< HEAD
+=======
+                .customQueryId("abc1")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .queryId("queryId1")
                 .warehouseName("wh1")
                 .resourceGroupName("wg1")
@@ -49,6 +53,10 @@ public class CurrentQueryStatisticsProcDirTest {
         );
         statistic.put("queryId2", new QueryStatisticsItem.Builder()
                 .queryStartTime(2)
+<<<<<<< HEAD
+=======
+                .customQueryId("abc2")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .queryId("queryId2")
                 .warehouseName("wh1")
                 .resourceGroupName("wg2")
@@ -78,6 +86,11 @@ public class CurrentQueryStatisticsProcDirTest {
         Assert.assertEquals("queryId1", list1.get(2));
         // Warehouse
         Assert.assertEquals("wh1", list1.get(12));
+<<<<<<< HEAD
+=======
+        // CustomQueryId
+        Assert.assertEquals("abc1", list1.get(13));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // ResourceGroupName
         Assert.assertEquals("wg1", list1.get(14));
 
@@ -87,6 +100,11 @@ public class CurrentQueryStatisticsProcDirTest {
         Assert.assertEquals("queryId2", list2.get(2));
         // Warehouse
         Assert.assertEquals("wh1", list2.get(12));
+<<<<<<< HEAD
+=======
+        // CustomQueryId
+        Assert.assertEquals("abc2", list2.get(13));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // ResourceGroupName
         Assert.assertEquals("wg2", list2.get(14));
     }

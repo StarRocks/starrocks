@@ -56,7 +56,12 @@ public class PartitionsProcDirTest {
         listPartition.setDataCacheInfo(partitionId, dataCache);
         cloudNativTable = new LakeTable(1024L, "cloud_native_table", col, null, listPartition, null);
         MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+<<<<<<< HEAD
         cloudNativTable.addPartition(new Partition(partitionId, "p1", index, new RandomDistributionInfo(10)));
+=======
+        cloudNativTable.addPartition(new Partition(partitionId, 1035,
+                "p1", index, new RandomDistributionInfo(10)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         db.registerTableUnlocked(cloudNativTable);
     }
@@ -66,7 +71,11 @@ public class PartitionsProcDirTest {
         BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, cloudNativTable, false).fetchResult();
         List<List<String>> rows = result.getRows();
         List<String> list1 = rows.get(0);
+<<<<<<< HEAD
         Assert.assertEquals("1025", list1.get(0));
+=======
+        Assert.assertEquals("1035", list1.get(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("p1", list1.get(1));
         Assert.assertEquals("0", list1.get(2));
         Assert.assertEquals("1", list1.get(3));

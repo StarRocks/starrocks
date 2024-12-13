@@ -110,8 +110,13 @@ public class CachingDeltaLakeMetastoreTest {
         Table table = cachingDeltaLakeMetastore.getTable("db1", "table1");
         Assert.assertTrue(table instanceof DeltaLakeTable);
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+<<<<<<< HEAD
         Assert.assertEquals("db1", deltaLakeTable.getDbName());
         Assert.assertEquals("table1", deltaLakeTable.getTableName());
+=======
+        Assert.assertEquals("db1", deltaLakeTable.getCatalogDBName());
+        Assert.assertEquals("table1", deltaLakeTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("s3://bucket/path/to/table", deltaLakeTable.getTableLocation());
     }
 

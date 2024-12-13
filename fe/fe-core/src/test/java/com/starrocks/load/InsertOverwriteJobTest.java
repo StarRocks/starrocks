@@ -35,7 +35,11 @@ public class InsertOverwriteJobTest {
             }
         };
         InsertOverwriteJob insertOverwriteJob1 = new InsertOverwriteJob(100L, insertStmt, 110L, 120L,
+<<<<<<< HEAD
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
+=======
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(100L, insertOverwriteJob1.getJobId());
         Assert.assertEquals(110L, insertOverwriteJob1.getTargetDbId());
         Assert.assertEquals(120L, insertOverwriteJob1.getTargetTableId());
@@ -46,7 +50,11 @@ public class InsertOverwriteJobTest {
         Assert.assertTrue(insertOverwriteJob1.isFinished());
 
         List<Long> targetPartitionIds = Lists.newArrayList(10L, 20L, 30L);
+<<<<<<< HEAD
         InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, 110L, 120L, targetPartitionIds);
+=======
+        InsertOverwriteJob insertOverwriteJob2 = new InsertOverwriteJob(100L, 110L, 120L, targetPartitionIds, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(100L, insertOverwriteJob2.getJobId());
         Assert.assertEquals(110L, insertOverwriteJob2.getTargetDbId());
         Assert.assertEquals(120L, insertOverwriteJob2.getTargetTableId());

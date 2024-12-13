@@ -16,11 +16,20 @@ package com.starrocks.connector.hive;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemoteFileOperations;
 
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -41,6 +50,10 @@ public class HiveMetadataFactory {
     private final boolean enableHmsEventsIncrementalSync;
     private final HdfsEnvironment hdfsEnvironment;
     private final MetastoreType metastoreType;
+<<<<<<< HEAD
+=======
+    private final ConnectorProperties connectorProperties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -54,7 +67,12 @@ public class HiveMetadataFactory {
                                boolean isRecursive,
                                boolean enableHmsEventsIncrementalSync,
                                HdfsEnvironment hdfsEnvironment,
+<<<<<<< HEAD
                                MetastoreType metastoreType) {
+=======
+                               MetastoreType metastoreType,
+                               Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -68,6 +86,10 @@ public class HiveMetadataFactory {
         this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
         this.hdfsEnvironment = hdfsEnvironment;
         this.metastoreType = metastoreType;
+<<<<<<< HEAD
+=======
+        this.connectorProperties = new ConnectorProperties(ConnectorType.HIVE, properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public HiveMetadata create() {
@@ -86,7 +108,12 @@ public class HiveMetadataFactory {
 
         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new HiveMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations, remoteFileOperations,
+<<<<<<< HEAD
                 statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor);
+=======
+                statisticsProvider, cacheUpdateProcessor, updateStatisticsExecutor, refreshOthersFeExecutor,
+                connectorProperties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {

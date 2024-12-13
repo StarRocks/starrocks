@@ -46,7 +46,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -80,9 +84,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+=======
+import java.io.DataOutput;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -285,7 +293,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws UserException {
+=======
+    public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = null;
         LoadDataSourceType type = LoadDataSourceType.valueOf(createRoutineLoadStmt.getTypeName());
         switch (type) {
@@ -296,7 +308,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 routineLoadJob = PulsarRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException("Unknown data source type: " + type);
+=======
+                throw new StarRocksException("Unknown data source type: " + type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
@@ -408,7 +424,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void pauseRoutineLoadJob(PauseRoutineLoadStmt pauseRoutineLoadStmt)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(pauseRoutineLoadStmt.getDbFullName(),
                 pauseRoutineLoadStmt.getName());
 
@@ -421,7 +441,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 "routine load job has been paused by user").build());
     }
 
+<<<<<<< HEAD
     public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws UserException {
+=======
+    public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(resumeRoutineLoadStmt.getDbFullName(),
                 resumeRoutineLoadStmt.getName());
 
@@ -438,7 +462,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void stopRoutineLoadJob(StopRoutineLoadStmt stopRoutineLoadStmt)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(stopRoutineLoadStmt.getDbFullName(),
                 stopRoutineLoadStmt.getName());
         routineLoadJob.updateState(RoutineLoadJob.JobState.STOPPED,
@@ -517,7 +545,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 sortRoutineLoadJob(result);
             } else {
                 long dbId = 0L;
+<<<<<<< HEAD
                 Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
+=======
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
@@ -669,7 +701,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         warehouseLoadStatusInfoBuilder.withRemovedJob(routineLoadJob);
     }
 
+<<<<<<< HEAD
     public void updateRoutineLoadJob() throws UserException {
+=======
+    public void updateRoutineLoadJob() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         readLock();
         try {
             for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
@@ -693,7 +729,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         RoutineLoadJob job = getJob(operation.getId());
         try {
             job.updateState(operation.getJobState(), null, true /* is replay */);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error("should not happened", e);
         }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, operation.getId())
@@ -722,7 +762,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     /**
      * Enter of altering a routine load job
      */
+<<<<<<< HEAD
     public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws UserException {
+=======
+    public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob job = checkPrivAndGetJob(stmt.getDbName(), stmt.getLabel());
         if (job.getState() != RoutineLoadJob.JobState.PAUSED) {
             throw new DdlException("Only supports modification of PAUSED jobs");
@@ -735,7 +779,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 stmt.getDataSourceProperties(), stmt.getOrigStmt(), false);
     }
 
+<<<<<<< HEAD
     public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws UserException, IOException {
+=======
+    public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws StarRocksException, IOException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob job = getJob(log.getJobId());
         Preconditions.checkNotNull(job, log.getJobId());
 
@@ -782,6 +830,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public long loadRoutineLoadJobs(DataInputStream dis, long checksum) throws IOException {
         readFields(dis);
         LOG.info("finished replay routineLoadJobs from image");
@@ -793,6 +842,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void saveRoutineLoadJobsV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         final int cnt = 1 + idToRoutineLoadJob.size();
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);

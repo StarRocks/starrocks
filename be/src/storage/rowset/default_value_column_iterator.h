@@ -56,34 +56,57 @@ public:
               _pool(),
               _num_rows(num_rows) {}
 
+<<<<<<< HEAD
     [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
 
     [[nodiscard]] Status seek_to_first() override {
+=======
+    Status init(const ColumnIteratorOptions& opts) override;
+
+    Status seek_to_first() override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _current_rowid = 0;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_to_ordinal(ordinal_t ord_idx) override {
+=======
+    Status seek_to_ordinal(ordinal_t ord_idx) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _current_rowid = ord_idx;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
 
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+=======
+    Status next_batch(size_t* n, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
 
     ordinal_t num_rows() const override { return _num_rows; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
+=======
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool all_page_dict_encoded() const override { return false; }
 
     int dict_lookup(const Slice& word) override { return -1; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("DefaultValueColumnIterator does not support");
     }
@@ -93,6 +116,17 @@ public:
     }
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+=======
+    Status next_dict_codes(size_t* n, Column* dst) override {
+        return Status::NotSupported("DefaultValueColumnIterator does not support");
+    }
+
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
+        return Status::NotSupported("DefaultValueColumnIterator does not support");
+    }
+
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     bool _has_default_value;

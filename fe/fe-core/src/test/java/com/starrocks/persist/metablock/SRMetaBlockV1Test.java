@@ -52,7 +52,10 @@ public class SRMetaBlockV1Test {
     @BeforeClass
     public static void setUp() throws Exception {
         tmpDir = Files.createTempDirectory(Paths.get("."), "SRMetaBlockV1Test");
+<<<<<<< HEAD
         UtFrameUtils.PseudoImage.setUpImageVersion();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @AfterClass

@@ -17,7 +17,11 @@ package com.starrocks.alter;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -76,23 +80,39 @@ public class LakeTableAlterMetaJobTest {
     public void setUp() throws Exception {
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         connectContext.setDatabase(DB_NAME);
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
 
         table = createTable(connectContext,
+<<<<<<< HEAD
                 "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
                         "PROPERTIES('enable_persistent_index'='false')");
         Assert.assertFalse(table.enablePersistentIndex());
         job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
                 table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
+=======
+                    "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
+                                "PROPERTIES('enable_persistent_index'='false')");
+        Assert.assertFalse(table.enablePersistentIndex());
+        job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
+                    table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @After
     public void tearDown() throws DdlException, MetaNotFoundException {
         db.dropTable(table.getName());
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().dropDb(DB_NAME, true);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (MetaNotFoundException ignored) {
         }
     }
@@ -100,8 +120,14 @@ public class LakeTableAlterMetaJobTest {
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
         return (LakeTable) db.getTable(createTableStmt.getTableName());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), createTableStmt.getTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -181,7 +207,11 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+<<<<<<< HEAD
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+=======
+                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             @Mock
@@ -268,8 +298,13 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
+<<<<<<< HEAD
                 job.dbId, job.tableId, job.tableName,
                 job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
+=======
+                    job.dbId, job.tableId, job.tableName,
+                    job.timeoutMs, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Table<Long, Long, MaterializedIndex> partitionIndexMap = job.getPartitionIndexMap();
         Map<Long, Long> commitVersionMap = job.getCommitVersionMap();
@@ -277,10 +312,17 @@ public class LakeTableAlterMetaJobTest {
         // for replay will check partition.getVisibleVersion()
         // here we reduce the visibleVersion for test
         for (long partitionId : partitionIndexMap.rowKeySet()) {
+<<<<<<< HEAD
             Partition partition = table.getPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
             Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
             partition.updateVisibleVersion(commitVersion - 1);
+=======
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+            long commitVersion = commitVersionMap.get(partitionId);
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
+            physicalPartition.updateVisibleVersion(commitVersion - 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         replayAlterMetaJob.replay(job);
@@ -295,9 +337,15 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertEquals(job.getPartitionIndexMap(), replayAlterMetaJob.getPartitionIndexMap());
 
         for (long partitionId : partitionIndexMap.rowKeySet()) {
+<<<<<<< HEAD
             Partition partition = table.getPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
             Assert.assertEquals(partition.getVisibleVersion(), commitVersion);
+=======
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+            long commitVersion = commitVersionMap.get(partitionId);
+            Assert.assertEquals(physicalPartition.getVisibleVersion(), commitVersion);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -309,7 +357,11 @@ public class LakeTableAlterMetaJobTest {
         tabletSet.add(1L);
         MarkedCountDownLatch<Long, Set<Long>> latch = new MarkedCountDownLatch<>(1);
         TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+<<<<<<< HEAD
                 backend, tabletSet, true);
+=======
+                    backend, tabletSet, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         task.setLatch(latch);
         task.setTxnId(txnId);
         TUpdateTabletMetaInfoReq result = task.toThrift();
@@ -324,7 +376,11 @@ public class LakeTableAlterMetaJobTest {
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         Assertions.assertThrows(DdlException.class,
+<<<<<<< HEAD
                 () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
+=======
+                    () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

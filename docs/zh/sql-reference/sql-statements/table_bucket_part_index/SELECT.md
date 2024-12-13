@@ -1111,7 +1111,10 @@ pivot_value:
 ```
 
 #### 参数
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 在PIVOT操作中，你需要指定以下几个关键部分：
 - aggregate_function()：聚合函数，如SUM、AVG、COUNT等，用于对数据进行汇总。
 - alias：为聚合结果指定的别名，使得结果更易于理解。

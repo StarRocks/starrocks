@@ -16,14 +16,24 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
+=======
+import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.BranchOptions;
+import com.starrocks.connector.ConnectorAlterTableExecutor;
+import com.starrocks.connector.TagOptions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddFieldClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.DropColumnClause;
@@ -32,15 +42,44 @@ import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import org.apache.iceberg.FileFormat;
+=======
+import com.starrocks.sql.ast.AlterTableOperationClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateOrReplaceBranchClause;
+import com.starrocks.sql.ast.CreateOrReplaceTagClause;
+import com.starrocks.sql.ast.DropBranchClause;
+import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropFieldClause;
+import com.starrocks.sql.ast.DropTagClause;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.iceberg.ExpireSnapshots;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.ManageSnapshots;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotRef;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+=======
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
@@ -274,4 +313,211 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         icebergCatalog.renameTable(tableName.getDb(), tableName.getTbl(), clause.getNewTableName());
         return null;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public Void visitCreateOrReplaceBranchClause(CreateOrReplaceBranchClause clause, ConnectContext context) {
+        actions.add(() -> {
+            String branchName = clause.getBranchName();
+            BranchOptions branchOptions = clause.getBranchOptions();
+            boolean create = clause.isCreate();
+            boolean replace = clause.isReplace();
+            boolean ifNotExists = clause.isIfNotExists();
+
+            Long snapshotId = branchOptions.getSnapshotId().orElse(
+                    Optional.ofNullable(table.currentSnapshot()).map(Snapshot::snapshotId).orElse(null));
+            ManageSnapshots manageSnapshots = transaction.manageSnapshots();
+
+            Runnable safeCreateBranch = () -> {
+                if (snapshotId == null) {
+                    manageSnapshots.createBranch(branchName);
+                } else {
+                    manageSnapshots.createBranch(branchName, snapshotId);
+                }
+            };
+
+            boolean refExists = table.refs().get(branchName) != null;
+            if (create && replace && !refExists) {
+                safeCreateBranch.run();
+            } else if (replace) {
+                Preconditions.checkArgument(snapshotId != null,
+                        "Cannot complete replace branch operation on %s, main has no snapshot", table.name());
+                manageSnapshots.replaceBranch(branchName, snapshotId);
+            } else {
+                if (refExists && ifNotExists) {
+                    return;
+                }
+                safeCreateBranch.run();
+            }
+
+            if (branchOptions.getNumSnapshots().isPresent()) {
+                manageSnapshots.setMinSnapshotsToKeep(branchName, branchOptions.getNumSnapshots().get());
+            }
+
+            if (branchOptions.getSnapshotRetain().isPresent()) {
+                manageSnapshots.setMaxSnapshotAgeMs(branchName, branchOptions.getSnapshotRetain().get());
+            }
+
+            if (branchOptions.getSnapshotRefRetain().isPresent()) {
+                manageSnapshots.setMaxRefAgeMs(branchName, branchOptions.getSnapshotRefRetain().get());
+            }
+
+            manageSnapshots.commit();
+        });
+        return null;
+    }
+
+    @Override
+    public Void visitCreateOrReplaceTagClause(CreateOrReplaceTagClause clause, ConnectContext context) {
+        actions.add(() -> {
+            String tagName = clause.getTagName();
+            TagOptions tagOptions = clause.getTagOptions();
+            boolean create = clause.isCreate();
+            boolean replace = clause.isReplace();
+            boolean ifNotExists = clause.isIfNotExists();
+
+            Long snapshotId = tagOptions.getSnapshotId().orElse(
+                    Optional.ofNullable(table.currentSnapshot()).map(Snapshot::snapshotId).orElse(null));
+
+            Preconditions.checkArgument(snapshotId != null,
+                    "Cannot complete create or replace tag operation on %s, main has no snapshot", table.name());
+            ManageSnapshots manageSnapshots = transaction.manageSnapshots();
+
+            boolean refExists = table.refs().get(tagName) != null;
+
+            if (create && replace && !refExists) {
+                manageSnapshots.createTag(tagName, snapshotId);
+            } else if (replace) {
+                manageSnapshots.replaceTag(tagName, snapshotId);
+            } else {
+                if (refExists && ifNotExists) {
+                    return;
+                }
+                manageSnapshots.createTag(tagName, snapshotId);
+            }
+
+            if (tagOptions.getSnapshotRefRetain().isPresent()) {
+                manageSnapshots.setMaxRefAgeMs(tagName, tagOptions.getSnapshotRefRetain().get());
+            }
+
+            manageSnapshots.commit();
+        });
+        return null;
+    }
+
+    @Override
+    public Void visitDropBranchClause(DropBranchClause clause, ConnectContext context) {
+        actions.add(() -> {
+            String branchName = clause.getBranch();
+            boolean ifExists = clause.isIfExists();
+            SnapshotRef snapshotRef = table.refs().get(branchName);
+
+            if (snapshotRef != null || !ifExists) {
+                transaction.manageSnapshots().removeBranch(branchName).commit();
+            }
+        });
+
+        return null;
+    }
+
+    @Override
+    public Void visitDropTagClause(DropTagClause clause, ConnectContext context) {
+        actions.add(() -> {
+            String tagName = clause.getTag();
+            boolean ifExists = clause.isIfExists();
+            SnapshotRef snapshotRef = table.refs().get(tagName);
+
+            if (snapshotRef != null || !ifExists) {
+                transaction.manageSnapshots().removeTag(tagName).commit();
+            }
+        });
+
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableOperationClause(AlterTableOperationClause clause, ConnectContext context) {
+        IcebergTableOperation op = IcebergTableOperation.fromString(clause.getTableOperationName());
+        if (op == IcebergTableOperation.UNKNOWN) {
+            throw new StarRocksConnectorException("Unknown iceberg table operation : %s", clause.getTableOperationName());
+        }
+        List<ConstantOperator> args = clause.getArgs();
+
+        switch (op) {
+            case FAST_FORWARD:
+                fastForward(args);
+                break;
+            case CHERRYPICK_SNAPSHOT:
+                cherryPickSnapshot(args);
+                break;
+            case EXPIRE_SNAPSHOTS:
+                expireSnapshots(args);
+                break;
+            default:
+                throw new StarRocksConnectorException("Unsupported table operation %s", op);
+        }
+
+        return null;
+    }
+
+    private void fastForward(List<ConstantOperator> args) {
+        if (args.size() != 2) {
+            throw new StarRocksConnectorException("invalid args. fast forward must contain `from branch` and `to branch`");
+        }
+
+        String from = args.get(0)
+                .castTo(Type.VARCHAR)
+                .map(ConstantOperator::getChar)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+
+        String to = args.get(1)
+                .castTo(Type.VARCHAR)
+                .map(ConstantOperator::getChar)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(1)));
+
+        actions.add(() -> {
+            transaction.manageSnapshots().fastForwardBranch(from, to).commit();
+        });
+    }
+
+    private void cherryPickSnapshot(List<ConstantOperator> args) {
+        if (args.size() != 1) {
+            throw new StarRocksConnectorException("invalid args. cherrypick snapshot must contain `snapshot id`");
+        }
+
+        long snapshotId = args.get(0)
+                .castTo(Type.BIGINT)
+                .map(ConstantOperator::getBigint)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+
+        actions.add(() -> {
+            transaction.manageSnapshots().cherrypick(snapshotId).commit();
+        });
+    }
+
+    private void expireSnapshots(List<ConstantOperator> args) {
+        if (args.size() > 1) {
+            throw new StarRocksConnectorException("invalid args. only support `older_than` in the expire snapshot operation");
+        }
+
+        long olderThanMillis;
+        if (args.isEmpty()) {
+            olderThanMillis = -1L;
+        } else {
+            LocalDateTime time = Optional.ofNullable(args.get(0))
+                    .flatMap(arg -> arg.castTo(Type.DATETIME).map(ConstantOperator::getDatetime))
+                    .orElseThrow(() -> new StarRocksConnectorException("invalid arg %s", args.get(0)));
+            olderThanMillis = Duration.ofSeconds(time.atZone(TimeUtils.getTimeZone().toZoneId()).toEpochSecond()).toMillis();
+        }
+
+        actions.add(() -> {
+            ExpireSnapshots expireSnapshots = transaction.expireSnapshots();
+            if (olderThanMillis != -1) {
+                expireSnapshots = expireSnapshots.expireOlderThan(olderThanMillis);
+            }
+            expireSnapshots.commit();
+        });
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -24,7 +24,11 @@ public class ProcUtils {
         try {
             return Long.parseLong(dbIdOrName);
         } catch (NumberFormatException e) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbIdOrName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbIdOrName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 throw new AnalysisException("Unknown database id or name \"" + dbIdOrName + "\"");
             }

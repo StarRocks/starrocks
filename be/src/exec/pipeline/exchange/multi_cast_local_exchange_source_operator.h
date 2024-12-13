@@ -38,6 +38,11 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     bool _is_finished = false;
     int32_t _mcast_consumer_index;

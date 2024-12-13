@@ -74,7 +74,11 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             for (Tablet tablet : index.getTablets()) {
                 List<Comparable> tabletInfo = Lists.newArrayList();
@@ -86,7 +90,11 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfos.add(tabletInfo);
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return tabletInfos;
     }
@@ -133,7 +141,11 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         }
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Tablet tablet = index.getTablet(tabletId);
             if (tablet == null) {
@@ -142,7 +154,11 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             Preconditions.checkState(tablet instanceof LakeTablet);
             return new LakeTabletProcNode((LakeTablet) tablet);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

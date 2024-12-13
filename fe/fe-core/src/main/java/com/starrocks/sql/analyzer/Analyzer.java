@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -152,6 +155,10 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -506,11 +513,15 @@ public class Analyzer {
 
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
+<<<<<<< HEAD
             try {
                 statement.analyze(context);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+=======
+            new CreateFunctionAnalyzer().analyze(statement, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
@@ -716,28 +727,45 @@ public class Analyzer {
             return null;
         }
 
+<<<<<<< HEAD
         // ---------------------------------------- Privilege Statement ------------------------------------------------
 
         @Override
         public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+        // ---------------------------------------- Authentication Statement ------------------------------------------------
+
+        @Override
+        public Void visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+            AuthenticationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthenticationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(statement, context);
+=======
+            AuthenticationAnalyzer.analyze(statement, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
@@ -745,42 +773,76 @@ public class Analyzer {
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthenticationAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        // ---------------------------------------- Authorization Statement ------------------------------------------------
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
+            AuthorizationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthorizationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthorizationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthorizationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitSetDefaultRoleStatement(SetDefaultRoleStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthorizationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthorizationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
+<<<<<<< HEAD
             PrivilegeStmtAnalyzer.analyze(stmt, session);
+=======
+            AuthorizationAnalyzer.analyze(stmt, session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
 
@@ -1075,5 +1137,14 @@ public class Analyzer {
         public Void visitShowNodesStatement(ShowNodesStmt statement, ConnectContext context) {
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

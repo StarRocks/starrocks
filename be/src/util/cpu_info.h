@@ -85,6 +85,21 @@ public:
 
     static std::string debug_string();
 
+<<<<<<< HEAD
+=======
+    static const std::vector<long>& get_cache_sizes() {
+        static std::vector<long> cache_sizes;
+        static std::vector<long> cache_line_sizes;
+
+        if (cache_sizes.empty()) {
+            cache_sizes.resize(NUM_CACHE_LEVELS);
+            cache_line_sizes.resize(NUM_CACHE_LEVELS);
+            _get_cache_info(cache_sizes.data(), cache_line_sizes.data());
+        }
+        return cache_sizes;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static std::vector<size_t> get_core_ids();
 
     static bool is_cgroup_with_cpuset() { return is_cgroup_with_cpuset_; }

@@ -70,13 +70,21 @@ public class AutovacuumDaemon extends FrontendDaemon {
     protected void runAfterCatalogReady() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 continue;
             }
 
             List<Table> tables = new ArrayList<>();
+<<<<<<< HEAD
             for (Table table : db.getTables()) {
+=======
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table.isCloudNativeTableOrMaterializedView()) {
                     tables.add(table);
                 }
@@ -95,7 +103,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             partitions = table.getPhysicalPartitions().stream()
                     .filter(p -> p.getVisibleVersionTime() > staleTime)
@@ -104,7 +116,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                             p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
                     .collect(Collectors.toList());
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(baseTable.getId()), LockType.READ);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         for (PhysicalPartition partition : partitions) {
@@ -131,7 +147,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             tablets = partition.getBaseIndex().getTablets();
             visibleVersion = partition.getVisibleVersion();
@@ -140,7 +160,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         for (Tablet tablet : tablets) {

@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableMap;
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
@@ -23,10 +24,18 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
+=======
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+
+import java.util.Collections;
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Objects;
 
 public class LogicalMetaScanOperator extends LogicalScanOperator {
+<<<<<<< HEAD
     private ImmutableMap<Integer, String> aggColumnIdToNames;
 
     public LogicalMetaScanOperator(Table table,
@@ -43,6 +52,10 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
                 Operator.DEFAULT_LIMIT, null, null);
         this.aggColumnIdToNames = ImmutableMap.copyOf(aggColumnIdToNames);
     }
+=======
+    private Map<Integer, String> aggColumnIdToNames = ImmutableMap.of();
+    private List<String> selectPartitionNames = Collections.emptyList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private LogicalMetaScanOperator() {
         super(OperatorType.LOGICAL_META_SCAN);
@@ -52,6 +65,13 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         return aggColumnIdToNames;
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getSelectPartitionNames() {
+        return selectPartitionNames;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalMetaScan(this, context);
@@ -69,7 +89,12 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             return false;
         }
         LogicalMetaScanOperator that = (LogicalMetaScanOperator) o;
+<<<<<<< HEAD
         return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames);
+=======
+        return Objects.equals(aggColumnIdToNames, that.aggColumnIdToNames) &&
+                Objects.equals(selectPartitionNames, that.selectPartitionNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -77,6 +102,13 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         return Objects.hash(super.hashCode(), aggColumnIdToNames);
     }
 
+<<<<<<< HEAD
+=======
+    public static LogicalMetaScanOperator.Builder builder() {
+        return new LogicalMetaScanOperator.Builder();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalMetaScanOperator, LogicalMetaScanOperator.Builder> {
 
@@ -89,6 +121,20 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         public LogicalMetaScanOperator.Builder withOperator(LogicalMetaScanOperator operator) {
             super.withOperator(operator);
             builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);
+<<<<<<< HEAD
+=======
+            builder.selectPartitionNames = operator.selectPartitionNames;
+            return this;
+        }
+
+        public LogicalMetaScanOperator.Builder setAggColumnIdToNames(Map<Integer, String> aggColumnIdToNames) {
+            builder.aggColumnIdToNames = aggColumnIdToNames;
+            return this;
+        }
+
+        public LogicalMetaScanOperator.Builder setSelectPartitionNames(List<String> selectPartitionNames) {
+            builder.selectPartitionNames = selectPartitionNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
     }

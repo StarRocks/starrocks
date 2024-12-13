@@ -16,9 +16,13 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.utframe.StarRocksAssert;
+=======
+import com.starrocks.sql.ast.CreateDbStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Rule;

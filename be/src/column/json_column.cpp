@@ -24,6 +24,10 @@
 #include "common/compiler_util.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+<<<<<<< HEAD
+=======
+#include "gutil/strings/substitute.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "util/hash_util.hpp"
@@ -433,6 +437,7 @@ void JsonColumn::reset_column() {
     _path_to_index.clear();
 }
 
+<<<<<<< HEAD
 bool JsonColumn::capacity_limit_reached(std::string* msg) const {
     if (size() > Column::MAX_CAPACITY_LIMIT) {
         if (msg != nullptr) {
@@ -441,6 +446,14 @@ bool JsonColumn::capacity_limit_reached(std::string* msg) const {
         return true;
     }
     return false;
+=======
+Status JsonColumn::capacity_limit_reached() const {
+    if (size() > Column::MAX_CAPACITY_LIMIT) {
+        return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+    }
+    return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void JsonColumn::check_or_die() const {

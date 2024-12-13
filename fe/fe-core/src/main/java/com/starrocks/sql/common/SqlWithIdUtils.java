@@ -80,7 +80,11 @@ public class SqlWithIdUtils {
             long dbId = Long.parseLong(dbStr.substring(0, dbStr.indexOf(COMMON_SUFFIX)));
             Database db = dbMap.get(dbId);
             if (db == null) {
+<<<<<<< HEAD
                 db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+                db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (db == null) {
                     throw new SemanticException("Can not find db id: %s", dbId);
                 }
@@ -90,7 +94,11 @@ public class SqlWithIdUtils {
             long tableId = Long.parseLong(tableStr.substring(7, tableStr.indexOf(COMMON_SUFFIX)));
             Table table = tableMap.get(tableId);
             if (table == null) {
+<<<<<<< HEAD
                 table = db.getTable(tableId);
+=======
+                table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null) {
                     throw new SemanticException("Can not find table id: %s in db: %s", tableId, db.getOriginName());
                 }

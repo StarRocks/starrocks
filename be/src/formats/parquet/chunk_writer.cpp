@@ -14,6 +14,7 @@
 
 #include "formats/parquet/chunk_writer.h"
 
+<<<<<<< HEAD
 #include <parquet/arrow/writer.h>
 
 #include <utility>
@@ -28,6 +29,20 @@
 #include "formats/parquet/column_chunk_writer.h"
 #include "formats/parquet/level_builder.h"
 #include "util/defer_op.h"
+=======
+#include <parquet/file_writer.h>
+#include <parquet/schema.h>
+
+#include <algorithm>
+#include <numeric>
+#include <utility>
+
+#include "column/chunk.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
+#include "formats/parquet/column_chunk_writer.h"
+#include "formats/parquet/level_builder.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 

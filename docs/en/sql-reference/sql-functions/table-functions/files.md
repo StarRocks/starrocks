@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # FILES
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Defines data files in remote storage. It can be used to:
 

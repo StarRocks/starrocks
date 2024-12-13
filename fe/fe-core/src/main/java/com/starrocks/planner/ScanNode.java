@@ -39,7 +39,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
@@ -106,10 +110,21 @@ public abstract class ScanNode extends PlanNode {
         return false;
     }
 
+<<<<<<< HEAD
     /**
      * cast expr to SlotDescriptor type
      */
     protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws UserException {
+=======
+    public boolean hasMoreScanRanges() {
+        return false;
+    }
+
+    /**
+     * cast expr to SlotDescriptor type
+     */
+    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!slotDesc.getType().matchesType(expr.getType())) {
             return expr.castTo(slotDesc.getType());
         } else {
@@ -165,6 +180,14 @@ public abstract class ScanNode extends PlanNode {
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // We use this flag to know how many connector scan nodes at BE side, and connector framework
     // will use this number to fair share memory usage between those scan nodes.
     public boolean isRunningAsConnectorOperator() {

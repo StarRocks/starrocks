@@ -64,6 +64,7 @@ public:
     DataSink() = default;
     virtual ~DataSink() = default;
 
+<<<<<<< HEAD
     [[nodiscard]] virtual Status init(const TDataSink& thrift_sink, RuntimeState* state);
 
     // Setup. Call before send(), Open(), or Close().
@@ -74,22 +75,44 @@ public:
     [[nodiscard]] virtual Status open(RuntimeState* state) = 0;
 
     [[nodiscard]] virtual Status send_chunk(RuntimeState* state, Chunk* chunk);
+=======
+    virtual Status init(const TDataSink& thrift_sink, RuntimeState* state);
+
+    // Setup. Call before send(), Open(), or Close().
+    // Subclasses must call DataSink::Prepare().
+    virtual Status prepare(RuntimeState* state);
+
+    // Setup. Call before send() or close().
+    virtual Status open(RuntimeState* state) = 0;
+
+    virtual Status send_chunk(RuntimeState* state, Chunk* chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Releases all resources that were allocated in prepare()/send().
     // Further send() calls are illegal after calling close().
     // It must be okay to call this multiple times. Subsequent calls should
     // be ignored.
+<<<<<<< HEAD
     [[nodiscard]] virtual Status close(RuntimeState* state, Status exec_status) {
+=======
+    virtual Status close(RuntimeState* state, Status exec_status) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _closed = true;
         return Status::OK();
     }
 
     // Creates a new data sink from thrift_sink. A pointer to the
     // new sink is written to *sink, and is owned by the caller.
+<<<<<<< HEAD
     [[nodiscard]] static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
                                                  const std::vector<TExpr>& output_exprs,
                                                  const TPlanFragmentExecParams& params, int32_t sender_id,
                                                  const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
+=======
+    static Status create_data_sink(RuntimeState* state, const TDataSink& thrift_sink,
+                                   const std::vector<TExpr>& output_exprs, const TPlanFragmentExecParams& params,
+                                   int32_t sender_id, const RowDescriptor& row_desc, std::unique_ptr<DataSink>* sink);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Returns the runtime profile for the sink.
     virtual RuntimeProfile* profile() = 0;

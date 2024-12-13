@@ -29,7 +29,13 @@ enum StorageAggregateType {
     STORAGE_AGGREGATE_BITMAP_UNION = 7,
     // Replace if and only if added value is not null
     STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL = 8,
+<<<<<<< HEAD
     STORAGE_AGGREGATE_PERCENTILE_UNION = 9
+=======
+    STORAGE_AGGREGATE_PERCENTILE_UNION = 9,
+    // Generic aggregate function's state union
+    STORAGE_AGGREGATE_AGG_STATE_UNION = 10
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 StorageAggregateType get_aggregation_type_by_string(const std::string& str);

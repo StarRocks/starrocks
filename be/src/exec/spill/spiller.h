@@ -40,13 +40,21 @@
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 
+<<<<<<< HEAD
+=======
+#define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define RETURN_TRUE_IF_SPILL_TASK_ERROR(spiller) \
     if (!(spiller)->task_status().ok()) {        \
         return true;                             \
     }
 
+<<<<<<< HEAD
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::spill {
 
 // some metrics for spill

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # divide
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Return the quotient of x divide y. If y is 0, return null.
 

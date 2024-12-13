@@ -126,7 +126,11 @@ public class MVMaintenanceJobTest extends PlanTestBase {
                 pair.first);
 
         String currentDb = connectContext.getDatabase();
+<<<<<<< HEAD
         long dbId = GlobalStateMgr.getCurrentState().getDb(currentDb).getId();
+=======
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MaterializedView view = new MaterializedView();
         view.setDbId(dbId);
         view.setId(1024);

@@ -36,22 +36,38 @@ public:
 
     ~RowIdColumnIterator() override = default;
 
+<<<<<<< HEAD
     [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override {
+=======
+    Status init(const ColumnIteratorOptions& opts) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _opts = opts;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_to_first() override {
+=======
+    Status seek_to_first() override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _current_rowid = 0;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override {
+=======
+    Status seek_to_ordinal(ordinal_t ord) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _current_rowid = ord;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
+=======
+    Status next_batch(size_t* n, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Buffer<rowid_t>& v = down_cast<FixedLengthColumn<rowid_t>*>(dst)->get_data();
         const size_t sz = v.size();
         raw::stl_vector_resize_uninitialized(&v, sz + *n);
@@ -63,7 +79,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SparseRangeIterator<> iter = range.new_iterator();
         size_t to_read = range.span_size();
         while (to_read > 0) {
@@ -82,7 +102,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
+=======
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::NotSupported("Not supported by RowIdColumnIterator: fetch_values_by_rowid");
     }
 
@@ -94,11 +118,19 @@ public:
 
     int dict_lookup(const Slice& word) override { return -1; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override {
         return Status::NotSupported("Not supported by RowIdColumnIterator: next_dict_codes");
     }
 
     [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
+=======
+    Status next_dict_codes(size_t* n, Column* dst) override {
+        return Status::NotSupported("Not supported by RowIdColumnIterator: next_dict_codes");
+    }
+
+    Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::NotSupported("Not supported by RowIdColumnIterator: decode_dict_codes");
     }
 

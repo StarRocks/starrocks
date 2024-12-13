@@ -32,10 +32,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public interface IRewriteEquivalent {
     /**
+<<<<<<< HEAD
      * Different {@code RewriteEquivalentType} will be used to rewrite different scalar operators.
      * eg:
      *  `PREDICATE` will be used to rewrite for `BinaryPredicateOperator`;
      *  `CallOperator` will be used to rewrite for `BinaryPredicateOperator`;
+=======
+     * Different {@code RewriteEquivalentType} will be used to rewrite different scalar operators which can deduce lookup
+     * time to rewrite specific input expression.
+     * eg:
+     *  `PREDICATE` will be used to rewrite for `BinaryPredicateOperator` by using Predicate equivalents;
+     *  `AGGREGATE` will be used to rewrite for `CallOperator` by using Aggregate equivalents;
+     *  `ANY` type can be used to rewrite `CallOperator` for both `PREDICATE` type and `AGGREGATE` equivalents.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     enum RewriteEquivalentType {
         PREDICATE,

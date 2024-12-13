@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex_decode_binary
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将一个十六进制编码的字符串解码为 VARBINARY 类型的值。
 

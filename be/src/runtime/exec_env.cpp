@@ -41,7 +41,10 @@
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "block_cache/block_cache.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -53,7 +56,10 @@
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
+<<<<<<< HEAD
 #include "exprs/jit/jit_engine.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -61,6 +67,10 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "runtime/batch_write/batch_write_mgr.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
@@ -91,6 +101,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+<<<<<<< HEAD
+=======
+#include "udf/python/env.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
@@ -100,6 +114,13 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 // Calculate the total memory limit of all load tasks on this BE
@@ -234,7 +255,10 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
     _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", _process_mem_tracker.get());
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
+<<<<<<< HEAD
     _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
     _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
@@ -245,12 +269,19 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
     _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
+<<<<<<< HEAD
+=======
+    _poco_connection_pool_mem_tracker = regist_tracker(-1, "poco_connection_pool", _process_mem_tracker.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
+<<<<<<< HEAD
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     ForEach<ColumnPoolList>(op);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }
@@ -507,6 +538,20 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
 
+<<<<<<< HEAD
+=======
+    std::unique_ptr<ThreadPool> batch_write_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
+                            .set_min_threads(config::batch_write_thread_pool_num_min)
+                            .set_max_threads(config::batch_write_thread_pool_num_max)
+                            .set_max_queue_size(config::batch_write_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&batch_write_thread_pool));
+    auto batch_write_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
+    _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
 
@@ -515,6 +560,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(this);
+<<<<<<< HEAD
+=======
+    auto runtime_filter_event_func = [] {
+        auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
+        return (pool == nullptr) ? 0U : pool->queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
@@ -528,8 +581,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         exit(-1);
     }
 
+<<<<<<< HEAD
 #if defined(USE_STAROS) && !defined(BE_TEST)
     _lake_location_provider = new lake::StarletLocationProvider();
+=======
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _lake_update_manager =
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
@@ -545,7 +603,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
 
 #elif defined(BE_TEST)
+<<<<<<< HEAD
     _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
+=======
+    _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _lake_update_manager =
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
@@ -570,11 +632,22 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto jit_engine = JITEngine::get_instance();
     status = jit_engine->init();
     if (!status.ok()) {
         LOG(WARNING) << "Failed to init JIT engine: " << status.message();
     }
+<<<<<<< HEAD
+=======
+#endif
+
+    RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
+    PythonEnvManager::getInstance().start_background_cleanup_thread();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }
@@ -657,6 +730,13 @@ void ExecEnv::stop() {
         _stream_mgr->close();
     }
 
+<<<<<<< HEAD
+=======
+    if (_batch_write_mgr) {
+        _batch_write_mgr->stop();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_routine_load_task_executor) {
         _routine_load_task_executor->stop();
     }
@@ -668,6 +748,11 @@ void ExecEnv::stop() {
 #ifndef BE_TEST
     close_s3_clients();
 #endif
+<<<<<<< HEAD
+=======
+
+    PythonEnvManager::getInstance().close();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void ExecEnv::destroy() {
@@ -715,7 +800,10 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
+<<<<<<< HEAD
     SAFE_DELETE(_lake_location_provider);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);

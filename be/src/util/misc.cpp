@@ -14,8 +14,11 @@
 
 #include "util/misc.h"
 
+<<<<<<< HEAD
 #include <utility>
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/await.h"
 
 namespace starrocks {
@@ -29,7 +32,11 @@ static constexpr int sleep_interval = 1 * 1000 * 1000; // 1 seconds
 void nap_sleep(int32_t sleep_secs, const std::function<bool()>& stop_condition) {
     Awaitility await;
     await.timeout(sleep_secs * 1000LL * 1000LL).interval(sleep_interval);
+<<<<<<< HEAD
     await.until(std::move(stop_condition));
+=======
+    await.until(stop_condition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

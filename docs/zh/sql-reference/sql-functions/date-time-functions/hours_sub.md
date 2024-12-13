@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hours_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从指定的日期时间中减少指定的小时数。
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # host_name
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the hostname of the node on which the computation is performed.
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # avg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the average value of selected fields.
 

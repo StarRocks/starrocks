@@ -125,6 +125,7 @@ class BinaryDictPageDecoder final : public PageDecoder {
 public:
     BinaryDictPageDecoder(Slice data);
 
+<<<<<<< HEAD
     [[nodiscard]] Status init() override;
 
     [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override;
@@ -132,6 +133,15 @@ public:
     [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
 
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+=======
+    Status init() override;
+
+    Status seek_to_position_in_page(uint32_t pos) override;
+
+    Status next_batch(size_t* n, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     uint32_t count() const override { return _data_page_decoder->count(); }
 
@@ -141,9 +151,15 @@ public:
 
     void set_dict_decoder(PageDecoder* dict_decoder);
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
 
     [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+=======
+    Status next_dict_codes(size_t* n, Column* dst) override;
+
+    Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     Slice _data;

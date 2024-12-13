@@ -54,6 +54,10 @@ struct CompactionTaskInfo {
     CompactionTaskState state{COMPACTION_INIT};
     uint64_t task_id{0};
     Version output_version;
+<<<<<<< HEAD
+=======
+    int64_t gtid{0};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     uint64_t elapsed_time{0};
     int64_t tablet_id{0};
     double compaction_score{0};
@@ -105,6 +109,10 @@ struct CompactionTaskInfo {
         ss << ", state:" << compaction_state_to_string(state);
         ss << ", compaction_type:" << starrocks::to_string(compaction_type);
         ss << ", output_version:" << output_version;
+<<<<<<< HEAD
+=======
+        ss << ", gtid:" << gtid;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ss << ", start_time:" << ToStringFromUnixMillis(start_time);
         ss << ", end_time:" << ToStringFromUnixMillis(end_time);
         ss << ", elapsed_time:" << elapsed_time << " us";

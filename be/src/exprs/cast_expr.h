@@ -24,8 +24,14 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "runtime/types.h"
+=======
+#include "jsonpath.h"
+#include "runtime/types.h"
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -63,8 +69,12 @@ public:
     ~CastStringToArray() override = default;
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
+<<<<<<< HEAD
     [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
                               FunctionContext::FunctionStateScope scope) override;
+=======
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     Slice _unquote(Slice slice) const;
@@ -91,6 +101,37 @@ private:
     TypeDescriptor _cast_to_type_desc;
 };
 
+<<<<<<< HEAD
+=======
+// Cast Json to struct<ANY>
+class CastJsonToStruct final : public Expr {
+public:
+    CastJsonToStruct(const TExprNode& node, std::vector<std::unique_ptr<Expr>> field_casts)
+            : Expr(node), _field_casts(std::move(field_casts)) {
+        _json_paths.reserve(_type.field_names.size());
+        for (int j = 0; j < _type.field_names.size(); j++) {
+            std::string path_string = "$." + _type.field_names[j];
+            auto res = JsonPath::parse(Slice(path_string));
+            if (!res.ok()) {
+                throw std::runtime_error("Failed to parse JSON path: " + path_string);
+            }
+            _json_paths.emplace_back(res.value());
+        }
+    }
+
+    CastJsonToStruct(const CastJsonToStruct& rhs) : Expr(rhs) {}
+
+    ~CastJsonToStruct() override = default;
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* input_chunk) override;
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToStruct(*this)); }
+
+private:
+    std::vector<std::unique_ptr<Expr>> _field_casts;
+    std::vector<JsonPath> _json_paths;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // cast one ARRAY to another ARRAY.
 // For example.
 //   cast ARRAY<tinyint> to ARRAY<int>

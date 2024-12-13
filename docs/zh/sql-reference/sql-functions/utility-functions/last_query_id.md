@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # last_query_id
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回最近一次执行的查询的 ID。
 

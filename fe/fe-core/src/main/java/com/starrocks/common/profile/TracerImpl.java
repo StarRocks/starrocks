@@ -86,7 +86,11 @@ class TracerImpl extends Tracer {
         tracerCost.stop();
     }
 
+<<<<<<< HEAD
     public void count(String name, int count) {
+=======
+    public void count(String name, long count) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tracerCost.start();
         varTracer.count(timePoint(), name, count);
         tracerCost.stop();

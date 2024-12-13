@@ -35,6 +35,10 @@
 #include "service/brpc.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+<<<<<<< HEAD
+=======
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::pipeline {
 
@@ -72,8 +76,13 @@ public:
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
+<<<<<<< HEAD
     [[nodiscard]] Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
                                             const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
+=======
+    Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -118,7 +127,11 @@ private:
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
+<<<<<<< HEAD
     PInternalService_Stub* _brpc_stub = nullptr;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // If pipeline level shuffle is enable, the size of the _chunks
     // equals with dop of dest pipeline
@@ -316,9 +329,13 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
 }
 
 Status ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* fragment_ctx) {
+<<<<<<< HEAD
     auto status = _close_internal(state, fragment_ctx);
     state->log_error(status); // Lock only when status is not ok.
     return status;
+=======
+    return _close_internal(state, fragment_ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 ExchangeSinkOperator::ExchangeSinkOperator(

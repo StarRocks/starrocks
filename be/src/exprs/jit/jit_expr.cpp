@@ -24,7 +24,10 @@
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/pipeline/fragment_context.h"
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"

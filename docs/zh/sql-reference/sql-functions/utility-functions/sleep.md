@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sleep
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将当前正在执行的线程休眠 `x` 秒。返回 BOOLEAN 类型的值，`1` 表示正常休眠，`0` 表示休眠失败。
 

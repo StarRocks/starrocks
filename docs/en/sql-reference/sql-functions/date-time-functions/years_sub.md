@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # years_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Subtracts the specified number of years from the specified datetime or date.
 

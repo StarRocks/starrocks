@@ -18,6 +18,10 @@
 #include "glog/logging.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/current_thread.h"
+<<<<<<< HEAD
+=======
+#include "runtime/memory/counting_allocator.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/failpoint/fail_point.h"
 #include "util/stack_util.h"
 
@@ -38,6 +42,15 @@
 #define STARROCKS_CFREE(ptr) je_free(ptr)
 #define STARROCKS_VALLOC(size) je_valloc(size)
 
+<<<<<<< HEAD
+=======
+#define SET_DELTA_MEMORY(value)              \
+    do {                                     \
+        starrocks::tls_delta_memory = value; \
+    } while (0)
+#define RESET_DELTA_MEMORY() SET_DELTA_MEMORY(0)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifndef BE_TEST
 #define MEMORY_CONSUME_SIZE(size)                                      \
     do {                                                               \
@@ -57,6 +70,7 @@
     } while (0)
 #define MEMORY_CONSUME_PTR(ptr) MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr))
 #define MEMORY_RELEASE_PTR(ptr) MEMORY_RELEASE_SIZE(STARROCKS_MALLOC_SIZE(ptr))
+<<<<<<< HEAD
 #define TRY_MEM_CONSUME(size, err_ret)                                                                   \
     do {                                                                                                 \
         if (LIKELY(starrocks::tls_is_thread_status_init)) {                                              \
@@ -64,6 +78,21 @@
         } else {                                                                                         \
             RETURN_IF_UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size), err_ret); \
         }                                                                                                \
+=======
+#define TRY_MEM_CONSUME(size, err_ret)                                                      \
+    do {                                                                                    \
+        if (LIKELY(starrocks::tls_is_thread_status_init)) {                                 \
+            if (UNLIKELY(!starrocks::tls_thread_status.try_mem_consume(size))) {            \
+                RESET_DELTA_MEMORY();                                                       \
+                return err_ret;                                                             \
+            }                                                                               \
+        } else {                                                                            \
+            if (UNLIKELY(!starrocks::CurrentThread::try_mem_consume_without_cache(size))) { \
+                RESET_DELTA_MEMORY();                                                       \
+                return err_ret;                                                             \
+            }                                                                               \
+        }                                                                                   \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
     starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
@@ -114,15 +143,29 @@ extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
     STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
+<<<<<<< HEAD
+=======
+    int64_t alloc_size = STARROCKS_NALLOX(size, 0);
+    SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (IS_BAD_ALLOC_CATCHED()) {
         FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
+<<<<<<< HEAD
         TRY_MEM_CONSUME(STARROCKS_NALLOX(size, 0), nullptr);
         void* ptr = STARROCKS_MALLOC(size);
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0));
+=======
+        TRY_MEM_CONSUME(alloc_size, nullptr);
+        void* ptr = STARROCKS_MALLOC(size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(alloc_size);
+            RESET_DELTA_MEMORY();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     } else {
@@ -130,7 +173,13 @@ void* my_malloc(size_t size) __THROW {
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
         if (LIKELY(ptr != nullptr)) {
+<<<<<<< HEAD
             MEMORY_CONSUME_SIZE(STARROCKS_NALLOX(size, 0));
+=======
+            MEMORY_CONSUME_SIZE(alloc_size);
+        } else {
+            RESET_DELTA_MEMORY();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     }
@@ -139,9 +188,18 @@ void* my_malloc(size_t size) __THROW {
 // free
 void my_free(void* p) __THROW {
     if (UNLIKELY(p == nullptr)) {
+<<<<<<< HEAD
         return;
     }
     MEMORY_RELEASE_PTR(p);
+=======
+        RESET_DELTA_MEMORY();
+        return;
+    }
+    int64_t malloc_size = STARROCKS_MALLOC_SIZE(p);
+    MEMORY_RELEASE_SIZE(malloc_size);
+    SET_DELTA_MEMORY(-malloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     STARROCKS_FREE(p);
 }
 
@@ -152,6 +210,7 @@ void* my_realloc(void* p, size_t size) __THROW {
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
+<<<<<<< HEAD
         return nullptr;
     }
     int64_t old_size = STARROCKS_MALLOC_SIZE(p);
@@ -163,15 +222,40 @@ void* my_realloc(void* p, size_t size) __THROW {
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(STARROCKS_NALLOX(size, 0) - old_size);
+=======
+        RESET_DELTA_MEMORY();
+        return nullptr;
+    }
+    int64_t old_size = STARROCKS_MALLOC_SIZE(p);
+    int64_t new_size = STARROCKS_NALLOX(size, 0);
+    SET_DELTA_MEMORY(new_size - old_size);
+
+    if (IS_BAD_ALLOC_CATCHED()) {
+        FAIL_POINT_INJECT_MEM_ALLOC_ERROR(nullptr);
+        TRY_MEM_CONSUME(new_size - old_size, nullptr);
+        void* ptr = STARROCKS_REALLOC(p, size);
+        if (UNLIKELY(ptr == nullptr)) {
+            SET_EXCEED_MEM_TRACKER();
+            MEMORY_RELEASE_SIZE(new_size - old_size);
+            RESET_DELTA_MEMORY();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_REALLOC(p, size);
         if (ptr != nullptr) {
+<<<<<<< HEAD
             MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - old_size);
         } else {
             // nothing to do.
             // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+=======
+            MEMORY_CONSUME_SIZE(new_size - old_size);
+        } else {
+            // nothing to do.
+            // If tc_realloc() fails the original block is left untouched; it is not freed or moved
+            RESET_DELTA_MEMORY();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     }
@@ -183,6 +267,10 @@ void* my_calloc(size_t n, size_t size) __THROW {
     // If size is zero, the behavior is implementation defined (null pointer may be returned
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
+<<<<<<< HEAD
+=======
+        RESET_DELTA_MEMORY();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return nullptr;
     }
 
@@ -193,22 +281,45 @@ void* my_calloc(size_t n, size_t size) __THROW {
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(n * size);
+<<<<<<< HEAD
         } else {
             MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - n * size);
+=======
+            RESET_DELTA_MEMORY();
+        } else {
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - n * size);
+            SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_CALLOC(n, size);
+<<<<<<< HEAD
         MEMORY_CONSUME_PTR(ptr);
+=======
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ptr;
     }
 }
 
 void my_cfree(void* ptr) __THROW {
     if (UNLIKELY(ptr == nullptr)) {
+<<<<<<< HEAD
         return;
     }
     MEMORY_RELEASE_PTR(ptr);
+=======
+        RESET_DELTA_MEMORY();
+        return;
+    }
+    int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+    MEMORY_RELEASE_SIZE(alloc_size);
+    SET_DELTA_MEMORY(-alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     STARROCKS_CFREE(ptr);
 }
 
@@ -222,13 +333,27 @@ void* my_memalign(size_t align, size_t size) __THROW {
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+<<<<<<< HEAD
         } else {
             MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+=======
+            RESET_DELTA_MEMORY();
+        } else {
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
+<<<<<<< HEAD
         MEMORY_CONSUME_PTR(ptr);
+=======
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ptr;
     }
 }
@@ -243,13 +368,27 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+<<<<<<< HEAD
         } else {
             MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+=======
+            RESET_DELTA_MEMORY();
+        } else {
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
+<<<<<<< HEAD
         MEMORY_CONSUME_PTR(ptr);
+=======
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ptr;
     }
 }
@@ -264,13 +403,27 @@ void* my_valloc(size_t size) __THROW {
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+<<<<<<< HEAD
         } else {
             MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+=======
+            RESET_DELTA_MEMORY();
+        } else {
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_VALLOC(size);
+<<<<<<< HEAD
         MEMORY_CONSUME_PTR(ptr);
+=======
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ptr;
     }
 }
@@ -285,13 +438,27 @@ void* my_pvalloc(size_t size) __THROW {
         if (UNLIKELY(ptr == nullptr)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+<<<<<<< HEAD
         } else {
             MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(ptr) - size);
+=======
+            RESET_DELTA_MEMORY();
+        } else {
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ptr;
     } else {
         void* ptr = STARROCKS_VALLOC(size);
+<<<<<<< HEAD
         MEMORY_CONSUME_PTR(ptr);
+=======
+        int64_t alloc_size = STARROCKS_MALLOC_SIZE(ptr);
+        MEMORY_CONSUME_SIZE(alloc_size);
+        SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ptr;
     }
 }
@@ -306,14 +473,30 @@ int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
         if (UNLIKELY(ret != 0)) {
             SET_EXCEED_MEM_TRACKER();
             MEMORY_RELEASE_SIZE(size);
+<<<<<<< HEAD
         } else {
             MEMORY_CONSUME_SIZE(STARROCKS_MALLOC_SIZE(*r) - size);
+=======
+            SET_DELTA_MEMORY(0);
+        } else {
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(*r);
+            MEMORY_CONSUME_SIZE(alloc_size - size);
+            SET_DELTA_MEMORY(alloc_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ret;
     } else {
         int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);
         if (ret == 0) {
+<<<<<<< HEAD
             MEMORY_CONSUME_PTR(*r);
+=======
+            int64_t alloc_size = STARROCKS_MALLOC_SIZE(*r);
+            MEMORY_CONSUME_SIZE(alloc_size);
+            SET_DELTA_MEMORY(alloc_size);
+        } else {
+            RESET_DELTA_MEMORY();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return ret;
     }

@@ -27,8 +27,13 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+=======
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.TimeUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
@@ -294,6 +299,10 @@ public class TaskManager implements MemoryTrackable {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
         ExecuteOption option = new ExecuteOption(task.getSource().isMergeable());
+<<<<<<< HEAD
+=======
+        option.setManual(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return executeTask(taskName, option);
     }
 
@@ -481,7 +490,11 @@ public class TaskManager implements MemoryTrackable {
             if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskLock.getOwner();
                 if (owner != null) {
+<<<<<<< HEAD
                     LOG.warn("task lock is held by: {}", Util.dumpThread(owner, 50));
+=======
+                    LOG.warn("task lock is held by: {}", LogUtil.dumpThread(owner, 50));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     LOG.warn("task lock owner is null");
                 }
@@ -591,10 +604,13 @@ public class TaskManager implements MemoryTrackable {
 
         writer.writeInt(runStatusList.size());
         for (TaskRunStatus status : runStatusList) {
+<<<<<<< HEAD
             // TODO: compatible with old version, remove this later.
             if (status.getState().equals(Constants.TaskRunState.MERGED)) {
                 status.setState(Constants.TaskRunState.SUCCESS);
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             writer.writeJson(status);
         }
 

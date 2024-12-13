@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # translate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Substitutes specified characters within a string. It works by taking a string (`source`) as the input and replaces the `from_string` characters in `source` with `to_string`.
 

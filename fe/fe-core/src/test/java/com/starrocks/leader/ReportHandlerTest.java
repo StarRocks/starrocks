@@ -85,6 +85,7 @@ public class ReportHandlerTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
+<<<<<<< HEAD
                 .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
                 .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
@@ -96,11 +97,28 @@ public class ReportHandlerTest {
                 .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
                         "'primary_index_cache_expire_sec' = '3600');");
+=======
+                    .withTable("CREATE TABLE test.properties_change_test(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) properties('replication_num' = '1');")
+                    .withTable("CREATE TABLE test.binlog_report_handler_test(k1 int, v1 int) " +
+                                "duplicate key(k1) distributed by hash(k1) buckets 50 properties('replication_num' = '1', " +
+                                "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
+                    .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                                "'primary_index_cache_expire_sec' = '3600');")
+                    .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
+                                "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                                "'primary_index_cache_expire_sec' = '3600');");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testHandleSetTabletEnablePersistentIndex() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbId = db.getId();
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
@@ -124,9 +142,16 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetPrimaryIndexCacheExpireSec() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         long dbId = db.getId();
         OlapTable olapTable = (OlapTable) db.getTable("primary_index_cache_expire_sec_test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        long dbId = db.getId();
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "primary_index_cache_expire_sec_test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
@@ -149,21 +174,36 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleUpdateTableSchema() throws Exception {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         long dbId = db.getId();
         OlapTable olapTable = (OlapTable) db.getTable("update_schema");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        long dbId = db.getId();
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "update_schema");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String stmt = "alter table update_schema add column add_v int default '1'";
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         AlterTableStmt alterTableStmt =
+<<<<<<< HEAD
                 (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+=======
+                    (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
 
         long backendId = 10001L;
         List<Long> tabletIds =
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
+=======
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
@@ -184,9 +224,16 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleSetTabletBinlogConfig() {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         long dbId = db.getId();
         OlapTable olapTable = (OlapTable) db.getTable("binlog_report_handler_test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        long dbId = db.getId();
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "binlog_report_handler_test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long backendId = 10001L;
         List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
@@ -375,17 +422,30 @@ public class ReportHandlerTest {
         for (int i = 0; i < tabletMetaList.size(); i++) {
             long tabletId = tabletIds.get(i);
             TabletMeta tabletMeta = tabletMetaList.get(i);
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 continue;
             }
             OlapTable table = null;
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
             try {
                 table = (OlapTable) db.getTable(tabletMeta.getTableId());
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tabletMeta.getTableId());
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             PhysicalPartition partition = table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
@@ -413,11 +473,19 @@ public class ReportHandlerTest {
         };
 
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
                 .getDb("test").getTable("binlog_report_handler_test");
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         List<Long> allTablets = new ArrayList<>();
         for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
                 .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+=======
+                    .getLocalMetastore().getDb("test").getTable("binlog_report_handler_test");
+        ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
+        List<Long> allTablets = new ArrayList<>();
+        for (MaterializedIndex index : olapTable.getPartition("binlog_report_handler_test")
+                .getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Tablet tablet : index.getTablets()) {
                 tabletMetaMigrationMap.put(TStorageMedium.HDD, tablet.getId());
                 allTablets.add(tablet.getId());

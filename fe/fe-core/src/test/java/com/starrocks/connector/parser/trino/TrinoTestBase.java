@@ -94,6 +94,13 @@ public class TrinoTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
+                "`day` int NULL COMMENT \"\") \n" +
+                "PROPERTIES ('replication_num' = '1')");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withTable("CREATE TABLE `tall` (\n" +
                 "  `ta` varchar(20) NULL COMMENT \"\",\n" +
                 "  `tb` smallint(6) NULL COMMENT \"\",\n" +
@@ -173,7 +180,11 @@ public class TrinoTestBase {
                     connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
+<<<<<<< HEAD
         } catch (ParsingException | StarRocksPlannerException e) {
+=======
+        } catch (ParsingException | StarRocksPlannerException | io.trino.sql.parser.ParsingException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }

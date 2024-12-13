@@ -45,8 +45,13 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
+<<<<<<< HEAD
 #include "storage/inverted/inverted_index_option.h"
 #include "storage/inverted/inverted_plugin_factory.h"
+=======
+#include "storage/index/inverted/inverted_index_option.h"
+#include "storage/index/inverted/inverted_plugin_factory.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"

@@ -35,11 +35,19 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+=======
+    Status set_finished(RuntimeState* state) override;
+
+    void close(RuntimeState* state) override;
+
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     // It is used to perform aggregation algorithms shared by

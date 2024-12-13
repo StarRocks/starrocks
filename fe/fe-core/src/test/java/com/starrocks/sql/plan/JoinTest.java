@@ -1113,8 +1113,13 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb("test");
         Table table = db.getTable("join2");
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "join2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1137,7 +1142,11 @@ public class JoinTest extends PlanTestBase {
     public void testJoinReorderWithWithClause() throws Exception {
         connectContext.setDatabase("test");
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         Table table = globalStateMgr.getDb("test").getTable("join2");
+=======
+        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1640,7 +1649,11 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         Table table = globalStateMgr.getDb("test").getTable("join2");
+=======
+        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);

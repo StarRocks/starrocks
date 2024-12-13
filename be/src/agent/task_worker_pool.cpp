@@ -846,7 +846,12 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
             LOG(WARNING) << "Fail to report resource_usage to " << master_address.hostname << ":" << master_address.port
                          << ", err=" << status;
         }
+<<<<<<< HEAD
         std::this_thread::sleep_for(std::chrono::milliseconds(config::report_datacache_metrics_interval_ms));
+=======
+        size_t sleep_secs = config::report_datacache_metrics_interval_ms / 1000;
+        nap_sleep(sleep_secs, [&]() { return worker_pool_this->_stopped.load(); });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return nullptr;

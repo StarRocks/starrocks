@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex_decode_string
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function performs the opposite operation of [hex()](hex.md).
 

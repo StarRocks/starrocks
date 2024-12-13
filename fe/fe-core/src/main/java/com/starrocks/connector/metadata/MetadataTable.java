@@ -14,29 +14,50 @@
 
 package com.starrocks.connector.metadata;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.thrift.THdfsTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class MetadataTable extends Table {
     private final MetadataTableType metadataTableType;
 
     private final String catalogName;
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final String originDb;
     private final String originTable;
 
     protected static final List<Column> PLACEHOLDER_COLUMNS = ImmutableList.<Column>builder()
             .add(new Column("predicate", ScalarType.STRING, true))
             .build();
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public MetadataTable(String catalogName, long id, String name, TableType type, List<Column> baseSchema,
                          String originDb, String originTable, MetadataTableType metadataTableType) {
         super(id, name, type, baseSchema);
@@ -66,6 +87,35 @@ public class MetadataTable extends Table {
         throw new UnsupportedOperationException("Do not allow read SchemaTable from image.");
     }
 
+<<<<<<< HEAD
+=======
+    public List<Column> getPlaceHolderColumns() {
+        return PLACEHOLDER_COLUMNS;
+    }
+
+    public boolean supportBuildPlan() {
+        return false;
+    }
+
+    protected THdfsTable buildThriftTable(List<Column> columns) {
+        THdfsTable hdfsTable = new THdfsTable();
+        hdfsTable.setColumns(columns.stream().map(Column::toThrift).collect(Collectors.toList()));
+        hdfsTable.setPartition_columnsIsSet(false);
+
+        String columnNames = Joiner.on(',').join(columns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toList()));
+        hdfsTable.setHive_column_names(columnNames);
+
+        String columnTypes = Joiner.on('#').join(columns.stream()
+                .map(x -> ColumnTypeConverter.toHiveType(x.getType()))
+                .collect(Collectors.toList()));
+        hdfsTable.setHive_column_types(columnTypes);
+        hdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
+        return hdfsTable;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static Builder builder() {
         return new Builder();
     }

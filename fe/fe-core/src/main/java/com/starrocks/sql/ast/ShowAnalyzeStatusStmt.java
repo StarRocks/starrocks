@@ -24,8 +24,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.common.MetaUtils;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatisticUtils;
@@ -75,8 +81,16 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         Table table;
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
+<<<<<<< HEAD
             table = MetaUtils.getTable(analyzeStatus.getCatalogName(), analyzeStatus.getDbName(),
                     analyzeStatus.getTableName());
+=======
+            table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                    analyzeStatus.getCatalogName(), analyzeStatus.getDbName(), analyzeStatus.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
         } catch (Exception e) {

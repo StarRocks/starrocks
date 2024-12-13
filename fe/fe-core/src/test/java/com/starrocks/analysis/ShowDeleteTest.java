@@ -16,7 +16,10 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.common.jmockit.Deencapsulation;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -45,11 +48,16 @@ public class ShowDeleteTest {
         Database db = new Database();
         new Expectations(db) {
             {
+<<<<<<< HEAD
                 db.getTable(anyString);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), anyString);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
             }
         };
 
+<<<<<<< HEAD
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new Expectations(globalStateMgr) {
@@ -72,6 +80,8 @@ public class ShowDeleteTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // mock scheduler
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {

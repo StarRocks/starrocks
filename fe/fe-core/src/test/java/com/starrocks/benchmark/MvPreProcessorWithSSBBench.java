@@ -112,7 +112,10 @@ public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
                     "            INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY\n" +
                     "            INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY\n" +
                     "            INNER JOIN dates AS d ON l.lo_orderdate = d.d_datekey;\n", i);
+<<<<<<< HEAD
             System.out.println("create table :" + i);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             starRocksAssert.withMaterializedView(mv);
         }
 

@@ -68,7 +68,10 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
             }
 
             // once mv's base table has updated, refresh the materialized view totally.
+<<<<<<< HEAD
             // once mv's base table has updated, refresh the materialized view totally.
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MvBaseTableUpdateInfo mvBaseTableUpdateInfo = getMvBaseTableUpdateInfo(mv, table, true, isQueryRewrite);
             // TODO: fixme if mvBaseTableUpdateInfo is null, should return full refresh?
             if (mvBaseTableUpdateInfo != null &&
@@ -81,9 +84,15 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
     }
 
     @Override
+<<<<<<< HEAD
     protected MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
         List<Partition> partitions = Lists.newArrayList(mv.getPartitions());
         if (partitions.size() > 0 && partitions.get(0).getVisibleVersion() <= 1) {
+=======
+    public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
+        List<Partition> partitions = Lists.newArrayList(mv.getPartitions());
+        if (partitions.size() > 0 && partitions.get(0).getDefaultPhysicalPartition().getVisibleVersion() <= 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // the mv is newly created, can not use it to rewrite query.
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
         }

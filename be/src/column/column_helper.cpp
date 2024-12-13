@@ -25,6 +25,10 @@
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "simd/simd.h"
+<<<<<<< HEAD
+=======
+#include "storage/chunk_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type_infra.h"
 #include "util/date_func.h"
 #include "util/percentile_value.h"
@@ -32,10 +36,13 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 NullColumnPtr ColumnHelper::one_size_not_null_column = NullColumn::create(1, 0);
 
 NullColumnPtr ColumnHelper::one_size_null_column = NullColumn::create(1, 1);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Filter& ColumnHelper::merge_nullable_filter(Column* column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -487,7 +494,11 @@ size_t ChunkSliceTemplate<Ptr>::skip(size_t skip_rows) {
 
 // Cutoff required rows from this chunk
 template <class Ptr>
+<<<<<<< HEAD
 Ptr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
+=======
+ChunkUniquePtr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(!empty());
     size_t cut_rows = std::min(rows(), required_rows);
     auto res = chunk->clone_empty(cut_rows);
@@ -500,7 +511,36 @@ Ptr ChunkSliceTemplate<Ptr>::cutoff(size_t required_rows) {
     return res;
 }
 
+<<<<<<< HEAD
 template struct ChunkSliceTemplate<ChunkPtr>;
 template struct ChunkSliceTemplate<ChunkUniquePtr>;
+=======
+// Specialized for SegmentedChunkPtr
+template <>
+ChunkUniquePtr ChunkSliceTemplate<SegmentedChunkPtr>::cutoff(size_t required_rows) {
+    DCHECK(!empty());
+    // cutoff a chunk from current segment, if it doesn't meet the requirement just let it be
+    ChunkPtr segment = chunk->segments()[segment_id];
+    size_t segment_offset = offset % chunk->segment_size();
+    size_t cut_rows = std::min(segment->num_rows() - segment_offset, required_rows);
+
+    auto res = segment->clone_empty(cut_rows);
+    res->append(*segment, segment_offset, cut_rows);
+    offset += cut_rows;
+
+    // move to next segment
+    segment_id = offset / chunk->segment_size();
+
+    if (empty()) {
+        chunk->reset();
+        offset = 0;
+    }
+    return res;
+}
+
+template struct ChunkSliceTemplate<ChunkPtr>;
+template struct ChunkSliceTemplate<ChunkUniquePtr>;
+template struct ChunkSliceTemplate<SegmentedChunkPtr>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

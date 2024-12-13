@@ -142,6 +142,11 @@ std::string generate_uuid_string();
 /// generates a 16 byte UUID
 TUniqueId generate_uuid();
 
+<<<<<<< HEAD
+=======
+bool parse_id(const std::string& s, TUniqueId* id);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 std::ostream& operator<<(std::ostream& os, const UniqueId& uid);
 
 std::string print_id(const UniqueId& id);

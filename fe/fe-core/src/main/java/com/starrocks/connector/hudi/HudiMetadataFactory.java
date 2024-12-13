@@ -16,6 +16,11 @@ package com.starrocks.connector.hudi;
 
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.RemoteFileIO;
@@ -27,6 +32,10 @@ import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.IHiveMetastore;
 
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 
@@ -42,6 +51,10 @@ public class HudiMetadataFactory {
     private final boolean isRecursive;
     private final HdfsEnvironment hdfsEnvironment;
     private final MetastoreType metastoreType;
+<<<<<<< HEAD
+=======
+    private final ConnectorProperties connectorProperties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public HudiMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -51,7 +64,12 @@ public class HudiMetadataFactory {
                                ExecutorService pullRemoteFileExecutor,
                                boolean isRecursive,
                                HdfsEnvironment hdfsEnvironment,
+<<<<<<< HEAD
                                MetastoreType metastoreType) {
+=======
+                               MetastoreType metastoreType,
+                               Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -61,6 +79,10 @@ public class HudiMetadataFactory {
         this.isRecursive = isRecursive;
         this.hdfsEnvironment = hdfsEnvironment;
         this.metastoreType = metastoreType;
+<<<<<<< HEAD
+=======
+        this.connectorProperties = new ConnectorProperties(ConnectorType.HUDI, properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public HudiMetadata create() {
@@ -79,7 +101,11 @@ public class HudiMetadataFactory {
         Optional<HiveCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
 
         return new HudiMetadata(catalogName, hdfsEnvironment, hiveMetastoreOperations,
+<<<<<<< HEAD
                 remoteFileOperations, statisticsProvider, cacheUpdateProcessor);
+=======
+                remoteFileOperations, statisticsProvider, cacheUpdateProcessor, connectorProperties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public synchronized Optional<HiveCacheUpdateProcessor> getCacheUpdateProcessor() {

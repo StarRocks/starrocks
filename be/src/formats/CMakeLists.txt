@@ -56,6 +56,12 @@ add_library(Formats STATIC
         parquet/column_chunk_reader.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp
+<<<<<<< HEAD
+=======
+        parquet/column_reader_factory.cpp
+        parquet/scalar_column_reader.cpp
+        parquet/complex_column_reader.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         parquet/encoding.cpp
         parquet/level_codec.cpp
         parquet/page_reader.cpp
@@ -75,6 +81,10 @@ add_library(Formats STATIC
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
         parquet/statistics_helper.cpp
+<<<<<<< HEAD
+=======
+        parquet/zone_map_filter_evaluator.h
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         disk_range.hpp
         )
 

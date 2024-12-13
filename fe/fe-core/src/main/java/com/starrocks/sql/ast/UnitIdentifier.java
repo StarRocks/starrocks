@@ -37,6 +37,14 @@ public class UnitIdentifier implements ParseNode {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public String toSql() {
+        return description;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public NodePosition getPos() {
         return pos;
     }

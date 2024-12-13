@@ -16,6 +16,10 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -25,20 +29,39 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
+<<<<<<< HEAD
     private String temporalClause;
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+=======
+    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean isTransformed;
+
+    public LogicalIcebergMetadataScanOperator(Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                      long limit,
+                                      ScalarOperator predicate) {
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, TableVersionRange.empty());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public LogicalIcebergMetadataScanOperator(Table table,
                                               Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                               Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                               long limit,
+<<<<<<< HEAD
                                               ScalarOperator predicate) {
 
+=======
+                                              ScalarOperator predicate,
+                                              TableVersionRange versionRange) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
                 table,
                 colRefToColumnMetaMap,
                 columnMetaToColRefMap,
                 limit,
+<<<<<<< HEAD
                 predicate, null);
 
     }
@@ -51,6 +74,14 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
         this.temporalClause = temporalClause;
     }
 
+=======
+                predicate,
+                null,
+                versionRange);
+
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private LogicalIcebergMetadataScanOperator() {
         super(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
     }
@@ -63,6 +94,17 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isTransformed() {
+        return isTransformed;
+    }
+
+    public void setTransformed(boolean transformed) {
+        isTransformed = transformed;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalIcebergMetadataScan(this, context);
@@ -80,7 +122,11 @@ public class LogicalIcebergMetadataScanOperator extends LogicalScanOperator {
         public LogicalIcebergMetadataScanOperator.Builder withOperator(LogicalIcebergMetadataScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates;
+<<<<<<< HEAD
             builder.temporalClause = scanOperator.temporalClause;
+=======
+            builder.isTransformed = scanOperator.isTransformed;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
     }

@@ -233,3 +233,7 @@ message TxnInfoPB {
     optional TxnTypePB txn_type = 4;
     optional bool force_publish = 5; // only used for compaction
 };
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

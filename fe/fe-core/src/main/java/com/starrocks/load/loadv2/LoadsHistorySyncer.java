@@ -16,6 +16,10 @@ package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -104,6 +108,12 @@ public class LoadsHistorySyncer extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+<<<<<<< HEAD
+=======
+        if (FeConstants.runningUnitTest) {
+            return;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             // wait table keeper to create table
             if (firstSync) {

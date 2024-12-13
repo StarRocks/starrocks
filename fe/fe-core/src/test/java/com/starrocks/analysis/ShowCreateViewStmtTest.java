@@ -189,14 +189,22 @@ public class ShowCreateViewStmtTest {
             CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
+<<<<<<< HEAD
             List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
+=======
+            List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<String> res = Lists.newArrayList();
             AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                     null, null, false, false, false);
 
             Assert.assertEquals(testcase[2], res.get(0));
 
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -208,7 +216,11 @@ public class ShowCreateViewStmtTest {
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
+<<<<<<< HEAD
         List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
+=======
+        List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false, false);
@@ -276,7 +288,11 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlComment() {
+<<<<<<< HEAD
         List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+=======
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("test", commentTest, res,
@@ -287,7 +303,11 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlStorageType() {
+<<<<<<< HEAD
         List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+=======
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,

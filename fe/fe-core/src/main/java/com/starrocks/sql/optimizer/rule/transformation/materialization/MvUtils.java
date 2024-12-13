@@ -114,6 +114,10 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.util.Box;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,6 +125,10 @@ import org.apache.logging.log4j.Logger;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
+<<<<<<< HEAD
+=======
+import java.util.Comparator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,12 +181,20 @@ public class MvUtils {
         }
         Set<Table> newMvs = Sets.newHashSet();
         for (MvId mvId : newMvIds) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 logMVPrepare("Cannot find database from mvId:{}", mvId);
                 continue;
             }
+<<<<<<< HEAD
             Table table = db.getTable(mvId.getId());
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 logMVPrepare("Cannot find materialized view from mvId:{}", mvId);
                 continue;
@@ -434,6 +450,15 @@ public class MvUtils {
                 && !(operator instanceof LogicalJoinOperator)) {
             return false;
         }
+<<<<<<< HEAD
+=======
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (OptExpression child : root.getInputs()) {
             if (!isLogicalSPJ(child)) {
                 return false;
@@ -443,6 +468,15 @@ public class MvUtils {
     }
 
     public static boolean isLogicalSPJGOperator(Operator operator) {
+<<<<<<< HEAD
+=======
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return (operator instanceof LogicalScanOperator)
                 || (operator instanceof LogicalProjectOperator)
                 || (operator instanceof LogicalFilterOperator)
@@ -989,7 +1023,15 @@ public class MvUtils {
             return new BoolLiteral(true);
         }
         // to avoid duplicate values
+<<<<<<< HEAD
         return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+=======
+        if (values.size() == 1) {
+            return new BinaryPredicate(BinaryType.EQ, slotRef, values.get(0));
+        } else {
+            return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -1033,6 +1075,44 @@ public class MvUtils {
         return mergedRanges;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<Range<PartitionKey>> mergeRanges(List<Pair<Long, Range<PartitionKey>>> ranges,
+                                                        Map<Box<Range<PartitionKey>>, Set<Long>> queryMergeRangesToPartitionIds) {
+        ranges.sort(Comparator.comparing(k -> k.second.lowerEndpoint()));
+        List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
+        for (Pair<Long, Range<PartitionKey>> currentRangePair : ranges) {
+            boolean merged = false;
+            Range<PartitionKey> currentRange = currentRangePair.second;
+            long partitionId = currentRangePair.first;
+            for (int j = 0; j < mergedRanges.size(); j++) {
+                // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
+                Range<PartitionKey> mergedRange = mergedRanges.get(j);
+                if (currentRange.isConnected(mergedRange)) {
+                    // for partition range, the intersection must be empty
+                    Preconditions.checkState(currentRange.intersection(mergedRange).isEmpty());
+                    Range<PartitionKey> newRange = mergedRange.span(currentRange);
+                    mergedRanges.set(j, newRange);
+
+                    Box<Range<PartitionKey>> mergedRangeBox = Box.of(mergedRange);
+                    Set<Long> mergePartitionIds = queryMergeRangesToPartitionIds.get(mergedRangeBox);
+                    queryMergeRangesToPartitionIds.remove(mergedRangeBox);
+                    mergePartitionIds.add(partitionId);
+                    queryMergeRangesToPartitionIds.put(Box.of(newRange), mergePartitionIds);
+
+                    merged = true;
+                    break;
+                }
+            }
+            if (!merged) {
+                mergedRanges.add(currentRange);
+                queryMergeRangesToPartitionIds.put(Box.of(currentRange), Sets.newHashSet(partitionId));
+            }
+        }
+        return mergedRanges;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static boolean isDateRange(Range<PartitionKey> range) {
         if (range.hasUpperBound()) {
             PartitionKey partitionKey = range.upperEndpoint();
@@ -1081,7 +1161,10 @@ public class MvUtils {
         return o.toString();
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Return the max refresh timestamp of all partition infos.
      */
@@ -1130,6 +1213,7 @@ public class MvUtils {
         return joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
 
+<<<<<<< HEAD
     public static SlotRef extractPartitionSlotRef(Expr paritionExpr) {
         List<SlotRef> slotRefs = Lists.newArrayList();
         paritionExpr.collect(SlotRef.class, slotRefs);
@@ -1137,6 +1221,8 @@ public class MvUtils {
         return slotRefs.get(0);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Inactive related mvs after modified columns have been done. Only inactive mvs after
      * modified columns have done because the modified process may be failed and in this situation
@@ -1150,7 +1236,12 @@ public class MvUtils {
         }
         // inactive related asynchronous mvs
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+<<<<<<< HEAD
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+=======
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -1273,6 +1364,7 @@ public class MvUtils {
     }
 
     /**
+<<<<<<< HEAD
      * Check whether opt expression or its children have applied mv union rewrite.
      *
      * @param optExpression: opt expression to check
@@ -1283,6 +1375,8 @@ public class MvUtils {
     }
 
     /**
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Return mv's plan context. If mv's plan context is not in cache, optimize it.
      *
      * @param connectContext: connect context
@@ -1344,7 +1438,13 @@ public class MvUtils {
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(query, connectContext.getSessionVariable());
+<<<<<<< HEAD
             Preconditions.checkState(statementBases.size() == 1);
+=======
+            if (statementBases.size() != 1) {
+                return null;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             StatementBase stmt = statementBases.get(0);
             Analyzer.analyze(stmt, connectContext);
             return stmt;
@@ -1370,7 +1470,11 @@ public class MvUtils {
         // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
         // query expressions are too complex.
         final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
+<<<<<<< HEAD
                 mvContext, queryColumnRefFactory, queryExpression);
+=======
+                mvContext, rule, queryColumnRefFactory, queryExpression);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (queryPartitionPredicate == null) {
             logMVRewrite(mvContext.getOptimizerContext(), rule, "Compensate query expression's partition " +
                     "predicates from pruned partitions failed.");
@@ -1390,6 +1494,7 @@ public class MvUtils {
         return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
     }
 
+<<<<<<< HEAD
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
         List<Expr> matches = Lists.newArrayList();
         partitionExpr.collect(expr -> isStr2Date(expr), matches);
@@ -1404,6 +1509,8 @@ public class MvUtils {
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
     }
@@ -1416,6 +1523,30 @@ public class MvUtils {
         return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
     }
 
+<<<<<<< HEAD
+=======
+    public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {
+        List<Expr> matches = Lists.newArrayList();
+        partitionExpr.collect(expr -> isStr2Date(expr), matches);
+        if (matches.size() != 1) {
+            return Optional.empty();
+        }
+        return Optional.of(matches.get(0).cast());
+    }
+
+    public static boolean isFuncCallExpr(Expr expr, String expectFuncName) {
+        if (expr == null) {
+            return false;
+        }
+        return expr instanceof FunctionCallExpr
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+    }
+
+    public static boolean isStr2Date(Expr expr) {
+        return isFuncCallExpr(expr, FunctionSet.STR2DATE);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {
         Map<String, String> partitionProperties = new HashMap<>(4);
         partitionProperties.put("replication_num",
@@ -1434,8 +1565,13 @@ public class MvUtils {
     public static DistributionDesc getDistributionDesc(MaterializedView materializedView) {
         DistributionInfo distributionInfo = materializedView.getDefaultDistributionInfo();
         if (distributionInfo instanceof HashDistributionInfo) {
+<<<<<<< HEAD
             List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(materializedView.getIdToColumn(),
                     distributionInfo.getDistributionColumns());
+=======
+            List<String> distColumnNames = MetaUtils.getColumnNamesByColumnIds(
+                    materializedView.getIdToColumn(), distributionInfo.getDistributionColumns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new HashDistributionDesc(distributionInfo.getBucketNum(), distColumnNames);
         } else {
             return new RandomDistributionDesc();
@@ -1473,13 +1609,20 @@ public class MvUtils {
      * @param table             the base table to find the specific partition expr
      * @return the mv partition expr if found, otherwise empty
      */
+<<<<<<< HEAD
     public static Optional<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
         if (partitionExprMaps == null || partitionExprMaps.isEmpty() || table == null) {
             return Optional.empty();
+=======
+    public static List<MVPartitionExpr> getMvPartitionExpr(Map<Expr, SlotRef> partitionExprMaps, Table table) {
+        if (partitionExprMaps == null || partitionExprMaps.isEmpty() || table == null) {
+            return null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return partitionExprMaps.entrySet().stream()
                 .filter(entry -> SRStringUtils.areTableNamesEqual(table, entry.getValue().getTblNameWithoutAnalyzed().getTbl()))
                 .map(entry -> new MVPartitionExpr(entry.getKey(), entry.getValue()))
+<<<<<<< HEAD
                 .findFirst();
     }
 
@@ -1488,6 +1631,13 @@ public class MvUtils {
      *
      * @param columns base table's columns
      * @param slotRef the base table's partition slot ref to find
+=======
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Get the column by slot ref from table's columns.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @return the column if found, otherwise empty
      */
     public static Optional<Column> getColumnBySlotRef(List<Column> columns, SlotRef slotRef) {
@@ -1508,6 +1658,7 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
+<<<<<<< HEAD
     public static ScalarOperator convertPartitionKeysToListPredicate(ScalarOperator partitionColRef,
                                                                      Collection<PartitionKey> partitionRanges) {
         List<ScalarOperator> values = Lists.newArrayList();
@@ -1517,6 +1668,37 @@ public class MvUtils {
             values.add(upperBound);
         }
         return MvUtils.convertToInPredicate(partitionColRef, values);
+=======
+    public static ScalarOperator convertPartitionKeysToListPredicate(List<ScalarOperator> partitionColRefs,
+                                                                     Collection<PartitionKey> partitionRanges) {
+        List<ScalarOperator> values = Lists.newArrayList();
+        if (partitionColRefs.size() == 1) {
+            for (PartitionKey partitionKey : partitionRanges) {
+                List<LiteralExpr> literalExprs = partitionKey.getKeys();
+                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                LiteralExpr literalExpr = literalExprs.get(0);
+                ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                values.add(upperBound);
+            }
+            return MvUtils.convertToInPredicate(partitionColRefs.get(0), values);
+        } else {
+            for (PartitionKey partitionKey : partitionRanges) {
+                List<LiteralExpr> literalExprs = partitionKey.getKeys();
+                Preconditions.checkArgument(literalExprs.size() == partitionColRefs.size());
+                // TODO: use row operator instead
+                List<ScalarOperator> predicates = Lists.newArrayList();
+                for (int i = 0; i < literalExprs.size(); i++) {
+                    ScalarOperator partitionColRef = partitionColRefs.get(i);
+                    LiteralExpr literalExpr = literalExprs.get(i);
+                    ConstantOperator upperBound = (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                    ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, partitionColRef, upperBound);
+                    predicates.add(eq);
+                }
+                values.add(Utils.compoundAnd(predicates));
+            }
+            return Utils.compoundOr(values);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -1540,7 +1722,11 @@ public class MvUtils {
         return optimizedViewPlan;
     }
 
+<<<<<<< HEAD
     /*
+=======
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Trim the input string if its length is larger than maxLength.
      * @param input the input string
      * @param maxLength the max length

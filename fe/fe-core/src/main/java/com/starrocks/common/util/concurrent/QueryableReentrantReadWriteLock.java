@@ -12,18 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.common.util.concurrent;
 
 import com.google.common.collect.Lists;
+=======
+package com.starrocks.common.util.concurrent;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.consistency.LockChecker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+<<<<<<< HEAD
 
 /*
  * This Lock is for exposing the getOwner() method,
@@ -32,6 +47,20 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     // threadId -> lockTime
     Map<Long, Long> sharedLockThreads = new ConcurrentHashMap<>();
+=======
+import java.util.stream.Collectors;
+
+/*
+ * This Lock is for exposing the getOwner() method,
+ * which is a protected method of ReentrantReadWriteLock.
+ * And to provide the lock information for debugging, we should
+ * call the helper method like sharedLock(), exclusiveLock() instead of
+ * directly calling readLock().lock(), writeLock.lock().
+ */
+public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
+    // threadId -> lockTime
+    private final Map<Thread, Long> sharedLockThreads = new ConcurrentHashMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     AtomicLong exclusiveLockTime = new AtomicLong(-1L);
 
@@ -41,6 +70,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
 
     public void sharedLock() {
         this.readLock().lock();
+<<<<<<< HEAD
         this.sharedLockThreads.put(Thread.currentThread().getId(), System.currentTimeMillis());
     }
 
@@ -50,11 +80,26 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
             this.sharedLockThreads.put(Thread.currentThread().getId(), System.currentTimeMillis());
         }
         return succ;
+=======
+        this.sharedLockThreads.put(Thread.currentThread(), System.currentTimeMillis());
+    }
+
+    public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
+        boolean result = this.readLock().tryLock(timeout, unit);
+        if (result) {
+            this.sharedLockThreads.put(Thread.currentThread(), System.currentTimeMillis());
+        }
+        return result;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void sharedUnlock() {
         this.readLock().unlock();
+<<<<<<< HEAD
         this.sharedLockThreads.remove(Thread.currentThread().getId());
+=======
+        this.sharedLockThreads.remove(Thread.currentThread());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void exclusiveLock() {
@@ -63,11 +108,19 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     }
 
     public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
+<<<<<<< HEAD
         boolean succ = this.writeLock().tryLock(timeout, unit);
         if (succ) {
             this.exclusiveLockTime.set(System.currentTimeMillis());
         }
         return succ;
+=======
+        boolean result = this.writeLock().tryLock(timeout, unit);
+        if (result) {
+            this.exclusiveLockTime.set(System.currentTimeMillis());
+        }
+        return result;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void exclusiveUnlock() {
@@ -81,6 +134,7 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     }
 
     public List<Long> getSharedLockThreadIds() {
+<<<<<<< HEAD
         return Lists.newArrayList(sharedLockThreads.keySet());
     }
 
@@ -89,6 +143,20 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     }
 
     public long getExclusiveLockTime() {
+=======
+        return sharedLockThreads.keySet().stream().map(Thread::getId).collect(Collectors.toList());
+    }
+
+    public Set<Thread> getSharedLockThreads() {
+        return sharedLockThreads.keySet();
+    }
+
+    public long getSharedLockStartTimeMs(Thread thread) {
+        return sharedLockThreads.getOrDefault(thread, -1L);
+    }
+
+    public long getExclusiveLockStartTimeMs() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return exclusiveLockTime.get();
     }
 
@@ -97,6 +165,19 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
         return super.getQueuedThreads();
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public Collection<Thread> getQueuedReaderThreads() {
+        return super.getQueuedReaderThreads();
+    }
+
+    @Override
+    public Collection<Thread> getQueuedWriterThreads() {
+        return super.getQueuedWriterThreads();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isWriteLockHeldByCurrentThread() {
         return this.writeLock().isHeldByCurrentThread();
     }
@@ -104,4 +185,111 @@ public class QueryableReentrantReadWriteLock extends ReentrantReadWriteLock {
     public boolean isReadLockHeldByCurrentThread() {
         return this.getReadHoldCount() > 0;
     }
+<<<<<<< HEAD
+=======
+
+    private void appendQueuedInfo(StringBuilder sb, List<Long> queuedReaders, List<Long> queuedWriters) {
+        sb.append(queuedReaders.size()).append(" queued reader(s): ").append(queuedReaders).append(", ")
+                .append(queuedWriters.size()).append(" queued writer(s): ").append(queuedWriters);
+    }
+
+    // The following API generate debug info for {@link QueryableReentrantReadWriteLock}
+    // which is quite helpful when we met slow lock or deadlock issue.
+
+    /**
+     * Get the lock information, includes: isFair, owner name, owner id, queued readers, queued writers,
+     * owner or current thread stack trace.
+     *
+     * @param currThread the thread on which we want to dump the stack,
+     *                   if it's null, we dump the owner thread(if exists) of this lock
+     * @return The lock information
+     */
+    public JsonObject getLockInfoToJson(Thread currThread) {
+        JsonObject lockInfoJsonObj = new JsonObject();
+
+        if (currThread == null) {
+            lockInfoJsonObj.addProperty("isFairLock", isFair());
+            JsonObject ownerInfoJsonObj = new JsonObject();
+            Thread owner = getOwner();
+            if (owner == null) {
+                ownerInfoJsonObj.addProperty("status", "shared");
+                // For performance reason, only output the stack trace and other info of oldest reader.
+                ownerInfoJsonObj.add("oldestReader", getOldestSharedLockHolderInfo());
+            } else {
+                ownerInfoJsonObj.addProperty("status", "exclusive");
+                ownerInfoJsonObj.addProperty("id", owner.getId());
+                ownerInfoJsonObj.addProperty("name", owner.getName());
+                ownerInfoJsonObj.add("stack",
+                        LogUtil.getStackTraceToJsonArray(owner, 0,
+                                Config.slow_lock_stack_trace_reserve_levels));
+            }
+            // append owner info
+            lockInfoJsonObj.add("holderInfo", ownerInfoJsonObj);
+        } else {
+            JsonObject currentLockHolderJObj = new JsonObject();
+            currentLockHolderJObj.addProperty("id", currThread.getId());
+            currentLockHolderJObj.addProperty("name", currThread.getName());
+            currentLockHolderJObj.add("stack",
+                    LogUtil.getStackTraceToJsonArray(currThread, 6,
+                            Config.slow_lock_stack_trace_reserve_levels));
+            // append current lock holder info
+            lockInfoJsonObj.add("holderInfo", currentLockHolderJObj);
+        }
+
+        // append waiters info
+        lockInfoJsonObj.add("queuedReaders",
+                LockChecker.getLockWaiterInfoJsonArray(getQueuedReaderThreads()));
+        lockInfoJsonObj.add("queuedWriters",
+                LockChecker.getLockWaiterInfoJsonArray(getQueuedWriterThreads()));
+
+        return lockInfoJsonObj;
+    }
+
+    public JsonArray getCurrReadersInfoToJsonArray(boolean onlyLogSlow, boolean dumpStack, int reserveLevels) {
+        JsonArray readerInfos = new JsonArray();
+        for (Map.Entry<Thread, Long> entry : sharedLockThreads.entrySet()) {
+            Thread thread = entry.getKey();
+            long lockStartTimeMs = entry.getValue();
+            long lockHeldTimeMs = computeLockHeldTime(lockStartTimeMs);
+            if (!onlyLogSlow || lockHeldTimeMs > Config.slow_lock_threshold_ms) {
+                readerInfos.add(getReaderInfo(dumpStack, thread, lockHeldTimeMs, reserveLevels));
+            }
+        }
+
+        return readerInfos;
+    }
+
+    private JsonObject getOldestSharedLockHolderInfo() {
+        Thread oldestReaderThread = getSharedLockThreads().stream().max((a, b) ->
+                (int) (computeLockHeldTime(getSharedLockStartTimeMs(a)) -
+                        computeLockHeldTime(getSharedLockStartTimeMs(b)))).orElse(null);
+        return oldestReaderThread == null ? new JsonObject() : getReaderInfo(
+                true,
+                oldestReaderThread,
+                computeLockHeldTime(getSharedLockStartTimeMs(oldestReaderThread)),
+                Config.slow_lock_stack_trace_reserve_levels);
+    }
+
+    private JsonObject getReaderInfo(boolean dumpStack, Thread thread, long lockHeldTimeMs, int reserveLevels) {
+        JsonObject readerInfo = new JsonObject();
+        readerInfo.addProperty("id", thread.getId());
+        readerInfo.addProperty("name", thread.getName());
+        readerInfo.addProperty("heldFor", lockHeldTimeMs + "ms");
+        if (dumpStack) {
+            readerInfo.add("stack",
+                    LogUtil.getStackTraceToJsonArray(thread, 0, reserveLevels));
+        }
+
+        return readerInfo;
+    }
+
+    public static long computeLockHeldTime(long startTimeMs) {
+        long result = -1L;
+        if (startTimeMs > 0L) {
+            result = System.currentTimeMillis() - startTimeMs;
+        }
+
+        return result;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

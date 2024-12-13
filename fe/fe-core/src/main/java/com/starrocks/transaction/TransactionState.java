@@ -46,8 +46,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TraceManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
@@ -77,6 +82,10 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -245,6 +254,11 @@ public class TransactionState implements Writable {
     private long finishTime;
     @SerializedName("rs")
     private String reason = "";
+<<<<<<< HEAD
+=======
+    @SerializedName("gtid")
+    private long globalTransactionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // whether this txn is finished using new mechanism
     // this field needs to be persisted, so we shared the serialization field with `reason`.
@@ -259,7 +273,11 @@ public class TransactionState implements Writable {
     private Set<Long> errorReplicas;
 
     @SerializedName("ctl")
+<<<<<<< HEAD
     private boolean combinedTxnLog;
+=======
+    private boolean useCombinedTxnLog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final CountDownLatch latch;
 
@@ -337,6 +355,7 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
+<<<<<<< HEAD
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
@@ -349,6 +368,18 @@ public class TransactionState implements Writable {
         if (Config.lock_manager_enable_using_fine_granularity_lock) {
             txnLock.writeLock().unlock();
         }
+=======
+    private List<String> createdPartitionNames = Lists.newArrayList();
+
+    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
+
+    public void writeLock() {
+        txnLock.writeLock().lock();
+    }
+
+    public void writeUnlock() {
+        txnLock.writeLock().unlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TransactionState() {
@@ -486,6 +517,13 @@ public class TransactionState implements Writable {
         return transactionId;
     }
 
+<<<<<<< HEAD
+=======
+    public long getGlobalTransactionId() {
+        return globalTransactionId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getLabel() {
         return this.label;
     }
@@ -613,7 +651,11 @@ public class TransactionState implements Writable {
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
                                     TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // after status changed
         if (callback != null) {
             switch (transactionStatus) {
@@ -657,6 +699,13 @@ public class TransactionState implements Writable {
         return this.latch.await(timeout, unit);
     }
 
+<<<<<<< HEAD
+=======
+    public void setGlobalTransactionId(long globalTransactionId) {
+        this.globalTransactionId = globalTransactionId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setPrepareTime(long prepareTime) {
         this.prepareTime = prepareTime;
     }
@@ -872,7 +921,12 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
+<<<<<<< HEAD
             List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+=======
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);
@@ -890,7 +944,11 @@ public class TransactionState implements Writable {
 
         List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
+<<<<<<< HEAD
             TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
+=======
+            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPhysicalPartitionId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     commitInfo.getVersion(), 0);
             if (commitInfo.isDoubleWrite()) {
                 version.setIs_double_write(true);
@@ -902,6 +960,10 @@ public class TransactionState implements Writable {
         for (long backendId : publishBackends) {
             PublishVersionTask task = new PublishVersionTask(backendId,
                     this.getTransactionId(),
+<<<<<<< HEAD
+=======
+                    this.getGlobalTransactionId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     this.getDbId(),
                     commitTime,
                     partitionVersions,
@@ -932,7 +994,11 @@ public class TransactionState implements Writable {
 
     public boolean checkCanFinish() {
         // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             // consider txn finished if db is dropped
             return true;
@@ -1014,12 +1080,21 @@ public class TransactionState implements Writable {
         this.writeDurationMs = writeDurationMs;
     }
 
+<<<<<<< HEAD
     public void setCombinedTxnLog(boolean combinedTxnLog) {
         this.combinedTxnLog = combinedTxnLog;
     }
 
     public boolean isCombinedTxnLog() {
         return combinedTxnLog;
+=======
+    public void setUseCombinedTxnLog(boolean useCombinedTxnLog) {
+        this.useCombinedTxnLog = useCombinedTxnLog;
+    }
+
+    public boolean isUseCombinedTxnLog() {
+        return useCombinedTxnLog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
@@ -1030,7 +1105,16 @@ public class TransactionState implements Writable {
         return tabletIdToTTabletLocation;
     }
 
+<<<<<<< HEAD
     public void clearAutomaticPartitionSnapshot() {
+=======
+    public List<String> getCreatedPartitionNames() {
+        return createdPartitionNames;
+    }
+
+    public void clearAutomaticPartitionSnapshot() {
+        createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
     }

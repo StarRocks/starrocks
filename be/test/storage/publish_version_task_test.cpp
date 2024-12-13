@@ -19,7 +19,10 @@
 #include "agent/publish_version.h"
 #include "butil/file_util.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"

@@ -35,6 +35,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import com.starrocks.sql.optimizer.property.DomainPropertyDeriver;
+import org.apache.commons.collections4.CollectionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -111,6 +117,13 @@ public class LogicalAggregationOperator extends LogicalOperator {
         isSplit = false;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isOnlyLocalAggregate() {
+        return type.isLocal() && !isSplit;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
@@ -177,6 +190,38 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return new RowOutputInfo(columnOutputInfoList);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        DomainProperty childDomainProperty = inputs.get(0).getDomainProperty();
+
+        Map<ScalarOperator, DomainProperty.DomainWrapper> newDomainMap = Maps.newHashMap();
+        for (ColumnRefOperator groupByKey : groupingKeys) {
+            if (childDomainProperty.contains(groupByKey)) {
+                newDomainMap.put(groupByKey, childDomainProperty.getValueWrapper(groupByKey));
+            }
+        }
+
+        ColumnRefSet groupByCols = new ColumnRefSet(groupingKeys);
+        for (Map.Entry<ScalarOperator, DomainProperty.DomainWrapper> entry : childDomainProperty.getDomainMap().entrySet()) {
+            if (!newDomainMap.containsKey(entry.getKey()) && groupByCols.containsAll(entry.getKey().getUsedColumns())) {
+                newDomainMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        DomainProperty domainProperty = new DomainProperty(newDomainMap);
+        if (predicate != null) {
+            DomainPropertyDeriver deriver = new DomainPropertyDeriver();
+            DomainProperty property = deriver.derive(predicate);
+            domainProperty = domainProperty.filterDomainProperty(property);
+        }
+        return domainProperty;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
         Map<ColumnRefOperator, ScalarOperator> keyMap =

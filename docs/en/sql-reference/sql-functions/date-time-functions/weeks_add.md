@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weeks_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the value with the number of weeks added to date.
 

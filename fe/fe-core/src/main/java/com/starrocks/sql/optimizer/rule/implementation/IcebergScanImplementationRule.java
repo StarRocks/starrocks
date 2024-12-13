@@ -36,6 +36,11 @@ public class IcebergScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalIcebergScanOperator scan = (LogicalIcebergScanOperator) input.getOp();
         PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan);
+<<<<<<< HEAD
+=======
+        physicalIcebergScan.setTableFullMORParams(scan.getTableFullMORParams());
+        physicalIcebergScan.setMORParams(scan.getMORParam());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OptExpression result = new OptExpression(physicalIcebergScan);
         return Lists.newArrayList(result);
     }

@@ -17,14 +17,23 @@ package com.starrocks.common;
 import com.starrocks.common.io.ParamsKey;
 
 public enum NgramBfIndexParamsKey implements ParamsKey {
+<<<<<<< HEAD
     /**
      * gram num, if gram num is 4, "apple" -> ["appl","pple"]
      */
     GRAM_NUM(String.valueOf(FeConstants.DEFAULT_GRAM_NUM), true),
+=======
+
+    /**
+     * gram num, if gram num is 4, "apple" -> ["appl","pple"]
+     */
+    GRAM_NUM,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * bloom filter's false positive possibility
      */
+<<<<<<< HEAD
     BLOOM_FILTER_FPP(String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP), true),
     CASE_SENSITIVE(String.valueOf(FeConstants.NGRAM_CASE_SENSITIVE), true);
 
@@ -45,4 +54,8 @@ public enum NgramBfIndexParamsKey implements ParamsKey {
     public boolean needDefault() {
         return needDefault;
     }
+=======
+    BLOOM_FILTER_FPP,
+    CASE_SENSITIVE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

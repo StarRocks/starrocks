@@ -39,7 +39,11 @@ TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
     std::vector<const ColumnPredicate*> preds;
     std::unique_ptr<ColumnPredicate> del_pred(new_column_null_predicate(type_info, 1, true));
     SparseRange<> row_ranges;
+<<<<<<< HEAD
     st = iter.get_row_ranges_by_zone_map(preds, del_pred.get(), &row_ranges);
+=======
+    st = iter.get_row_ranges_by_zone_map(preds, del_pred.get(), &row_ranges, CompoundNodeType::AND);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(st.ok());
 
     TypeDescriptor type_desc(LogicalType::TYPE_INT);

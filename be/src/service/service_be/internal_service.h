@@ -35,7 +35,10 @@
 #pragma once
 
 #include "common/status.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/internal_service.pb.h"
 #include "service/internal_service.h"
 

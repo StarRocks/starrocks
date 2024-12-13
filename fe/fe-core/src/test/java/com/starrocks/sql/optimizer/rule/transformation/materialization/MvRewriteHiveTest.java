@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
+<<<<<<< HEAD
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -31,6 +32,14 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+=======
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.sql.plan.PlanTestBase;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -38,6 +47,11 @@ import org.junit.Test;
 import java.util.List;
 import java.util.Set;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.utframe.UtFrameUtils.getQueryScanOperators;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @BeforeClass
@@ -486,6 +500,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         dropMv("test", "hive_partitioned_mv");
     }
 
+<<<<<<< HEAD
     private List<LogicalScanOperator> getQueryOptExpression(String query) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         QueryStatement statement = null;
@@ -502,6 +517,8 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         return scanOperators;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private ScanOperatorPredicates getScanOperatorPredicates(LogicalScanOperator logicalScanOperator) {
         try {
             return logicalScanOperator.getScanOperatorPredicates();
@@ -515,7 +532,11 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     public void testHivePartitionPruner0() {
         String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "GROUP BY `l_orderkey`, `l_suppkey`;";
+<<<<<<< HEAD
         List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+=======
+        List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
         Assert.assertTrue(scanOperatorPredicates != null);
@@ -544,7 +565,11 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         );
         for (int i = 0; i < queries.size(); i++) {
             String query = queries.get(i);
+<<<<<<< HEAD
             List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+=======
+            List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertTrue(scanOperators.size() == 1);
             ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
             Assert.assertTrue(scanOperatorPredicates != null);
@@ -565,7 +590,11 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         String query = "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "WHERE date_trunc('month', l_shipdate) = date_sub('1998-01-02', interval 1 day) " +
                 "GROUP BY `l_orderkey`, `l_suppkey`;";
+<<<<<<< HEAD
         List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+=======
+        List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
         Assert.assertTrue(scanOperatorPredicates != null);
@@ -587,7 +616,11 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 " WHERE date_trunc('month', l_shipdate) = date_sub('1998-01-02', interval 1 day) " +
                 " and l_shipdate >= '1998-01-01' and l_orderkey > 1000 " +
                 " GROUP BY `l_orderkey`, `l_suppkey`;";
+<<<<<<< HEAD
         List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
+=======
+        List<LogicalScanOperator> scanOperators = getQueryScanOperators(connectContext, query);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(scanOperators.size() == 1);
         ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
         Assert.assertTrue(scanOperatorPredicates != null);

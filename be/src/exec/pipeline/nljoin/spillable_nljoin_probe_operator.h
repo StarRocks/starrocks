@@ -177,7 +177,11 @@ private:
     const RowDescriptor& _left_row_desc;
     const RowDescriptor& _right_row_desc;
 
+<<<<<<< HEAD
     Buffer<SlotDescriptor*> _col_types;
+=======
+    std::vector<SlotDescriptor*> _col_types;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
 

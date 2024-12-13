@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # md5sum_numeric
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算多个输入参数的 MD5 128-bit 校验和 (checksum), 返回 MD5 值的十进制表示。
 

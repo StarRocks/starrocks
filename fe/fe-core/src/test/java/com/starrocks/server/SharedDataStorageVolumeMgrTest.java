@@ -792,6 +792,7 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(storageVolumeToTables, svm1.storageVolumeToTables);
         Assert.assertEquals(dbToStorageVolume, svm1.dbToStorageVolume);
         Assert.assertEquals(tableToStorageVolume, svm1.tableToStorageVolume);
+<<<<<<< HEAD
 
         // v3
         out = new ByteArrayOutputStream();
@@ -807,6 +808,8 @@ public class SharedDataStorageVolumeMgrTest {
         Assert.assertEquals(storageVolumeToTables, svm2.storageVolumeToTables);
         Assert.assertEquals(dbToStorageVolume, svm2.dbToStorageVolume);
         Assert.assertEquals(tableToStorageVolume, svm2.tableToStorageVolume);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

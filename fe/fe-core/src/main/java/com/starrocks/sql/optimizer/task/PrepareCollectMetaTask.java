@@ -71,7 +71,12 @@ public class PrepareCollectMetaTask extends OptimizerTask {
             CompletableFuture<Void> allFutures = CompletableFuture.allOf(scanOperators.stream()
                     .map(op -> CompletableFuture.supplyAsync(() ->
                                     metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
+<<<<<<< HEAD
                                             new MetaPreparationItem(op.getTable(), op.getPredicate(), op.getLimit()),
+=======
+                                            new MetaPreparationItem(op.getTable(), op.getPredicate(),
+                                                    op.getLimit(), op.getTableVersionRange()),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                             tracers, connectContext),
                             executorService)).toArray(CompletableFuture[]::new));
             allFutures.join();

@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
@@ -20,7 +23,10 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.google.common.collect.Sets;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -43,7 +49,10 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+<<<<<<< HEAD
 import org.apache.iceberg.Snapshot;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -56,8 +65,11 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Optional;
 import java.util.Set;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -69,6 +81,7 @@ import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
+<<<<<<< HEAD
     private Optional<Snapshot> snapshot = null;
     private static final String JSON_KEY_ICEBERG_DB = "database";
     private static final String JSON_KEY_ICEBERG_TABLE = "table";
@@ -81,6 +94,18 @@ public class IcebergTable extends Table {
     private String remoteDbName;
     @SerializedName(value = "tn")
     private String remoteTableName;
+=======
+    private static final String PARQUET_FORMAT = "parquet";
+    public static final String DATA_SEQUENCE_NUMBER = "$data_sequence_number";
+    public static final String SPEC_ID = "$spec_id";
+    public static final String EQUALITY_DELETE_TABLE_COMMENT = "equality_delete_table_comment";
+
+    private String catalogName;
+    @SerializedName(value = "dn")
+    protected String catalogDBName;
+    @SerializedName(value = "tn")
+    protected String catalogTableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "rn")
     private String resourceName;
     @SerializedName(value = "prop")
@@ -91,21 +116,35 @@ public class IcebergTable extends Table {
 
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
+<<<<<<< HEAD
     private Set<Integer> identifierFieldIds = Sets.newHashSet();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public IcebergTable() {
         super(TableType.ICEBERG);
     }
 
+<<<<<<< HEAD
     public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String remoteDbName,
                         String remoteTableName, String comment, List<Column> schema,
+=======
+    public IcebergTable(long id, String srTableName, String catalogName, String resourceName, String catalogDBName,
+                        String catalogTableName, String comment, List<Column> schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         org.apache.iceberg.Table nativeTable, Map<String, String> icebergProperties) {
         super(id, srTableName, TableType.ICEBERG, schema);
         this.catalogName = catalogName;
         this.resourceName = resourceName;
+<<<<<<< HEAD
         this.remoteDbName = remoteDbName;
         this.remoteTableName = remoteTableName;
         this.comment =  comment;
+=======
+        this.catalogDBName = catalogDBName;
+        this.catalogTableName = catalogTableName;
+        this.comment = comment;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
     }
@@ -115,10 +154,15 @@ public class IcebergTable extends Table {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "iceberg") : catalogName;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getResourceName() {
         return resourceName;
     }
 
+<<<<<<< HEAD
     public String getRemoteDbName() {
         return remoteDbName;
     }
@@ -134,13 +178,27 @@ public class IcebergTable extends Table {
             snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
             return snapshot;
         }
+=======
+    @Override
+    public String getCatalogDBName() {
+        return catalogDBName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+        return catalogTableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
             String uuid = ((BaseTable) getNativeTable()).operations().current().uuid();
+<<<<<<< HEAD
             return String.join(".", catalogName, remoteDbName, remoteTableName,
+=======
+            return String.join(".", catalogName, catalogDBName, catalogTableName,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     uuid == null ? "" : uuid);
         } else {
             return Long.toString(id);
@@ -157,6 +215,10 @@ public class IcebergTable extends Table {
         }
         return partitionColumns;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Column> getPartitionColumnsIncludeTransformed() {
         List<Column> allPartitionColumns = new ArrayList<>();
         for (PartitionField field : getNativeTable().spec().fields()) {
@@ -227,10 +289,13 @@ public class IcebergTable extends Table {
                 (isV2Format() && getNativeTable().spec().specId() > 0);
     }
 
+<<<<<<< HEAD
     public void resetSnapshot() {
         snapshot = null;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isV2Format() {
         return ((BaseTable) getNativeTable()).operations().current().formatVersion() > 1;
     }
@@ -273,6 +338,13 @@ public class IcebergTable extends Table {
         return ((BaseTable) getNativeTable()).operations().current().spec().isUnpartitioned();
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isPartitioned() {
+        return !isUnPartitioned();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getPartitionColumnNames() {
         return getPartitionColumns().stream().filter(java.util.Objects::nonNull).map(Column::getName)
                 .collect(Collectors.toList());
@@ -309,19 +381,29 @@ public class IcebergTable extends Table {
         // For compatibility with the resource iceberg table. native table is lazy. Prevent failure during fe restarting.
         if (nativeTable == null) {
             IcebergTable resourceMappingTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+<<<<<<< HEAD
                     .getTable(getCatalogName(), remoteDbName, remoteTableName);
             if (resourceMappingTable == null) {
                 throw new StarRocksConnectorException("Can't find table %s.%s.%s",
                         getCatalogName(), remoteDbName, remoteTableName);
+=======
+                    .getTable(getCatalogName(), catalogDBName, catalogTableName);
+            if (resourceMappingTable == null) {
+                throw new StarRocksConnectorException("Can't find table %s.%s.%s",
+                        getCatalogName(), catalogDBName, catalogTableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             nativeTable = resourceMappingTable.getNativeTable();
         }
         return nativeTable;
     }
+<<<<<<< HEAD
     
     public void setIdentifierFieldIds(Set<Integer> identifierFieldIds) {
         this.identifierFieldIds = identifierFieldIds;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
@@ -339,6 +421,7 @@ public class IcebergTable extends Table {
         tIcebergTable.setIceberg_schema(IcebergApiConverter.getTIcebergSchema(nativeTable.schema()));
         tIcebergTable.setPartition_column_names(getPartitionColumnNames());
 
+<<<<<<< HEAD
         Set<Integer> identifierIds = nativeTable.schema().identifierFieldIds();
         if (identifierIds.isEmpty()) {
             identifierIds = this.identifierFieldIds;
@@ -351,6 +434,8 @@ public class IcebergTable extends Table {
                             .collect(Collectors.toList()))));
         }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!partitions.isEmpty()) {
             TPartitionMap tPartitionMap = new TPartitionMap();
             for (int i = 0; i < partitions.size(); i++) {
@@ -380,7 +465,11 @@ public class IcebergTable extends Table {
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.ICEBERG_TABLE,
+<<<<<<< HEAD
                 fullSchema.size(), 0, remoteTableName, remoteDbName);
+=======
+                fullSchema.size(), 0, catalogTableName, catalogDBName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tTableDescriptor.setIcebergTable(tIcebergTable);
         return tTableDescriptor;
     }
@@ -403,8 +492,18 @@ public class IcebergTable extends Table {
     }
 
     @Override
+<<<<<<< HEAD
     public int hashCode() {
         return com.google.common.base.Objects.hashCode(getCatalogName(), remoteDbName, getTableIdentifier());
+=======
+    public boolean isTemporal() {
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        return com.google.common.base.Objects.hashCode(getCatalogName(), catalogDBName, getTableIdentifier());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -417,7 +516,11 @@ public class IcebergTable extends Table {
         String catalogName = getCatalogName();
         String tableIdentifier = getTableIdentifier();
         return Objects.equal(catalogName, otherTable.getCatalogName()) &&
+<<<<<<< HEAD
                 Objects.equal(remoteDbName, otherTable.remoteDbName) &&
+=======
+                Objects.equal(catalogDBName, otherTable.catalogDBName) &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 
@@ -430,8 +533,13 @@ public class IcebergTable extends Table {
         private String srTableName;
         private String catalogName;
         private String resourceName;
+<<<<<<< HEAD
         private String remoteDbName;
         private String remoteTableName;
+=======
+        private String catalogDBName;
+        private String catalogTableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private String comment;
         private List<Column> fullSchema;
@@ -456,7 +564,10 @@ public class IcebergTable extends Table {
             return this;
         }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Builder setComment(String comment) {
             this.comment = comment;
             return this;
@@ -467,6 +578,7 @@ public class IcebergTable extends Table {
             return this;
         }
 
+<<<<<<< HEAD
         public Builder setRemoteDbName(String remoteDbName) {
             this.remoteDbName = remoteDbName;
             return this;
@@ -474,6 +586,15 @@ public class IcebergTable extends Table {
 
         public Builder setRemoteTableName(String remoteTableName) {
             this.remoteTableName = remoteTableName;
+=======
+        public Builder setCatalogDBName(String catalogDbName) {
+            this.catalogDBName = catalogDbName;
+            return this;
+        }
+
+        public Builder setCatalogTableName(String catalogTableName) {
+            this.catalogTableName = catalogTableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
@@ -493,7 +614,11 @@ public class IcebergTable extends Table {
         }
 
         public IcebergTable build() {
+<<<<<<< HEAD
             return new IcebergTable(id, srTableName, catalogName, resourceName, remoteDbName, remoteTableName,
+=======
+            return new IcebergTable(id, srTableName, catalogName, resourceName, catalogDBName, catalogTableName,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     comment, fullSchema, nativeTable, icebergProperties);
         }
     }

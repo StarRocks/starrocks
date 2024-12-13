@@ -18,7 +18,10 @@ import com.starrocks.common.io.ParamsKey;
 
 import java.util.Arrays;
 import java.util.Locale;
+<<<<<<< HEAD
 import java.util.Map;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -30,12 +33,15 @@ public class InvertedIndexParams {
             .flatMap(key -> key.map(k -> k.name().toLowerCase(Locale.ROOT)))
             .collect(Collectors.toSet());
 
+<<<<<<< HEAD
     public static void setDefaultParamsValue(Map<String, String> properties, ParamsKey[] e) {
         Arrays.stream(e).filter(k -> !properties.containsKey(k.name()) && k.needDefault())
                 .forEach(k -> properties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
     }
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public enum InvertedIndexImpType {
         CLUCENE
     }
@@ -44,6 +50,7 @@ public class InvertedIndexParams {
         /**
          * index implement lib, default is clucene
          */
+<<<<<<< HEAD
         IMP_LIB {
             @Override
             public String defaultValue() {
@@ -55,6 +62,9 @@ public class InvertedIndexParams {
                 return true;
             }
         }
+=======
+        IMP_LIB
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 
@@ -80,6 +90,7 @@ public class InvertedIndexParams {
         IndexParamsKey(String defaultValue) {
             this.defaultValue = defaultValue;
         }
+<<<<<<< HEAD
 
         @Override
         public String defaultValue() {
@@ -90,6 +101,8 @@ public class InvertedIndexParams {
         public boolean needDefault() {
             return needDefault;
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public enum SearchParamsKey implements ParamsKey {
@@ -111,10 +124,13 @@ public class InvertedIndexParams {
         SearchParamsKey(String defaultValue) {
             this.defaultValue = defaultValue;
         }
+<<<<<<< HEAD
 
         @Override
         public String defaultValue() {
             return defaultValue;
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

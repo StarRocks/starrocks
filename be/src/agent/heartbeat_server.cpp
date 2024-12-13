@@ -83,8 +83,18 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
                    << " BE/CN:" << config::enable_transparent_data_encryption;
     }
 
+<<<<<<< HEAD
     // do heartbeat
     StatusOr<CmpResult> res = compare_master_info(master_info);
+=======
+    StatusOr<CmpResult> res;
+    // reject master's heartbeat when exit
+    if (process_exit_in_progress()) {
+        res = Status::Shutdown("BE is shutting down");
+    } else {
+        res = compare_master_info(master_info);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     res.status().to_thrift(&heartbeat_result.status);
     if (!res.ok()) {
         MasterInfoPtr ptr;
@@ -128,6 +138,10 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_http_port(config::be_http_port);
         heartbeat_result.backend_info.__set_be_rpc_port(-1);
         heartbeat_result.backend_info.__set_brpc_port(config::brpc_port);
+<<<<<<< HEAD
+=======
+        heartbeat_result.backend_info.__set_arrow_flight_port(config::arrow_flight_port);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef USE_STAROS
         heartbeat_result.backend_info.__set_starlet_port(config::starlet_port);
         if (StorageEngine::instance()->get_store_num() != 0) {
@@ -163,11 +177,14 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
     static const char* LOCALHOST = "127.0.0.1";
     static const char* LOCALHOST_IPV6 = "::1";
 
+<<<<<<< HEAD
     // reject master's heartbeat when exit
     if (process_exit_in_progress()) {
         return Status::InternalError("BE is shutting down");
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MasterInfoPtr curr_master_info;
     if (!get_master_info(&curr_master_info)) {
         return Status::InternalError("Fail to get local master info");

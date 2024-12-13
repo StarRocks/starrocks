@@ -83,13 +83,23 @@ public class MaterializedIndexTest {
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(10));
 
+<<<<<<< HEAD
         index = new MaterializedIndex(10, IndexState.NORMAL, 10);
+=======
+        index = new MaterializedIndex(10, IndexState.NORMAL, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(index.visibleForTransaction(0));
         Assert.assertTrue(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));
         Assert.assertTrue(index.visibleForTransaction(11));
 
+<<<<<<< HEAD
         index = new MaterializedIndex(10, IndexState.SHADOW, 10);
+=======
+        index = new MaterializedIndex(10, IndexState.SHADOW, 10,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(index.visibleForTransaction(0));
         Assert.assertFalse(index.visibleForTransaction(9));
         Assert.assertTrue(index.visibleForTransaction(10));

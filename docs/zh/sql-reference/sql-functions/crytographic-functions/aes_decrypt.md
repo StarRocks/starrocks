@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # aes_decrypt
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 使用 AES_128_ECB 算法将字符串 `str` 解密并返回一个二进制字符串。
 

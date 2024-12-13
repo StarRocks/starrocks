@@ -17,15 +17,22 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+=======
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.SemanticException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
@@ -33,17 +40,23 @@ import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
+<<<<<<< HEAD
 import org.apache.iceberg.aws.AwsProperties;
 
 import java.util.Locale;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
+<<<<<<< HEAD
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION_DEFAULT;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION_DEFAULT;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class IcebergTableSink extends DataSink {
     public final static int ICEBERG_SINK_MAX_DOP = 32;
@@ -56,8 +69,15 @@ public class IcebergTableSink extends DataSink {
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
+<<<<<<< HEAD
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
+=======
+    private String targetBranch;
+
+    public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink,
+                            SessionVariable sessionVariable, String targetBranch) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table nativeTable = icebergTable.getNativeTable();
         this.desc = desc;
         this.location = nativeTable.location();
@@ -68,6 +88,11 @@ public class IcebergTableSink extends DataSink {
                 .toLowerCase();
         this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+<<<<<<< HEAD
+=======
+        this.targetBranch = targetBranch;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String catalogName = icebergTable.getCatalogName();
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,
@@ -75,7 +100,11 @@ public class IcebergTableSink extends DataSink {
 
         // Try to set for tabular
         CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
+<<<<<<< HEAD
                 buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
+=======
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             this.cloudConfiguration = tabularTempCloudConfiguration;
         } else {
@@ -86,6 +115,13 @@ public class IcebergTableSink extends DataSink {
                 String.format("cloudConfiguration of catalog %s should not be null", catalogName));
     }
 
+<<<<<<< HEAD
+=======
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder strBuilder = new StringBuilder();

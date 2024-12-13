@@ -17,12 +17,20 @@
 #include <cstdint>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "runtime/memory/column_allocator.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/raw_container.h"
 
 namespace starrocks {
 
 // Bytes is a special vector<uint8_t> in which the internal memory is always allocated with an additional 16 bytes,
 // to make life easier with 128 bit instructions.
+<<<<<<< HEAD
 typedef starrocks::raw::RawVectorPad16<uint8_t> Bytes;
+=======
+typedef starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>> Bytes;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

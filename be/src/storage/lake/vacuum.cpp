@@ -659,6 +659,7 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
     DCHECK(response != nullptr);
 
     std::vector<std::string> files_to_delete;
+<<<<<<< HEAD
     files_to_delete.reserve(request.tablet_ids_size() * request.txn_ids_size());
 
     for (auto tablet_id : request.tablet_ids()) {
@@ -668,6 +669,23 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
 
             tablet_mgr->metacache()->erase(log_path);
         }
+=======
+    files_to_delete.reserve(request.tablet_ids_size() * (request.txn_ids_size() + request.txn_infos_size()));
+
+    for (auto tablet_id : request.tablet_ids()) {
+        // For each DeleteTxnLogRequest, FE will only set one of txn_ids and txn_infos, here we don't want
+        // to bother with determining which one is set, just iterate through both.
+        for (auto txn_id : request.txn_ids()) {
+            auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+            files_to_delete.emplace_back(log_path);
+            tablet_mgr->metacache()->erase(log_path);
+        }
+        for (auto&& info : request.txn_infos()) {
+            auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
+                                                    : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
+            files_to_delete.emplace_back(log_path);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     delete_files_async(files_to_delete);

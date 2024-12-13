@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # named_struct
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Creates a struct with the specified field names and values.
 

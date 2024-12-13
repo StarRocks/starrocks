@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.UserDesc;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -35,6 +38,7 @@ import java.util.Map;
  *      not only create the specified user, but also grant all privs of the specified role to the user.
  */
 public class CreateUserStmt extends BaseCreateAlterUserStmt {
+<<<<<<< HEAD
 
     private final boolean ifNotExists;
 
@@ -46,12 +50,34 @@ public class CreateUserStmt extends BaseCreateAlterUserStmt {
                           Map<String, String> properties, NodePosition pos) {
         super(userDesc, SetRoleType.ROLE, defaultRoles, properties, pos);
         this.ifNotExists = ifNotExists;
+=======
+    private final boolean ifNotExists;
+    protected SetRoleType setRoleType;
+    protected List<String> defaultRoles;
+
+    public CreateUserStmt(UserIdentity userIdentity, boolean ifNotExists,
+                          UserAuthOption authOption,
+                          List<String> defaultRoles,
+                          Map<String, String> properties,
+                          NodePosition pos) {
+        super(userIdentity, authOption, properties, pos);
+        this.ifNotExists = ifNotExists;
+        this.setRoleType = SetRoleType.ROLE;
+        this.defaultRoles = defaultRoles;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isIfNotExists() {
         return ifNotExists;
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getDefaultRoles() {
+        return defaultRoles;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateUserStatement(this, context);

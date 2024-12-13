@@ -16,11 +16,21 @@
 
 #include "common/object_pool.h"
 #include "exprs/binary_function.h"
+<<<<<<< HEAD
 #include "exprs/jit/ir_helper.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/predicate.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 #define DEFINE_COMPOUND_CONSTRUCT(CLASS)              \
@@ -60,6 +70,10 @@ public:
         return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -94,6 +108,10 @@ public:
         return "{" + _children[0]->jit_func_name(state) + " & " + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -137,6 +155,11 @@ public:
         return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
     JitScore compute_jit_score(RuntimeState* state) const override {
@@ -171,6 +194,10 @@ public:
         return "{" + _children[0]->jit_func_name(state) + " | " + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -195,6 +222,10 @@ public:
 
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);
     }
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_compilable(RuntimeState* state) const override { return state->can_jit_expr(CompilableExprType::LOGICAL); }
 
@@ -226,6 +257,10 @@ public:
         return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;

@@ -21,8 +21,11 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.InvertedIndexParams;
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.InvertedIndexImpType;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
@@ -38,12 +41,18 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+<<<<<<< HEAD
 import java.util.Arrays;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+<<<<<<< HEAD
 import java.util.Map;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
@@ -132,6 +141,7 @@ public class GINIndexTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testIndexPropertiesWithDefault() {
         Map<String, String> properties = new HashMap<>();
         // empty set default
@@ -146,6 +156,8 @@ public class GINIndexTest extends PlanTestBase {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "test_index";
@@ -160,6 +172,11 @@ public class GINIndexTest extends PlanTestBase {
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");
         }});
 
+<<<<<<< HEAD
+=======
+        index.hashCode();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TOlapTableIndex olapIndex = index.toThrift();
         Assertions.assertEquals(indexId, olapIndex.getIndex_id());
         Assertions.assertEquals(indexName, olapIndex.getIndex_name());
@@ -169,17 +186,29 @@ public class GINIndexTest extends PlanTestBase {
                 Collections.singletonMap(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name()),
                 olapIndex.getCommon_properties());
 
+<<<<<<< HEAD
         Assertions.assertEquals(new HashMap<String, String>() {{
+=======
+        Assertions.assertEquals(new HashMap<String, String>(){{
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
             put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 
+<<<<<<< HEAD
         Assertions.assertEquals(new HashMap<String, String>() {{
+=======
+        Assertions.assertEquals(new HashMap<String, String>(){{
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             put(InvertedIndexUtil.INVERTED_INDEX_PARSER_KEY, InvertedIndexUtil.INVERTED_INDEX_PARSER_CHINESE);
             put(IndexParamsKey.OMIT_TERM_FREQ_AND_POSITION.name().toLowerCase(Locale.ROOT), "true");
         }}, olapIndex.getIndex_properties());
 
+<<<<<<< HEAD
         Assertions.assertEquals(new HashMap<String, String>() {{
+=======
+        Assertions.assertEquals(new HashMap<String, String>(){{
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             put(SearchParamsKey.IS_SEARCH_ANALYZED.name().toLowerCase(Locale.ROOT), "false");
             put(SearchParamsKey.DEFAULT_SEARCH_ANALYZER.name().toLowerCase(Locale.ROOT), "english");
             put(SearchParamsKey.RERANK.name().toLowerCase(Locale.ROOT), "false");

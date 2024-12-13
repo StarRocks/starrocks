@@ -45,10 +45,20 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
         ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
                 .getLocalMetastore().getFullNameToDb();
         fullNameToDb.put(SHOW_DATA_DB_NAME, db);
+<<<<<<< HEAD
+=======
+
+        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
+        idToDb.put(1000 + testDbId, db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testGetShowData() throws IOException {
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.http_slow_request_threshold_ms = 0;
         Request request = new Request.Builder()
                 .get()

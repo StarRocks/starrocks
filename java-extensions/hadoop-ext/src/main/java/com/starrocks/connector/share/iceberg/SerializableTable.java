@@ -62,7 +62,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
 public class SerializableTable implements Table, Serializable {
+=======
+public class SerializableTable implements Table, Serializable, HasTableOperations {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final String name;
     private final String location;
@@ -373,6 +377,14 @@ public class SerializableTable implements Table, Serializable {
         return String.format("Operation %s is not supported after the table is serialized", operation);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public StaticTableOperations operations() {
+        return (StaticTableOperations) ((BaseTable) lazyTable()).operations();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static class SerializableConfSupplier implements SerializableSupplier<Configuration> {
 
         private final Map<String, String> confAsMap;

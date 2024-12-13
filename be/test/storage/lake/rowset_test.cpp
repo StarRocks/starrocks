@@ -132,8 +132,13 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     }
 
     // fill data cache: false, fill metadata cache: true
+<<<<<<< HEAD
     LakeIOOptions lake_io_opts{.fill_data_cache = false};
     ASSIGN_OR_ABORT(auto segments2, rowset->segments(lake_io_opts, true));
+=======
+    LakeIOOptions lake_io_opts{.fill_data_cache = false, .fill_metadata_cache = true};
+    ASSIGN_OR_ABORT(auto segments2, rowset->segments(lake_io_opts));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(2, segments2.size());
     for (const auto& seg : segments2) {
         auto segment = cache->lookup_segment(seg->file_name());

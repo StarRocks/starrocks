@@ -43,6 +43,10 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -58,6 +62,10 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -69,7 +77,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
@@ -78,9 +90,15 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
@@ -103,6 +121,10 @@ import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.ShowIndexStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
@@ -122,7 +144,10 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDataCacheStatus;
 import com.starrocks.thrift.TStorageType;
+<<<<<<< HEAD
 import com.starrocks.warehouse.DefaultWarehouse;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -188,12 +213,31 @@ public class ShowExecutorTest {
         MaterializedIndex index2 = new MaterializedIndex();
 
         // mock partition
+<<<<<<< HEAD
         Partition partition = Deencapsulation.newInstance(Partition.class);
         new Expectations(partition) {
             {
                 partition.getBaseIndex();
                 minTimes = 0;
                 result = index1;
+=======
+        PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
+        new Expectations(physicalPartition) {
+            {
+                physicalPartition.getBaseIndex();
+                minTimes = 0;
+                result = index1;
+            }
+        };
+
+        // mock partition
+        Partition partition = Deencapsulation.newInstance(Partition.class);
+        new Expectations(partition) {
+            {
+                partition.getDefaultPhysicalPartition();
+                minTimes = 0;
+                result = physicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -253,7 +297,11 @@ public class ShowExecutorTest {
         };
 
         BaseTableInfo baseTableInfo = new BaseTableInfo(
+<<<<<<< HEAD
                 "default_catalog", "testDb", "testTbl", null);
+=======
+                    "default_catalog", "testDb", "testTbl", null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // mock materialized view
         MaterializedView mv = new MaterializedView();
@@ -302,10 +350,17 @@ public class ShowExecutorTest {
                 mv.getPartitionInfo();
                 minTimes = 0;
                 result = new ExpressionRangePartitionInfo(
+<<<<<<< HEAD
                         Collections.singletonList(
                                 ColumnIdExpr.create(new SlotRef(
                                         new TableName("test", "testMv"), column1.getName()))),
                         Collections.singletonList(column1), PartitionType.RANGE);
+=======
+                            Collections.singletonList(
+                                        ColumnIdExpr.create(new SlotRef(
+                                                    new TableName("test", "testMv"), column1.getName()))),
+                            Collections.singletonList(column1), PartitionType.RANGE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 mv.getDefaultDistributionInfo();
                 minTimes = 0;
@@ -326,7 +381,11 @@ public class ShowExecutorTest {
                 mv.getTableProperty();
                 minTimes = 0;
                 result = new TableProperty(
+<<<<<<< HEAD
                         Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
+=======
+                            Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 mv.getIdToColumn();
                 minTimes = 0;
@@ -366,6 +425,7 @@ public class ShowExecutorTest {
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+<<<<<<< HEAD
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getDb("testDb");
@@ -376,10 +436,34 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = null;
 
+=======
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        new Expectations(globalStateMgr) {
+            {
+                /*
+                globalStateMgr.getLocalMetastore().getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
+                minTimes = 0;
+                result = null;
+
+                 */
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
+=======
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
                 result = metadataMgr;
@@ -397,12 +481,39 @@ public class ShowExecutorTest {
                 result = null;
 
                 metadataMgr.getTable("default_catalog", "testDb",
+<<<<<<< HEAD
                         "testTbl");
+=======
+                            "testTbl");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = table;
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                if (dbName.equalsIgnoreCase("emptyDb")) {
+                    return null;
+                }
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return db.getTables();
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // mock scheduler
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
@@ -459,7 +570,11 @@ public class ShowExecutorTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+=======
+    public void testShowPartitions(@Mocked Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -473,6 +588,10 @@ public class ShowExecutorTest {
         OlapTable olapTable = listPartitionInfoTest.findTableForMultiListPartition();
         Database db = new Database();
 
+<<<<<<< HEAD
+=======
+        /*
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(db) {
             {
                 db.getTable(anyString);
@@ -485,6 +604,11 @@ public class ShowExecutorTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+         */
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<MetaUtils>() {
             @Mock
             public Table getSessionAwareTable(ConnectContext ctx, Database db, TableName tableName) {
@@ -494,15 +618,29 @@ public class ShowExecutorTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(0);
                 minTimes = 0;
                 result = db;
+=======
+                globalStateMgr.getLocalMetastore().getDb(0);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, anyLong);
+                minTimes = 0;
+                result = olapTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
         // Ok to test
         ShowPartitionsStmt stmt = new ShowPartitionsStmt(new TableName("testDb", "testTbl"),
+<<<<<<< HEAD
                 null, null, null, false);
+=======
+                    null, null, null, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
@@ -519,9 +657,15 @@ public class ShowExecutorTest {
         Assert.assertEquals(partitionKey2, "dt, province");
 
         String values1 = resultSet.getResultRows().get(0).get(7);
+<<<<<<< HEAD
         Assert.assertEquals(values1, "(('2022-04-15', 'guangdong'), ('2022-04-15', 'tianjin'))");
         String values2 = resultSet.getResultRows().get(1).get(7);
         Assert.assertEquals(values2, "(('2022-04-16', 'shanghai'), ('2022-04-16', 'beijing'))");
+=======
+        Assert.assertEquals(values1, "[[\"2022-04-15\",\"guangdong\"],[\"2022-04-15\",\"tianjin\"]]");
+        String values2 = resultSet.getResultRows().get(1).get(7);
+        Assert.assertEquals(values2, "[[\"2022-04-16\",\"shanghai\"],[\"2022-04-16\",\"beijing\"]]");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -549,7 +693,11 @@ public class ShowExecutorTest {
         ctx.setQualifiedUser("testUser");
 
         DescribeStmt stmt = (DescribeStmt) com.starrocks.sql.parser.SqlParser.parse("desc testTbl",
+<<<<<<< HEAD
                 ctx.getSessionVariable().getSqlMode()).get(0);
+=======
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet;
@@ -613,7 +761,11 @@ public class ShowExecutorTest {
     @Test(expected = SemanticException.class)
     public void testShowCreateTableEmptyDb() throws SemanticException, DdlException {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("emptyDb", "testTable"),
+<<<<<<< HEAD
                 ShowCreateTableStmt.CreateTableType.TABLE);
+=======
+                    ShowCreateTableStmt.CreateTableType.TABLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
@@ -626,7 +778,11 @@ public class ShowExecutorTest {
         ctx.setQualifiedUser("testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
+<<<<<<< HEAD
                 ctx.getSessionVariable()).get(0);
+=======
+                    ctx.getSessionVariable()).get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
@@ -640,7 +796,11 @@ public class ShowExecutorTest {
 
         // verbose
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
+<<<<<<< HEAD
                 ctx.getSessionVariable()).get(0);
+=======
+                    ctx.getSessionVariable()).get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         resultSet = ShowExecutor.execute(stmt, ctx);
@@ -655,7 +815,11 @@ public class ShowExecutorTest {
 
         // show full fields
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full fields from testTbl in testDb",
+<<<<<<< HEAD
                 ctx.getSessionVariable()).get(0);
+=======
+                    ctx.getSessionVariable()).get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         resultSet = ShowExecutor.execute(stmt, ctx);
@@ -670,7 +834,11 @@ public class ShowExecutorTest {
 
         // pattern
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb like \"%1\"",
+<<<<<<< HEAD
                 ctx.getSessionVariable().getSqlMode()).get(0);
+=======
+                    ctx.getSessionVariable().getSqlMode()).get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         resultSet = ShowExecutor.execute(stmt, ctx);
@@ -702,8 +870,12 @@ public class ShowExecutorTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowBackendsSharedDataMode(@Mocked StarOSAgent starosAgent, @Mocked WarehouseManager warehouseManager)
             throws AnalysisException, DdlException {
+=======
+    public void testShowBackendsSharedDataMode(@Mocked StarOSAgent starosAgent) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
 
         // mock backends
@@ -711,6 +883,10 @@ public class ShowExecutorTest {
         backend.setCpuCores(16);
         backend.setMemLimitBytes(100L);
         backend.updateResourceUsage(0, 1L, 30);
+<<<<<<< HEAD
+=======
+        backend.setAlive(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         clusterInfo.addBackend(backend);
 
         NodeMgr nodeMgr = new NodeMgr();
@@ -722,6 +898,11 @@ public class ShowExecutorTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -731,6 +912,13 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -752,6 +940,7 @@ public class ShowExecutorTest {
                 starosAgent.getWorkerIdByNodeId(anyLong);
                 minTimes = 1;
                 result = workerId;
+<<<<<<< HEAD
 
             }
         };
@@ -766,6 +955,8 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -773,7 +964,11 @@ public class ShowExecutorTest {
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
+<<<<<<< HEAD
         Assert.assertEquals(32, resultSet.getMetaData().getColumnCount());
+=======
+        Assert.assertEquals(33, resultSet.getMetaData().getColumnCount());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("CpuCores", resultSet.getMetaData().getColumn(22).getName());
         Assert.assertEquals("MemLimit", resultSet.getMetaData().getColumn(23).getName());
@@ -781,22 +976,41 @@ public class ShowExecutorTest {
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(25).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(26).getName());
         Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(27).getName());
+<<<<<<< HEAD
         Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(29).getName());
         Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(30).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
+=======
+        Assert.assertEquals("StatusCode", resultSet.getMetaData().getColumn(29).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(30).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(31).getName());
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("1", resultSet.getString(0));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("16", resultSet.getString(22));
         Assert.assertEquals("100.000B", resultSet.getString(23));
         Assert.assertEquals("0", resultSet.getString(24));
         Assert.assertEquals("N/A", resultSet.getString(27));
+<<<<<<< HEAD
         Assert.assertEquals(String.valueOf(workerId), resultSet.getString(30));
+=======
+        Assert.assertEquals("CONNECTING", resultSet.getString(29));
+        Assert.assertEquals(String.valueOf(workerId), resultSet.getString(31));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(11));
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowComputeNodesSharedData(@Mocked StarOSAgent starosAgent, @Mocked WarehouseManager warehouseManager)
             throws AnalysisException, DdlException {
+=======
+    public void testShowComputeNodesSharedData(@Mocked StarOSAgent starosAgent) throws AnalysisException, DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SystemInfoService clusterInfo = AccessTestUtil.fetchSystemInfoService();
 
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
@@ -808,6 +1022,10 @@ public class ShowExecutorTest {
         tDataCacheMetrics.setDisk_quota_bytes(1024 * 1024 * 1024);
         tDataCacheMetrics.setMem_quota_bytes(1024 * 1024 * 1024);
         node.updateDataCacheMetrics(DataCacheMetrics.buildFromThrift(tDataCacheMetrics));
+<<<<<<< HEAD
+=======
+        node.setAlive(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         clusterInfo.addComputeNode(node);
 
         NodeMgr nodeMgr = new NodeMgr();
@@ -819,6 +1037,11 @@ public class ShowExecutorTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getNodeMgr();
@@ -828,6 +1051,13 @@ public class ShowExecutorTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starosAgent;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -838,6 +1068,7 @@ public class ShowExecutorTest {
             }
         };
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getWarehouseMgr();
@@ -851,6 +1082,8 @@ public class ShowExecutorTest {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long tabletNum = 1024;
         new Expectations() {
             {
@@ -865,10 +1098,17 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
 
         Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(),
+<<<<<<< HEAD
                 resultSet.getMetaData().getColumnCount());
         for (int i = 0; i < ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(); ++i) {
             Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.get(i),
                     resultSet.getMetaData().getColumn(i).getName());
+=======
+                    resultSet.getMetaData().getColumnCount());
+        for (int i = 0; i < ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.size(); ++i) {
+            Assert.assertEquals(ComputeNodeProcDir.TITLE_NAMES_SHARED_DATA.get(i),
+                        resultSet.getMetaData().getColumn(i).getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         Assert.assertTrue(resultSet.next());
@@ -878,7 +1118,12 @@ public class ShowExecutorTest {
         Assert.assertEquals("1.00 %", resultSet.getString(16));
         Assert.assertEquals("3.0 %", resultSet.getString(17));
         Assert.assertEquals("Status: Normal, DiskUsage: 0B/1GB, MemUsage: 0B/1GB", resultSet.getString(18));
+<<<<<<< HEAD
         Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(23));
+=======
+        Assert.assertEquals("OK", resultSet.getString(20));
+        Assert.assertEquals(String.valueOf(tabletNum), resultSet.getString(24));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -972,6 +1217,7 @@ public class ShowExecutorTest {
 
     private void verifyShowMaterializedViewResult(ShowResultSet resultSet) throws AnalysisException, DdlException {
         String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv` (`col1`, `col2`)\n" +
+<<<<<<< HEAD
                 "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
                 "PARTITION BY (`col1`)\n" +
                 "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
@@ -981,6 +1227,17 @@ public class ShowExecutorTest {
                 "\"storage_medium\" = \"SSD\"\n" +
                 ")\n" +
                 "AS select col1, col2 from table1;";
+=======
+                    "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
+                    "PARTITION BY (`col1`)\n" +
+                    "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
+                    "REFRESH ASYNC\n" +
+                    "PROPERTIES (\n" +
+                    "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\",\n" +
+                    "\"storage_medium\" = \"SSD\"\n" +
+                    ")\n" +
+                    "AS select col1, col2 from table1;";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertTrue(resultSet.next());
         List<Column> mvSchemaTable = MaterializedViewsSystemTable.create().getFullSchema();
@@ -1022,7 +1279,12 @@ public class ShowExecutorTest {
     @Test
     public void testShowAlterTable() throws AnalysisException, DdlException {
         ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
+<<<<<<< HEAD
         stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), globalStateMgr.getDb("testDb")));
+=======
+        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(),
+                    globalStateMgr.getLocalMetastore().getDb("testDb")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ShowExecutor.execute(stmt, ctx);
     }
@@ -1051,6 +1313,7 @@ public class ShowExecutorTest {
                 partitions.add("year");
                 partitions.add("dt");
                 HiveTable.Builder tableBuilder = HiveTable.builder()
+<<<<<<< HEAD
                         .setId(1)
                         .setTableName("test_table")
                         .setCatalogName("hive_catalog")
@@ -1061,16 +1324,33 @@ public class ShowExecutorTest {
                         .setFullSchema(fullSchema)
                         .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
                         .setCreateTime(10000);
+=======
+                            .setId(1)
+                            .setTableName("test_table")
+                            .setCatalogName("hive_catalog")
+                            .setResourceName(toResourceName("hive_catalog", "hive"))
+                            .setHiveDbName("hive_db")
+                            .setHiveTableName("test_table")
+                            .setPartitionColumnNames(partitions)
+                            .setFullSchema(fullSchema)
+                            .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                            .setCreateTime(10000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return tableBuilder.build();
             }
         };
 
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
+<<<<<<< HEAD
                 ShowCreateTableStmt.CreateTableType.TABLE);
+=======
+                    ShowCreateTableStmt.CreateTableType.TABLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
+<<<<<<< HEAD
                         "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
                         "  `name` varchar DEFAULT NULL,\n" +
                         "  `year` int(11) DEFAULT NULL,\n" +
@@ -1079,6 +1359,16 @@ public class ShowExecutorTest {
                         "PARTITION BY (year, dt)\n" +
                         "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
                 resultSet.getResultRows().get(0).get(1));
+=======
+                                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                                "  `name` varchar DEFAULT NULL,\n" +
+                                "  `year` int(11) DEFAULT NULL,\n" +
+                                "  `dt` int(11) DEFAULT NULL\n" +
+                                ")\n" +
+                                "PARTITION BY (year, dt)\n" +
+                                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                    resultSet.getResultRows().get(0).get(1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1105,6 +1395,7 @@ public class ShowExecutorTest {
                 partitions.add("year");
                 partitions.add("dt");
                 HiveTable.Builder tableBuilder = HiveTable.builder()
+<<<<<<< HEAD
                         .setId(1)
                         .setTableName("test_table")
                         .setCatalogName("hive_catalog")
@@ -1116,16 +1407,34 @@ public class ShowExecutorTest {
                         .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
                         .setCreateTime(10000)
                         .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE);
+=======
+                            .setId(1)
+                            .setTableName("test_table")
+                            .setCatalogName("hive_catalog")
+                            .setResourceName(toResourceName("hive_catalog", "hive"))
+                            .setHiveDbName("hive_db")
+                            .setHiveTableName("test_table")
+                            .setPartitionColumnNames(partitions)
+                            .setFullSchema(fullSchema)
+                            .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                            .setCreateTime(10000)
+                            .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return tableBuilder.build();
             }
         };
 
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
+<<<<<<< HEAD
                 ShowCreateTableStmt.CreateTableType.TABLE);
+=======
+                    ShowCreateTableStmt.CreateTableType.TABLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL TABLE `test_table` (\n" +
+<<<<<<< HEAD
                         "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
                         "  `name` varchar DEFAULT NULL,\n" +
                         "  `year` int(11) DEFAULT NULL,\n" +
@@ -1134,6 +1443,24 @@ public class ShowExecutorTest {
                         "PARTITION BY (year, dt)\n" +
                         "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
                 resultSet.getResultRows().get(0).get(1));
+=======
+                                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                                "  `name` varchar DEFAULT NULL,\n" +
+                                "  `year` int(11) DEFAULT NULL,\n" +
+                                "  `dt` int(11) DEFAULT NULL\n" +
+                                ")\n" +
+                                "PARTITION BY (year, dt)\n" +
+                                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                    resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowKeysFromTable() {
+        ShowIndexStmt stmt = new ShowIndexStmt("test_db",
+                new TableName(null, "test_db", "test_table"));
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+        Assert.assertEquals(0, resultSet.getResultRows().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1154,10 +1481,17 @@ public class ShowExecutorTest {
 
         Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
+<<<<<<< HEAD
                 "comment \"hive_test\"\n" +
                 "PROPERTIES (\"type\"  =  \"hive\",\n" +
                 "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
                 ")", resultSet.getResultRows().get(0).get(1));
+=======
+                    "comment \"hive_test\"\n" +
+                    "PROPERTIES (\"type\"  =  \"hive\",\n" +
+                    "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
+                    ")", resultSet.getResultRows().get(0).get(1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1172,7 +1506,11 @@ public class ShowExecutorTest {
         ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("catalog_not_exist");
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class, "Unknown catalog 'catalog_not_exist'",
+<<<<<<< HEAD
                 () -> ShowExecutor.execute(stmt, ctx));
+=======
+                    () -> ShowExecutor.execute(stmt, ctx));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1182,8 +1520,13 @@ public class ShowExecutorTest {
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> map = new HashMap<>();
                 map.put(new AnalyzeMgr.StatsMetaKey("hive0", "testDb", "testTable"),
+<<<<<<< HEAD
                         new ExternalBasicStatsMeta("hive0", "testDb", "testTable", null,
                                 StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap()));
+=======
+                            new ExternalBasicStatsMeta("hive0", "testDb", "testTable", null,
+                                        StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return map;
             }
         };
@@ -1204,6 +1547,7 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         resultSet.getResultRows().forEach(System.out::println);
         String expectString1 = "root, null, GRANT CREATE TABLE, DROP, ALTER, CREATE VIEW, CREATE FUNCTION, " +
+<<<<<<< HEAD
                 "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString1)));
@@ -1211,6 +1555,15 @@ public class ShowExecutorTest {
                 "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
         Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
                 l.toString().contains(expectString2)));
+=======
+                    "CREATE MATERIALIZED VIEW, CREATE PIPE ON ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                    l.toString().contains(expectString1)));
+        String expectString2 = "root, null, GRANT DELETE, DROP, INSERT, SELECT, ALTER, EXPORT, " +
+                    "UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE 'root'";
+        Assert.assertTrue(resultSet.getResultRows().stream().anyMatch(l ->
+                    l.toString().contains(expectString2)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1233,12 +1586,21 @@ public class ShowExecutorTest {
 
         Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
+<<<<<<< HEAD
                 "comment \"hive_test\"\n" +
                 "PROPERTIES (\"aws.s3.access_key\"  =  \"ia******ey\",\n" +
                 "\"aws.s3.secret_key\"  =  \"ia******ey\",\n" +
                 "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
                 "\"type\"  =  \"hive\"\n" +
                 ")", resultSet.getResultRows().get(0).get(1));
+=======
+                    "comment \"hive_test\"\n" +
+                    "PROPERTIES (\"aws.s3.access_key\"  =  \"ia******ey\",\n" +
+                    "\"aws.s3.secret_key\"  =  \"ia******ey\",\n" +
+                    "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
+                    "\"type\"  =  \"hive\"\n" +
+                    ")", resultSet.getResultRows().get(0).get(1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1251,7 +1613,11 @@ public class ShowExecutorTest {
         properties.put("ni", "hao");
         StringLiteral stringLiteral = new StringLiteral("hello");
         dataCacheMgr.createCacheRule(QualifiedName.of(ImmutableList.of("test2", "test2", "test2")),
+<<<<<<< HEAD
                 stringLiteral, -1, properties);
+=======
+                    stringLiteral, -1, properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ShowDataCacheRulesStmt stmt = new ShowDataCacheRulesStmt(NodePosition.ZERO);
 

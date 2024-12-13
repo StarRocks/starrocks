@@ -67,11 +67,19 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
+<<<<<<< HEAD
+=======
+class BaseRowset;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct CompactionCandidate;
 struct CompactionContext;
 struct TabletBasicInfo;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
+<<<<<<< HEAD
+=======
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class ChunkIterator;
 
@@ -91,7 +99,11 @@ public:
 
     ~Tablet() override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status init();
+=======
+    Status init();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool init_succeeded();
 
@@ -102,8 +114,13 @@ public:
 
     void save_meta(bool skip_tablet_schema = false);
     // Used in clone task, to update local meta when finishing a clone job
+<<<<<<< HEAD
     [[nodiscard]] Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                                             const std::vector<Version>& versions_to_delete);
+=======
+    Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+                              const std::vector<Version>& versions_to_delete);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const int64_t cumulative_layer_point() const;
     void set_cumulative_layer_point(int64_t new_point);
@@ -120,17 +137,30 @@ public:
     size_t num_rows_per_row_block_with_max_version() const;
     size_t next_unique_id() const;
     size_t field_index_with_max_version(const string& field_name) const;
+<<<<<<< HEAD
+=======
+    size_t field_index(const string& field_name, const string& extra_column_name) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string schema_debug_string() const;
     std::string debug_string() const;
     bool enable_shortcut_compaction() const;
 
     // Load incremental rowsets to the tablet in DataDir#load.
+<<<<<<< HEAD
     [[nodiscard]] Status load_rowset(const RowsetSharedPtr& rowset);
     // finish loading rowsets
     [[nodiscard]] Status finish_load_rowsets();
 
     // operation in rowsets
     [[nodiscard]] Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
+=======
+    Status load_rowset(const RowsetSharedPtr& rowset);
+    // finish loading rowsets
+    Status finish_load_rowsets();
+
+    // operation in rowsets
+    Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void modify_rowsets_without_lock(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,
                                      std::vector<RowsetSharedPtr>* to_replace);
 
@@ -141,7 +171,11 @@ public:
 
     RowsetSharedPtr rowset_with_max_version() const;
 
+<<<<<<< HEAD
     [[nodiscard]] Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+=======
+    Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
 
@@ -151,6 +185,7 @@ public:
     /// need to delete flag.
     void delete_expired_stale_rowset();
 
+<<<<<<< HEAD
     [[nodiscard]] Status capture_consistent_versions(const Version& spec_version, vector<Version>* version_path) const;
     [[nodiscard]] Status check_version_integrity(const Version& version);
     void list_versions(std::vector<Version>* versions) const;
@@ -158,11 +193,25 @@ public:
     // REQUIRE: `obtain_header_rdlock()`ed
     [[nodiscard]] Status capture_consistent_rowsets(const Version& spec_version,
                                                     vector<RowsetSharedPtr>* rowsets) const;
+=======
+    Status capture_consistent_versions(const Version& spec_version, vector<Version>* version_path) const;
+    Status check_version_integrity(const Version& version);
+    void list_versions(std::vector<Version>* versions) const;
+
+    // REQUIRE: `obtain_header_rdlock()`ed
+    Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
+
+    Status capture_consistent_rowsets(const int64_t gtid, vector<RowsetSharedPtr>* rowsets) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     [[nodiscard]] bool version_for_delete_predicate(const Version& version);
     [[nodiscard]] bool version_for_delete_predicate_unlocked(const Version& version);
+<<<<<<< HEAD
     [[nodiscard]] bool has_delete_predicates(const Version& version);
+=======
+    [[nodiscard]] StatusOr<bool> has_delete_predicates(const Version& version) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -256,8 +305,13 @@ public:
 
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
+<<<<<<< HEAD
     [[nodiscard]] Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
                                        bool is_version_overwrite = false, bool is_double_write = false);
+=======
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
+                         bool is_version_overwrite = false, bool is_double_write = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // if there is _compaction_task running
     // do not do compaction
@@ -296,7 +350,11 @@ public:
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status support_binlog();
+=======
+    Status support_binlog();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // This will modify the TabletMeta, and save_meta() will be called outside
     // to persist it. See run_update_meta_info_task() in agent_task.cpp
@@ -304,7 +362,11 @@ public:
 
     BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
 
+<<<<<<< HEAD
     [[nodiscard]] Status contains_version(const Version& version);
+=======
+    Status contains_version(const Version& version);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void get_basic_info(TabletBasicInfo& info);
 
@@ -325,7 +387,11 @@ public:
     void remove_in_writing_data_size(int64_t txn_id);
 
     // verify all rowsets of current(max) version in this tablet
+<<<<<<< HEAD
     [[nodiscard]] Status verify();
+=======
+    Status verify();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
 
@@ -432,6 +498,12 @@ private:
                                   true>
             _committed_rs_map;
 
+<<<<<<< HEAD
+=======
+    // gtid -> version
+    std::map<int64_t, int64_t> _gtid_to_version_map;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // States used for updatable tablets only
     std::unique_ptr<TabletUpdates> _updates;
 
@@ -521,6 +593,13 @@ inline size_t Tablet::field_index_with_max_version(const string& field_name) con
     return tablet_schema()->field_index(field_name);
 }
 
+<<<<<<< HEAD
+=======
+inline size_t Tablet::field_index(const string& field_name, const string& extra_column_name) const {
+    return tablet_schema()->field_index(field_name, extra_column_name);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline bool Tablet::enable_shortcut_compaction() const {
     std::shared_lock rdlock(_meta_lock);
     return _tablet_meta->enable_shortcut_compaction();

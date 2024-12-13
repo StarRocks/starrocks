@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # url_extract_host
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Extracts the host section from a URL.
 

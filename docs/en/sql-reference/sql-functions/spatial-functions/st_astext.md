@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_AsText,ST_AsWKT
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a geometric figure to WKT (Well Known Text) format.
 

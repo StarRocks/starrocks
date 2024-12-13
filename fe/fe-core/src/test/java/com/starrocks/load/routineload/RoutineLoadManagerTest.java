@@ -46,7 +46,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -115,7 +119,11 @@ public class RoutineLoadManagerTest {
     @Test
     public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
                                  @Mocked ConnectContext connectContext,
+<<<<<<< HEAD
                                  @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+                                 @Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -203,7 +211,11 @@ public class RoutineLoadManagerTest {
             Assert.fail();
         } catch (AnalysisException e) {
             LOG.info("Access deny");
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             e.printStackTrace();
         }
     }
@@ -574,7 +586,11 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
+<<<<<<< HEAD
                 globalStateMgr.getDb("db1");
+=======
+                globalStateMgr.getLocalMetastore().getDb("db1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -624,7 +640,11 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.getName();
                 minTimes = 0;
                 result = "bbb";
+<<<<<<< HEAD
                 globalStateMgr.getDb("db1");
+=======
+                globalStateMgr.getLocalMetastore().getDb("db1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -664,7 +684,11 @@ public class RoutineLoadManagerTest {
                 routineLoadJob3.isFinal();
                 minTimes = 0;
                 result = true;
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -695,7 +719,11 @@ public class RoutineLoadManagerTest {
     public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
+<<<<<<< HEAD
                                         @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -718,7 +746,11 @@ public class RoutineLoadManagerTest {
                 pauseRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -750,7 +782,11 @@ public class RoutineLoadManagerTest {
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
                                          @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database,
+<<<<<<< HEAD
                                          @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                         @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -769,7 +805,11 @@ public class RoutineLoadManagerTest {
                 resumeRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -787,7 +827,11 @@ public class RoutineLoadManagerTest {
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked Database database,
+<<<<<<< HEAD
                                        @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                       @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -806,7 +850,11 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();
@@ -927,7 +975,11 @@ public class RoutineLoadManagerTest {
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
+<<<<<<< HEAD
                                         @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -946,7 +998,11 @@ public class RoutineLoadManagerTest {
                 stopRoutineLoadStmt.getName();
                 minTimes = 0;
                 result = "";
+<<<<<<< HEAD
                 globalStateMgr.getDb("");
+=======
+                globalStateMgr.getLocalMetastore().getDb("");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 database.getId();

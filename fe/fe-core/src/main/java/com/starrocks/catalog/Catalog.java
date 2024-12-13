@@ -70,6 +70,13 @@ public class Catalog implements Writable {
         return name;
     }
 
+<<<<<<< HEAD
+=======
+    public void setName(String name) {
+        this.name = name;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getType() {
         return config.get(CATALOG_TYPE);
     }

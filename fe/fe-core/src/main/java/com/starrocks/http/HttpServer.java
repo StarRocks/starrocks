@@ -85,12 +85,20 @@ import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
+<<<<<<< HEAD
+=======
+import com.starrocks.http.rest.StreamLoadMetaAction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+<<<<<<< HEAD
+=======
+import com.starrocks.http.rest.v2.TablePartitionAction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -148,6 +156,10 @@ public class HttpServer {
     private void registerActions() throws IllegalArgException {
         // add rest action
         LoadAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        StreamLoadMetaAction.registerAction(controller);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionLoadAction.registerAction(controller);
         GetLoadInfoAction.registerAction(controller);
         SetConfigAction.registerAction(controller);
@@ -213,6 +225,11 @@ public class HttpServer {
         // external usage
         TableRowCountAction.registerAction(controller);
         TableSchemaAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        com.starrocks.http.rest.v2.TableSchemaAction.registerAction(controller);
+        TablePartitionAction.registerAction(controller);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);

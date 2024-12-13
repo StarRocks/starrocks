@@ -78,9 +78,16 @@ public class BloomFilterIndexUtil {
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
+<<<<<<< HEAD
         properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.defaultValue());
         properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.defaultValue());
         properties.computeIfAbsent(CASE_SENSITIVE_KEY, k -> NgramBfIndexParamsKey.CASE_SENSITIVE.defaultValue());
+=======
+        properties.computeIfAbsent(FPP_KEY, k -> NgramBfIndexParamsKey.BLOOM_FILTER_FPP.getIndexParamItem().getDefaultValue());
+        properties.computeIfAbsent(GRAM_NUM_KEY, k -> NgramBfIndexParamsKey.GRAM_NUM.getIndexParamItem().getDefaultValue());
+        properties.computeIfAbsent(CASE_SENSITIVE_KEY,
+                k -> NgramBfIndexParamsKey.CASE_SENSITIVE.getIndexParamItem().getDefaultValue());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void checkNgramBloomFilterIndexValid(Column column, Map<String, String> properties, KeysType keysType)

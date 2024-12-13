@@ -101,7 +101,11 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsertOverwriteWhenSchemaChange() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
                 .getDb("test").getTable("t0");
+=======
+                .getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         analyzeFail("insert overwrite t0 select * from t0;",
                 "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
@@ -114,11 +118,23 @@ public class AnalyzeInsertTest {
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+<<<<<<< HEAD
         new MockUp<MetaUtils>() {
             @Mock
             public Database getDatabase(String catalogName, String tableName) {
                 return new Database();
             }
+=======
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return null;
@@ -135,6 +151,13 @@ public class AnalyzeInsertTest {
         };
         new Expectations(metadata) {
             {
+<<<<<<< HEAD
+=======
+                metadata.getDb(anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -145,6 +168,13 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
+<<<<<<< HEAD
+=======
+                metadata.getDb(anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 icebergTable.getBaseSchema();
                 result = ImmutableList.of(new Column("c1", Type.INT));
                 minTimes = 0;
@@ -157,12 +187,23 @@ public class AnalyzeInsertTest {
     public void testPartitionedIcebergTable(@Mocked IcebergTable icebergTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
 
+<<<<<<< HEAD
         new MockUp<MetaUtils>() {
             @Mock
             public Database getDatabase(String catalogName, String databaseName) {
                 return new Database();
             }
 
+=======
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
                 return icebergTable;
@@ -171,6 +212,13 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
+<<<<<<< HEAD
+=======
+                metadata.getDb(anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 icebergTable.supportInsert();
                 result = true;
                 minTimes = 0;
@@ -241,11 +289,22 @@ public class AnalyzeInsertTest {
 
     @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
+<<<<<<< HEAD
         new MockUp<MetaUtils>() {
             @Mock
             public Database getDatabase(String catalogName, String databaseName) {
                 return null;
             }
+=======
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public Table getSessionAwareTable(ConnectContext conntext, Database database, TableName tableName) {
                 return hiveTable;

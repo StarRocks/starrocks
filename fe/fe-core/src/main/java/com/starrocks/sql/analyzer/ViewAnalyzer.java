@@ -20,6 +20,10 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
@@ -28,7 +32,10 @@ import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.HashSet;
 import java.util.List;
@@ -67,7 +74,15 @@ public class ViewAnalyzer {
             final String tableName = stmt.getTableName().getTbl();
             FeNameFormat.checkTableName(tableName);
 
+<<<<<<< HEAD
             Table table = MetaUtils.getTable(stmt.getTableName());
+=======
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(stmt.getTableName().getCatalog(),
+                    stmt.getTableName().getDb(), stmt.getTableName().getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table.isConnectorView()) {
                 throw new SemanticException("cannot alter connector view");
             }

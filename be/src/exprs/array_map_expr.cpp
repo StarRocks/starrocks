@@ -29,7 +29,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/constexpr.h"
 #include "common/statusor.h"
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"

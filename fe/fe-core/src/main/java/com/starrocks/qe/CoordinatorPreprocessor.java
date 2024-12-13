@@ -20,7 +20,11 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
@@ -37,6 +41,10 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -243,7 +251,11 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
     void computeFragmentInstances() throws UserException {
+=======
+    void computeFragmentInstances() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }
@@ -259,6 +271,18 @@ public class CoordinatorPreprocessor {
         executionDAG.finalizeDAG();
     }
 
+<<<<<<< HEAD
+=======
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws
+            StarRocksException {
+        execFragment.getScanRangeAssignment().clear();
+        for (FragmentInstance instance : execFragment.getInstances()) {
+            instance.resetAllScanRanges();
+        }
+        fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void validateExecutionDAG() throws StarRocksPlannerException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             DataSink sink = execFragment.getPlanFragment().getSink();

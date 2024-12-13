@@ -102,13 +102,28 @@ public class SelectStmtTest {
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ";
+<<<<<<< HEAD
+=======
+
+        String createTableWithPrimaryKey = "CREATE TABLE db1.t_with_pk (" +
+                "user_id INT," +
+                "value INT) " +
+                "PRIMARY KEY (user_id) " +
+                "PROPERTIES('replication_num' = '1');";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
                 .withTable(createBaseAllStmtStr)
                 .withTable(createDateTblStmtStr)
                 .withTable(createPratitionTableStr)
+<<<<<<< HEAD
                 .withTable(createTable1);
+=======
+                .withTable(createTable1)
+                .withTable(createTableWithPrimaryKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FeConstants.enablePruneEmptyOutputScan = false;
     }
 
@@ -289,7 +304,11 @@ public class SelectStmtTest {
                 "select * from db1.tbl1 where not(k1 <=> k2)",
                 "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
         };
+<<<<<<< HEAD
         Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
+=======
+        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*", Pattern.CASE_INSENSITIVE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
@@ -670,4 +689,28 @@ public class SelectStmtTest {
                 "     limit: 1\n" +
                 "     cardinality: 1\n"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    void testDistinctCountOnPrimaryKey() throws Exception {
+        String insertData = "INSERT INTO t0 VALUES (1,0),(2,1),(3,0),(4,1);";
+        starRocksAssert.query(insertData);
+        String sql = "SELECT CASE WHEN(value = 1) THEN 'A' ELSE 'B' END as flag, COUNT(DISTINCT user_id) " +
+                "FROM db1.t_with_pk " +
+                "GROUP BY 1";
+
+        String plan = starRocksAssert.query(sql).explainQuery();
+
+        Assert.assertTrue(plan, plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1: user_id)\n" +
+                "  |  group by: 3: case\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: user_id\n" +
+                "  |  <slot 3> : if(2: value = 1, 'A', 'B')\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

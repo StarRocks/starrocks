@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # is_role_in_session
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Verifies whether a role (or a nested role) is active in the current session.
 

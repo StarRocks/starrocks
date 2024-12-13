@@ -94,6 +94,7 @@ public class LakeMaterializedViewTest {
         starRocksAssert.withDatabase(DB).useDatabase(DB);
 
         starRocksAssert.withTable("CREATE TABLE base_table\n" +
+<<<<<<< HEAD
                 "(\n" +
                 "    k1 date,\n" +
                 "    k2 int,\n" +
@@ -105,6 +106,19 @@ public class LakeMaterializedViewTest {
                 "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+=======
+                    "(\n" +
+                    "    k1 date,\n" +
+                    "    k2 int,\n" +
+                    "    k3 int\n" +
+                    ")\n" +
+                    "PARTITION BY RANGE(k1)\n" +
+                    "(\n" +
+                    "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                    "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @AfterClass
@@ -125,6 +139,10 @@ public class LakeMaterializedViewTest {
         long mvId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 6L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -149,7 +167,11 @@ public class LakeMaterializedViewTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // refresh scheme
         MvRefreshScheme mvRefreshScheme = new MvRefreshScheme();
@@ -157,7 +179,11 @@ public class LakeMaterializedViewTest {
 
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
+<<<<<<< HEAD
                 partitionInfo, distributionInfo, mvRefreshScheme);
+=======
+                    partitionInfo, distributionInfo, mvRefreshScheme);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Deencapsulation.setField(mv, "baseIndexId", indexId);
         mv.addPartition(partition);
         mv.setIndexMeta(indexId, "mv1", columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -202,6 +228,7 @@ public class LakeMaterializedViewTest {
     @Test
     public void testCreateMaterializedView() throws Exception {
         starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+<<<<<<< HEAD
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
                         "   'datacache.enable' = 'true',\n" +
@@ -213,6 +240,20 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv1");
+=======
+                    "distributed by hash(k2) buckets 3\n" +
+                    "PROPERTIES(\n" +
+                    "   'datacache.enable' = 'true',\n" +
+                    "   'enable_async_write_back' = 'false',\n" +
+                    "   'datacache.partition_duration' = '6 day'\n" +
+                    ")\n" +
+                    "refresh async\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
@@ -243,12 +284,17 @@ public class LakeMaterializedViewTest {
         Assert.assertNotNull(task);
 
         starRocksAssert.dropMaterializedView("mv1");
+<<<<<<< HEAD
         Assert.assertNull(db.getTable("mv1"));
+=======
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testInactiveMaterializedView() throws Exception {
         starRocksAssert.withTable("create table base_table2\n" +
+<<<<<<< HEAD
                 "(\n" +
                 "    k4 date,\n" +
                 "    k5 int\n" +
@@ -261,21 +307,45 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv2");
+=======
+                    "(\n" +
+                    "    k4 date,\n" +
+                    "    k5 int\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k4) BUCKETS 3");
+        starRocksAssert.withMaterializedView("create materialized view mv2\n" +
+                    "distributed by hash(k2) buckets 3\n" +
+                    "refresh async\n" +
+                    "as select k1, k2, sum(k3) as total from base_table, base_table2 where k1 = k4 group by k1, k2;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
         // drop base table and inactive mv
         starRocksAssert.dropTable("base_table2");
+<<<<<<< HEAD
         Assert.assertNull(db.getTable("base_table2"));
         Assert.assertFalse(mv.isActive());
 
         starRocksAssert.dropMaterializedView("mv2");
         Assert.assertNull(db.getTable("mv2"));
+=======
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table2"));
+        Assert.assertFalse(mv.isActive());
+
+        starRocksAssert.dropMaterializedView("mv2");
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv2"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAlterAsyncMaterializedViewInterval() throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv3\n" +
+<<<<<<< HEAD
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
@@ -283,6 +353,16 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv3");
+=======
+                    "PARTITION BY k1\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                    "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
+                    "as select k1,k2 from base_table;");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv =
+                    (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(mv.isCloudNativeMaterializedView());
 
         MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
@@ -299,13 +379,18 @@ public class LakeMaterializedViewTest {
         Assert.assertEquals(2, asyncRefreshContext.getStep());
 
         starRocksAssert.dropMaterializedView("mv3");
+<<<<<<< HEAD
         Assert.assertNull(db.getTable("mv3"));
+=======
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv3"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testModifyRelatedColumnWithMaterializedView() {
         try {
             starRocksAssert.withTable("create table base_table4\n" +
+<<<<<<< HEAD
                     "(\n" +
                     "    k4 date,\n" +
                     "    k5 int\n" +
@@ -318,6 +403,21 @@ public class LakeMaterializedViewTest {
 
             Database db = GlobalStateMgr.getCurrentState().getDb(DB);
             MaterializedView mv = (MaterializedView) db.getTable("mv4");
+=======
+                        "(\n" +
+                        "    k4 date,\n" +
+                        "    k5 int\n" +
+                        ")\n" +
+                        "duplicate key(k4) distributed by hash(k4) buckets 3;");
+            starRocksAssert.withMaterializedView("create materialized view mv4\n" +
+                        "distributed by hash(k1) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k5, sum(k3) as total from base_table, base_table4 where k1 = k4 group by k1, k5;");
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            MaterializedView mv =
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertTrue(mv.isCloudNativeMaterializedView());
             Assert.assertTrue(mv.isActive());
 
@@ -332,9 +432,15 @@ public class LakeMaterializedViewTest {
             Assert.assertFalse(mv.isActive());
 
             starRocksAssert.dropMaterializedView("mv4");
+<<<<<<< HEAD
             Assert.assertNull(db.getTable("mv4"));
             starRocksAssert.dropTable("base_table4");
             Assert.assertNull(db.getTable("base_table4"));
+=======
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv4"));
+            starRocksAssert.dropTable("base_table4");
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table4"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             System.out.println(e);
             Assert.fail();
@@ -345,6 +451,7 @@ public class LakeMaterializedViewTest {
     public void testNonPartitionMvEnableFillDataCache() {
         try {
             starRocksAssert.withTable("create table base_table5\n" +
+<<<<<<< HEAD
                     "(\n" +
                     "    k4 date,\n" +
                     "    k5 int\n" +
@@ -357,15 +464,36 @@ public class LakeMaterializedViewTest {
 
             Database db = GlobalStateMgr.getCurrentState().getDb(DB);
             MaterializedView mv = (MaterializedView) db.getTable("mv5");
+=======
+                        "(\n" +
+                        "    k4 date,\n" +
+                        "    k5 int\n" +
+                        ")\n" +
+                        "duplicate key(k4) distributed by hash(k4) buckets 3;");
+            starRocksAssert.withMaterializedView("create materialized view mv5\n" +
+                        "distributed by hash(k1) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k5, sum(k3) as total from base_table, base_table5 where k1 = k4 group by k1, k5;");
+
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            MaterializedView mv =
+                        (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertTrue(mv.isCloudNativeMaterializedView());
 
             Partition p = mv.getPartition("mv5");
             Assert.assertTrue(mv.isEnableFillDataCache(p));
 
             starRocksAssert.dropMaterializedView("mv5");
+<<<<<<< HEAD
             Assert.assertNull(db.getTable("mv5"));
             starRocksAssert.dropTable("base_table5");
             Assert.assertNull(db.getTable("base_table5"));
+=======
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv5"));
+            starRocksAssert.dropTable("base_table5");
+            Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "base_table5"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             System.out.println(e);
             Assert.fail();
@@ -386,6 +514,12 @@ public class LakeMaterializedViewTest {
         long indexId = 3L;
         long partition1Id = 20L;
         long partition2Id = 21L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId1 = 22L;
+        long physicalPartitionId2 = 23L;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long tablet1Id = 10L;
         long tablet2Id = 11L;
 
@@ -412,26 +546,42 @@ public class LakeMaterializedViewTest {
         TabletMeta tabletMeta1 = new TabletMeta(dbId, mvId, partition1Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet1 = new LakeTablet(tablet1Id);
         index1.addTablet(tablet1, tabletMeta1);
+<<<<<<< HEAD
         Partition partition1 = new Partition(partition1Id, "p1", index1, distributionInfo);
+=======
+        Partition partition1 = new Partition(partition1Id, physicalPartitionId1, "p1", index1, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LocalDate upper1 = LocalDate.now().minus(duration);
         LocalDate lower1 = upper1.minus(duration);
         Range<PartitionKey> range1 = Range.closedOpen(PartitionKey.ofDate(lower1), PartitionKey.ofDate(upper1));
         partitionInfo.addPartition(partition1Id, false, range1, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, false,
+<<<<<<< HEAD
                                    new DataCacheInfo(true, false));
+=======
+                    new DataCacheInfo(true, false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // partition2
         MaterializedIndex index2 = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
         TabletMeta tabletMeta2 = new TabletMeta(dbId, mvId, partition2Id, indexId, 0, TStorageMedium.HDD, true);
         Tablet tablet2 = new LakeTablet(tablet2Id);
         index2.addTablet(tablet2, tabletMeta2);
+<<<<<<< HEAD
         Partition partition2 = new Partition(partition2Id, "p2", index1, distributionInfo);
+=======
+        Partition partition2 = new Partition(partition2Id, physicalPartitionId2, "p2", index1, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LocalDate upper2 = LocalDate.now();
         LocalDate lower2 = upper2.minus(duration);
         Range<PartitionKey> range2 = Range.closedOpen(PartitionKey.ofDate(lower2), PartitionKey.ofDate(upper2));
         partitionInfo.addPartition(partition2Id, false, range2, DataProperty.DEFAULT_DATA_PROPERTY, (short) 1, false,
+<<<<<<< HEAD
                                    new DataCacheInfo(true, false));
+=======
+                    new DataCacheInfo(true, false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // refresh scheme
         MvRefreshScheme mvRefreshScheme = new MvRefreshScheme();
@@ -439,7 +589,11 @@ public class LakeMaterializedViewTest {
 
         // Lake mv
         LakeMaterializedView mv = new LakeMaterializedView(mvId, dbId, "mv1", columns, KeysType.AGG_KEYS,
+<<<<<<< HEAD
                                                            partitionInfo, distributionInfo, mvRefreshScheme);
+=======
+                    partitionInfo, distributionInfo, mvRefreshScheme);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Deencapsulation.setField(mv, "baseIndexId", indexId);
         mv.addPartition(partition1);
         mv.addPartition(partition2);

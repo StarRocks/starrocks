@@ -35,7 +35,11 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;
@@ -77,7 +81,11 @@ public abstract class LoadTask extends PriorityLeaderTask {
             failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
                     .add("error_msg", "Failed to execute load task").build(), e);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
             failMsg.setCancelType(FailMsg.CancelType.USER_CANCEL);
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
@@ -105,7 +113,11 @@ public abstract class LoadTask extends PriorityLeaderTask {
     /**
      * execute load task
      *
+<<<<<<< HEAD
      * @throws UserException task is failed
+=======
+     * @throws StarRocksException task is failed
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     abstract void executeTask() throws Exception;
 

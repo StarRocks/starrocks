@@ -14,6 +14,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/balanced_chunk_buffer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
@@ -38,7 +43,11 @@ public:
 
     static size_t max_buffer_capacity() { return kIOTaskBatchSize; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state) override;
+=======
+    Status prepare(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // The running I/O task committed by ScanOperator holds the reference of query context,
     // so it can prevent the scan operator from deconstructored, but cannot prevent it from closed.
@@ -52,9 +61,15 @@ public:
 
     bool is_finished() const override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+=======
+    Status set_finishing(RuntimeState* state) override;
+
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void update_metrics(RuntimeState* state) override { _merge_chunk_source_profiles(state); }
 
@@ -67,7 +82,11 @@ public:
     int64_t global_rf_wait_timeout_ns() const override;
 
     /// interface for different scan node
+<<<<<<< HEAD
     [[nodiscard]] virtual Status do_prepare(RuntimeState* state) = 0;
+=======
+    virtual Status do_prepare(RuntimeState* state) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual void do_close(RuntimeState* state) = 0;
     virtual ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) = 0;
 
@@ -94,6 +113,11 @@ public:
 
     virtual int64_t get_scan_table_id() const { return -1; }
 
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -102,6 +126,7 @@ protected:
     virtual void attach_chunk_source(int32_t source_index) = 0;
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
+<<<<<<< HEAD
     virtual ChunkPtr get_chunk_from_buffer() = 0;
     virtual size_t num_buffered_chunks() const = 0;
     virtual size_t buffer_size() const = 0;
@@ -117,6 +142,34 @@ protected:
     [[nodiscard]] virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     [[nodiscard]] Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     [[nodiscard]] Status _try_to_trigger_next_scan(RuntimeState* state);
+=======
+
+    virtual BalancedChunkBuffer& get_chunk_buffer() const = 0;
+
+    ChunkPtr get_chunk_from_buffer() {
+        auto& chunk_buffer = get_chunk_buffer();
+        ChunkPtr chunk = nullptr;
+        if (chunk_buffer.try_get(_driver_sequence, &chunk)) {
+            return chunk;
+        }
+        return nullptr;
+    }
+
+    size_t num_buffered_chunks() const { return get_chunk_buffer().size(_driver_sequence); }
+    size_t buffer_size() const { return get_chunk_buffer().size(_driver_sequence); }
+    size_t buffer_capacity() const { return get_chunk_buffer().limiter()->capacity(); }
+    size_t buffer_memory_usage() const { return get_chunk_buffer().memory_usage(); }
+    size_t default_buffer_capacity() const { return get_chunk_buffer().limiter()->default_capacity(); }
+    ChunkBufferTokenPtr pin_chunk(int num_chunks) { return get_chunk_buffer().limiter()->pin(num_chunks); }
+    bool is_buffer_full() const { return get_chunk_buffer().limiter()->is_full(); }
+    void set_buffer_finished() { get_chunk_buffer().set_finished(_driver_sequence); }
+
+    // This method is only invoked when current morsel is reached eof
+    // and all cached chunk of this morsel has benn read out
+    virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
+    Status _try_to_trigger_next_scan(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual void _close_chunk_source_unlocked(RuntimeState* state, int index);
     void _close_chunk_source(RuntimeState* state, int index);
     virtual void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns,
@@ -136,7 +189,11 @@ protected:
         }
     }
 
+<<<<<<< HEAD
     [[nodiscard]] inline Status _get_scan_status() const {
+=======
+    inline Status _get_scan_status() const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::lock_guard<SpinLock> l(_scan_status_mutex);
         return _scan_status;
     }
@@ -215,11 +272,19 @@ public:
 
     bool with_morsels() const override { return true; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     // interface for different scan node
     [[nodiscard]] virtual Status do_prepare(RuntimeState* state) = 0;
+=======
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+    // interface for different scan node
+    virtual Status do_prepare(RuntimeState* state) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 

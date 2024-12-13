@@ -20,20 +20,29 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import mockit.Expectations;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -68,6 +77,7 @@ public class AnalyzeMgrTest {
     @Test
     public void testRefreshConnectorTableBasicStatisticsCache(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+<<<<<<< HEAD
         new Expectations() {
             {
                 cachedStatisticStorage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"));
@@ -78,10 +88,13 @@ public class AnalyzeMgrTest {
                 minTimes = 1;
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), true);
+<<<<<<< HEAD
 
         new Expectations() {
             {
@@ -93,6 +106,8 @@ public class AnalyzeMgrTest {
                 minTimes = 1;
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), false);
 

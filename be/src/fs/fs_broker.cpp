@@ -21,13 +21,20 @@
 #include <string>
 #include <thread>
 
+<<<<<<< HEAD
 #include "common/config.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "fs/fs.h"
 #include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "util/thrift_rpc_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 using namespace fmt::literals;
 
@@ -91,6 +98,7 @@ static Status to_status(const TBrokerOperationStatus& st, const TNetworkAddress&
 template <typename Method, typename Request, typename Response>
 static Status call_method(const TNetworkAddress& broker, Method method, const Request& request, Response* response,
                           int retry_count = 1, int timeout_ms = DEFAULT_TIMEOUT_MS) {
+<<<<<<< HEAD
     TFileBrokerServiceClient* client;
 #ifndef BE_TEST
     Status status;
@@ -127,6 +135,20 @@ static Status call_method(const TNetworkAddress& broker, Method method, const Re
                     fmt::format("Fail to call broker, error={}, broker={}", e.what(), broker.hostname));
         }
     }
+=======
+#ifdef BE_TEST
+    TFileBrokerServiceClient* client = g_broker_client;
+    (client->*method)(*response, request);
+    return Status::OK();
+#else
+    return ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+            broker,
+            [method, response, &request](BrokerServiceConnection& client) {
+                (client.get()->*method)(*response, request);
+            },
+            timeout_ms, retry_count);
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // This function will *NOT* return EOF status.

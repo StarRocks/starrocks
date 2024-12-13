@@ -259,6 +259,11 @@ std::string Status::code_as_string() const {
         return "JIT compile error";
     case TStatusCode::CAPACITY_LIMIT_EXCEED:
         return "Capaticy limit exceeded";
+<<<<<<< HEAD
+=======
+    case TStatusCode::SHUTDOWN:
+        return "Shut down in progress";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     case TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED:
         return "Big query cpu second limit exceeded";
     case TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED:

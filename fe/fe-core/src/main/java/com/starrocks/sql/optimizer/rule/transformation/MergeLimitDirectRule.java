@@ -54,6 +54,11 @@ public class MergeLimitDirectRule extends TransformationRule {
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION);
     public static final MergeLimitDirectRule TABLE_FUNCTION_TABLE_SCAN =
             new MergeLimitDirectRule(OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN);
+<<<<<<< HEAD
+=======
+    public static final MergeLimitDirectRule CTE_CONSUMER =
+            new MergeLimitDirectRule(OperatorType.LOGICAL_CTE_CONSUME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private MergeLimitDirectRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_MERGE_LIMIT_DIRECT, Pattern.create(OperatorType.LOGICAL_LIMIT)

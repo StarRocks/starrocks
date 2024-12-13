@@ -14,7 +14,10 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -42,7 +45,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
     @Override
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
@@ -71,7 +78,11 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         long tableId = table.getId();
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("ignored dropped partition {} when applying visible log", partitionId);
@@ -80,9 +91,19 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
+<<<<<<< HEAD
             // The version of a replication transaction may not continuously
             Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
                     || version == partition.getVisibleVersion() + 1);
+=======
+
+            // lake rollup will lead to version not continuously,
+            // just ingore check for now
+            // or we can persist a mocked transactionState.
+            // The version of a replication transaction may not continuously
+            //Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+            //        || version == partition.getVisibleVersion() + 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             partition.updateVisibleVersion(version, versionTime);
             if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {

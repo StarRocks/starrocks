@@ -26,6 +26,10 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -38,8 +42,12 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.PhysicalPartitionImpl;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -48,8 +56,13 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
@@ -144,14 +157,22 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSinglePartition() throws UserException {
+=======
+    public void testSinglePartition() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
+<<<<<<< HEAD
         Partition partition = new Partition(2, "p1", index, distInfo);
+=======
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -177,7 +198,11 @@ public class OlapTableSinkTest {
     @Test
     public void testRangePartition(
             @Injectable RangePartitionInfo partInfo,
+<<<<<<< HEAD
             @Injectable MaterializedIndex index) throws UserException {
+=======
+            @Injectable MaterializedIndex index) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TupleDescriptor tuple = getTuple();
 
         HashDistributionInfo distInfo = new HashDistributionInfo(
@@ -186,8 +211,13 @@ public class OlapTableSinkTest {
         Column partKey = new Column("k2", Type.VARCHAR);
         PartitionKey key = PartitionKey
                 .createPartitionKey(Lists.newArrayList(new PartitionValue("123")), Lists.newArrayList(partKey));
+<<<<<<< HEAD
         Partition p1 = new Partition(1, "p1", index, distInfo);
         Partition p2 = new Partition(2, "p2", index, distInfo);
+=======
+        Partition p1 = new Partition(1, 21, "p1", index, distInfo);
+        Partition p2 = new Partition(2, 22, "p2", index, distInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -211,17 +241,28 @@ public class OlapTableSinkTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
             sink.complete();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         }
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testRangeUnknownPartition(
             @Injectable RangePartitionInfo partInfo,
             @Injectable MaterializedIndex index) throws UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testRangeUnknownPartition(
+            @Injectable RangePartitionInfo partInfo,
+            @Injectable MaterializedIndex index) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TupleDescriptor tuple = getTuple();
 
         long unknownPartId = 12345L;
@@ -248,6 +289,10 @@ public class OlapTableSinkTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 6L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -279,11 +324,19 @@ public class OlapTableSinkTest {
 
         // Index
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+<<<<<<< HEAD
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
         index.addTablet(tablet, tabletMeta);
 
         // Partition
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, 0, TStorageMedium.SSD);
+        index.addTablet(tablet, tabletMeta);
+
+        // Partition
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -308,7 +361,11 @@ public class OlapTableSinkTest {
 
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         TOlapTablePartition tPartition = new TOlapTablePartition();
+<<<<<<< HEAD
         tPartition.setId(partitionId);
+=======
+        tPartition.setId(physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, partitionParam, false);
@@ -332,6 +389,10 @@ public class OlapTableSinkTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 6L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -357,7 +418,11 @@ public class OlapTableSinkTest {
             tablet.addReplica(replica3);
 
             // Index
+<<<<<<< HEAD
             TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+=======
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, physicalPartitionId, indexId, 0, TStorageMedium.SSD);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             index.addTablet(tablet, tabletMeta);
         }
 
@@ -370,7 +435,11 @@ public class OlapTableSinkTest {
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
         // Partition
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -395,7 +464,11 @@ public class OlapTableSinkTest {
 
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         TOlapTablePartition tPartition = new TOlapTablePartition();
+<<<<<<< HEAD
         tPartition.setId(partitionId);
+=======
+        tPartition.setId(physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, partitionParam, true);
@@ -419,7 +492,11 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSingleListPartition() throws UserException {
+=======
+    public void testSingleListPartition() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                 Lists.newArrayList(new Column("province", Type.STRING)));
@@ -428,7 +505,11 @@ public class OlapTableSinkTest {
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+<<<<<<< HEAD
         Partition partition = new Partition(1, "p1", index, distInfo);
+=======
+        Partition partition = new Partition(1, 11, "p1", index, distInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
         idToColumn.put(ColumnId.create("province"), new Column("province", Type.STRING));
@@ -457,18 +538,31 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testImmutablePartition() throws UserException {
+=======
+    public void testImmutablePartition() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+<<<<<<< HEAD
         Partition partition = new Partition(2, "p1", index, distInfo);
 
         PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
 
         physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
+=======
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartition(4, "", 2, index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 
@@ -497,18 +591,31 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInitialOpenPartition() throws UserException {
+=======
+    public void testInitialOpenPartition() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+<<<<<<< HEAD
         Partition partition = new Partition(2, "p1", index, distInfo);
 
         PhysicalPartitionImpl physicalPartition = new PhysicalPartitionImpl(3, "", 2, 0, index);
         partition.addSubPartition(physicalPartition);
 
         physicalPartition = new PhysicalPartitionImpl(4, "", 2, 0, index);
+=======
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartition(4, "", 2, index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         physicalPartition.setImmutable(true);
         partition.addSubPartition(physicalPartition);
 

@@ -159,6 +159,11 @@ public:
 
     bool can_vectorized() const override { return SpecColumnOperator::can_vectorized(); }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return SpecColumnOperator::support_bitmap_filter(); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return _predicate_operator.seek_bitmap_dictionary(iter, range);
     }

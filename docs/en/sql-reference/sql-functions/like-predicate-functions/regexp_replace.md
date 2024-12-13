@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # regexp_replace
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function uses repl to replace a sequence of characters in str that matches a regular expression pattern.
 

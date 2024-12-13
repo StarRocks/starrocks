@@ -30,6 +30,7 @@
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
 #include "util/thread.h"
+<<<<<<< HEAD
 
 namespace starrocks::pipeline {
 
@@ -37,6 +38,12 @@ using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
 
+=======
+#include "util/thrift_rpc_helper.h"
+
+namespace starrocks::pipeline {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
@@ -224,6 +231,15 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
             query_statistic->add_stats_item(stats_item);
         }
     }
+<<<<<<< HEAD
+=======
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        query_statistic->add_exec_stats_item(
+                node_id, exec_stats->push_rows.exchange(0), exec_stats->pull_rows.exchange(0),
+                exec_stats->pred_filter_rows.exchange(0), exec_stats->index_filter_rows.exchange(0),
+                exec_stats->rf_filter_rows.exchange(0));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
@@ -245,6 +261,15 @@ std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
             res->add_stats_item(stats_item);
         }
     }
+<<<<<<< HEAD
+=======
+
+    for (const auto& [node_id, exec_stats] : _node_exec_stats) {
+        res->add_exec_stats_item(node_id, exec_stats->push_rows, exec_stats->pull_rows, exec_stats->pred_filter_rows,
+                                 exec_stats->index_filter_rows, exec_stats->rf_filter_rows);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
 }
@@ -267,6 +292,18 @@ void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, in
     stats->delta_scan_bytes += scan_bytes;
 }
 
+<<<<<<< HEAD
+=======
+void QueryContext::init_node_exec_stats(const std::vector<int32_t>& exec_stats_node_ids) {
+    std::call_once(_node_exec_stats_init_flag, [this, &exec_stats_node_ids]() {
+        for (int32_t node_id : exec_stats_node_ids) {
+            auto node_exec_stats = std::make_shared<NodeExecStats>();
+            _node_exec_stats[node_id] = node_exec_stats;
+        }
+    });
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
         : _num_slots(1 << log2_num_slots),
           _slot_mask(_num_slots - 1),
@@ -371,8 +408,13 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
+<<<<<<< HEAD
                 RETURN_NULL_IF_CTX_CANCELLED(ctx);
                 sc_map.erase(sc_it);
+=======
+                sc_map.erase(sc_it);
+                RETURN_NULL_IF_CTX_CANCELLED(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 auto* raw_ctx_ptr = ctx.get();
                 context_map.emplace(query_id, std::move(ctx));
                 return raw_ctx_ptr;
@@ -499,7 +541,10 @@ void QueryContextManager::report_fragments_with_same_host(
                 continue;
             }
 
+<<<<<<< HEAD
             Status fe_connection_status;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto fe_addr = fragment_ctx->fe_addr();
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
@@ -600,13 +645,18 @@ void QueryContextManager::report_fragments(
                 continue;
             }
 
+<<<<<<< HEAD
             Status fe_connection_status;
             auto fe_addr = fragment_ctx->fe_addr();
             auto exec_env = fragment_ctx->runtime_state()->exec_env();
+=======
+            auto fe_addr = fragment_ctx->fe_addr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto fragment_id = fragment_ctx->fragment_instance_id();
             auto* runtime_state = fragment_ctx->runtime_state();
             DCHECK(runtime_state != nullptr);
 
+<<<<<<< HEAD
             FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr,
                                                     config::thrift_rpc_timeout_ms, &fe_connection_status);
             if (!fe_connection_status.ok()) {
@@ -619,6 +669,8 @@ void QueryContextManager::report_fragments(
                 continue;
             }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             std::vector<TReportExecStatusParams> report_exec_status_params_vector;
 
             TReportExecStatusParams params;
@@ -655,6 +707,7 @@ void QueryContextManager::report_fragments(
             Status rpc_status;
 
             VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+<<<<<<< HEAD
 
             // TODO: refactor me
             try {
@@ -676,6 +729,17 @@ void QueryContextManager::report_fragments(
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
+=======
+            rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                    fe_addr,
+                    [&res, &report_batch](FrontendServiceConnection& client) {
+                        client->batchReportExecStatus(res, report_batch);
+                    },
+                    config::thrift_rpc_timeout_ms);
+            if (!rpc_status.ok()) {
+                LOG(WARNING) << "thrift rpc error:" << rpc_status;
+                continue;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             const std::vector<TStatus>& status_list = res.status_list;

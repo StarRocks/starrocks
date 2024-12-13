@@ -28,6 +28,10 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -57,7 +61,12 @@ import static org.junit.Assert.assertEquals;
 public class DistributionPrunerRuleTest {
 
     @Test
+<<<<<<< HEAD
     public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked MaterializedIndex index,
+=======
+    public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked PhysicalPartition physicalPartition,
+                          @Mocked MaterializedIndex index,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                           @Mocked HashDistributionInfo distributionInfo) {
         List<Long> tabletIds = Lists.newArrayListWithExpectedSize(300);
         for (long i = 0; i < 300; i++) {
@@ -169,9 +178,15 @@ public class DistributionPrunerRuleTest {
                 result = idToColumn;
 
                 partition.getSubPartitions();
+<<<<<<< HEAD
                 result = Arrays.asList(partition);
 
                 partition.getIndex(anyLong);
+=======
+                result = Arrays.asList(physicalPartition);
+
+                physicalPartition.getIndex(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = index;
 
                 partition.getDistributionInfo();

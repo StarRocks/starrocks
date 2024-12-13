@@ -23,7 +23,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class ColumnIsNullPredicate : public ColumnPredicate {
+=======
+class ColumnIsNullPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     explicit ColumnIsNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -68,6 +72,11 @@ public:
         return min.is_null();
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         if (iter->has_null_bitmap()) {
@@ -97,9 +106,17 @@ public:
         *output = this;
         return Status::OK();
     }
+<<<<<<< HEAD
 };
 
 class ColumnNotNullPredicate : public ColumnPredicate {
+=======
+
+    std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NULL)", _column_id); }
+};
+
+class ColumnNotNullPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     explicit ColumnNotNullPredicate(const TypeInfoPtr& type_info, ColumnId id) : ColumnPredicate(type_info, id) {}
 
@@ -147,6 +164,11 @@ public:
         return !max.is_null();
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return false; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not null predicate not support bitmap index");
     }
@@ -168,6 +190,11 @@ public:
         *output = this;
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+
+    std::string debug_string() const override { return strings::Substitute("(ColumnId($0) IS NOT NULL)", _column_id); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type_info, ColumnId id, bool is_null) {

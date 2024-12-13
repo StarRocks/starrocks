@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # money_format
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将数字按照货币格式输出，整数部分每隔 3 位用逗号分隔，小数部分保留 2 位。
 

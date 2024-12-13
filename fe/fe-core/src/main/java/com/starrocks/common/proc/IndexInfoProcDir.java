@@ -77,7 +77,11 @@ public class IndexInfoProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
@@ -116,7 +120,11 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -138,7 +146,11 @@ public class IndexInfoProcDir implements ProcDirInterface {
         }
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
@@ -158,7 +170,11 @@ public class IndexInfoProcDir implements ProcDirInterface {
             }
             return node;
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

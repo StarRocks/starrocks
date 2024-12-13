@@ -65,8 +65,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.metadata.MetadataTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -162,6 +167,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
@@ -269,9 +278,15 @@ public class PlanFragmentBuilder {
         Collections.reverse(execPlan.getFragments());
 
         // Create a fake table sink here, replaced it after created the MV
+<<<<<<< HEAD
         PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         long dbId = GlobalStateMgr.getCurrentState().getDb(createStmt.getTableName().getDb()).getId();
+=======
+        PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt, null);
+        long mvId = GlobalStateMgr.getCurrentState().getNextId();
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createStmt.getTableName().getDb()).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
                 .createSinkTable(createStmt, partitionInfo, mvId, dbId);
         TupleDescriptor tupleDesc = buildTupleDesc(execPlan, view);
@@ -337,7 +352,10 @@ public class PlanFragmentBuilder {
 
         ExchangeNode exchangeNode =
                 new ExchangeNode(execPlan.getNextNodeId(), inputFragment.getPlanRoot(), DataPartition.UNPARTITIONED);
+<<<<<<< HEAD
         exchangeNode.setNumInstances(1);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PlanFragment exchangeFragment =
                 new PlanFragment(execPlan.getNextFragmentId(), exchangeNode, DataPartition.UNPARTITIONED);
         inputFragment.setDestination(exchangeNode);
@@ -366,6 +384,10 @@ public class PlanFragmentBuilder {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
             fragment.createDataSink(resultSinkType);
+<<<<<<< HEAD
+=======
+            fragment.setCollectExecStatsIds(execPlan.getCollectExecStatsIds());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         Collections.reverse(fragments);
         // assign colocate groups to plan fragment
@@ -417,6 +439,11 @@ public class PlanFragmentBuilder {
         private final ColumnRefFactory columnRefFactory;
         private final IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator = RuntimeFilterId.createGenerator();
         private final ExecGroupSets execGroups = new ExecGroupSets();
+<<<<<<< HEAD
+=======
+
+        private final List<Integer> collectExecStatsIds = Lists.newArrayList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
         private boolean canUseLocalShuffleAgg = true;
@@ -428,10 +455,35 @@ public class PlanFragmentBuilder {
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
             PlanFragment fragment = visit(optExpression, context);
             computeFragmentCost(context, fragment);
+<<<<<<< HEAD
             context.setExecGroups(execGroups.getExecGroups());
             return fragment;
         }
 
+=======
+            collectExecStatsIds(fragment.getPlanRoot());
+            context.setExecGroups(execGroups.getExecGroups());
+            context.setCollectExecStatsIds(collectExecStatsIds);
+            return fragment;
+        }
+
+        private void collectExecStatsIds(PlanNode root) {
+            if (ConnectContext.get() == null) {
+                return;
+            }
+            if (!ConnectContext.get().getSessionVariable().isEnablePlanAdvisor()) {
+                return;
+            }
+
+            for (PlanNode child : root.getChildren()) {
+                collectExecStatsIds(child);
+            }
+            if (root.needCollectExecStats()) {
+                collectExecStatsIds.add(root.getId().asInt());
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private void computeFragmentCost(ExecPlan context, PlanFragment fragment) {
             for (PlanFragment child : fragment.getChildren()) {
                 computeFragmentCost(context, child);
@@ -476,21 +528,54 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+<<<<<<< HEAD
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
             if (!ConnectContext.get().getSessionVariable().isEnableFilterUnusedColumnsInScanStage()) {
+=======
+        /**
+         * Set the columns which do not need to be output by ScanNode. They are columns which are only used in pushdownable
+         * predicates rather than columns which are used in non-pushdownable predicates and output columns.
+         *
+         * <p> The columns that can be pushed down need to meet:
+         * <ul>
+         * <li> All the columns of duplicate-key model.
+         * <li> Keys of primary-key model.
+         * <li> Keys of agg-key model (aggregation/unique_key model) in the skip-aggr scan stage.
+         * </ul>
+         *
+         * <p> The predicates that can be pushed down need to meet:
+         * <ul>
+         * <li> Simple single-column predicates, and the column can be pushed down, such as a = v1.
+         * <li> AND and OR predicates, and the sub-predicates are all pushable, such as a = v1 OR (b = v2 AND c = v3).
+         * <li> The other predicates are not pushable, such as a + b = v1, a = v1 OR a + b = v2.
+         * </ul>
+         *
+         * <p> The columns in the predicates that cannot be pushed down need to be retained, because these columns are
+         * used in the stage after scan.
+         */
+        private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
+                                            List<ScalarOperator> predicates, OlapTable referenceTable) {
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            if (!sessionVariable.isEnableFilterUnusedColumnsInScanStage()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return;
             }
 
             // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
             // - All the keys columns must be retained to merge and aggregate rows.
             // - Value columns can only be used after merging and aggregating.
+<<<<<<< HEAD
             MaterializedIndexMeta materializedIndexMeta =
                     referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+=======
+            MaterializedIndexMeta materializedIndexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (materializedIndexMeta.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
                 return;
             }
 
+<<<<<<< HEAD
             List<ColumnRefOperator> outputColumns = node.getOutputColumns();
             // if outputColumns is empty, skip this optimization
             if (outputColumns.isEmpty()) {
@@ -529,10 +614,61 @@ public class PlanFragmentBuilder {
                 } else {
                     for (int cid : usedColumns.getColumnIds()) {
                         complexPredColumnIds.add(cid);
+=======
+            // ------------------------------------------------------------------------------------
+            // Get outputColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> outputColumnIds = node.getOutputColumns().stream()
+                    .map(ColumnRefOperator::getId)
+                    .collect(Collectors.toSet());
+            // Empty outputColumnIds means that the expression after ScanNode does not need any column from ScanNode.
+            // However, at least one column needs to be output, so choose any column as the output column.
+            if (outputColumnIds.isEmpty()) {
+                if (!scanNode.getSlots().isEmpty()) {
+                    outputColumnIds.add(scanNode.getSlots().get(0).getId().asInt());
+                }
+            }
+
+            // ------------------------------------------------------------------------------------
+            // Get nonPushdownColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> nonPushdownColumnIds = Collections.emptySet();
+            if (materializedIndexMeta.getKeysType().isAggregationFamily() ||
+                    materializedIndexMeta.getKeysType() == KeysType.PRIMARY_KEYS) {
+                Map<String, Integer> columnNameToId = scanNode.getSlots().stream().collect(Collectors.toMap(
+                        slot -> slot.getColumn().getName(),
+                        slot -> slot.getId().asInt()
+                ));
+                nonPushdownColumnIds = materializedIndexMeta.getSchema().stream()
+                        .filter(col -> !col.isKey())
+                        .map(Column::getName)
+                        .map(columnNameToId::get)
+                        .collect(Collectors.toSet());
+            }
+
+            // ------------------------------------------------------------------------------------
+            // Get pushdownPredUsedColumnIds and nonPushdownPredUsedColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> pushdownPredUsedColumnIds = new HashSet<>();
+            Set<Integer> nonPushdownPredUsedColumnIds = new HashSet<>();
+            for (ScalarOperator predicate : predicates) {
+                ColumnRefSet usedColumns = predicate.getUsedColumns();
+                boolean isPushdown =
+                        DecodeVisitor.isSimpleStrictPredicate(predicate, sessionVariable.isEnablePushdownOrPredicate())
+                                && Arrays.stream(usedColumns.getColumnIds()).noneMatch(nonPushdownColumnIds::contains);
+                if (isPushdown) {
+                    for (int cid : usedColumns.getColumnIds()) {
+                        pushdownPredUsedColumnIds.add(cid);
+                    }
+                } else {
+                    for (int cid : usedColumns.getColumnIds()) {
+                        nonPushdownPredUsedColumnIds.add(cid);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
 
+<<<<<<< HEAD
             Set<Integer> unUsedOutputColumnIds = new HashSet<>();
             for (Integer newCid : singlePredColumnIds) {
                 if (!complexPredColumnIds.contains(newCid) && !outputColumnIds.contains(newCid)) {
@@ -541,6 +677,16 @@ public class PlanFragmentBuilder {
             }
 
             scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
+=======
+            // ------------------------------------------------------------------------------------
+            // Get unUsedOutputColumnIds which are in pushdownPredUsedColumnIds
+            // but not in nonPushdownPredUsedColumnIds and outputColumnIds.
+            // ------------------------------------------------------------------------------------
+            Set<Integer> unUsedOutputColumnIds = pushdownPredUsedColumnIds.stream()
+                    .filter(cid -> !nonPushdownPredUsedColumnIds.contains(cid) && !outputColumnIds.contains(cid))
+                    .collect(Collectors.toSet());
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         @Override
@@ -797,6 +943,12 @@ public class PlanFragmentBuilder {
             scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
             scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
+<<<<<<< HEAD
+=======
+            scanNode.setGtid(node.getGtid());
+            scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
+            scanNode.setSample(node.getSample());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             currentExecGroup.add(scanNode);
             // set tablet
             try {
@@ -834,7 +986,11 @@ public class PlanFragmentBuilder {
                         if (CollectionUtils.isEmpty(selectTabletIds)) {
                             continue;
                         }
+<<<<<<< HEAD
                         selectedNonEmptyPartitionIds.add(physicalPartition.getId());
+=======
+                        selectedNonEmptyPartitionIds.add(partitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedTable = physicalPartition.getIndex(selectedIndexId);
@@ -851,7 +1007,11 @@ public class PlanFragmentBuilder {
                 }
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
                 scanNode.setTotalTabletsNum(totalTabletsNum);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(
                         "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
             }
@@ -950,6 +1110,10 @@ public class PlanFragmentBuilder {
 
             MetaScanNode scanNode = new MetaScanNode(context.getNextNodeId(),
                     tupleDescriptor, (OlapTable) scan.getTable(), scan.getAggColumnIdToNames(),
+<<<<<<< HEAD
+=======
+                    scan.getSelectPartitionNames(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     context.getConnectContext().getCurrentWarehouseId());
             scanNode.computeRangeLocations();
             scanNode.computeStatistics(optExpression.getStatistics());
@@ -1198,11 +1362,19 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
 
+<<<<<<< HEAD
                 deltaLakeScanNode.preProcessDeltaLakePredicate(node.getPredicate());
                 List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
                         .map(ColumnRefOperator::getName)
                         .collect(Collectors.toList());
                 deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl(), fieldNames);
+=======
+                List<String> fieldNames = node.getColRefToColumnMetaMap().keySet().stream()
+                        .map(ColumnRefOperator::getName)
+                        .collect(Collectors.toList());
+                deltaLakeScanNode.setupScanRangeSource(node.getPredicate(), fieldNames,
+                        context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
@@ -1210,7 +1382,11 @@ public class PlanFragmentBuilder {
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("Delta scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1367,8 +1543,22 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalIcebergScan(OptExpression optExpression, ExecPlan context) {
+<<<<<<< HEAD
             PhysicalIcebergScanOperator node = (PhysicalIcebergScanOperator) optExpression.getOp();
 
+=======
+            return buildIcebergScanNode(optExpression, context);
+        }
+
+        @Override
+        public PlanFragment visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, ExecPlan context) {
+            return buildIcebergScanNode(optExpression, context);
+        }
+
+
+        public PlanFragment buildIcebergScanNode(OptExpression expression, ExecPlan context) {
+            PhysicalScanOperator node = expression.getOp().cast();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Table referenceTable = node.getTable();
             context.getDescTbl().addReferencedTable(referenceTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
@@ -1377,12 +1567,30 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+<<<<<<< HEAD
             TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
             IcebergScanNode icebergScanNode =
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode",
                             equalityDeleteTupleDesc);
             icebergScanNode.computeStatistics(optExpression.getStatistics());
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+=======
+            boolean isEqDeleteScan = node.getOpType() != OperatorType.PHYSICAL_ICEBERG_SCAN;
+            IcebergScanNode icebergScanNode;
+            String planNodeName = isEqDeleteScan ? "IcebergEqualityDeleteScanNode" : "IcebergScanNode";
+            if (!isEqDeleteScan) {
+                PhysicalIcebergScanOperator op = node.cast();
+                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
+                        op.getTableFullMORParams(), op.getMORParams());
+            } else {
+                PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
+                icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
+                        op.getTableFullMORParams(), op.getMORParams());
+            }
+
+            icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            icebergScanNode.computeStatistics(expression.getStatistics());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             currentExecGroup.add(icebergScanNode, true);
             try {
                 // set predicate
@@ -1394,12 +1602,26 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
 
+<<<<<<< HEAD
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
             } catch (UserException e) {
+=======
+                ScalarOperator icebergPredicate = !isEqDeleteScan ? node.getPredicate() :
+                        ((PhysicalIcebergEqualityDeleteScanOperator) node).getOriginPredicate();
+                icebergScanNode.preProcessIcebergPredicate(icebergPredicate);
+                icebergScanNode.setSnapshotId(node.getTableVersionRange().end());
+                icebergScanNode.setupScanRangeLocations(
+                        context.getConnectContext().getSessionVariable().isEnableConnectorIncrementalScanRanges());
+                if (!isEqDeleteScan) {
+                    HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
+                    prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
+                }
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("Iceberg scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1420,7 +1642,11 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalIcebergMetadataScan(OptExpression optExpression, ExecPlan context) {
             PhysicalIcebergMetadataScanOperator node = (PhysicalIcebergMetadataScanOperator) optExpression.getOp();
 
+<<<<<<< HEAD
             LogicalIcebergMetadataTable table = (LogicalIcebergMetadataTable) node.getTable();
+=======
+            MetadataTable table = (MetadataTable) node.getTable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             context.getDescTbl().addReferencedTable(table);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(table);
@@ -1445,7 +1671,11 @@ public class PlanFragmentBuilder {
 
             IcebergMetadataScanNode metadataScanNode =
                     new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
+<<<<<<< HEAD
                             "IcebergMetadataScanNode", node.getTemporalClause());
+=======
+                            "IcebergMetadataScanNode", node.getTableVersionRange());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 ScalarOperatorToExpr.FormatterContext formatterContext =
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
@@ -1759,7 +1989,11 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 scanNode.assignNodes();
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
             scanNode.setShardScanRanges(scanNode.computeShardLocations(node.getSelectedIndex()));
@@ -2232,6 +2466,10 @@ public class PlanFragmentBuilder {
             }
             currentExecGroup.add(aggregationNode);
             inputFragment.setPlanRoot(aggregationNode);
+<<<<<<< HEAD
+=======
+            inputFragment.getPlanRoot().forceCollectExecStats();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             inputFragment.mergeQueryDictExprs(originalInputFragment.getQueryGlobalDictExprs());
             inputFragment.mergeQueryGlobalDicts(originalInputFragment.getQueryGlobalDicts());
             return inputFragment;
@@ -2322,6 +2560,7 @@ public class PlanFragmentBuilder {
             currentExecGroup.add(exchangeNode, true);
             DataPartition dataPartition;
             if (DistributionSpec.DistributionType.GATHER.equals(distribution.getDistributionSpec().getType())) {
+<<<<<<< HEAD
                 exchangeNode.setNumInstances(1);
                 dataPartition = DataPartition.UNPARTITIONED;
             } else if (DistributionSpec.DistributionType.BROADCAST
@@ -2330,6 +2569,13 @@ public class PlanFragmentBuilder {
                 dataPartition = DataPartition.UNPARTITIONED;
             } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
                 exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
+=======
+                dataPartition = DataPartition.UNPARTITIONED;
+            } else if (DistributionSpec.DistributionType.BROADCAST
+                    .equals(distribution.getDistributionSpec().getType())) {
+                dataPartition = DataPartition.UNPARTITIONED;
+            } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<ColumnRefOperator> partitionColumns =
                         getShuffleColumns((HashDistributionSpec) distribution.getDistributionSpec());
                 List<Expr> distributeExpressions =
@@ -2339,7 +2585,10 @@ public class PlanFragmentBuilder {
                 dataPartition = DataPartition.hashPartitioned(distributeExpressions);
             } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
                     distribution.getDistributionSpec().getType())) {
+<<<<<<< HEAD
                 exchangeNode.setNumInstances(inputFragment.getPlanRoot().getNumInstances());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 dataPartition = DataPartition.RANDOM;
             } else {
                 throw new StarRocksPlannerException("Unsupport exchange type : "
@@ -2370,7 +2619,11 @@ public class PlanFragmentBuilder {
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
                         topN.getPartitionLimit(), topN.getOrderSpec(),
+<<<<<<< HEAD
                         topN.getTopNType(), topN.getLimit(), topN.getOffset(), inputFragment);
+=======
+                        topN.getTopNType(), topN.getLimit(), topN.getOffset(), topN.getPreAggCall(), inputFragment);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 return buildFinalTopNFragment(context, topN.getTopNType(), topN.getLimit(), topN.getOffset(),
                         inputFragment, optExpr);
@@ -2384,7 +2637,10 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     DistributionSpec.DistributionType.GATHER);
 
+<<<<<<< HEAD
             exchangeNode.setNumInstances(1);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DataPartition dataPartition = DataPartition.UNPARTITIONED;
             exchangeNode.setDataPartition(dataPartition);
 
@@ -2417,12 +2673,21 @@ public class PlanFragmentBuilder {
         private PlanFragment buildPartialTopNFragment(OptExpression optExpr, ExecPlan context,
                                                       List<ColumnRefOperator> partitionByColumns, long partitionLimit,
                                                       OrderSpec orderSpec, TopNType topNType, long limit, long offset,
+<<<<<<< HEAD
+=======
+                                                      Map<ColumnRefOperator, CallOperator> preAggFnCalls,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                       PlanFragment inputFragment) {
             List<Expr> resolvedTupleExprs = Lists.newArrayList();
             List<Expr> partitionExprs = Lists.newArrayList();
             List<Expr> sortExprs = Lists.newArrayList();
             TupleDescriptor sortTuple = context.getDescTbl().createTupleDescriptor();
 
+<<<<<<< HEAD
+=======
+            ColumnRefSet outputColumnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns().clone();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (CollectionUtils.isNotEmpty(partitionByColumns)) {
                 for (ColumnRefOperator partitionByColumn : partitionByColumns) {
                     Expr expr = ScalarOperatorToExpr.buildExecExpression(partitionByColumn,
@@ -2446,6 +2711,7 @@ public class PlanFragmentBuilder {
                         .put(ordering.getColumnRef(), new SlotRef(ordering.getColumnRef().toString(), slotDesc));
                 resolvedTupleExprs.add(sortExpr);
                 sortExprs.add(new SlotRef(slotDesc));
+<<<<<<< HEAD
             }
 
             ColumnRefSet columnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
@@ -2469,6 +2735,55 @@ public class PlanFragmentBuilder {
                     context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDesc));
                     resolvedTupleExprs.add(outputExpr);
                 }
+=======
+
+                outputColumnRefSet.except(List.of(ordering.getColumnRef()));
+            }
+
+            List<Expr> preAggFnCallExprs = new ArrayList<>();
+            List<SlotId> preAggOutputColumnIds = new ArrayList<>();
+            TupleDescriptor preAggTuple = context.getDescTbl().createTupleDescriptor();
+            if (preAggFnCalls != null) {
+                for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggFnCalls.entrySet()) {
+                    Expr preAggFunction = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+
+                    preAggFnCallExprs.add(preAggFunction);
+
+                    SlotId outputColumnId = new SlotId(entry.getKey().getId());
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(preAggTuple, outputColumnId);
+                    slotDesc.initFromExpr(preAggFunction);
+                    slotDesc.setIsMaterialized(true);
+                    slotDesc.setIsNullable(preAggFunction.isNullable());
+                    slotDesc.setType(preAggFunction.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDesc));
+
+                    //                    resolvedTupleExprs.add(preAggFunction);
+                    outputColumnRefSet.except(List.of(entry.getKey()));
+
+                    preAggOutputColumnIds.add(outputColumnId);
+                }
+            }
+
+            for (int i = 0; i < outputColumnRefSet.getColumnIds().length; ++i) {
+                /*
+                 * Add column not be used in ordering
+                 */
+                ColumnRefOperator columnRef = columnRefFactory.getColumnRef(outputColumnRefSet.getColumnIds()[i]);
+                Expr outputExpr = ScalarOperatorToExpr.buildExecExpression(columnRef,
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+
+                SlotDescriptor slotDesc =
+                        context.getDescTbl().addSlotDescriptor(sortTuple, new SlotId(columnRef.getId()));
+                slotDesc.initFromExpr(outputExpr);
+                slotDesc.setIsMaterialized(true);
+                slotDesc.setIsNullable(outputExpr.isNullable());
+                slotDesc.setType(outputExpr.getType());
+
+                context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDesc));
+                resolvedTupleExprs.add(outputExpr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             sortTuple.computeMemLayout();
@@ -2476,6 +2791,12 @@ public class PlanFragmentBuilder {
                     orderSpec.getOrderDescs().stream().map(Ordering::isAscending).collect(Collectors.toList()),
                     orderSpec.getOrderDescs().stream().map(Ordering::isNullsFirst).collect(Collectors.toList()));
             sortInfo.setMaterializedTupleInfo(sortTuple, resolvedTupleExprs);
+<<<<<<< HEAD
+=======
+            if (preAggFnCalls != null) {
+                sortInfo.setPreAggTupleDesc_(preAggTuple);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             SortNode sortNode = new SortNode(
                     context.getNextNodeId(),
@@ -2485,6 +2806,11 @@ public class PlanFragmentBuilder {
                     limit == Operator.DEFAULT_LIMIT,
                     0);
             sortNode.setTopNType(topNType);
+<<<<<<< HEAD
+=======
+            sortNode.setPreAggFnCalls(preAggFnCallExprs);
+            sortNode.setPreAggOutputColumnId(preAggOutputColumnIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sortNode.setLimit(limit);
             sortNode.setOffset(offset);
             sortNode.resolvedTupleExprs = resolvedTupleExprs;
@@ -2521,9 +2847,17 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+<<<<<<< HEAD
             ExecGroup leftExecGroup = this.currentExecGroup;
             this.currentExecGroup = execGroups.newExecGroup();
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+=======
+            leftFragment.getPlanRoot().forceCollectExecStats();
+            ExecGroup leftExecGroup = this.currentExecGroup;
+            this.currentExecGroup = execGroups.newExecGroup();
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            rightFragment.getPlanRoot().forceCollectExecStats();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return visitPhysicalJoin(leftFragment, rightFragment, leftExecGroup, currentExecGroup, optExpr, context);
         }
 
@@ -2558,9 +2892,17 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+<<<<<<< HEAD
             ExecGroup leftExecGroup = this.currentExecGroup;
             this.currentExecGroup = execGroups.newExecGroup();
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+=======
+            leftFragment.getPlanRoot().forceCollectExecStats();
+            ExecGroup leftExecGroup = this.currentExecGroup;
+            this.currentExecGroup = execGroups.newExecGroup();
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+            rightFragment.getPlanRoot().forceCollectExecStats();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.currentExecGroup = leftExecGroup;
 
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
@@ -2891,6 +3233,14 @@ public class PlanFragmentBuilder {
             for (Map.Entry<ColumnRefOperator, CallOperator> analyticCall : node.getAnalyticCall().entrySet()) {
                 Expr analyticFunction = ScalarOperatorToExpr.buildExecExpression(analyticCall.getValue(),
                         new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+<<<<<<< HEAD
+=======
+                // if local partition topn can preAgg, then it's output is binary format
+                // which means analytic node should call function's merge method instead of update
+                if (node.isInputIsBinary()) {
+                    ((FunctionCallExpr) analyticFunction).setMergeAggFn();
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 analyticFnCalls.add(analyticFunction);
 
                 SlotDescriptor slotDesc = context.getDescTbl()
@@ -3171,6 +3521,29 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
+<<<<<<< HEAD
+=======
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
+            if (filter.getPredicateCommonOperators() != null) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : filter.getPredicateCommonOperators().entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                    filter.getPredicateCommonOperators()));
+
+                    commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3180,6 +3553,10 @@ public class PlanFragmentBuilder {
                     new SelectNode(context.getNextNodeId(), inputFragment.getPlanRoot(), predicates);
             selectNode.setLimit(filter.getLimit());
             selectNode.computeStatistics(optExpr.getStatistics());
+<<<<<<< HEAD
+=======
+            selectNode.setCommonSlotMap(commonSubOperatorMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             currentExecGroup.add(selectNode);
             inputFragment.setPlanRoot(selectNode);
             return inputFragment;
@@ -3239,7 +3616,10 @@ public class PlanFragmentBuilder {
                     // use merge-exchange
                     ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(), child.getPlanRoot(),
                             DistributionSpec.DistributionType.GATHER);
+<<<<<<< HEAD
                     exchangeNode.setNumInstances(1);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     exchangeNode.setDataPartition(DataPartition.UNPARTITIONED);
                     this.currentExecGroup.add(exchangeNode, true);
 
@@ -3279,8 +3659,12 @@ public class PlanFragmentBuilder {
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
                     .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
+<<<<<<< HEAD
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());
+=======
+            exchangeNode.forceCollectExecStats();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             PlanFragment consumeFragment = new PlanFragment(context.getNextFragmentId(), exchangeNode,
                     cteFragment.getDataPartition());
@@ -3319,6 +3703,10 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalCTEProduce(OptExpression optExpression, ExecPlan context) {
             PlanFragment child = visit(optExpression.inputAt(0), context);
+<<<<<<< HEAD
+=======
+            child.getPlanRoot().forceCollectExecStats();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             int cteId = ((PhysicalCTEProduceOperator) optExpression.getOp()).getCteId();
             context.getFragments().remove(child);
             MultiCastPlanFragment cteProduce = new MultiCastPlanFragment(child);
@@ -3648,7 +4036,11 @@ public class PlanFragmentBuilder {
             currentExecGroup.add(binlogScanNode, true);
             try {
                 binlogScanNode.computeScanRanges();
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(
                         "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
             }
@@ -3708,10 +4100,17 @@ public class PlanFragmentBuilder {
             prepareContextSlots(node, context, tupleDesc);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
+<<<<<<< HEAD
             files.add(table.fileList());
             long warehouseId = context.getConnectContext().getCurrentWarehouseId();
             FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
                     "FileScanNode", files, table.fileList().size(), warehouseId);
+=======
+            files.add(table.loadFileList());
+            long warehouseId = context.getConnectContext().getCurrentWarehouseId();
+            FileScanNode scanNode = new FileScanNode(context.getNextNodeId(), tupleDesc,
+                    "FileScanNode", files, table.loadFileList().size(), warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Set<String> scanColumns = tupleDesc.getSlots().stream().map(SlotDescriptor::getColumn).map(Column::getName).collect(
                     Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
@@ -3719,14 +4118,22 @@ public class PlanFragmentBuilder {
             try {
                 BrokerFileGroup grp = new BrokerFileGroup(table, scanColumns);
                 fileGroups.add(grp);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);
             }
 
             int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
+<<<<<<< HEAD
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, false, dop);
+=======
+            scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             scanNode.setUseVectorizedLoad(true);
             // table function enable flexible column mapping by default.
             scanNode.setFlexibleColumnMapping(true);
@@ -3736,7 +4143,11 @@ public class PlanFragmentBuilder {
             try {
                 scanNode.init(analyzer);
                 scanNode.finalizeStats(analyzer);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);

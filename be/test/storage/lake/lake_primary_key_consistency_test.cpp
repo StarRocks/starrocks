@@ -406,7 +406,11 @@ public:
                     delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
             _replayer->erase(chunk_index.first);
         }
+<<<<<<< HEAD
         RETURN_IF_ERROR(delta_writer->finish());
+=======
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
@@ -440,7 +444,11 @@ public:
                 _replayer->partial_update(chunk_index.first);
             }
         }
+<<<<<<< HEAD
         RETURN_IF_ERROR(delta_writer->finish());
+=======
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
@@ -470,7 +478,11 @@ public:
                     delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
             _replayer->condition_update(chunk_index.first, merge_condition);
         }
+<<<<<<< HEAD
         RETURN_IF_ERROR(delta_writer->finish());
+=======
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
@@ -508,7 +520,11 @@ public:
                                                     chunk_index.second.size()));
                 _replayer->erase(chunk_index.first);
             }
+<<<<<<< HEAD
             RETURN_IF_ERROR(delta_writer->finish());
+=======
+            RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             delta_writer->close();
         }
         // Batch Publish version
@@ -533,7 +549,11 @@ public:
         RETURN_IF_ERROR(delta_writer->open());
         RETURN_IF_ERROR(
                 delta_writer->write(*(chunk_index.first), chunk_index.second.data(), chunk_index.second.size()));
+<<<<<<< HEAD
         RETURN_IF_ERROR(delta_writer->finish());
+=======
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delta_writer->close();
         // Publish version
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));

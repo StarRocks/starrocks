@@ -65,8 +65,13 @@ struct SimpleJsonPath {
 
 class JsonFunctions {
 public:
+<<<<<<< HEAD
     [[nodiscard]] static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     [[nodiscard]] static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+=======
+    static Status json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * @param: [json_string, tagged_value]
@@ -161,6 +166,7 @@ public:
      */
     DEFINE_VECTORIZED_FN(to_json);
 
+<<<<<<< HEAD
     [[nodiscard]] static Status native_json_path_prepare(FunctionContext* context,
                                                          FunctionContext::FunctionStateScope scope);
     [[nodiscard]] static Status native_json_path_close(FunctionContext* context,
@@ -174,6 +180,17 @@ public:
 
     [[nodiscard]] static Status parse_json_paths(const std::string& path_strings,
                                                  std::vector<SimpleJsonPath>* parsed_paths);
+=======
+    static Status native_json_path_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status native_json_path_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    // extract_from_object extracts value from object according to the json path.
+    // Now, we do not support complete functions of json path.
+    static Status extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
+                                      simdjson::ondemand::value* value) noexcept;
+
+    static Status parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // jsonpaths_to_string serializes json patsh to std::string. Setting sub_index to serializes paritially json paths.
     static std::string jsonpaths_to_string(const std::vector<SimpleJsonPath>& jsonpaths, size_t sub_index = -1);
@@ -189,7 +206,11 @@ public:
 
 private:
     template <LogicalType ResultType>
+<<<<<<< HEAD
     [[nodiscard]] static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
+=======
+    static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     template <LogicalType RresultType>
     DEFINE_VECTORIZED_FN(_flat_json_query_impl);
@@ -229,8 +250,13 @@ private:
      * @return: JsonColumn
      */
 
+<<<<<<< HEAD
     [[nodiscard]] static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
                                                   std::vector<SimpleJsonPath>* parsed_paths);
+=======
+    static Status _get_parsed_paths(const std::vector<std::string>& path_exprs,
+                                    std::vector<SimpleJsonPath>* parsed_paths);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

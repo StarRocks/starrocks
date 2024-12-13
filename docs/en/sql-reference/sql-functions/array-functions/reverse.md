@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # reverse
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Reverses a string or array. Returns a string or array with the characters in the string or array elements in reverse order.
 

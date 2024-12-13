@@ -741,7 +741,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
         int partitionBatchNum = Config.tablet_checker_partition_batch_num;
         int partitionChecked = 0;
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long lockStart = System.nanoTime();
         try {
             TABLE:
@@ -768,8 +772,13 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     if (partitionChecked % partitionBatchNum == 0) {
                         lockTotalTime += System.nanoTime() - lockStart;
                         // release lock, so that lock can be acquired by other threads.
+<<<<<<< HEAD
                         locker.unLockDatabase(db, LockType.READ);
                         locker.lockDatabase(db, LockType.READ);
+=======
+                        locker.unLockDatabase(db.getId(), LockType.READ);
+                        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         lockStart = System.nanoTime();
                         if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return new ColocateMatchResult(lockTotalTime, Status.UNKNOWN);
@@ -789,10 +798,18 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         continue;
                     }
 
+<<<<<<< HEAD
                     long visibleVersion = partition.getVisibleVersion();
                     // Here we only get VISIBLE indexes. All other indexes are not queryable.
                     // So it does not matter if tablets of other indexes are not matched.
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+                    long visibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
+                    // Here we only get VISIBLE indexes. All other indexes are not queryable.
+                    // So it does not matter if tablets of other indexes are not matched.
+                    for (MaterializedIndex index :
+                            partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
                                 backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
                         int idx = 0;
@@ -885,7 +902,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
 
         } finally {
             lockTotalTime += System.nanoTime() - lockStart;
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return new ColocateMatchResult(lockTotalTime - waitTotalTimeMs * 1000000,

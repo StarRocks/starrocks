@@ -159,6 +159,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
     EXPECT_EQ(count, num_rows);
+<<<<<<< HEAD
 
     // add useless string to partial segment
     WritableFileOptions wopts2{
@@ -207,6 +208,8 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
     EXPECT_EQ(count, num_rows);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

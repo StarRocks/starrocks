@@ -23,11 +23,17 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 using PrepareFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 using CloseFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 using ScalarFunction = StatusOr<ColumnPtr> (*)(FunctionContext* context, const Columns& columns);
+=======
+using PrepareFunction = std::function<Status(FunctionContext* context, FunctionContext::FunctionStateScope scope)>;
+using CloseFunction = std::function<Status(FunctionContext* context, FunctionContext::FunctionStateScope scope)>;
+using ScalarFunction = std::function<StatusOr<ColumnPtr>(FunctionContext* context, const Columns& columns)>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct FunctionDescriptor {
     std::string name;

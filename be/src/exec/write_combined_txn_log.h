@@ -18,6 +18,10 @@
 
 namespace starrocks {
 class CombinedTxnLogPB;
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status write_combined_txn_log(const CombinedTxnLogPB& logs);
 
 } // namespace starrocks

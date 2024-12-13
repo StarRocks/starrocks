@@ -26,8 +26,13 @@ using SimdJsonValue = simdjson::ondemand::value;
 using SimdJsonObject = simdjson::ondemand::object;
 
 // Convert SIMD-JSON object/value to a JsonValue
+<<<<<<< HEAD
 [[nodiscard]] StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
 [[nodiscard]] StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
+=======
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonValue value);
+StatusOr<JsonValue> convert_from_simdjson(SimdJsonObject value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // like getNumber, but don't check
 template <LogicalType ResultType>

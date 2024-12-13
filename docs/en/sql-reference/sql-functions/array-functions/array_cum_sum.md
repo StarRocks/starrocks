@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_cum_sum
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the cumulative sums of elements in an array.
 

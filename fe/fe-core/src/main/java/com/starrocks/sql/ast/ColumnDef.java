@@ -48,6 +48,10 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TypeDef;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.AggregateFunction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -55,6 +59,10 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.combinator.AggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.persist.ColumnIdExpr;
@@ -130,6 +138,10 @@ public class ColumnDef implements ParseNode {
     private final String defaultCharset = "utf8";
     private String charsetName = defaultCharset;
     private AggregateType aggregateType;
+<<<<<<< HEAD
+=======
+    private AggStateDesc aggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean isKey;
     // Primary-key column should obey the not-null constraint. When creating a table, the not-null constraint will add to the primary-key column default. If the user specifies NULL explicitly, semantics analysis will report an error.
     // Now, isAllowNull is used to indicate a null constraint hold or not. Primary-key and non-primary-key columns obey different constraints, so the isAllowNull can not be assigned a default value.
@@ -140,15 +152,24 @@ public class ColumnDef implements ParseNode {
     private Expr generatedColumnExpr;
     private DefaultValueDef defaultValueDef;
     private final String comment;
+<<<<<<< HEAD
+=======
+    private boolean isPartitionColumn = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final NodePosition pos;
 
     public ColumnDef(String name, TypeDef typeDef) {
+<<<<<<< HEAD
         this(name, typeDef, null, false, null, false, DefaultValueDef.NOT_SET,
+=======
+        this(name, typeDef, null, false, null, null, false, DefaultValueDef.NOT_SET,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 null, null, "", NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, Boolean isAllowNull) {
+<<<<<<< HEAD
         this(name, typeDef, null, false, null, isAllowNull, DefaultValueDef.NOT_SET,
                 null, null, "", NodePosition.ZERO);
     }
@@ -156,18 +177,38 @@ public class ColumnDef implements ParseNode {
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
         this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef,
+=======
+        this(name, typeDef, null, false, null, null, isAllowNull, DefaultValueDef.NOT_SET,
+                null, null, "", NodePosition.ZERO);
+    }
+
+    public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
+        this(name, typeDef, null, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 null, null, comment, NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
+<<<<<<< HEAD
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement,
                      Expr generatedColumnExpr, String comment) {
         this(name, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef, isAutoIncrement,
+=======
+                     AggStateDesc aggStateDesc,
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement,
+                     Expr generatedColumnExpr, String comment) {
+        this(name, typeDef, charsetName, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, isAutoIncrement,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 generatedColumnExpr, comment, NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
+<<<<<<< HEAD
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, 
+=======
+                     AggStateDesc aggStateDesc, Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                      Expr generatedColumnExpr, String comment, NodePosition pos) {
         this.pos = pos;
         this.name = name;
@@ -179,6 +220,10 @@ public class ColumnDef implements ParseNode {
         }
         this.isKey = isKey;
         this.aggregateType = aggregateType;
+<<<<<<< HEAD
+=======
+        this.aggStateDesc = aggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (isAllowNull == null) {
             this.isAllowNull = true;
             this.isAllowNullImplicit = true;
@@ -262,6 +307,13 @@ public class ColumnDef implements ParseNode {
         this.isKey = isKey;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsPartitionColumn(boolean isPartitionColumn) {
+        this.isPartitionColumn = isPartitionColumn;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TypeDef getTypeDef() {
         return typeDef;
     }
@@ -286,7 +338,11 @@ public class ColumnDef implements ParseNode {
         if (name == null || typeDef == null) {
             throw new AnalysisException("No column name or column type in column definition");
         }
+<<<<<<< HEAD
         FeNameFormat.checkColumnName(name);
+=======
+        FeNameFormat.checkColumnName(name, isPartitionColumn);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // When string type length is not assigned, it needs to be assigned to 1.
         if (typeDef.getType().isScalarType()) {
@@ -347,27 +403,68 @@ public class ColumnDef implements ParseNode {
                 throw new AnalysisException(
                         String.format("Invalid aggregate function '%s' for '%s'", aggregateType, name));
             }
+<<<<<<< HEAD
+=======
+            // check agg_state_desc
+            if (aggregateType == AggregateType.AGG_STATE_UNION) {
+                if (aggStateDesc == null) {
+                    throw new AnalysisException(
+                            String.format("Invalid aggregate function '%s' for '%s'", aggregateType, name));
+                }
+                // Ensure agg_state_desc is compatible with type
+                AggregateFunction aggFunc = aggStateDesc.getAggregateFunction();
+                if (aggFunc == null) {
+                    throw new AnalysisException(
+                            String.format("Invalid aggregate function '%s' for '%s': aggregate function is not found",
+                                    aggregateType, name));
+                }
+                if (!aggFunc.getIntermediateTypeOrReturnType().isFullyCompatible(type)) {
+                    throw new AnalysisException(
+                            String.format("Invalid aggregate function '%s' for '%s': return type is not compatible, colunm " +
+                                            "type: %s, return type: %s",
+                                    aggregateType, name, type, aggFunc.getReturnType()));
+                }
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (type.isBitmapType() || type.isHllType() || type.isPercentile()) {
             throw new AnalysisException(String.format("No aggregate function specified for '%s'", name));
         }
 
+<<<<<<< HEAD
+=======
+        if (aggStateDesc != null) {
+            if (defaultValueDef.isSet) {
+                throw new AnalysisException(String.format("Invalid default value for '%s'", name));
+            }
+            // not set default value
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (type.isHllType()) {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
             defaultValueDef = DefaultValueDef.EMPTY_VALUE;
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (type.isBitmapType()) {
             if (defaultValueDef.isSet) {
                 throw new AnalysisException(String.format("Invalid default value for '%s'", name));
             }
             defaultValueDef = DefaultValueDef.EMPTY_VALUE;
         }
+<<<<<<< HEAD
 
         // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
         // If default value is not set, we set it NULL
         if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
+=======
+        if (aggregateType == AggregateType.REPLACE_IF_NOT_NULL) {
+            // If aggregate type is REPLACE_IF_NOT_NULL, we set it nullable.
+            // If default value is not set, we set it NULL
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             isAllowNull = true;
             if (!defaultValueDef.isSet) {
                 defaultValueDef = DefaultValueDef.NULL_DEFAULT_VALUE;
@@ -515,8 +612,13 @@ public class ColumnDef implements ParseNode {
     }
 
     public Column toColumn(Table table) {
+<<<<<<< HEAD
         Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment,
                 Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+=======
+        Column col = new Column(name, typeDef.getType(), isKey, aggregateType, aggStateDesc,
+                isAllowNull, defaultValueDef, comment, Column.COLUMN_UNIQUE_ID_INIT_VALUE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         col.setIsAutoIncrement(isAutoIncrement);
         if (generatedColumnExpr != null) {
             if (table != null) {

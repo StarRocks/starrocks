@@ -4,6 +4,44 @@ displayed_sidebar: docs
 
 # StarRocks version 2.5
 
+<<<<<<< HEAD
+=======
+## 2.5.22
+
+发布日期：2024 年 6 月 20 日
+
+### 功能优化
+
+- 优化一个查询在建执行计划时的分区检查逻辑，对于涉及很多表的复杂查询，能减少较多时间。[#46781](https://github.com/StarRocks/starrocks/pull/46781)
+
+### 问题修复
+
+修复了如下问题：
+
+- 函数调用中没有处理内部子逻辑的错误。[#42590](https://github.com/StarRocks/starrocks/pull/42590)
+- 如果内部数据统计没有定期清理，将导致预估信息不准确，进而导致构建了不合理的查询计划，使得查询变慢、内存使用增加。[#45839](https://github.com/StarRocks/starrocks/pull/45839)
+- 使用非最新的直方图统计信息，可能会导致除零错误。（用户可以通过使用 Min/Max 的估计统计来避免）。[#45614](https://github.com/StarRocks/starrocks/pull/45614)
+
+## 2.5.21
+
+发布日期：2024 年 5 月 15 日
+
+### 功能优化
+
+- 优化物化视图刷新时对于 db 锁的使用，避免死锁。[#42801](https://github.com/StarRocks/starrocks/pull/42801)
+- 访问 S3 时，可以使用 `s3a://`，也可以使用 `s3://`。[#42460](https://github.com/StarRocks/starrocks/pull/42460)
+
+### 问题修复
+
+修复了如下问题：
+
+- 表进行 Schema Change 时，可能会导致前缀索引排序有问题，从而导致基于前缀索引的查询结果不对。[#44941](https://github.com/StarRocks/starrocks/pull/44941)
+- Routine Load 任务因 Kafka 集群异常而暂停后，后台还是会不停尝试连接该异常 Kafka，从而导致 StarRocks 集群上的其他消费正常 Kafka 消息的 Routine Load 任务无法消费。[#45029](https://github.com/StarRocks/starrocks/pull/45029)
+- 查询 `information_schema` 中的视图时，持有 db 锁的时间太长，导致查询时间整体变长。[#45392](https://github.com/StarRocks/starrocks/pull/45392)
+- 开启 Query Cache 后，SQL 有 Having 子句时可能会导致 BE 节点 crash。（可以先通过 `set enable_query_cache=false` 关闭 Query Cache。）[#43823](https://github.com/StarRocks/starrocks/pull/43823)
+- Query Cache 开启时，一些查询可能会返回 `All slotIds should be remapped` 的错误信息。[#42861](https://github.com/StarRocks/starrocks/pull/42861)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## 2.5.20
 
 发布日期：2024 年 3 月 22 日
@@ -35,7 +73,10 @@ displayed_sidebar: docs
 
 ### 新增特性
 
+<<<<<<< HEAD
 - 新增模糊/正则匹配函数：[regexp_extract_all](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/)。
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 新增 Bitmap 取值的处理函数：serialize、deserialize、serializeToString。 [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
 
 ### 功能优化

@@ -26,7 +26,11 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
+<<<<<<< HEAD
 #include "storage/inverted/index_descriptor.hpp"
+=======
+#include "storage/index/index_descriptor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -172,8 +176,15 @@ public:
                 Rowset::segment_file_path(rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id, 0);
         std::string index_path = IndexDescriptor::inverted_index_file_path(
                 rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id.to_string(), 0, 100);
+<<<<<<< HEAD
         (void)FileSystem::Default()->new_random_access_file(seg_path);
         fs::create_directories(index_path).ok();
+=======
+        FileSystem::Default()->new_random_access_file(seg_path);
+        fs::create_directories(index_path).ok();
+        int* _num_segment = (int*)((char*)_rowset_writer.get() + offsetof(VerticalRowsetWriter, _num_segment));
+        (*_num_segment) = 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // test for the abnormal destory for rowset writer
     }
 

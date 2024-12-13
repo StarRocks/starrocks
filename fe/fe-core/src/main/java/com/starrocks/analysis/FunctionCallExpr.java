@@ -321,9 +321,13 @@ public class FunctionCallExpr extends Expr {
         // except in test cases that do it explicitly.
         if (isAggregate() || isAnalyticFnCall) {
             msg.node_type = TExprNodeType.AGG_EXPR;
+<<<<<<< HEAD
             if (!isAnalyticFnCall) {
                 msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
             }
+=======
+            msg.setAgg_expr(new TAggregateExpr(isMergeAggFn));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             msg.node_type = TExprNodeType.FUNCTION_CALL;
         }

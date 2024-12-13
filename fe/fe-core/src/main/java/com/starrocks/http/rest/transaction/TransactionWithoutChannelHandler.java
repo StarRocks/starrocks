@@ -15,7 +15,11 @@
 package com.starrocks.http.rest.transaction;
 
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
@@ -57,15 +61,24 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
     }
 
     @Override
+<<<<<<< HEAD
     public ResultWrapper handle(BaseRequest request, BaseResponse response) throws UserException {
+=======
+    public ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
         String dbName = txnOperationParams.getDbName();
         String label = txnOperationParams.getLabel();
         Long timeoutMillis = txnOperationParams.getTimeoutMillis();
         LOG.info("Handle transaction without channel info, label: {}", label);
 
+<<<<<<< HEAD
         Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(dbName))
                 .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
+=======
+        Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
+                .orElseThrow(() -> new StarRocksException(String.format("Database[%s] does not exist.", dbName)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TransactionResult result = null;
         switch (txnOperation) {
@@ -80,7 +93,11 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
                 result = handleRollbackTransaction(db, label);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException("Unsupported operation: " + txnOperation);
+=======
+                throw new StarRocksException("Unsupported operation: " + txnOperation);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return new ResultWrapper(result);
@@ -88,7 +105,11 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
 
     private TransactionResult handleCommitTransaction(Database db,
                                                       String label,
+<<<<<<< HEAD
                                                       long timeoutMillis) throws UserException {
+=======
+                                                      long timeoutMillis) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
         long txnId = txnState.getTransactionId();
@@ -108,7 +129,11 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
             case ABORTED:
+<<<<<<< HEAD
                 throw new UserException(String.format(
+=======
+                throw new StarRocksException(String.format(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "Can not commit %s transaction %s, label is %s", txnStatus, txnId, label));
             default:
                 return null;
@@ -118,7 +143,11 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
     }
 
     private TransactionResult handleRollbackTransaction(Database db,
+<<<<<<< HEAD
                                                         String label) throws UserException {
+=======
+                                                        String label) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
         long txnId = txnState.getTransactionId();
@@ -138,7 +167,11 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
                 break;
             case COMMITTED:
             case VISIBLE:
+<<<<<<< HEAD
                 throw new UserException(String.format(
+=======
+                throw new StarRocksException(String.format(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "Can not abort %s transaction %s, label is %s", txnStatus, txnId, label));
             default:
                 return null;
@@ -147,11 +180,19 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         return result;
     }
 
+<<<<<<< HEAD
     private static TransactionState getTxnState(long dbId, String label) throws UserException {
         TransactionState txnState = GlobalStateMgr.getCurrentState()
                 .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
         if (null == txnState) {
             throw new UserException(String.format("No transaction found by label %s", label));
+=======
+    private static TransactionState getTxnState(long dbId, String label) throws StarRocksException {
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
+        if (null == txnState) {
+            throw new StarRocksException(String.format("No transaction found by label %s", label));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return txnState;
     }

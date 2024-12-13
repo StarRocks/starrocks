@@ -537,9 +537,12 @@ public:
 
     static ColumnPtr convert_time_column_from_double_to_str(const ColumnPtr& column);
 
+<<<<<<< HEAD
     static NullColumnPtr one_size_not_null_column;
 
     static NullColumnPtr one_size_null_column;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // unpack array column, return offsets_column, elements_column, elements_null_column
     static std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> unpack_array_column(const ColumnPtr& column);
 };
@@ -548,12 +551,20 @@ public:
 template <class Ptr = ChunkUniquePtr>
 struct ChunkSliceTemplate {
     Ptr chunk;
+<<<<<<< HEAD
+=======
+    size_t segment_id = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t offset = 0;
 
     bool empty() const;
     size_t rows() const;
     size_t skip(size_t skip_rows);
+<<<<<<< HEAD
     Ptr cutoff(size_t required_rows);
+=======
+    ChunkUniquePtr cutoff(size_t required_rows);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void reset(Ptr input);
 };
 
@@ -583,5 +594,9 @@ APPLY_FOR_ALL_STRING_TYPE(GET_CONTAINER)
 
 using ChunkSlice = ChunkSliceTemplate<ChunkUniquePtr>;
 using ChunkSharedSlice = ChunkSliceTemplate<ChunkPtr>;
+<<<<<<< HEAD
+=======
+using SegmentedChunkSlice = ChunkSliceTemplate<SegmentedChunkPtr>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

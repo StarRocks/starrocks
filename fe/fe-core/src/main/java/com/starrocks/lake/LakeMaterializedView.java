@@ -21,10 +21,20 @@ import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.io.DeepCopy;
@@ -62,6 +72,17 @@ public class LakeMaterializedView extends MaterializedView {
         this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
     }
 
+<<<<<<< HEAD
+=======
+    public LakeMaterializedView(Database db, String mvName,
+                            MaterializedIndexMeta indexMeta, OlapTable baseTable,
+                            PartitionInfo partitionInfo, DistributionInfo distributionInfo,
+                            MvRefreshScheme refreshScheme) {
+        super(db, mvName, indexMeta, baseTable, partitionInfo, distributionInfo, refreshScheme);
+        this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public FileCacheInfo getPartitionFileCacheInfo(long partitionId) {
         FileCacheInfo cacheInfo = null;

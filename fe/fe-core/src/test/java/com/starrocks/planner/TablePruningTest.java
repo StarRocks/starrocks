@@ -40,6 +40,10 @@ public class TablePruningTest extends TablePruningTestBase {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
+<<<<<<< HEAD
+=======
+        ctx.getSessionVariable().setCboPushDownAggregateMode(-1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
@@ -464,6 +468,7 @@ public class TablePruningTest extends TablePruningTestBase {
                 "A A0 left join A A1 on A1.a_pk = A0.a_pk",
                 "A A0 right join A A1 on A1.a_pk = A0.a_pk");
 
+<<<<<<< HEAD
         List<String> whereClauses = Lists.newArrayList(
                 "true",
                 "false",
@@ -471,6 +476,16 @@ public class TablePruningTest extends TablePruningTestBase {
                 "A1.a_pk>10",
                 "murmur_hash3_32(A0.a_pk)>10",
                 "murmur_hash3_32(A1.a_pk)>10",
+=======
+        // todo table prune not work when move around predicates from join conditions
+        List<String> whereClauses = Lists.newArrayList(
+                "true",
+                "false",
+                // "A0.a_pk>10",
+                // "A1.a_pk>10",
+                // "murmur_hash3_32(A0.a_pk)>10",
+                // "murmur_hash3_32(A1.a_pk)>10",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "murmur_hash3_32(A1.a_pk)>murmur_hash3_32(A1.a_pk)",
                 "murmur_hash3_32(A0.a_pk)>10 and murmur_hash3_32(A1.a_pk)>10",
                 "murmur_hash3_32(A0.a_c0)>10 and murmur_hash3_32(A0.a_c1)>10",

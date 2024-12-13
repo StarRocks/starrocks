@@ -14,8 +14,13 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.qe.scheduler.RecoverableException;
@@ -89,7 +94,11 @@ public class GlobalSlotProvider implements SlotProvider {
             slotRequest.onFinished(pipelineDop);
         } else {
             LOG.warn("[Slot] finishSlotRequirement receives a failed response [slot={}] [status={}]", slotRequest, status);
+<<<<<<< HEAD
             slotRequest.onFailed(new UserException(status.getErrorMsg()));
+=======
+            slotRequest.onFailed(new StarRocksException(status.getErrorMsg()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return new Status();

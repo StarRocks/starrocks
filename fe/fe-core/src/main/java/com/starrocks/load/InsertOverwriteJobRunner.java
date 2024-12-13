@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
@@ -222,7 +225,11 @@ public class InsertOverwriteJobRunner {
         }
         job.setTmpPartitionIds(tmpPartitionIds);
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -249,7 +256,11 @@ public class InsertOverwriteJobRunner {
                     job.getTmpPartitionIds());
             GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, tableId, LockType.WRITE);
+=======
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
@@ -260,13 +271,23 @@ public class InsertOverwriteJobRunner {
         if (insertStmt.getTargetPartitionNames() == null) {
             return;
         }
+<<<<<<< HEAD
+=======
+        if (insertStmt.isDynamicOverwrite()) {
+            return;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
         List<List<String>> partitionValues = Lists.newArrayList();
         if (!olapTable.getPartitionInfo().isAutomaticPartition()) {
             return;
         }
 
+<<<<<<< HEAD
         if (insertStmt.isSpecifyPartitionNames())  {
+=======
+        if (insertStmt.isSpecifyPartitionNames()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<String> partitionNames = insertStmt.getTargetPartitionNames().getPartitionNames();
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             for (String partitionName : partitionNames) {
@@ -305,14 +326,22 @@ public class InsertOverwriteJobRunner {
         }
 
         try {
+<<<<<<< HEAD
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
+=======
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues, false, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (AnalysisException ex) {
             LOG.warn(ex.getMessage(), ex);
             throw new RuntimeException(ex);
         }
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         String targetDb = insertStmt.getTableName().getDb();
+<<<<<<< HEAD
         Database db = state.getDb(targetDb);
+=======
+        Database db = state.getLocalMetastore().getDb(targetDb);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
             AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
@@ -363,8 +392,16 @@ public class InsertOverwriteJobRunner {
     }
 
     private void createTempPartitions() throws DdlException {
+<<<<<<< HEAD
         long createPartitionStartTimestamp = System.currentTimeMillis();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        if (job.isDynamicOverwrite()) {
+            return;
+        }
+        long createPartitionStartTimestamp = System.currentTimeMillis();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -376,7 +413,11 @@ public class InsertOverwriteJobRunner {
         try {
             targetTable = checkAndGetTable(db, tableId);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, tableId, LockType.READ);
+=======
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
                 job.getSourcePartitionIds(), job.getTmpPartitionIds(), null, job.getWarehouseId());
@@ -386,7 +427,11 @@ public class InsertOverwriteJobRunner {
     private void gc(boolean isReplay) {
         LOG.info("start to garbage collect");
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -396,7 +441,11 @@ public class InsertOverwriteJobRunner {
         }
 
         try {
+<<<<<<< HEAD
             Table table = db.getTable(tableId);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
             }
@@ -421,6 +470,28 @@ public class InsertOverwriteJobRunner {
                     }
                 }
             }
+<<<<<<< HEAD
+=======
+            // if dynamic overwrite, drop all runtime created partitions
+            if (job.isDynamicOverwrite()) {
+                TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(dbId, insertStmt.getTxnId());
+                if (txnState == null) {
+                    throw new DmlException("transaction state is null for dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                }
+                List<String> tmpPartitionNames = txnState.getCreatedPartitionNames();
+                for (String partitionName : tmpPartitionNames) {
+                    Partition partition = targetTable.getPartition(partitionName, true);
+                    if (partition != null) {
+                        for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                            sourceTablets.addAll(index.getTablets());
+                        }
+                        targetTable.dropTempPartition(partitionName, true);
+                    }
+                }
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!isReplay) {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
@@ -434,12 +505,20 @@ public class InsertOverwriteJobRunner {
         } catch (Exception e) {
             LOG.warn("exception when gc insert overwrite job.", e);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, tableId, LockType.WRITE);
+=======
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     private void doCommit(boolean isReplay) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -486,7 +565,21 @@ public class InsertOverwriteJobRunner {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+<<<<<<< HEAD
                 targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+=======
+                if (job.isDynamicOverwrite()) {
+                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .getTransactionState(dbId, insertStmt.getTxnId());
+                    if (txnState == null) {
+                        throw new DmlException("transaction state is null for dbId:%s, txnId:%s", dbId, insertStmt.getTxnId());
+                    }
+                    tmpPartitionNames = txnState.getCreatedPartitionNames();
+                    targetTable.replaceMatchPartitions(tmpPartitionNames);
+                } else {
+                    targetTable.replaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true, false);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
@@ -522,7 +615,11 @@ public class InsertOverwriteJobRunner {
                     job.getTargetDbId(), job.getTargetTableId(), e);
             throw new DmlException("replace partitions failed", e);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, tableId, LockType.WRITE);
+=======
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (!isReplay) {
@@ -537,7 +634,11 @@ public class InsertOverwriteJobRunner {
         Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
         Preconditions.checkState(insertStmt != null);
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DmlException("database id:%s does not exist", dbId);
         }
@@ -559,20 +660,35 @@ public class InsertOverwriteJobRunner {
             if (insertStmt.getTargetPartitionNames() == null) {
                 insertStmt.setPartitionNotSpecifiedInOverwrite(true);
             }
+<<<<<<< HEAD
             insertStmt.setTargetPartitionNames(partitionNames);
             insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
+=======
+            if (!job.isDynamicOverwrite()) {
+                insertStmt.setTargetPartitionNames(partitionNames);
+                insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             insertStmt.setOverwrite(false);
             insertStmt.setSystem(true);
 
         } catch (Exception e) {
             throw new DmlException("prepareInsert exception", e);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, tableId, LockType.READ);
+=======
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     private OlapTable checkAndGetTable(Database db, long tableId) {
+<<<<<<< HEAD
         Table table = db.getTable(tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
         }

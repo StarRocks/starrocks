@@ -38,6 +38,11 @@ import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 
 import java.util.List;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MVPartitionPruner {
     private final OptimizerContext optimizerContext;
     private final MvRewriteContext mvRewriteContext;
@@ -51,6 +56,7 @@ public class MVPartitionPruner {
         return queryExpression.getOp().accept(new MVPartitionPrunerVisitor(), queryExpression, null);
     }
 
+<<<<<<< HEAD
     /**
      * For input query expression, reset/clear pruned partitions and return new query expression to be pruned again.
      */
@@ -64,6 +70,8 @@ public class MVPartitionPruner {
         return mvScanBuilder.build();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private class MVPartitionPrunerVisitor extends OptExpressionVisitor<OptExpression, Void> {
         private boolean isAddMVPrunePredicate(LogicalOlapScanOperator olapScanOperator) {
             if (mvRewriteContext == null) {
@@ -84,8 +92,13 @@ public class MVPartitionPruner {
 
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
+<<<<<<< HEAD
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
 
+=======
+            LogicalScanOperator result = null;
+            LogicalScanOperator scanOperator = optExpression.getOp().cast();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) (scanOperator);
@@ -97,12 +110,22 @@ public class MVPartitionPruner {
                 if (isAddMvPrunePredicate) {
                     builder.setPredicate(getMVPrunePredicate(olapScanOperator));
                 }
+<<<<<<< HEAD
                 LogicalOlapScanOperator newOlapScanOperator = builder.build();
 
                 // prune partition
                 List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
                 if (selectedPartitionIds == null || selectedPartitionIds.isEmpty()) {
                     newOlapScanOperator =  OptOlapPartitionPruner.prunePartitions(newOlapScanOperator);
+=======
+                LogicalOlapScanOperator cloned = builder.build();
+
+                // prune partition
+                List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
+                LogicalOlapScanOperator newOlapScanOperator = cloned;
+                if (selectedPartitionIds == null) {
+                    newOlapScanOperator =  OptOlapPartitionPruner.prunePartitions(cloned);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
 
                 // prune distribution key
@@ -121,7 +144,11 @@ public class MVPartitionPruner {
                 }
 
                 LogicalOlapScanOperator.Builder rewrittenBuilder = new LogicalOlapScanOperator.Builder();
+<<<<<<< HEAD
                 scanOperator = rewrittenBuilder.withOperator(newOlapScanOperator)
+=======
+                result = rewrittenBuilder.withOperator(newOlapScanOperator)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .setPredicate(MvUtils.canonizePredicate(scanPredicate))
                         .setSelectedTabletId(selectedTabletIds)
                         .build();
@@ -135,10 +162,20 @@ public class MVPartitionPruner {
                 Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
                 LogicalScanOperator copiedScanOperator =
                         (LogicalScanOperator) builder.withOperator(scanOperator).build();
+<<<<<<< HEAD
                 scanOperator = OptExternalPartitionPruner.prunePartitions(optimizerContext,
                         copiedScanOperator);
             }
             return OptExpression.create(scanOperator);
+=======
+                result = OptExternalPartitionPruner.prunePartitions(optimizerContext,
+                        copiedScanOperator);
+            }
+            if (result != null) {
+                result.setOpRuleBit(OP_PARTITION_PRUNED);
+            }
+            return OptExpression.create(result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         public OptExpression visit(OptExpression optExpression, Void context) {

@@ -43,7 +43,10 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+<<<<<<< HEAD
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -395,11 +398,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
+<<<<<<< HEAD
     public long saveStorageVolumes(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void load(DataInput in) throws IOException {
         String json = Text.readString(in);
         StorageVolumeMgr data = GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);

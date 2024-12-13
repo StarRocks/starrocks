@@ -35,6 +35,14 @@ using ParallelSet = phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_h
                                                   phmap::priv::Allocator<T>, 4, std::mutex, true>;
 ParallelSet<int64_t> tablet_txns;
 
+<<<<<<< HEAD
+=======
+// publish version with EMPTY_TXNLOG_TXNID means there is no txnlog
+// and need to increase version number of the tablet,
+// the situation happens in create rollup.
+const int64_t EMPTY_TXNLOG_TXNID = -1;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool add_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
     return ok;
@@ -136,6 +144,24 @@ StatusOr<TxnLogPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet_id, c
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const TxnInfoPB> txns) {
+<<<<<<< HEAD
+=======
+    if (txns.size() == 1 && txns[0].txn_id() == EMPTY_TXNLOG_TXNID) {
+        LOG(INFO) << "publish version tablet_id: " << tablet_id << ", txn: " << EMPTY_TXNLOG_TXNID
+                  << ", base_version: " << base_version << ", new_version: " << new_version;
+        // means there is no txnlog and need to increase version number,
+        // just return tablet metadata of base_version.
+        DCHECK_EQ(new_version, base_version + 1);
+        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, base_version));
+
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
+        new_metadata->set_version(new_version);
+
+        RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
+        return new_metadata;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!add_tablet(tablet_id)) {
         return Status::ResourceBusy(
                 fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
@@ -155,8 +181,15 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
     auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
     if (cached_new_metadata != nullptr) {
+<<<<<<< HEAD
         LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
                   << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
+=======
+        // The retries may be caused by some tablets failing to publish in a partition
+        // set the following log as debug log to prevent excessive logging
+        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
+                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return std::move(cached_new_metadata);
     }
 
@@ -380,6 +413,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     return new_metadata;
 }
 
+<<<<<<< HEAD
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids,
                            const int64_t* log_versions, int txns_size) {
     std::vector<std::string> files_to_delete;
@@ -405,6 +439,39 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const i
         } else {
             files_to_delete.emplace_back(txn_log_path);
             tablet_mgr->metacache()->erase(txn_log_path);
+=======
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
+                           const int64_t* log_versions) {
+    auto files_to_delete = std::vector<std::string>{};
+    for (int i = 0; i < txn_infos.size(); i++) {
+        if (!txn_infos[i].combined_txn_log()) {
+            auto txn_id = txn_infos[i].txn_id();
+            auto log_version = log_versions[i];
+            auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+            auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
+            // TODO: use rename() API if supported by the underlying filesystem.
+            auto st = fs::copy_file(txn_log_path, txn_vlog_path);
+            if (st.is_not_found()) {
+                ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
+                auto check_st = fs->path_exists(txn_vlog_path);
+                if (check_st.ok()) {
+                    continue;
+                } else {
+                    LOG_IF(WARNING, !check_st.is_not_found())
+                            << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+                    return st;
+                }
+            } else if (!st.ok()) {
+                return st;
+            } else {
+                files_to_delete.emplace_back(txn_log_path);
+                tablet_mgr->metacache()->erase(txn_log_path);
+            }
+        } else {
+            ASSIGN_OR_RETURN(auto txn_log, load_txn_log(tablet_mgr, tablet_id, txn_infos[i]));
+            auto log_version = log_versions[i];
+            RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(txn_log, log_version));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     delete_files_async(std::move(files_to_delete));

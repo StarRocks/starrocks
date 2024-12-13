@@ -140,13 +140,23 @@ public class QueryStatisticsInfo {
         return wareHouseName;
     }
 
+<<<<<<< HEAD
+=======
+    public String getResourceGroupName() {
+        return resourceGroupName;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getCustomQueryId() {
         return customQueryId;
     }
 
+<<<<<<< HEAD
     public String getResourceGroupName() {
         return resourceGroupName;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public QueryStatisticsInfo withQueryStartTime(long queryStartTime) {
         this.queryStartTime = queryStartTime;
         return this;
@@ -294,14 +304,23 @@ public class QueryStatisticsInfo {
                 Objects.equals(db, that.db) && Objects.equals(user, that.user) && cpuCostNs == that.cpuCostNs &&
                 scanBytes == that.scanBytes && scanRows == that.scanRows && memUsageBytes == that.memUsageBytes &&
                 spillBytes == that.spillBytes && execTime == that.execTime &&
+<<<<<<< HEAD
                 Objects.equals(wareHouseName, that.wareHouseName) &&
                         Objects.equals(resourceGroupName, that.resourceGroupName);
+=======
+                Objects.equals(wareHouseName, that.wareHouseName) && Objects.equals(customQueryId, that.customQueryId) &&
+                Objects.equals(resourceGroupName, that.resourceGroupName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(queryStartTime, feIp, queryId, connId, db, user, cpuCostNs, scanBytes, scanRows, memUsageBytes,
+<<<<<<< HEAD
                 spillBytes, execTime, wareHouseName, resourceGroupName);
+=======
+                spillBytes, execTime, wareHouseName, customQueryId, resourceGroupName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -319,6 +338,10 @@ public class QueryStatisticsInfo {
                 ", spillBytes=" + spillBytes +
                 ", execTime=" + execTime +
                 ", wareHouseName=" + wareHouseName +
+<<<<<<< HEAD
+=======
+                ", customQueryId=" + customQueryId +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ", resourceGroupName=" + resourceGroupName +
                 '}';
     }

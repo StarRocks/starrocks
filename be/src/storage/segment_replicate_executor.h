@@ -19,9 +19,15 @@
 #include <vector>
 
 #include "common/status.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
+=======
+#include "gen_cpp/internal_service.pb.h"
+#include "storage/olap_define.h"
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/reusable_closure.h"
 #include "util/spinlock.h"
 #include "util/threadpool.h"
@@ -65,12 +71,27 @@ private:
     const int64_t _node_id;
 
     ReusableClosure<PTabletWriterAddSegmentResult>* _closure = nullptr;
+<<<<<<< HEAD
     PInternalService_Stub* _stub = nullptr;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool _inited = false;
     Status _st = Status::OK();
 };
 
+<<<<<<< HEAD
+=======
+struct SegmentReplicateStat {
+    std::atomic_int32_t num_pending_tasks{0};
+    std::atomic_int32_t num_running_tasks{0};
+    std::atomic_int32_t num_finished_tasks{0};
+    std::atomic_int64_t pending_time_ns{0};
+    std::atomic_int64_t execute_time_ns{0};
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ReplicateToken {
 public:
     ReplicateToken(std::unique_ptr<ThreadPoolToken> sync_pool_token, const DeltaWriterOptions* opt);
@@ -108,6 +129,11 @@ public:
 
     const std::vector<int64_t> replica_node_ids() const { return _replica_node_ids; }
 
+<<<<<<< HEAD
+=======
+    const SegmentReplicateStat& get_stat() const { return _stat; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     friend class SegmentReplicateTask;
 
@@ -132,6 +158,11 @@ private:
 
     int64_t _max_fail_replica_num;
     std::vector<int64_t> _replica_node_ids;
+<<<<<<< HEAD
+=======
+
+    SegmentReplicateStat _stat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SegmentReplicateExecutor {

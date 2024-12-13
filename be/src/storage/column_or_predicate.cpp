@@ -68,4 +68,20 @@ Status ColumnOrPredicate::convert_to(const ColumnPredicate** output, const TypeI
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+std::string ColumnOrPredicate::debug_string() const {
+    std::stringstream ss;
+    ss << "OR(";
+    for (size_t i = 0; i < _child.size(); i++) {
+        if (i != 0) {
+            ss << ", ";
+        }
+        ss << i << ":" << _child[i]->debug_string();
+    }
+    ss << ")";
+    return ss.str();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

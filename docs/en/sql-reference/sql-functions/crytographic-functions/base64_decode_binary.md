@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # base64_decode_binary
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Decodes a Base64-encoded string and return a BINARY.
 

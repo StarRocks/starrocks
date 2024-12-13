@@ -66,11 +66,19 @@ public:
     ~ChunksSorterTopn() override;
 
     // Append a Chunk for sort.
+<<<<<<< HEAD
     [[nodiscard]] Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
     [[nodiscard]] Status do_done(RuntimeState* state) override;
     // get_next only works after done().
     [[nodiscard]] Status get_next(ChunkPtr* chunk, bool* eos) override;
+=======
+    Status update(RuntimeState* state, const ChunkPtr& chunk) override;
+    // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
+    Status do_done(RuntimeState* state) override;
+    // get_next only works after done().
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t get_output_rows() const override;
 
@@ -83,6 +91,7 @@ public:
 private:
     size_t _get_number_of_rows_to_sort() const { return _offset + _limit; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status _sort_chunks(RuntimeState* state);
 
     // build data for top-n
@@ -97,12 +106,27 @@ private:
 
     [[nodiscard]] Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
                                             size_t sorted_size, Permutation& new_permutation);
+=======
+    Status _sort_chunks(RuntimeState* state);
+
+    // build data for top-n
+    Status _build_sorting_data(RuntimeState* state, Permutation& permutation_second, DataSegments& segments);
+
+    Status _hybrid_sort_first_time(RuntimeState* state, Permutation& new_permutation, DataSegments& segments);
+
+    Status _hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
+                               DataSegments& segments);
+
+    Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
+                              size_t sorted_size, Permutation& new_permutation);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 
     static void _set_permutation_complete(std::pair<Permutation, Permutation>&, size_t size,
                                           std::vector<std::vector<uint8_t>>& filter_array);
 
+<<<<<<< HEAD
     [[nodiscard]] Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
                                                DataSegments& segments);
 
@@ -112,6 +136,16 @@ private:
 
     [[nodiscard]] Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
                                                 DataSegments& segments);
+=======
+    Status _filter_and_sort_data(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                 DataSegments& segments);
+
+    Status _merge_sort_data_as_merged_segment(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
+                                              DataSegments& segments);
+
+    Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
+                                  DataSegments& segments);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // For rank type topn, it may keep more data than we need during processing,
     // therefor, pruning should be performed when processing is finished

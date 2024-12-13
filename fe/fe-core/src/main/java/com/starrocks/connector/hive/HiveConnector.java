@@ -67,7 +67,12 @@ public class HiveConnector implements Connector {
                 internalMgr.isSearchRecursive(),
                 internalMgr.enableHmsEventsIncrementalSync(),
                 hdfsEnvironment,
+<<<<<<< HEAD
                 internalMgr.getMetastoreType()
+=======
+                internalMgr.getMetastoreType(),
+                properties
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         );
     }
 

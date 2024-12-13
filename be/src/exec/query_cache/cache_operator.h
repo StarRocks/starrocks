@@ -51,7 +51,11 @@ public:
     Status reset_lane(RuntimeState* state, LaneOwnerType lane_owner);
     void populate_cache(int64_t tablet_id);
     int64_t cached_version(int64_t tablet_id);
+<<<<<<< HEAD
     std::tuple<int64_t, std::vector<RowsetSharedPtr>> delta_version_and_rowsets(int64_t tablet_id);
+=======
+    std::tuple<int64_t, std::vector<BaseRowsetSharedPtr>> delta_version_and_rowsets(int64_t tablet_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     bool has_output() const override;

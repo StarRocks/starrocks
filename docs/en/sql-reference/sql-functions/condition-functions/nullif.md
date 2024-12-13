@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # nullif
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns NULL if `expr1` is equal to `expr2`. Otherwise, returns `expr1`.
 

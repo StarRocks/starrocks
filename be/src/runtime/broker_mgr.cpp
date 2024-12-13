@@ -45,6 +45,10 @@
 #include "util/misc.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
+<<<<<<< HEAD
+=======
+#include "util/thrift_rpc_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -81,6 +85,7 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
     request.__set_clientId(_client_id);
 
     TBrokerOperationStatus response;
+<<<<<<< HEAD
     Status status;
     // 500ms is enough
     BrokerServiceConnection client(_exec_env->broker_client_cache(), addr, 500, &status);
@@ -102,6 +107,15 @@ void BrokerMgr::ping(const TNetworkAddress& addr) {
     } catch (apache::thrift::TException& e) {
         (void)client.reopen(500);
         LOG(WARNING) << "Broker ping failed, broker:" << addr << " failed:" << e.what();
+=======
+    Status rpc_status;
+
+    // 500ms is enough
+    rpc_status = ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+            addr, [&response, &request](BrokerServiceConnection& client) { client->ping(response, request); }, 500);
+    if (!rpc_status.ok()) {
+        LOG(WARNING) << "Broker ping failed, broker:" << addr << " failed:" << rpc_status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

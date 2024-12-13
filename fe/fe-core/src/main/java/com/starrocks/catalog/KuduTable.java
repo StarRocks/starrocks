@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.catalog;
 
 import com.google.common.collect.Sets;
@@ -33,7 +36,10 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class KuduTable extends Table {
     private static final Logger LOG = LogManager.getLogger(KuduTable.class);
     public static final Set<String> KUDU_INPUT_FORMATS = Sets.newHashSet(
@@ -73,11 +79,16 @@ public class KuduTable extends Table {
     public String getMasterAddresses() {
         return masterAddresses;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String getCatalogName() {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
         return databaseName;
     }
@@ -85,6 +96,18 @@ public class KuduTable extends Table {
     public String getTableName() {
         return tableName;
     }
+=======
+    @Override
+    public String getCatalogDBName() {
+        return databaseName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+        return tableName;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Optional<String> getKuduTableName() {
         return kuduTableName;
     }

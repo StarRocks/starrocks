@@ -35,13 +35,25 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+=======
+import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
+import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.StreamLoadHttpHeader;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -63,6 +75,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.ThreadLocalRandom;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class LoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(LoadAction.class);
@@ -121,6 +137,15 @@ public class LoadAction extends RestBaseAction {
         // affect subsequent requests processing.
         response.setForceCloseConnection(true);
 
+<<<<<<< HEAD
+=======
+        boolean enableBatchWrite = "true".equalsIgnoreCase(
+                request.getRequest().headers().get(StreamLoadHttpHeader.HTTP_ENABLE_BATCH_WRITE));
+        if (enableBatchWrite && redirectToLeader(request, response)) {
+            return;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String dbName = request.getSingleParameter(DB_KEY);
         if (Strings.isNullOrEmpty(dbName)) {
             throw new DdlException("No database selected.");
@@ -131,11 +156,28 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No table selected.");
         }
 
+<<<<<<< HEAD
         String label = request.getRequest().headers().get(LABEL_KEY);
 
         Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
                 dbName, tableName, PrivilegeType.INSERT);
 
+=======
+        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
+                dbName, tableName, PrivilegeType.INSERT);
+
+        if (!enableBatchWrite) {
+            processNormalStreamLoad(request, response, dbName, tableName);
+        } else {
+            processBatchWriteStreamLoad(request, response, dbName, tableName);
+        }
+    }
+
+    private void processNormalStreamLoad(
+            BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
+        String label = request.getRequest().headers().get(LABEL_KEY);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
         if (request.getRequest().headers().contains(WAREHOUSE_KEY)) {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
@@ -173,5 +215,37 @@ public class LoadAction extends RestBaseAction {
                 redirectAddr.toString(), dbName, tableName, label, warehouseName);
         redirectTo(request, response, redirectAddr);
     }
+<<<<<<< HEAD
+=======
+
+    private void processBatchWriteStreamLoad(
+            BaseRequest request, BaseResponse response, String dbName, String tableName) throws DdlException {
+        TableId tableId = new TableId(dbName, tableName);
+        StreamLoadKvParams params = StreamLoadKvParams.fromHttpHeaders(request.getRequest().headers());
+        RequestCoordinatorBackendResult result = GlobalStateMgr.getCurrentState()
+                .getBatchWriteMgr().requestCoordinatorBackends(tableId, params);
+        if (!result.isOk()) {
+            BatchWriteResponseResult responseResult = new BatchWriteResponseResult(
+                    result.getStatus().status_code.name(), ActionStatus.FAILED,
+                    result.getStatus().error_msgs.get(0));
+            sendResult(request, response, responseResult);
+            return;
+        }
+
+        List<ComputeNode> nodes = result.getValue();
+        int index = ThreadLocalRandom.current().nextInt(nodes.size());
+        ComputeNode node = nodes.get(index);
+        TNetworkAddress redirectAddr = new TNetworkAddress(node.getHost(), node.getHttpPort());
+        LOG.info("redirect batch write to destination={}, db: {}, tbl: {}", redirectAddr, dbName, tableName);
+        redirectTo(request, response, redirectAddr);
+    }
+
+    public static class BatchWriteResponseResult extends RestBaseResult {
+
+        public BatchWriteResponseResult(String code, ActionStatus status, String msg) {
+            super(code, status, msg);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

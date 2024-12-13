@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_remove
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从数组中移除指定元素。
 

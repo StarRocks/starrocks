@@ -17,7 +17,12 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 
+<<<<<<< HEAD
 #include "exec/mor_processor.h"
+=======
+#include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/scan/morsel.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -82,6 +87,11 @@ struct HdfsScanStats {
     // page index
     int64_t rows_before_page_index = 0;
     int64_t page_index_ns = 0;
+<<<<<<< HEAD
+=======
+    int64_t parquet_total_row_groups = 0;
+    int64_t parquet_filtered_row_groups = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
@@ -159,6 +169,10 @@ struct HdfsScannerParams {
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
+<<<<<<< HEAD
+=======
+    std::vector<ExprContext*> all_conjunct_ctxs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // all conjuncts except `conjunct_ctxs_by_slot`, like compound predicates
     std::vector<ExprContext*> scanner_conjunct_ctxs;
     std::unordered_set<SlotId> slots_in_conjunct;
@@ -174,6 +188,11 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+<<<<<<< HEAD
+=======
+    // the table location
+    std::string table_location;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -190,6 +209,14 @@ struct HdfsScannerParams {
     // partition conjunct, used to generate partition columns
     std::vector<ExprContext*> partition_values;
 
+<<<<<<< HEAD
+=======
+    std::vector<SlotDescriptor*> extended_col_slots;
+    std::vector<int> extended_col_index_in_chunk;
+    std::vector<int> index_in_extended_columns;
+    std::vector<ExprContext*> extended_col_values;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // min max conjunct for filter row group or page
     // should clone in scanner
     std::vector<ExprContext*> min_max_conjunct_ctxs;
@@ -204,9 +231,15 @@ struct HdfsScannerParams {
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
+<<<<<<< HEAD
     const TIcebergSchema* iceberg_schema = nullptr;
 
     const TIcebergSchema* iceberg_equal_delete_schema = nullptr;
+=======
+    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
+
+    const TIcebergSchema* iceberg_schema = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
@@ -219,7 +252,10 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool orc_use_column_names = false;
+<<<<<<< HEAD
     MORParams mor_params;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int64_t connector_max_split_size = 0;
 };
@@ -244,7 +280,11 @@ struct HdfsScannerContext {
         return case_sensitive ? name : boost::algorithm::to_lower_copy(name);
     }
 
+<<<<<<< HEAD
     const TupleDescriptor* tuple_desc = nullptr;
+=======
+    std::vector<SlotDescriptor*> slot_descs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
     // materialized column read from parquet file
@@ -256,6 +296,14 @@ struct HdfsScannerContext {
     // partition column value which read from hdfs file path
     std::vector<ColumnPtr> partition_values;
 
+<<<<<<< HEAD
+=======
+    // extended column
+    std::vector<ColumnInfo> extended_columns;
+
+    std::vector<ColumnPtr> extended_values;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // scan range
     const THdfsScanRange* scan_range = nullptr;
     bool enable_split_tasks = false;
@@ -317,6 +365,13 @@ struct HdfsScannerContext {
     void append_or_update_partition_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t row_count);
 
+<<<<<<< HEAD
+=======
+    void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
+    void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
+                                          const std::vector<ColumnPtr>& values);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
     std::vector<SlotDescriptor*> not_existed_slots;
@@ -327,6 +382,14 @@ struct HdfsScannerContext {
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 
     void merge_split_tasks();
+<<<<<<< HEAD
+=======
+
+    // used for parquet zone map filter only
+    std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
+    std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
+    PredicateTree predicate_tree;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 struct OpenFileOptions {
@@ -372,10 +435,18 @@ public:
     void move_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks);
     bool has_split_tasks() const { return _scanner_ctx.has_split_tasks; }
 
+<<<<<<< HEAD
 protected:
     static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
             std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
             std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+=======
+    static StatusOr<std::unique_ptr<RandomAccessFile>> create_random_access_file(
+            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<io::CacheInputStream>& cache_input_stream, const OpenFileOptions& options);
+
+protected:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status open_random_access_file();
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
@@ -386,7 +457,10 @@ private:
     std::atomic<bool> _closed = false;
     Status _build_scanner_context();
     void update_hdfs_counter(HdfsScanProfile* profile);
+<<<<<<< HEAD
     Status _init_mor_processor(RuntimeState* runtime_state, const MORParams& params);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     HdfsScannerContext _scanner_ctx;
@@ -400,8 +474,11 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+<<<<<<< HEAD
 
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

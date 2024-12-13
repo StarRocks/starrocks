@@ -22,6 +22,11 @@
 #include <string>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "common/status.h"
+#include "runtime/types.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -37,6 +42,7 @@ using ColumnPtr = std::shared_ptr<Column>;
 
 class FunctionContext {
 public:
+<<<<<<< HEAD
     struct TypeDesc {
         ::starrocks::LogicalType type = ::starrocks::TYPE_NULL;
 
@@ -54,6 +60,9 @@ public:
         std::vector<TypeDesc> children;
         std::vector<std::string> field_names;
     };
+=======
+    using TypeDesc = TypeDescriptor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     enum FunctionStateScope {
         /// Indicates that the function state for this FunctionContext's UDF is shared across
@@ -135,6 +144,11 @@ public:
     // the FunctionContext* argument). Returns NULL if arg_idx is invalid.
     const TypeDesc* get_arg_type(int arg_idx) const;
 
+<<<<<<< HEAD
+=======
+    const std::vector<FunctionContext::TypeDesc>& get_arg_types() const { return _arg_types; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_constant_column(int arg_idx) const;
 
     // Return true if it's constant and not null
@@ -160,8 +174,22 @@ public:
     void set_constant_columns(std::vector<ColumnPtr> columns) { _constant_columns = std::move(columns); }
 
     MemPool* mem_pool() { return _mem_pool; }
+<<<<<<< HEAD
     size_t mem_usage() { return _mem_usage; }
     void add_mem_usage(size_t size) { _mem_usage += size; }
+=======
+
+    void set_mem_usage_counter(int64_t* mem_usage_counter) { _mem_usage_counter = mem_usage_counter; }
+
+    int64_t mem_usage() const {
+        DCHECK(_mem_usage_counter);
+        return *_mem_usage_counter;
+    }
+    void add_mem_usage(int64_t delta) {
+        DCHECK(_mem_usage_counter);
+        *_mem_usage_counter += delta;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeState* state() { return _state; }
     bool has_error() const;
@@ -213,8 +241,17 @@ private:
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;
 
+<<<<<<< HEAD
     // this is used for count memory usage of aggregate state
     size_t _mem_usage = 0;
+=======
+    int64_t _mem_usage = 0;
+    // This is used to count the memory usage of the agg state.
+    // In Aggregator, multiple FunctionContexts can share the same counter.
+    // If it is not explicitly set externally (e.g. AggFuncBasedValueAggregator),
+    // it will point to the internal _mem_usage
+    int64_t* _mem_usage_counter = &_mem_usage;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // UDAF Context
     std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;

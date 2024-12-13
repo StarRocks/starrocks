@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # makedate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据给定的年份和天数值，构造一个日期值。
 

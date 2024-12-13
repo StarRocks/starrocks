@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # lower
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将参数中所有的字符串转换成小写。
 

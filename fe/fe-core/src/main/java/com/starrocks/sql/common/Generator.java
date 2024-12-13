@@ -31,11 +31,19 @@ import java.util.List;
  */
 public class Generator<T> {
     private List<T> data;
+<<<<<<< HEAD
     private int multiplier;
     private int totalCount;
     private int iTotal;
 
     public Generator(List<T> data, int totalCount, int multiplier) {
+=======
+    private long multiplier;
+    private long totalCount;
+    private long iTotal;
+
+    public Generator(List<T> data, long totalCount, long multiplier) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.data = data;
         assert (data.size() > 0);
         assert (totalCount % multiplier == 0);
@@ -51,7 +59,11 @@ public class Generator<T> {
 
     public T next() {
         assert (iTotal < totalCount);
+<<<<<<< HEAD
         T ans = data.get((iTotal / multiplier) % data.size());
+=======
+        T ans = data.get((int) (iTotal / multiplier) % data.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         iTotal++;
         return ans;
     }

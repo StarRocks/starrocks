@@ -39,7 +39,10 @@
 #include <set>
 
 #include "agent/master_info.h"
+<<<<<<< HEAD
 #include "common/config.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
@@ -51,7 +54,12 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
 #include "storage/inverted/clucene/clucene_plugin.h"
+=======
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -1006,7 +1014,12 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         *new_file_name = ss.str();
         return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
+<<<<<<< HEAD
                _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt")) {
+=======
+               _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt") ||
+               _end_with(file_name, ".vi")) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         *new_file_name = file_name;
         return Status::OK();
     } else if (CLucenePlugin::is_index_files(file_name)) {

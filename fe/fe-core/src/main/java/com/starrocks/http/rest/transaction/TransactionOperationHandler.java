@@ -14,7 +14,11 @@
 
 package com.starrocks.http.rest.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
@@ -28,7 +32,11 @@ public interface TransactionOperationHandler {
     /**
      * Handle transaction management request.
      */
+<<<<<<< HEAD
     ResultWrapper handle(BaseRequest request, BaseResponse response) throws UserException;
+=======
+    ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     class ResultWrapper {
 

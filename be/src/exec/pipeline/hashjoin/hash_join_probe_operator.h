@@ -14,8 +14,12 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+=======
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -51,6 +55,10 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     Status reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     /// Reference the read-only hash table from builder in the first pull_chunk.

@@ -15,6 +15,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Expr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -26,6 +30,12 @@ public class DropPartitionClause extends AlterTableClause {
     // true if this is to drop a temp partition
     private final boolean isTempPartition;
     private final boolean forceDrop;
+<<<<<<< HEAD
+=======
+    private final MultiRangePartitionDesc multiRangePartitionDesc;
+    private final List<String> partitionNames;
+    private final Expr dropWhereExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     //Object Resolved by Analyzer
     private List<String> resolvedPartitionNames;
@@ -41,6 +51,52 @@ public class DropPartitionClause extends AlterTableClause {
         this.partitionName = partitionName;
         this.isTempPartition = isTempPartition;
         this.forceDrop = forceDrop;
+<<<<<<< HEAD
+=======
+        this.multiRangePartitionDesc = null;
+        this.partitionNames = null;
+        this.dropWhereExpr = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, List<String> partitionNames, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.forceDrop = forceDrop;
+        this.multiRangePartitionDesc = null;
+        this.partitionNames = partitionNames;
+        this.dropWhereExpr = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, MultiRangePartitionDesc multiRangePartitionDesc, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.forceDrop = forceDrop;
+        this.multiRangePartitionDesc = multiRangePartitionDesc;
+        this.partitionNames = null;
+        this.dropWhereExpr = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, Expr whereExpr, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.forceDrop = forceDrop;
+        this.multiRangePartitionDesc = null;
+        this.partitionNames = null;
+        this.dropWhereExpr = whereExpr;
+    }
+
+    public Expr getDropWhereExpr() {
+        return dropWhereExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<String> getResolvedPartitionNames() {
@@ -67,6 +123,17 @@ public class DropPartitionClause extends AlterTableClause {
         return forceDrop;
     }
 
+<<<<<<< HEAD
+=======
+    public MultiRangePartitionDesc getMultiRangePartitionDesc() {
+        return multiRangePartitionDesc;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropPartitionClause(this, context);

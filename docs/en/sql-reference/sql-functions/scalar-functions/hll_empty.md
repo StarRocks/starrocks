@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_empty
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Generates an empty HLL column to supplement the default values when inserting or loading data.
 

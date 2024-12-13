@@ -21,7 +21,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -61,7 +65,11 @@ public class Utils {
         try {
             return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .getNodeSelector().seqChooseBackendOrComputeId();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
     }
@@ -98,16 +106,27 @@ public class Utils {
         return groupMap;
     }
 
+<<<<<<< HEAD
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
                                       long warehouseId)
+=======
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, long warehouseId)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null, warehouseId);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                            long baseVersion, long newVersion,
+<<<<<<< HEAD
                                            Map<Long, Double> compactionScores, long warehouseId,
                                            Map<ComputeNode, List<Long>> nodeToTablets)
+=======
+                                           Map<Long, Double> compactionScores,
+                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                           long warehouseId)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws NoAliveBackendException, RpcException {
         if (nodeToTablets == null) {
             nodeToTablets = new HashMap<>();
@@ -166,6 +185,7 @@ public class Utils {
         }
     }
 
+<<<<<<< HEAD
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
                                       Map<Long, Double> compactionScores, long warehouseId)
             throws NoAliveBackendException, RpcException {
@@ -183,6 +203,26 @@ public class Utils {
     }
 
     public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds, List<Long> versions,
+=======
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, Map<Long, Double> compactionScores,
+                                      long warehouseId)
+            throws NoAliveBackendException, RpcException {
+        List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
+        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, warehouseId);
+    }
+
+    public static void publishLogVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long version, long warehouseId)
+            throws NoAliveBackendException, RpcException {
+        List<TxnInfoPB> txnInfos = new ArrayList<>();
+        txnInfos.add(txnInfo);
+        List<Long> versions = new ArrayList<>();
+        versions.add(version);
+        publishLogVersionBatch(tablets, txnInfos, versions, warehouseId);
+    }
+
+    public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txns, List<Long> versions,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                               long warehouseId)
             throws NoAliveBackendException, RpcException {
         Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
@@ -211,7 +251,11 @@ public class Utils {
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             PublishLogVersionBatchRequest request = new PublishLogVersionBatchRequest();
             request.tabletIds = entry.getValue();
+<<<<<<< HEAD
             request.txnIds = txnIds;
+=======
+            request.txnInfos = txns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             request.versions = versions;
 
             ComputeNode node = entry.getKey();

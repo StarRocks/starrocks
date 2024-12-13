@@ -18,7 +18,11 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorMetadata;
@@ -51,8 +55,13 @@ public class ExecuteExceptionHandler {
             handleRemoteFileNotFound((RemoteFileNotFoundException) e, context);
         } else if (e instanceof RpcException) {
             handleRpcException((RpcException) e, context);
+<<<<<<< HEAD
         } else if (e instanceof UserException) {
             handleUserException((UserException) e, context);
+=======
+        } else if (e instanceof StarRocksException) {
+            handleUserException((StarRocksException) e, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             throw e;
         }
@@ -76,7 +85,11 @@ public class ExecuteExceptionHandler {
                     ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .getOptionalMetadata(hiveTable.getCatalogName()).get();
                     // refresh catalog level metadata cache
+<<<<<<< HEAD
                     metadata.refreshTable(hiveTable.getDbName(), hiveTable, new ArrayList<>(), true);
+=======
+                    metadata.refreshTable(hiveTable.getCatalogDBName(), hiveTable, new ArrayList<>(), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // clear query level metadata cache
                     metadata.clear();
                 }
@@ -122,7 +135,11 @@ public class ExecuteExceptionHandler {
         }
     }
 
+<<<<<<< HEAD
     private static void handleUserException(UserException e, RetryContext context) throws Exception {
+=======
+    private static void handleUserException(StarRocksException e, RetryContext context) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String msg = e.getMessage();
         if (context.parsedStmt instanceof QueryStatement) {
             for (String errMsg : SCHEMA_NOT_MATCH_ERROR) {

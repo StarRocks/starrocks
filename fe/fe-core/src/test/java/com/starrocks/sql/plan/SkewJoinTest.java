@@ -42,6 +42,7 @@ public class SkewJoinTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
@@ -64,6 +65,30 @@ public class SkewJoinTest extends PlanTestBase {
         setTableStatistics(t3, 1500000 * scale);
 
         OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("region");
+        setTableStatistics(t0, 5);
+
+        OlapTable t5 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("nation");
+        setTableStatistics(t5, 25);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("supplier");
+        setTableStatistics(t1, 10000 * scale);
+
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("customer");
+        setTableStatistics(t4, 150000 * scale);
+
+        OlapTable t6 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("part");
+        setTableStatistics(t6, 200000 * scale);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("partsupp");
+        setTableStatistics(t2, 800000 * scale);
+
+        OlapTable t3 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("orders");
+        setTableStatistics(t3, 1500000 * scale);
+
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t7, 6000000 * scale);
 
         starRocksAssert.withTable("create table struct_tbl(c0 INT, " +

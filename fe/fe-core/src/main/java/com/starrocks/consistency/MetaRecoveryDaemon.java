@@ -71,15 +71,25 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
         List<PartitionVersion> partitionsToRecover = new ArrayList<>();
         List<Long> dbIds = stateMgr.getLocalMetastore().getDbIds();
         for (long dbId : dbIds) {
+<<<<<<< HEAD
             Database database = stateMgr.getDb(dbId);
+=======
+            Database database = stateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (database == null || database.isSystemDatabase()) {
                 continue;
             }
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(database, LockType.READ);
             try {
                 for (Table table : database.getTables()) {
+=======
+            locker.lockDatabase(database.getId(), LockType.READ);
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!table.isOlapTableOrMaterializedView()) {
                         continue;
                     }
@@ -171,7 +181,11 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(database, LockType.READ);
+=======
+                locker.unLockDatabase(database.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -186,15 +200,26 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
     public void recoverPartitionVersion(PartitionVersionRecoveryInfo recoveryInfo) {
         for (PartitionVersion version : recoveryInfo.getPartitionVersions()) {
+<<<<<<< HEAD
             Database database = GlobalStateMgr.getCurrentState().getDb(version.getDbId());
+=======
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(version.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (database == null) {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
             }
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(database, LockType.WRITE);
             try {
                 Table table = database.getTable(version.getTableId());
+=======
+            locker.lockDatabase(database.getId(), LockType.WRITE);
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(database.getId(), version.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null) {
                     LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);
                     continue;
@@ -243,7 +268,11 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
                         table.getName(), partition.getName(), physicalPartition.getId(), null));
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(database, LockType.WRITE);
+=======
+                locker.unLockDatabase(database.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }

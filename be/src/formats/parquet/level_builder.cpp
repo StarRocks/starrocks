@@ -14,6 +14,7 @@
 
 #include "formats/parquet/level_builder.h"
 
+<<<<<<< HEAD
 #include <parquet/arrow/writer.h>
 
 #include <functional>
@@ -28,6 +29,24 @@
 #include "exprs/expr.h"
 #include "gutil/casts.h"
 #include "gutil/endian.h"
+=======
+#include <fmt/core.h>
+
+#include <string>
+#include <utility>
+
+#include "column/array_column.h"
+#include "column/column.h"
+#include "column/column_helper.h"
+#include "column/fixed_length_column.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
+#include "column/type_traits.h"
+#include "common/compiler_util.h"
+#include "gutil/casts.h"
+#include "types/date_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/defer_op.h"
 #include "utils.h"
 
@@ -263,7 +282,11 @@ Status LevelBuilder::_write_decimal_to_flba_column_chunk(const LevelBuilderConte
     auto flba_values = new ::parquet::FixedLenByteArray[col->size()];
     DeferOp flba_defer([&] { delete[] flba_values; });
 
+<<<<<<< HEAD
     size_t padding = sizeof(cpp_type) - decimal_precision_to_byte_count(type_desc.precision);
+=======
+    size_t padding = sizeof(cpp_type) - ParquetUtils::decimal_precision_to_byte_count(type_desc.precision);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < col->size(); i++) {
         flba_values[i].ptr = reinterpret_cast<const uint8_t*>(values + i) + padding;
     }

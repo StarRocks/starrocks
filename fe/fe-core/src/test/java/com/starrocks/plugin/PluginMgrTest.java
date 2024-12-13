@@ -35,7 +35,10 @@
 package com.starrocks.plugin;
 
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.io.DataOutputBuffer;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,6 +48,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -52,6 +56,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 
 import static org.junit.Assert.assertEquals;
+=======
+import java.io.IOException;
+import java.nio.file.Files;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -93,6 +102,7 @@ public class PluginMgrTest {
             assert false;
         }
     }
+<<<<<<< HEAD
 
     private void testSerializeBuiltinPlugin(PluginMgr mgr) {
         try {
@@ -109,4 +119,6 @@ public class PluginMgrTest {
             e.printStackTrace();
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

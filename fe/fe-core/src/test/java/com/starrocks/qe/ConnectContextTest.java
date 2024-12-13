@@ -34,6 +34,10 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.TableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlCapability;
@@ -41,6 +45,12 @@ import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.ValuesRelation;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -58,8 +68,11 @@ public class ConnectContextTest {
     @Mocked
     private MysqlChannel channel;
     @Mocked
+<<<<<<< HEAD
     private StmtExecutor executor;
     @Mocked
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private SocketChannel socketChannel;
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -83,9 +96,12 @@ public class ConnectContextTest {
                 minTimes = 0;
                 result = "192.168.1.1";
 
+<<<<<<< HEAD
                 executor.cancel("set up");
                 minTimes = 0;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getVariableMgr();
                 minTimes = 0;
                 result = variableMgr;
@@ -189,7 +205,10 @@ public class ConnectContextTest {
         // Timeout
         ctx.setStartTime();
         now = ctx.getStartTime() + ctx.getSessionVariable().getWaitTimeoutS() * 1000 + 1;
+<<<<<<< HEAD
         ctx.setExecutor(executor);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctx.checkTimeout(now);
         Assert.assertTrue(ctx.isKilled());
 
@@ -204,6 +223,7 @@ public class ConnectContextTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testOtherTimeout() {
         ConnectContext ctx = new ConnectContext(socketChannel);
         ctx.setCommand(MysqlCommand.COM_QUERY);
@@ -211,11 +231,28 @@ public class ConnectContextTest {
         // sleep no time out
         Assert.assertFalse(ctx.isKilled());
         long now = ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
+=======
+    public void testQueryTimeout() {
+        ConnectContext ctx = new ConnectContext(socketChannel);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+
+        // query no time out
+        Assert.assertFalse(ctx.isKilled());
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 - 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctx.checkTimeout(now);
         Assert.assertFalse(ctx.isKilled());
 
         // Timeout
+<<<<<<< HEAD
         now = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
+=======
+        now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000 + 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctx.checkTimeout(now);
         Assert.assertFalse(ctx.isKilled());
 
@@ -228,6 +265,38 @@ public class ConnectContextTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testInsertTimeout() {
+        ConnectContext ctx = new ConnectContext(socketChannel);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+
+        StmtExecutor executor = new StmtExecutor(
+                ctx, new InsertStmt(new TableName("db", "tbl"), new QueryStatement(ValuesRelation.newDualRelation())));
+        ctx.setExecutor(executor);
+
+        // insert no time out
+        Assert.assertFalse(ctx.isKilled());
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getInsertTimeoutS() * 1000 - 1;
+        ctx.checkTimeout(now);
+        Assert.assertFalse(ctx.isKilled());
+
+        // Timeout
+        now = ctx.getStartTime() + ctx.getSessionVariable().getInsertTimeoutS() * 1000 + 1;
+        ctx.checkTimeout(now);
+        Assert.assertFalse(ctx.isKilled());
+
+        // Kill
+        ctx.kill(true, "insert timeout");
+        Assert.assertTrue(ctx.isKilled());
+
+        // clean up
+        ctx.cleanup();
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testThreadLocal() {
         ConnectContext ctx = new ConnectContext(socketChannel);
         Assert.assertNull(ConnectContext.get());

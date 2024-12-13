@@ -109,13 +109,24 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             String mvName = (String) obj;
                             assertPlanWithoutPushdownBelowScan(mvName);
                         });
+<<<<<<< HEAD
                     };
+=======
+                    }
+                    ;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 });
     }
 
     private void assertPlanWithoutPushdownBelowScan(String mvName) throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         Map<String, String> testProperties = task.getProperties();
@@ -132,7 +143,10 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
         Assert.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: k1 > 1\n" +
@@ -189,13 +203,24 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             String mvName = (String) obj;
                             assertPlanWithPushdownBelowScan(mvName);
                         });
+<<<<<<< HEAD
                     };
+=======
+                    }
+                    ;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 });
     }
 
     private void assertPlanWithPushdownBelowScan(String mvName) throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         Map<String, String> testProperties = task.getProperties();
@@ -212,7 +237,10 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
         ExecPlan execPlan = processor.getMvContext().getExecPlan();
         Assert.assertTrue(execPlan != null);
         String plan = execPlan.getExplainString(StatementBase.ExplainLevel.NORMAL);
+<<<<<<< HEAD
         System.out.println(plan);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PlanTestBase.assertContains(plan, "     TABLE: tt1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 1: k1 > 1\n" +
@@ -269,12 +297,19 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
                     executeInsertSql(connectContext, "insert into tbl1 values(\"2022-02-20\", 2, 10)");
                     Partition p2 = table.getPartition("p2");
+<<<<<<< HEAD
                     while (p2.getVisibleVersion()  != 3) {
                         System.out.println("waiting for partition p2 to be visible:" + p2.getVisibleVersion());
                         Thread.sleep(1000);
                     }
                     MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
                     System.out.println(mvUpdateInfo);
+=======
+                    while (p2.getDefaultPhysicalPartition().getVisibleVersion() != 3) {
+                        Thread.sleep(1000);
+                    }
+                    MvUpdateInfo mvUpdateInfo = getMvUpdateInfo(mv);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertTrue(mvUpdateInfo.getMvToRefreshType() == MvUpdateInfo.MvToRefreshType.PARTIAL);
                     Assert.assertTrue(mvUpdateInfo.isValidRewrite());
                     partitionsToRefresh1 = getPartitionNamesToRefreshForMv(mv);
@@ -338,7 +373,11 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
 
                     Assert.assertTrue(taskRunScheduler.addPendingTaskRun(taskRun));
+<<<<<<< HEAD
                     //Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
+=======
+                    Assert.assertNotNull(taskRunScheduler.getRunnableTaskRun(taskId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     // without db name
                     Assert.assertFalse(tm.getMatchedTaskRunStatus(null).isEmpty());
@@ -385,7 +424,11 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             "refresh deferred manual\n" +
                             "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                             "as select k1, k2 from tbl6;");
+<<<<<<< HEAD
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                     TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(mv.getId())).getId();
@@ -408,7 +451,12 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     }
                     Assert.assertEquals(1, statuses.size());
                     TaskRunStatus status = statuses.get(0);
+<<<<<<< HEAD
                     Assert.assertEquals(Constants.TaskRunPriority.HIGHEST.value(), status.getPriority());
+=======
+                    // default priority for next refresh batch is Constants.TaskRunPriority.HIGHER.value()
+                    Assert.assertEquals(Constants.TaskRunPriority.HIGHER.value(), status.getPriority());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     starRocksAssert.dropMaterializedView("mv_refresh_priority");
                 }
         );
@@ -445,22 +493,53 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                             ")\n" +
                             "as select k1, k2 from tbl6;",
                             () -> {
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                                 MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
                                 executeInsertSql(connectContext,
                                         "insert into tbl6 partition(p1) values('2022-01-02',2,10);");
+=======
+                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                                MaterializedView mv = ((MaterializedView) testDb.getTable(mvName));
+                                executeInsertSql(connectContext,
+                                        "insert into tbl6 partition(p1) values('2022-01-02',2,10);");
+                                executeInsertSql(connectContext, "insert into tbl6 partition(p2) values('2022-02-02',2,10);");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                                 HashMap<String, String> taskRunProperties = new HashMap<>();
                                 taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
                                 Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+<<<<<<< HEAD
                                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                                 initAndExecuteTaskRun(taskRun);
+=======
+                                ExecuteOption executeOption = new ExecuteOption(70, false, new HashMap<>());
+                                TaskRun taskRun = TaskRunBuilder.newBuilder(task).setExecuteOption(executeOption).build();
+                                initAndExecuteTaskRun(taskRun);
+                                TGetTasksParams params = new TGetTasksParams();
+                                params.setTask_name(task.getName());
+                                TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+                                List<TaskRunStatus> statuses = tm.getMatchedTaskRunStatus(params);
+                                while (statuses.size() != 1) {
+                                    statuses = tm.getMatchedTaskRunStatus(params);
+                                    Thread.sleep(100);
+                                }
+                                Assert.assertEquals(1, statuses.size());
+                                TaskRunStatus status = statuses.get(0);
+                                // the priority for next refresh batch is 70 which is specified in executeOption
+                                Assert.assertEquals(70, status.getPriority());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                                 PartitionBasedMvRefreshProcessor processor =
                                         (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
+<<<<<<< HEAD
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
                                 System.out.println(properties);
+=======
+                                Assert.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
+                                Map<String, String> properties = mvTaskRunContext.getProperties();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 Assert.assertEquals(1, properties.size());
                                 Assert.assertTrue(properties.containsKey(MV_ID));
                                 // Ensure that table properties are not passed to the task run
@@ -471,6 +550,10 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 // Ensure that session properties are set
                                 Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewrite());
                                 Assert.assertTrue(sessionVariable.isEnableMaterializedViewRewriteForInsert());
+<<<<<<< HEAD
+=======
+                                starRocksAssert.dropMaterializedView(mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             });
                 }
         );

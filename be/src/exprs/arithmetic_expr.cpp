@@ -14,9 +14,12 @@
 
 #include "exprs/arithmetic_expr.h"
 
+<<<<<<< HEAD
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Value.h>
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <optional>
 
 #include "column/type_traits.h"
@@ -27,12 +30,25 @@
 #include "exprs/binary_function.h"
 #include "exprs/decimal_binary_function.h"
 #include "exprs/decimal_cast_expr.h"
+<<<<<<< HEAD
 #include "exprs/jit/ir_helper.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
+#include "exprs/jit/ir_helper.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 #define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
@@ -124,6 +140,10 @@ public:
             return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type>(l, r);
         }
     }
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
@@ -148,6 +168,10 @@ public:
             return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -196,6 +220,11 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::DIV) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
@@ -234,6 +263,10 @@ public:
             return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -290,6 +323,10 @@ public:
             return VectorizedMod::template evaluate<Type>(l, r);
         }
     }
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::MOD) && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
@@ -329,6 +366,10 @@ public:
             return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -350,6 +391,10 @@ public:
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
     }
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
@@ -381,6 +426,10 @@ public:
         datum.value = ArithmeticBitNot::generate_ir(jit_ctx->builder, datum.value);
         return datum;
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -404,6 +453,11 @@ public:
         return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
     }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::ARITHMETIC) && IRHelper::support_jit(Type);
     }
@@ -439,6 +493,10 @@ public:
         return ArithmeticOp::template generate_ir<CppType, RunTimeCppType<TYPE_BIGINT>, CppType>(
                 context, jit_ctx->module, jit_ctx->builder, datums);
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;

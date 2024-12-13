@@ -55,7 +55,11 @@ public class EsShardProcDir implements ProcDirInterface {
 
         List<List<Comparable>> shardInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             // get infos
             EsShardPartitions esShardPartitions = esTable.getEsTablePartitions().getEsShardPartitions(indexName);
@@ -78,7 +82,11 @@ public class EsShardProcDir implements ProcDirInterface {
                 }
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // sort by tabletId, replicaId

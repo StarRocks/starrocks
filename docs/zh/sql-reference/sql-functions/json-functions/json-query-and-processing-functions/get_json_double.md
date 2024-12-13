@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_double
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 解析并获取 `json_str` 内 `json_path` 的浮点型内容。如果 `json_str` 格式不对或 `json_path` 格式不对，或者无法找到匹配项，则返回 NULL。
 

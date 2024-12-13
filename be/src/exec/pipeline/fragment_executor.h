@@ -105,6 +105,11 @@ public:
                    const TExecPlanFragmentParams& unique_request);
     Status execute(ExecEnv* exec_env);
 
+<<<<<<< HEAD
+=======
+    static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     void _fail_cleanup(bool fragment_has_registed);
     uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;

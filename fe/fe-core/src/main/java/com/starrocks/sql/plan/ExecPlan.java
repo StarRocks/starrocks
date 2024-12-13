@@ -65,6 +65,11 @@ public class ExecPlan {
     private LogicalPlan logicalPlan;
     private ColumnRefFactory columnRefFactory;
 
+<<<<<<< HEAD
+=======
+    private List<Integer> collectExecStatsIds;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VisibleForTesting
     public ExecPlan() {
         connectContext = new ConnectContext();
@@ -160,6 +165,10 @@ public class ExecPlan {
     }
 
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+<<<<<<< HEAD
+=======
+        optExpression.getOp().setPlanNodeId(id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         optExpressions.put(id, optExpression);
     }
 
@@ -260,4 +269,15 @@ public class ExecPlan {
     public void setColumnRefFactory(ColumnRefFactory columnRefFactory) {
         this.columnRefFactory = columnRefFactory;
     }
+<<<<<<< HEAD
+=======
+
+    public List<Integer> getCollectExecStatsIds() {
+        return collectExecStatsIds;
+    }
+
+    public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
+        this.collectExecStatsIds = collectExecStatsIds;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

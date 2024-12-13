@@ -96,4 +96,12 @@ public class TableFunctionNode extends PlanNode {
         planNode.setNode_type(TPlanNodeType.TABLE_FUNCTION_NODE);
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

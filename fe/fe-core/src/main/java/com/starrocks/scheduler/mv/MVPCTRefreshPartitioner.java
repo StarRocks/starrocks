@@ -40,6 +40,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Set;
 
@@ -76,6 +80,7 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Generate partition predicate for mv refresh according ref base table changed partitions.
+<<<<<<< HEAD
      * @param refBaseTable: ref base table to check.
      * @param refBaseTablePartitionNames: ref base table partition names to check.
      * @param mvPartitionSlotRef: mv partition slot ref to generate partition predicate.
@@ -96,11 +101,33 @@ public abstract class MVPCTRefreshPartitioner {
      * @param mvPotentialPartitionNames: mv potential partition names to check.
      * @return: Return mv partitions to refresh based on the ref base table partitions.
      * @throws AnalysisException
+=======
+     *
+     * @param refBaseTable:               ref base table to check.
+     * @param refBaseTablePartitionNames: ref base table partition names to check.
+     * @param mvPartitionSlotRefs:        mv partition slot ref to generate partition predicate.
+     * @throws AnalysisException
+     * @return: Return partition predicate for mv refresh.
+     */
+    public abstract Expr generatePartitionPredicate(Table refBaseTable,
+                                                    Set<String> refBaseTablePartitionNames,
+                                                    List<Expr> mvPartitionSlotRefs) throws AnalysisException;
+
+    /**
+     * Get mv partitions to refresh based on the ref base table partitions.
+     *
+     * @param mvPartitionInfo:           mv partition info to check.
+     * @param snapshotBaseTables:        snapshot base tables to check.
+     * @param mvPotentialPartitionNames: mv potential partition names to check.
+     * @throws AnalysisException
+     * @return: Return mv partitions to refresh based on the ref base table partitions.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     public abstract Set<String> getMVPartitionsToRefresh(PartitionInfo mvPartitionInfo,
                                                          Map<Long, TableSnapshotInfo> snapshotBaseTables,
                                                          MVRefreshParams mvRefreshParams,
                                                          Set<String> mvPotentialPartitionNames) throws AnalysisException;
+<<<<<<< HEAD
     public abstract Set<String> getMVPartitionsToRefreshWithForce(int partitionTTLNumber) throws AnalysisException;
 
     /**
@@ -116,6 +143,21 @@ public abstract class MVPCTRefreshPartitioner {
     public abstract Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
                                                            MVRefreshParams mvRefreshParams,
                                                            int partitionTTLNumber,
+=======
+
+    public abstract Set<String> getMVPartitionsToRefreshWithForce() throws AnalysisException;
+
+    /**
+     * Get mv partition names with TTL based on the ref base table partitions.
+     *
+     * @param materializedView: materialized view to check.
+     * @param isAutoRefresh:    is auto refresh or not.
+     * @throws AnalysisException
+     * @return: mv to refresh partition names with TTL based on the ref base table partitions.
+     */
+    public abstract Set<String> getMVPartitionNamesWithTTL(MaterializedView materializedView,
+                                                           MVRefreshParams mvRefreshParams,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                            boolean isAutoRefresh) throws AnalysisException;
 
     /**
@@ -123,7 +165,11 @@ public abstract class MVPCTRefreshPartitioner {
      *
      * @param mvPartitionsToRefresh     : mv partitions to refresh.
      * @param mvPotentialPartitionNames : mv potential partition names to check.
+<<<<<<< HEAD
      * @param tentative see {@link com.starrocks.scheduler.PartitionBasedMvRefreshProcessor#checkMvToRefreshedPartitions}
+=======
+     * @param tentative                 see {@link com.starrocks.scheduler.PartitionBasedMvRefreshProcessor}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     public abstract void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
                                                         Set<String> mvPotentialPartitionNames,
@@ -138,7 +184,11 @@ public abstract class MVPCTRefreshPartitioner {
 
     /**
      * Get mv partitions to refresh based on the ref base table partitions and its updated partitions.
+<<<<<<< HEAD
      * @param refBaseTable : ref base table to check.
+=======
+     * @param refBaseTable            : ref base table to check.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param baseTablePartitionNames : ref base table partition names to check.
      * @return : Return mv corresponding partition names to the ref base table partition names, null if sync info don't contain.
      */
@@ -148,14 +198,22 @@ public abstract class MVPCTRefreshPartitioner {
         Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMaps = mvContext.getRefBaseTableMVIntersectedPartitions();
         if (refBaseTableMVPartitionMaps == null || !refBaseTableMVPartitionMaps.containsKey(refBaseTable)) {
             LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
+<<<<<<< HEAD
                             "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
+=======
+                    "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
         Map<String, Set<String>> refBaseTableMVPartitionMap = refBaseTableMVPartitionMaps.get(refBaseTable);
         for (String basePartitionName : baseTablePartitionNames) {
             if (!refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
                 LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
+<<<<<<< HEAD
                                 "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
+=======
+                        "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return null;
             }
             result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
@@ -170,10 +228,15 @@ public abstract class MVPCTRefreshPartitioner {
      */
     protected Set<String> getMvPartitionNamesToRefresh(Set<String> mvPartitionNames) {
         Set<String> result = Sets.newHashSet();
+<<<<<<< HEAD
         Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         for (Map.Entry<Table, Column> e : refBaseTableAndColumns.entrySet()) {
             Table baseTable = e.getKey();
             
+=======
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        for (Table baseTable : refBaseTablePartitionColumns.keySet()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // refresh all mv partitions when the ref base table is not supported partition refresh
             if (!isPartitionRefreshSupported(baseTable)) {
                 LOG.info("The ref base table {} is not supported partition refresh, refresh all " +
@@ -203,7 +266,11 @@ public abstract class MVPCTRefreshPartitioner {
             }
             ans.retainAll(mvPartitionNames);
             LOG.info("The ref base table {} has updated partitions: {}, the corresponding " +
+<<<<<<< HEAD
                     "mv partitions to refresh: {}, " + "mvRangePartitionNames: {}", baseTable.getName(),
+=======
+                            "mv partitions to refresh: {}, " + "mvRangePartitionNames: {}", baseTable.getName(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     refBaseTablePartitionNames, ans, mvPartitionNames);
             result.addAll(ans);
         }
@@ -215,7 +282,11 @@ public abstract class MVPCTRefreshPartitioner {
      * - its non-ref base table except un-supported base table has updated.
      */
     protected boolean needsRefreshBasedOnNonRefTables(Map<Long, TableSnapshotInfo> snapshotBaseTables) {
+<<<<<<< HEAD
         Map<Table, Column> tableColumnMap = mv.getRefBaseTablePartitionColumns();
+=======
+        Map<Table, List<Column>> tableColumnMap = mv.getRefBaseTablePartitionColumns();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (TableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             Table snapshotTable = snapshotInfo.getBaseTable();
             if (!isPartitionRefreshSupported(snapshotTable)) {
@@ -260,7 +331,11 @@ public abstract class MVPCTRefreshPartitioner {
         }
         try {
             // check
+<<<<<<< HEAD
             Table mv = db.getTable(materializedView.getId());
+=======
+            Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), materializedView.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (mv == null) {
                 throw new DmlException("drop partition failed. mv:" + materializedView.getName() + " not exist");
             }
@@ -278,7 +353,11 @@ public abstract class MVPCTRefreshPartitioner {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
                     db.getFullName(), materializedView.getName());
         } finally {
+<<<<<<< HEAD
             locker.unLockTableWithIntensiveDbLock(db, materializedView, LockType.WRITE);
+=======
+            locker.unLockTableWithIntensiveDbLock(db.getId(), materializedView.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

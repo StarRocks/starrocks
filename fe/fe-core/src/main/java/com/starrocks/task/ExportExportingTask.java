@@ -36,8 +36,13 @@ package com.starrocks.task;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Version;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
@@ -275,7 +280,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
                     success = true;
                     LOG.info("move {} to {} success. job id: {}", exportedTempFile, exportedFile, job.getId());
                     break;
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     failMsg = e.getMessage();
                     LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                             exportedTempFile, exportedFile, job.getId(), i, failMsg);
@@ -351,7 +360,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
                         try {
                             Coordinator newCoord = exportJob.resetCoord(taskIdx, newQueryId);
                             coord = newCoord;
+<<<<<<< HEAD
                         } catch (UserException e) {
+=======
+                        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             // still use old coord if there are any problems when reseting Coord
                             LOG.warn("fail to reset coord for task idx: {}, task query id: {}, reason: {}", taskIdx,
                                     getQueryId(), e.getMessage());
@@ -392,7 +405,11 @@ public class ExportExportingTask extends PriorityLeaderTask {
         private void actualExecCoord(Coordinator coord) throws Exception {
             int leftTimeSecond = getLeftTimeSecond();
             if (leftTimeSecond <= 0) {
+<<<<<<< HEAD
                 throw new UserException("timeout");
+=======
+                throw new StarRocksException("timeout");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             coord.setTimeoutSecond(leftTimeSecond);
@@ -403,10 +420,17 @@ public class ExportExportingTask extends PriorityLeaderTask {
                 if (status.ok()) {
                     onSubTaskFinished(coord.getExportFiles());
                 } else {
+<<<<<<< HEAD
                     throw new UserException(status.getErrorMsg());
                 }
             } else {
                 throw new UserException("timeout");
+=======
+                    throw new StarRocksException(status.getErrorMsg());
+                }
+            } else {
+                throw new StarRocksException("timeout");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 

@@ -184,11 +184,21 @@ public class MysqlTable extends Table {
         return getPropertyFromResource(MYSQL_PASSWORD);
     }
 
+<<<<<<< HEAD
     public String getMysqlDatabaseName() {
         return mysqlDatabaseName;
     }
 
     public String getMysqlTableName() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return mysqlDatabaseName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return mysqlTableName;
     }
 
@@ -235,4 +245,12 @@ public class MysqlTable extends Table {
     public boolean supportInsert() {
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean isTemporal() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

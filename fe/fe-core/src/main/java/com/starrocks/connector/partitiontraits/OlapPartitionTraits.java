@@ -25,7 +25,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,7 +48,11 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public String getDbName() {
+=======
+    public String getCatalogDBName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         throw new NotImplementedException("not support olap table");
     }
 
@@ -62,9 +70,14 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, PListCell> getPartitionList(Column partitionColumn) {
         // TODO: check partition type
         return ((OlapTable) table).getListPartitionItems();
+=======
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+        return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -84,8 +97,14 @@ public class OlapPartitionTraits extends DefaultTraits {
             List<String> baseTablePartitionInfos = Lists.newArrayList();
             for (String p : baseTable.getVisiblePartitionNames()) {
                 Partition partition = baseTable.getPartition(p);
+<<<<<<< HEAD
                 baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(), partition.getVisibleVersion(),
                         partition.getVisibleVersionTime()));
+=======
+                baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersionTime()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             LOG.debug("baseTable: {}, baseTablePartitions:{}, mvBaseTableVisibleVersionMap: {}",
                     baseTable.getName(), baseTablePartitionInfos, mvBaseTableVisibleVersionMap);
@@ -96,7 +115,11 @@ public class OlapPartitionTraits extends DefaultTraits {
         for (String partitionName : baseTable.getVisiblePartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
+<<<<<<< HEAD
                 if (partition.getVisibleVersion() != 1) {
+=======
+                if (partition.getDefaultPhysicalPartition().getVisibleVersion() != 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     result.add(partitionName);
                 }
             }
@@ -134,8 +157,14 @@ public class OlapPartitionTraits extends DefaultTraits {
     public static boolean isBaseTableChanged(Partition partition,
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
         return mvRefreshedPartitionInfo.getId() != partition.getId()
+<<<<<<< HEAD
                 || partition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
                 || partition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
+=======
+                || partition.getDefaultPhysicalPartition().getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || partition.getDefaultPhysicalPartition().getVisibleVersionTime()
+                > mvRefreshedPartitionInfo.getLastRefreshTime();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<Column> getPartitionColumns() {

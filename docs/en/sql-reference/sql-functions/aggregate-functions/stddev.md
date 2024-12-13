@@ -5,7 +5,11 @@ displayed_sidebar: docs
 
 # stddev,stddev_pop,std
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the population standard deviation of the expr expression. Since v2.5.10, this function can also be used as a window function.
 

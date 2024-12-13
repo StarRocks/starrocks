@@ -123,9 +123,15 @@ public class MvRefreshConcurrencyTest extends MvRewriteTestBase {
                     System.out.println(sql);
                     starRocksAssert.withMaterializedView(sql);
 
+<<<<<<< HEAD
                     Database db = GlobalStateMgr.getCurrentState().getDb("test");
                     String mvName = buildMVName(i);
                     Table table = db.getTable(mvName);
+=======
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    String mvName = buildMVName(i);
+                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertTrue(table != null);
                     mvs.add((MaterializedView) table);
                     starRocksAssert.useDatabase("test");

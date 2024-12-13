@@ -28,10 +28,17 @@
 #include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
+=======
+#include "gen_cpp/internal_service.pb.h"
+#include "runtime/mem_tracker.h"
+#include "util/compression/block_compression.h"
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
@@ -96,6 +103,10 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_rpc_timer = nullptr;
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // map index_id to TabletBEMap(map tablet_id to backend id)
@@ -218,7 +229,11 @@ private:
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
+<<<<<<< HEAD
     PInternalService_Stub* _stub = nullptr;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;

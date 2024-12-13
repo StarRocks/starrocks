@@ -301,6 +301,15 @@ statement
     | showDictionaryStatement
     | cancelRefreshDictionaryStatement
 
+<<<<<<< HEAD
+=======
+    // Plan advisor statement
+    | alterPlanAdvisorAddStatement
+    | truncatePlanAdvisorStatement
+    | alterPlanAdvisorDropStatement
+    | showPlanAdvisorStatement
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Warehouse Statement
     | createWarehouseStatement
     | dropWarehouseStatement
@@ -310,6 +319,10 @@ statement
     | showWarehousesStatement
     | showClustersStatement
     | showNodesStatement
+<<<<<<< HEAD
+=======
+    | alterWarehouseStatement
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Unsupported Statement
     | unsupportedStatement
@@ -383,7 +396,11 @@ createTableStatement
 
 
 columnDesc
+<<<<<<< HEAD
     : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)?
+=======
+    : identifier type? charsetName? KEY? aggDesc? columnNullable?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     (defaultDesc | AUTO_INCREMENT | generatedColumnDesc)?
     comment?
     ;
@@ -426,6 +443,22 @@ orderByDesc
     : ORDER BY identifierList
     ;
 
+<<<<<<< HEAD
+=======
+columnNullable
+    : NULL
+    | NOT NULL
+    ;
+
+typeWithNullable
+    : type columnNullable?
+    ;
+
+aggStateDesc
+    : identifier '(' typeWithNullable (',' typeWithNullable)* ')'
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 aggDesc
     : SUM
     | MAX
@@ -435,6 +468,10 @@ aggDesc
     | BITMAP_UNION
     | PERCENTILE_UNION
     | REPLACE_IF_NOT_NULL
+<<<<<<< HEAD
+=======
+    | aggStateDesc
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 rollupDesc
@@ -498,7 +535,11 @@ dropIndexStatement
     ;
 
 indexType
+<<<<<<< HEAD
     : USING (BITMAP | GIN | NGRAMBF)
+=======
+    : USING (BITMAP | GIN | NGRAMBF | VECTOR)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 showTableStatement
@@ -623,8 +664,18 @@ createMaterializedViewStatement
     AS queryStatement
     ;
 
+<<<<<<< HEAD
 materializedViewDesc
     : (PARTITION BY primaryExpression)
+=======
+mvPartitionExprs:
+    primaryExpression
+    | '(' primaryExpression (',' primaryExpression)* ')'
+    ;
+
+materializedViewDesc
+    : (PARTITION BY mvPartitionExprs)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | distributionDesc
     | orderByDesc
     | refreshSchemeDesc
@@ -649,7 +700,11 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
+<<<<<<< HEAD
     : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)?
+=======
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -868,6 +923,14 @@ alterClause
     | optimizeClause
     | addFieldClause
     | dropFieldClause
+<<<<<<< HEAD
+=======
+    | createOrReplaceBranchClause
+    | createOrReplaceTagClause
+    | dropBranchClause
+    | dropTagClause
+    | tableOperationClause
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     //Alter partition clause
     | addPartitionClause
@@ -1034,6 +1097,67 @@ dropFieldClause
     : MODIFY COLUMN identifier DROP FIELD nestedFieldName properties?
     ;
 
+<<<<<<< HEAD
+=======
+createOrReplaceTagClause
+    : (CREATE OR)? REPLACE TAG identifier tagOptions
+    | CREATE TAG (IF NOT EXISTS)? identifier tagOptions
+    ;
+
+createOrReplaceBranchClause
+    : (CREATE OR)? REPLACE BRANCH identifier branchOptions
+    | CREATE BRANCH (IF NOT EXISTS)? identifier branchOptions
+    ;
+
+dropBranchClause
+    : DROP BRANCH (IF EXISTS)? identifier
+    ;
+
+dropTagClause
+    : DROP TAG (IF EXISTS)? identifier
+    ;
+
+tableOperationClause
+    : EXECUTE functionCall
+    ;
+
+tagOptions
+    : (AS OF VERSION snapshotId)? (refRetain)?
+    ;
+
+branchOptions
+    : (AS OF VERSION snapshotId)? (refRetain)? (snapshotRetention)?
+    ;
+
+snapshotRetention
+    : WITH SNAPSHOT RETENTION minSnapshotsToKeep
+    | WITH SNAPSHOT RETENTION maxSnapshotAge
+    | WITH SNAPSHOT RETENTION minSnapshotsToKeep maxSnapshotAge
+    ;
+
+refRetain
+    : RETAIN number timeUnit
+    ;
+
+maxSnapshotAge
+    : number timeUnit
+    ;
+
+minSnapshotsToKeep
+    : number SNAPSHOTS
+    ;
+
+snapshotId
+    : number
+    ;
+
+timeUnit
+    : DAYS
+    | HOURS
+    | MINUTES
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // ---------Alter partition clause---------
 
 addPartitionClause
@@ -1042,7 +1166,13 @@ addPartitionClause
     ;
 
 dropPartitionClause
+<<<<<<< HEAD
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+=======
+    : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 truncatePartitionClause
@@ -1065,11 +1195,25 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
+<<<<<<< HEAD
     : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
 
+=======
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName writeBranch? partitionNames? | (FILES propertyList) | (BLACKHOLE '(' ')'))
+        insertLabelOrColumnAliases* properties?
+        (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
+    ;
+
+// for compatibility with the case 'LABEL before columnAliases'
+insertLabelOrColumnAliases
+    : WITH LABEL label=identifier
+    | columnAliases
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 updateStatement
     : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
@@ -1168,7 +1312,11 @@ showStreamLoadStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
+<<<<<<< HEAD
     : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')?
+=======
+    : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')? partitionNames?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         (WITH (SYNC | ASYNC) MODE)?
         properties?
     ;
@@ -1281,11 +1429,22 @@ showFunctionsStatement
     ;
 
 dropFunctionStatement
+<<<<<<< HEAD
     : DROP GLOBAL? FUNCTION qualifiedName '(' typeList ')'
     ;
 
 createFunctionStatement
     : CREATE GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
+=======
+    : DROP GLOBAL? FUNCTION (IF EXISTS)?  qualifiedName '(' typeList ')'
+    ;
+
+createFunctionStatement
+    : CREATE orReplace GLOBAL? functionType=(TABLE | AGGREGATE)? FUNCTION ifNotExists qualifiedName '(' typeList ')' RETURNS returnType=type (properties|inlineProperties)?? inlineFunction?
+    ;
+inlineFunction
+    : AS ATTACHMENT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 typeList
@@ -1633,14 +1792,24 @@ privObjectTypePlural
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
+<<<<<<< HEAD
     : BACKUP SNAPSHOT qualifiedName
     TO identifier
     (ON '(' tableDesc (',' tableDesc) * ')')?
+=======
+    : BACKUP (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierList)? (DATABASE dbName=identifier)?
+    SNAPSHOT qualifiedName TO repoName=identifier
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     (PROPERTIES propertyList)?
     ;
 
 cancelBackupStatement
+<<<<<<< HEAD
     : CANCEL BACKUP ((FROM | IN) identifier)?
+=======
+    : CANCEL BACKUP ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 showBackupStatement
@@ -1649,13 +1818,24 @@ showBackupStatement
 
 restoreStatement
     : RESTORE SNAPSHOT qualifiedName
+<<<<<<< HEAD
     FROM identifier
     (ON '(' restoreTableDesc (',' restoreTableDesc) * ')')?
+=======
+    FROM repoName=identifier
+    (ALL EXTERNAL CATALOGS | EXTERNAL (CATALOG | CATALOGS) identifierWithAliasList)?
+    (DATABASE dbName=identifier (AS dbAlias=identifier)?)?
+    (ON '(' backupRestoreObjectDesc (',' backupRestoreObjectDesc) * ')')?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     (PROPERTIES propertyList)?
     ;
 
 cancelRestoreStatement
+<<<<<<< HEAD
     : CANCEL RESTORE ((FROM | IN) identifier)?
+=======
+    : CANCEL RESTORE ((FROM | IN) identifier | FOR EXTERNAL CATALOG)?
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 showRestoreStatement
@@ -1889,6 +2069,7 @@ lock_type
     ;
 
 // ------------------------------------------- Plan Tuning Statement ---------------------------------------------------
+<<<<<<< HEAD
 addPlanAdvisorStatement
     : ADD INTO PLAN ADVISOR queryStatement;
 
@@ -1897,6 +2078,16 @@ clearPlanAdvisorStatement
 
 delPlanAdvisorStatement
     : DELETE PLAN ADVISOR string;
+=======
+alterPlanAdvisorAddStatement
+    : ALTER PLAN ADVISOR ADD queryStatement;
+
+truncatePlanAdvisorStatement
+    : TRUNCATE PLAN ADVISOR;
+
+alterPlanAdvisorDropStatement
+    : ALTER PLAN ADVISOR DROP string;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 showPlanAdvisorStatement
     : SHOW PLAN ADVISOR;
@@ -1937,6 +2128,13 @@ showNodesStatement
     | SHOW NODES FROM WAREHOUSE identifier
     ;
 
+<<<<<<< HEAD
+=======
+alterWarehouseStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -1954,6 +2152,7 @@ queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
+<<<<<<< HEAD
 temporalClause
     : AS OF expression
     | FOR SYSTEM_TIME AS OF TIMESTAMP string
@@ -1961,6 +2160,19 @@ temporalClause
     | FOR SYSTEM_TIME FROM expression TO expression
     | FOR SYSTEM_TIME ALL
     | FOR VERSION AS OF expression
+=======
+queryPeriod
+    : FOR? periodType BETWEEN expression AND expression
+    | FOR? periodType FROM expression TO expression
+    | FOR? periodType ALL
+    | FOR? periodType AS OF end=expression
+    ;
+
+periodType
+    : SYSTEM_TIME
+    | TIMESTAMP
+    | VERSION
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 queryPrimary
@@ -2036,8 +2248,13 @@ relation
     ;
 
 relationPrimary
+<<<<<<< HEAD
     : qualifiedName temporalClause? partitionNames? tabletList? replicaList? (
         AS? alias=identifier)? bracketHint?                                             #tableAtom
+=======
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? sampleClause? (
+        AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
@@ -2064,6 +2281,13 @@ pivotValue
     : (literalExpression | literalExpressionList) (AS? (identifier | string))?
     ;
 
+<<<<<<< HEAD
+=======
+sampleClause
+    : SAMPLE propertyList?
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 argumentList
     : expressionList
     | namedArgumentList
@@ -2411,11 +2635,26 @@ frameBound
 
 // ------------------------------------------- COMMON AST --------------------------------------------------------------
 
+<<<<<<< HEAD
+=======
+backupRestoreObjectDesc
+    : backupRestoreTableDesc
+    | (ALL (FUNCTION | FUNCTIONS) | (FUNCTION | FUNCTIONS) qualifiedName (AS identifier)?)
+    | (ALL (TABLE | TABLES) | (TABLE | TABLES) backupRestoreTableDesc)
+    | (ALL MATERIALIZED (VIEW | VIEWS) | MATERIALIZED (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    | (ALL (VIEW | VIEWS) | (VIEW | VIEWS) qualifiedName (AS identifier)?)
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 tableDesc
     : qualifiedName partitionNames?
     ;
 
+<<<<<<< HEAD
 restoreTableDesc
+=======
+backupRestoreTableDesc
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     : qualifiedName partitionNames? (AS identifier)?
     ;
 
@@ -2427,6 +2666,14 @@ optimizerTrace
     : TRACE (ALL | LOGS | TIMES | VALUES | REASON) identifier?
     ;
 
+<<<<<<< HEAD
+=======
+partitionExpr
+    : identifier
+    | functionCall
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY RANGE primaryExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
@@ -2434,6 +2681,10 @@ partitionDesc
     | PARTITION BY LIST? identifierList
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
+<<<<<<< HEAD
+=======
+    | PARTITION BY partitionExpr (',' partitionExpr)*
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ;
 
 listPartitionDesc
@@ -2552,6 +2803,17 @@ property
     : key=string '=' value=string
     ;
 
+<<<<<<< HEAD
+=======
+inlineProperties
+    : inlineProperty ( inlineProperty)*
+    ;
+
+inlineProperty
+    : key=identifier '=' value=string
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 varType
     : GLOBAL
     | LOCAL
@@ -2679,6 +2941,13 @@ qualifiedName
     : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
+<<<<<<< HEAD
+=======
+writeBranch
+    : FOR? VERSION AS OF identifier
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 identifier
     : LETTER_IDENTIFIER      #unquotedIdentifier
     | nonReserved            #unquotedIdentifier
@@ -2686,6 +2955,17 @@ identifier
     | BACKQUOTED_IDENTIFIER  #backQuotedIdentifier
     ;
 
+<<<<<<< HEAD
+=======
+identifierWithAlias
+    : originalName=identifier (AS alias=identifier)?
+    ;
+
+identifierWithAliasList
+    : '(' identifierWithAlias (',' identifierWithAlias)* ')'
+    ;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 identifierList
     : '(' identifier (',' identifier)* ')'
     ;
@@ -2726,6 +3006,7 @@ number
     ;
 
 nonReserved
+<<<<<<< HEAD
     : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
     | ARRAY_AGG | ARRAY_AGG_DISTINCT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
@@ -2734,35 +3015,68 @@ nonReserved
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+=======
+    : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
+    | BUILTIN | BASE | BEFORE
+    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
+    | CONFIG | COMPACT
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
     | GLOBAL | GRANTS | GROUP_CONCAT
+<<<<<<< HEAD
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
+=======
+    | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HOURS | HUB
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
+<<<<<<< HEAD
     | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLUGIN | PLUGINS | POLICY | POLICIES
+=======
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS
+    | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
+    | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
+<<<<<<< HEAD
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
     | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE
+=======
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START
+    | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
+    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
+    | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
     | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VERSION | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
+<<<<<<< HEAD
     | DOTDOTDOT | NGRAMBF
+=======
+    | DOTDOTDOT | NGRAMBF | VECTOR
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | FIELD
     | ARRAY_ELEMENT
     ;

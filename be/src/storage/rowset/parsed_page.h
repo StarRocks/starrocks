@@ -112,6 +112,11 @@ public:
 
     virtual Status read_dict_codes(Column* column, const SparseRange<>& range) = 0;
 
+<<<<<<< HEAD
+=======
+    virtual size_t read_null_count() { return 0; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     uint32_t _page_index{0};
     uint64_t _num_rows{0};

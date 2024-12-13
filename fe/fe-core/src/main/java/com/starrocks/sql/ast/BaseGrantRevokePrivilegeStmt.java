@@ -16,10 +16,17 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.FunctionName;
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
+=======
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

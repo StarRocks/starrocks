@@ -48,6 +48,10 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.OlapTableRollupJobBuilder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.alter.OptimizeJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -109,7 +113,13 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.MetaUtils;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PRangeCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -119,7 +129,11 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.DropAutoIncrementMapTask;
+<<<<<<< HEAD
 import com.starrocks.task.DropReplicaTask;
+=======
+import com.starrocks.task.TabletTaskExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TPersistentIndexType;
@@ -131,7 +145,10 @@ import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
+<<<<<<< HEAD
 import org.apache.hadoop.util.ThreadUtil;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -195,7 +212,11 @@ public class OlapTable extends Table {
         /* This state means table is updating table meta during alter operation(SCHEMA_CHANGE
          * or ROLLUP).
          * The query plan which is generate during this state is invalid because the meta
+<<<<<<< HEAD
          * during the creation of the logical plan and the physical plan might be inconsistent. 
+=======
+         * during the creation of the logical plan and the physical plan might be inconsistent.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         */
         UPDATING_META,
         OPTIMIZE
@@ -385,7 +406,11 @@ public class OlapTable extends Table {
             olapTable.defaultDistributionInfo = this.defaultDistributionInfo.copy();
         }
         Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
+<<<<<<< HEAD
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+=======
+        Map<String, Partition> nameToPartitions = Maps.newLinkedHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
             Partition copiedPartition = kv.getValue().shallowCopy();
             idToPartitions.put(kv.getKey(), copiedPartition);
@@ -682,10 +707,18 @@ public class OlapTable extends Table {
 
     public boolean hasMaterializedView() {
         Optional<Partition> partition = idToPartition.values().stream().findFirst();
+<<<<<<< HEAD
         if (!partition.isPresent()) {
             return false;
         } else {
             return partition.get().hasMaterializedView();
+=======
+        if (partition.isEmpty()) {
+            return false;
+        } else {
+            PhysicalPartition physicalPartition = partition.get().getDefaultPhysicalPartition();
+            return physicalPartition.hasMaterializedView();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -845,7 +878,11 @@ public class OlapTable extends Table {
             partitionInfo.setReplicationNum(id, (short) restoreReplicationNum);
         }
 
+<<<<<<< HEAD
         // reset partiton info
+=======
+        // reset partition info
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         partitionInfo.setPartitionIdsForRestore(partitionOldIdToNewId);
 
         // reset partitions
@@ -865,7 +902,11 @@ public class OlapTable extends Table {
             });
             origPhysicalPartitions.forEach(physicalPartition -> {
                 if (physicalPartition.getId() != newPartitionId) {
+<<<<<<< HEAD
                     physicalPartition.setIdForRestore(globalStateMgr.getNextId());
+=======
+                    physicalPartition.setIdForRestore(GlobalStateMgr.getCurrentState().getNextId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     physicalPartition.setParentId(newPartitionId);
                     partition.addSubPartition(physicalPartition);
                 }
@@ -906,7 +947,11 @@ public class OlapTable extends Table {
                     idx.clearTabletsForRestore();
                     Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                             partitionInfo.getReplicationNum(entry.getKey()), physicalPartition.getVisibleVersion(),
+<<<<<<< HEAD
                             schemaHash, physicalPartition.getId(), physicalPartition.getShardGroupId(), db);
+=======
+                            schemaHash, physicalPartition.getId(), db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!status.ok()) {
                         return status;
                     }
@@ -919,7 +964,11 @@ public class OlapTable extends Table {
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
                                           int replicationNum, long version, int schemaHash,
+<<<<<<< HEAD
                                           long partitionId, long shardGroupId, Database db) {
+=======
+                                          long partitionId, Database db) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkArgument(replicationNum > 0);
         boolean isColocate = (this.colocateGroup != null && !this.colocateGroup.isEmpty() && db != null);
 
@@ -939,7 +988,11 @@ public class OlapTable extends Table {
             ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
             List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
             boolean chooseBackendsArbitrary = backendsPerBucketSeq == null || backendsPerBucketSeq.isEmpty();
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (chooseBackendsArbitrary) {
                 backendsPerBucketSeq = Lists.newArrayList();
             }
@@ -948,7 +1001,11 @@ public class OlapTable extends Table {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // replicas
                 List<Long> beIds;
                 if (chooseBackendsArbitrary) {
@@ -986,7 +1043,11 @@ public class OlapTable extends Table {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // replicas
                 List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
                         .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
@@ -1022,11 +1083,19 @@ public class OlapTable extends Table {
             if (localMvId == null) {
                 continue;
             }
+<<<<<<< HEAD
             Database mvDb = GlobalStateMgr.getCurrentState().getDb(localMvId.getDbId());
             if (mvDb == null) {
                 continue;
             }
             Table mvTable = mvDb.getTable(localMvId.getId());
+=======
+            Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(localMvId.getDbId());
+            if (mvDb == null) {
+                continue;
+            }
+            Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvDb.getId(), localMvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (mvTable == null) {
                 continue;
             }
@@ -1216,14 +1285,46 @@ public class OlapTable extends Table {
     }
 
     /**
+<<<<<<< HEAD
      * @return : table's partition name to list partition names.
+=======
+     * NOTE: Only list partitioned olap table can call this method.
+     * @return : table's partition name to all list partition cells.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * eg:
      *  partition columns   : (a, b, c)
      *  values              : [[1, 2, 3], [4, 5, 6]]
      */
     public Map<String, PListCell> getListPartitionItems() {
+<<<<<<< HEAD
         Preconditions.checkState(partitionInfo instanceof ListPartitionInfo);
         ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+=======
+        return getListPartitionItems(Optional.empty());
+    }
+
+    /**
+     * Return the partition items of the selected partition columns if selectedPartitionCols is not null, otherwise return
+     * all partition items.
+     */
+    public Map<String, PListCell> getListPartitionItems(Optional<List<Column>> selectedPartitionCols) {
+        Preconditions.checkState(partitionInfo instanceof ListPartitionInfo, "partition info is not list partition");
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
+        List<Column> partitionCols = listPartitionInfo.getPartitionColumns(this.idToColumn);
+        List<Integer> colIdxes = Lists.newArrayList();
+        if (selectedPartitionCols.isPresent()) {
+            Preconditions.checkState(!selectedPartitionCols.isEmpty(), "selected partition columns is empty");
+            Preconditions.checkState(partitionCols.size() >= selectedPartitionCols.get().size(),
+                    "selected partition columns size is larger than partition columns size");
+            for (Column select : selectedPartitionCols.get()) {
+                int idx = partitionCols.indexOf(select);
+                if (idx == -1) {
+                    throw new SemanticException("column " + select.getName() + " is not partition column");
+                }
+                colIdxes.add(idx);
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, PListCell> partitionItems = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
@@ -1234,7 +1335,11 @@ public class OlapTable extends Table {
             }
             // one item
             List<String> singleValues = listPartitionInfo.getIdToValues().get(partitionId);
+<<<<<<< HEAD
             if (singleValues != null) {
+=======
+            if (CollectionUtils.isNotEmpty(singleValues)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<List<String>> cellValue = Lists.newArrayList();
                 // for one item(single value), treat it as multi values.
                 for (String val : singleValues) {
@@ -1245,8 +1350,25 @@ public class OlapTable extends Table {
 
             // multi items
             List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partitionId);
+<<<<<<< HEAD
             if (multiValues != null) {
                 partitionItems.put(partitionName, new PListCell(multiValues));
+=======
+            if (CollectionUtils.isNotEmpty(multiValues)) {
+                if (CollectionUtils.isEmpty(colIdxes)) {
+                    partitionItems.put(partitionName, new PListCell(multiValues));
+                } else {
+                    List<List<String>> cellValue = Lists.newArrayList();
+                    for (List<String> multiValue : multiValues) {
+                        List<String> selectedValues = Lists.newArrayList();
+                        for (int idx : colIdxes) {
+                            selectedValues.add(multiValue.get(idx));
+                        }
+                        cellValue.add(selectedValues);
+                    }
+                    partitionItems.put(partitionName, new PListCell(cellValue));
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return partitionItems;
@@ -1263,15 +1385,23 @@ public class OlapTable extends Table {
         if (partitionInfo.isUnPartitioned()) {
             return partitionColumnNames;
         } else if (partitionInfo.isRangePartition()) {
+<<<<<<< HEAD
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(this.idToColumn);
+=======
+            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
             }
             return partitionColumnNames;
         } else if (partitionInfo.isListPartition()) {
+<<<<<<< HEAD
             ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
             List<Column> partitionColumns = listPartitionInfo.getPartitionColumns(this.idToColumn);
+=======
+            List<Column> partitionColumns = partitionInfo.getPartitionColumns(this.idToColumn);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Column column : partitionColumns) {
                 partitionColumnNames.add(column.getName());
             }
@@ -1359,6 +1489,10 @@ public class OlapTable extends Table {
 
     public void addPhysicalPartition(PhysicalPartition physicalPartition) {
         physicalPartitionIdToPartitionId.put(physicalPartition.getId(), physicalPartition.getParentId());
+<<<<<<< HEAD
+=======
+        physicalPartitionNameToPartitionId.put(physicalPartition.getName(), physicalPartition.getParentId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // This is a private method.
@@ -1519,6 +1653,7 @@ public class OlapTable extends Table {
                 }
             }
             for (Partition partition : idToPartition.values()) {
+<<<<<<< HEAD
                 // Compatibility code, if you roll back the version from 3.4 to 3.3,
                 // an unknown physical partition id may appear.
                 // This default partition id is actually The Partition
@@ -1526,6 +1661,8 @@ public class OlapTable extends Table {
                     return partition;
                 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (PhysicalPartition subPartition : partition.getSubPartitions()) {
                     if (subPartition.getId() == physicalPartitionId) {
                         return subPartition;
@@ -1628,7 +1765,12 @@ public class OlapTable extends Table {
         Collections.sort(partitions, new Comparator<Partition>() {
             @Override
             public int compare(Partition h1, Partition h2) {
+<<<<<<< HEAD
                 return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+=======
+                return (int) (h2.getDefaultPhysicalPartition().getVisibleVersion()
+                        - h1.getDefaultPhysicalPartition().getVisibleVersion());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         });
         return partitions.subList(0, recentPartitionNum);
@@ -2055,6 +2197,16 @@ public class OlapTable extends Table {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 physicalPartitionIdToPartitionId.put(physicalPartition.getId(), partition.getId());
                 physicalPartitionNameToPartitionId.put(physicalPartition.getName(), partition.getId());
+<<<<<<< HEAD
+=======
+
+                // Every partition has a ShardGroup previously,
+                // and now every Materialized index has a shardGroup.
+                // So the original partition's shardGroup is moved to the base materialized index for compatibility
+                if (physicalPartition.getShardGroupId() != PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                    physicalPartition.getBaseIndex().setShardGroupId(physicalPartition.getShardGroupId());
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -2259,8 +2411,15 @@ public class OlapTable extends Table {
         Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
         if (optionalPartition.isPresent()) {
             Partition partition = optionalPartition.get();
+<<<<<<< HEAD
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = partition.getBaseIndex();
+=======
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+
+            short replicationNum = partitionInfo.getReplicationNum(partition.getId());
+            MaterializedIndex baseIdx = physicalPartition.getBaseIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {
                 LocalTablet tablet = (LocalTablet) baseIdx.getTablet(tabletId);
                 List<Long> replicaBackendIds = tablet.getNormalReplicaBackendIds();
@@ -2743,6 +2902,36 @@ public class OlapTable extends Table {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void replaceMatchPartitions(List<String> tempPartitionNames) {
+        for (String partitionName : tempPartitionNames) {
+            Partition partition = tempPartitions.getPartition(partitionName);
+            if (partition != null) {
+                String oldPartitionName = partitionName.substring(
+                        partitionName.indexOf(AnalyzerUtils.PARTITION_NAME_PREFIX_SPLIT) + 1);
+                Partition oldPartition = nameToPartition.get(oldPartitionName);
+                if (oldPartition != null) {
+                    // drop old partition
+                    dropPartition(-1, oldPartitionName, true);
+                }
+                // add new partition
+                addPartition(partition);
+                // drop temp partition
+                tempPartitions.dropPartition(partitionName, false);
+                // move the range from idToTempRange to idToRange
+                partitionInfo.moveRangeFromTempToFormal(partition.getId());
+                // rename partition
+                renamePartition(partitionName, oldPartitionName);
+            }
+        }
+
+        for (Column column : getColumns()) {
+            IDictManager.getInstance().removeGlobalDict(this.getId(), column.getColumnId());
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /*
      * replace partitions in 'partitionNames' with partitions in
      * 'tempPartitionNames'.
@@ -2926,7 +3115,11 @@ public class OlapTable extends Table {
         if (tableProperty == null) {
             return -1;
         }
+<<<<<<< HEAD
         return tableProperty.getCompressionLevel();   
+=======
+        return tableProperty.getCompressionLevel();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setPartitionLiveNumber(int number) {
@@ -2942,7 +3135,11 @@ public class OlapTable extends Table {
         Collection<Partition> partitions = getPartitions();
         for (Partition partition : partitions) {
             result.put(TableProperty.BINLOG_PARTITION + partition.getId(),
+<<<<<<< HEAD
                     String.valueOf(partition.getVisibleVersion()));
+=======
+                    String.valueOf(partition.getDefaultPhysicalPartition().getVisibleVersion()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return result;
     }
@@ -3230,7 +3427,11 @@ public class OlapTable extends Table {
         removeTableBinds(isReplay);
         removeTabletsFromInvertedIndex();
         if (!isReplay) {
+<<<<<<< HEAD
             deleteAllReplicas();
+=======
+            TabletTaskExecutor.deleteAllReplicas(this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return true;
     }
@@ -3244,6 +3445,7 @@ public class OlapTable extends Table {
         return new OlapTableAlterJobV2Builder(this);
     }
 
+<<<<<<< HEAD
     public OptimizeJobV2Builder optimizeTable() {
         return new OptimizeJobV2Builder(this);
     }
@@ -3302,6 +3504,14 @@ public class OlapTable extends Table {
                 AgentTaskExecutor.submit(originTasks);
             }
         }
+=======
+    public AlterJobV2Builder rollUp() {
+        return new OlapTableRollupJobBuilder(this);
+    }
+
+    public OptimizeJobV2Builder optimizeTable() {
+        return new OptimizeJobV2Builder(this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -3501,10 +3711,17 @@ public class OlapTable extends Table {
     }
 
     @Nullable
+<<<<<<< HEAD
     public FilePathInfo getPartitionFilePathInfo(long partitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
             return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, partitionId);
+=======
+    public FilePathInfo getPartitionFilePathInfo(long physicalPartitionId) {
+        FilePathInfo pathInfo = getDefaultFilePathInfo();
+        if (pathInfo != null) {
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }
@@ -3541,11 +3758,19 @@ public class OlapTable extends Table {
         if (this.indexes != null && !this.indexes.getIndexes().isEmpty()) {
             this.maxIndexId = Math.max(
                     this.indexes.getIndexes().stream()
+<<<<<<< HEAD
                             .filter(index -> index.getIndexType() == IndexType.GIN)
                             .mapToLong(Index::getIndexId).max().orElse(-1),
                     this.maxIndexId);
             this.indexes.getIndexes().stream()
                     .filter(index -> index.getIndexType() == IndexType.GIN && index.getIndexId() < 0)
+=======
+                            .filter(index -> IndexType.isCompatibleIndex(index.getIndexType()))
+                            .mapToLong(Index::getIndexId).max().orElse(-1),
+                    this.maxIndexId);
+            this.indexes.getIndexes().stream()
+                    .filter(index -> IndexType.isCompatibleIndex(index.getIndexType()) && index.getIndexId() < 0)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .forEach(index -> index.setIndexId(this.incAndGetMaxIndexId()));
 
         }
@@ -3664,4 +3889,33 @@ public class OlapTable extends Table {
     public void updateLastCollectProfileTime() {
         this.lastCollectProfileTime = System.currentTimeMillis();
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Return partition name and associate partition cell with specific partition columns.
+     * If partitionColumnsOpt is empty, return partition cell with all partition columns.
+     */
+    public Map<String, PCell> getPartitionCells(Optional<List<Column>> partitionColumnsOpt) {
+        PartitionInfo partitionInfo = this.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return null;
+        }
+        if (partitionInfo.isRangePartition()) {
+            Preconditions.checkArgument(partitionColumnsOpt.isEmpty() || partitionColumnsOpt.get().size() == 1);
+            Map<String, Range<PartitionKey>> rangeMap = getRangePartitionMap();
+            if (rangeMap == null) {
+                return null;
+            }
+            return rangeMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> new PRangeCell(x.getValue())));
+        } else if (partitionInfo.isListPartition()) {
+            Map<String, PListCell> listMap = getListPartitionItems(partitionColumnsOpt);
+            if (listMap == null) {
+                return null;
+            }
+            return listMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+        }
+        return null;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

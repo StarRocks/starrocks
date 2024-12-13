@@ -15,6 +15,10 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
@@ -37,7 +41,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
@@ -74,6 +82,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+<<<<<<< HEAD
+=======
+import java.util.HashSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -142,6 +154,15 @@ public class LoadPlanner {
 
     private String mergeConditionStr;
 
+<<<<<<< HEAD
+=======
+    // Only valid for stream load
+    private boolean enableBatchWrite = false;
+    private int batchWriteIntervalMs;
+    private ImmutableMap<String, String> batchWriteParameters;
+    private Set<Long> batchWriteBackendIds;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
                        long startTime, boolean partialUpdate, ConnectContext context,
@@ -239,6 +260,17 @@ public class LoadPlanner {
         return warehouseId;
     }
 
+<<<<<<< HEAD
+=======
+    public void setBatchWrite(
+            int batchWriteIntervalMs, ImmutableMap<String, String> loadParameters, Set<Long> batchWriteBackendIds) {
+        this.enableBatchWrite = true;
+        this.batchWriteIntervalMs = batchWriteIntervalMs;
+        this.batchWriteParameters = loadParameters;
+        this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
     }
@@ -251,7 +283,11 @@ public class LoadPlanner {
         this.jsonOptions = options;
     }
 
+<<<<<<< HEAD
     public void plan() throws UserException {
+=======
+    public void plan() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
@@ -370,7 +406,11 @@ public class LoadPlanner {
         Collections.reverse(fragments);
     }
 
+<<<<<<< HEAD
     private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws UserException {
+=======
+    private void generateTupleDescriptor(List<Column> destColumns, boolean isPrimaryKey) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.tupleDesc = descTable.createTupleDescriptor("DestTableTupleDescriptor");
         // Add column slotDesc for dest table
         for (Column col : destColumns) {
@@ -400,7 +440,11 @@ public class LoadPlanner {
         descTable.computeMemLayout();
     }
 
+<<<<<<< HEAD
     private ScanNode prepareScanNodes() throws UserException {
+=======
+    private ScanNode prepareScanNodes() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ScanNode scanNode = null;
         if (this.etlJobType == EtlJobType.BROKER) {
             FileScanNode fileScanNode = new FileScanNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
@@ -417,6 +461,12 @@ public class LoadPlanner {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, warehouseId);
             streamScanNode.setNeedAssignBE(true);
+<<<<<<< HEAD
+=======
+            if (enableBatchWrite) {
+                streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             streamScanNode.setUseVectorizedLoad(true);
             streamScanNode.init(analyzer);
             streamScanNode.finalizeStats(analyzer);
@@ -448,7 +498,12 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds,
+<<<<<<< HEAD
                                      boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
+=======
+                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
@@ -487,7 +542,11 @@ public class LoadPlanner {
         sinkFragment.setLoadGlobalDicts(globalDicts);
     }
 
+<<<<<<< HEAD
     public void completeTableSink(long txnId) throws AnalysisException, UserException {
+=======
+    public void completeTableSink(long txnId) throws AnalysisException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (destTable instanceof OlapTable) {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);

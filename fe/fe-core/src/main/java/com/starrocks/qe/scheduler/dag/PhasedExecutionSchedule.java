@@ -18,10 +18,18 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.UnionFind;
+import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.rpc.RpcException;
@@ -59,9 +67,18 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
+<<<<<<< HEAD
     private Deployer deployer;
     private ExecutionDAG dag;
 
+=======
+    private Coordinator coordinator;
+    private Deployer deployer;
+    private ExecutionDAG dag;
+
+    private volatile boolean cancelled = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public PhasedExecutionSchedule(ConnectContext context) {
         this.connectContext = context;
         this.maxScheduleConcurrency = context.getSessionVariable().getPhasedSchedulerMaxConcurrency();
@@ -106,7 +123,12 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     // fragment id -> fragment child schedule order
     private Map<PlanFragmentId, FragmentSequence> sequenceMap = Maps.newHashMap();
 
+<<<<<<< HEAD
     public void prepareSchedule(Deployer deployer, ExecutionDAG dag) {
+=======
+    public void prepareSchedule(Coordinator coordinator, Deployer deployer, ExecutionDAG dag) {
+        this.coordinator = coordinator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.deployer = deployer;
         this.dag = dag;
         ExecutionFragment rootFragment = dag.getRootFragment();
@@ -197,7 +219,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     // schedule next
+<<<<<<< HEAD
     public void schedule() throws RpcException, UserException {
+=======
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buildDeployStates();
         final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
         if (oldTaskCnt == 0) {
@@ -209,18 +235,49 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         }
     }
 
+<<<<<<< HEAD
     private void doDeploy() throws RpcException, UserException {
         if (deployStates.isEmpty()) {
             return;
         }
         final List<DeployState> deployState = deployStates.poll();
+=======
+    public void cancel() {
+        cancelled = true;
+    }
+
+    private void doDeploy() throws RpcException, StarRocksException {
+        if (deployStates.isEmpty()) {
+            return;
+        }
+        List<DeployState> deployState = deployStates.poll();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkState(deployState != null);
         for (DeployState state : deployState) {
             deployer.deployFragments(state);
         }
+<<<<<<< HEAD
     }
 
     public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException {
+=======
+
+        while (true) {
+            deployState = coordinator.assignIncrementalScanRangesToDeployStates(deployer, deployState);
+            if (deployState.isEmpty()) {
+                break;
+            }
+            for (DeployState state : deployState) {
+                deployer.deployFragments(state);
+            }
+        }
+    }
+
+    public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
+        if (cancelled) {
+            return;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         final FragmentInstance instance = dag.getInstanceByInstanceId(fragmentInstanceId);
         final PlanFragmentId fragmentId = instance.getFragmentId();
         final AtomicInteger countDowns = schedulingFragmentInstances.get(fragmentId);
@@ -315,7 +372,11 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
             }
 
             if (groups.size() != fragment.childrenSize()) {
+<<<<<<< HEAD
                 List<PackedExecutionFragment> fragments =  Lists.newArrayList();
+=======
+                List<PackedExecutionFragment> fragments = Lists.newArrayList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int i = fragment.childrenSize() - 1; i >= 0; i--) {
                     final ExecutionFragment child = sequenceMap.get(fragment.getFragmentId()).getAt(i);
                     final PlanFragmentId childFragmentId = child.getFragmentId();

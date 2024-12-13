@@ -377,7 +377,11 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
             ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(getColumnStatistic(table, col)).
                     setHistogram(histogram).build();
             long rowCount = tableRowCount.getOrDefault(table.getName(), -1);
+<<<<<<< HEAD
             connectorTableColumnStats.add(new ConnectorTableColumnStats(columnStatistic, rowCount));
+=======
+            connectorTableColumnStats.add(new ConnectorTableColumnStats(columnStatistic, rowCount, "2024-01-01 00:00:00"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return connectorTableColumnStats;
     }

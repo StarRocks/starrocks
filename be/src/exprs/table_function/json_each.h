@@ -30,11 +30,16 @@ public:
     std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                   TableFunctionState* state) const override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
+=======
+    Status init(const TFunction& fn, TableFunctionState** state) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         *state = new TableFunctionState();
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(TableFunctionState* state) const override { return Status::OK(); }
 
     [[nodiscard]] Status open(RuntimeState* runtime_state, TableFunctionState* state) const override {
@@ -42,6 +47,13 @@ public:
     };
 
     [[nodiscard]] Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
+=======
+    Status prepare(TableFunctionState* state) const override { return Status::OK(); }
+
+    Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); };
+
+    Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         delete state;
         return Status::OK();
     }

@@ -53,7 +53,11 @@ public class MVRepairHandlerTest {
                         "distributed by hash(k1) buckets 3 refresh async as select k1 from test.t1");
 
         database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+<<<<<<< HEAD
         table = database.getTable("t1");
+=======
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         partition = olapTable.getPartition("t1");

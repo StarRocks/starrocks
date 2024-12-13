@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_or
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the union of two input bitmaps and return a new bitmap.
 

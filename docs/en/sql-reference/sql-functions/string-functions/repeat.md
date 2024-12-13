@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # repeat
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function repeats `str` by a number of times according to `count`. When `count` is below 1, it returns an empty string. When `str` or `count` is NULL, it returns NULL.
 

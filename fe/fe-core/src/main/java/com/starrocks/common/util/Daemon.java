@@ -17,7 +17,10 @@
 
 package com.starrocks.common.util;
 
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,8 +35,11 @@ public class Daemon extends Thread {
     private final AtomicBoolean isStopped = new AtomicBoolean(false);
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
 
+<<<<<<< HEAD
     private MetaContext metaContext = null;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     {
         setDaemon(true);
     }
@@ -71,10 +77,13 @@ public class Daemon extends Thread {
         }
     }
 
+<<<<<<< HEAD
     public void setMetaContext(MetaContext metaContext) {
         this.metaContext = metaContext;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setStop() {
         isStopped.set(true);
     }
@@ -100,10 +109,13 @@ public class Daemon extends Thread {
 
     @Override
     public void run() {
+<<<<<<< HEAD
         if (metaContext != null) {
             metaContext.setThreadLocalInfo();
         }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         while (!isStopped.get()) {
             try {
                 runOneCycle();
@@ -118,9 +130,12 @@ public class Daemon extends Thread {
             }
         }
 
+<<<<<<< HEAD
         if (metaContext != null) {
             MetaContext.remove();
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.error("daemon thread exits. name=" + this.getName());
         if (!isRunning.compareAndSet(true, false)) {
             LOG.warn("set daemon thread {} to stop failed", getName());

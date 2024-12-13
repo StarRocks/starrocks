@@ -47,9 +47,15 @@ struct ChunksPartitionStatistics {
 class ChunksPartitioner {
 public:
     ChunksPartitioner(const bool has_nullable_partition_column, const std::vector<ExprContext*>& partition_exprs,
+<<<<<<< HEAD
                       std::vector<PartitionColumnType> partition_types);
 
     Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
+=======
+                      std::vector<PartitionColumnType> partition_types, MemPool* mem_pool);
+
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile, bool enable_pre_agg = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Chunk is divided into multiple parts by partition columns,
     // and each partition corresponds to a key-value pair in the hash map.
@@ -106,7 +112,11 @@ public:
     // @consumer: bool consumer(int32_t partition_idx, const ChunkPtr& chunk)
     //      The return value of the consumer denote whether to continue or not
     template <typename Consumer>
+<<<<<<< HEAD
     [[nodiscard]] Status consume_from_hash_map(Consumer&& consumer) {
+=======
+    Status consume_from_hash_map(Consumer&& consumer) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (is_hash_map_eos()) {
             return Status::OK();
         }
@@ -125,7 +135,10 @@ public:
 
         if (is_hash_map_eos()) {
             _hash_map_variant.reset();
+<<<<<<< HEAD
             _mem_pool.reset();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _obj_pool.reset();
         }
 
@@ -148,7 +161,11 @@ private:
                                    PartitionChunkConsumer&& partition_chunk_consumer) {
         if (!_is_passthrough) {
             _is_passthrough = hash_map_with_key.template append_chunk<EnablePassthrough>(
+<<<<<<< HEAD
                     chunk, _partition_columns, _mem_pool.get(), _obj_pool.get(),
+=======
+                    chunk, _partition_columns, _mem_pool, _obj_pool.get(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     std::forward<NewPartitionCallback>(new_partition_cb),
                     std::forward<PartitionChunkConsumer>(partition_chunk_consumer));
         }
@@ -250,7 +267,11 @@ private:
     const std::vector<PartitionColumnType> _partition_types;
 
     RuntimeState* _state = nullptr;
+<<<<<<< HEAD
     std::unique_ptr<MemPool> _mem_pool = nullptr;
+=======
+    MemPool* _mem_pool = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<ObjectPool> _obj_pool = nullptr;
 
     Columns _partition_columns;

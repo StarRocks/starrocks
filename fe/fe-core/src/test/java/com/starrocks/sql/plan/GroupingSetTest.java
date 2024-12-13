@@ -107,7 +107,11 @@ public class GroupingSetTest extends PlanTestBase {
         starRocksAssert.query(sql).analysisError("cannot use GROUPING functions without");
 
         sql = "select k10 from baseall group by k10, GROUPING(1193275260000);";
+<<<<<<< HEAD
         starRocksAssert.query(sql).analysisError("grouping functions only support column");
+=======
+        starRocksAssert.query(sql).analysisError("GROUP BY clause cannot contain grouping.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select k10 from baseall group by k10 having GROUPING(1193275260000) > 2;";
         starRocksAssert.query(sql).analysisError("HAVING clause cannot contain grouping");

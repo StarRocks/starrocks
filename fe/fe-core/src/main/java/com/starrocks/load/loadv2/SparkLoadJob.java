@@ -54,7 +54,11 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Resource;
@@ -71,8 +75,12 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -122,10 +130,14 @@ import com.starrocks.transaction.TransactionState.TxnSourceType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.File;
 import java.io.IOException;
+=======
+import java.io.File;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -193,7 +205,11 @@ public class SparkLoadJob extends BulkLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
+=======
+    public void setJobProperties(Map<String, String> properties) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.setJobProperties(properties);
 
         if (properties != null && properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
@@ -450,7 +466,11 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws UserException {
+=======
+    private PushBrokerReaderParams getPushBrokerReaderParams(OlapTable table, long indexId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!indexToPushBrokerReaderParams.containsKey(indexId)) {
             PushBrokerReaderParams pushBrokerReaderParams = new PushBrokerReaderParams();
             pushBrokerReaderParams.init(table.getSchemaByIndexId(indexId), brokerDesc);
@@ -459,7 +479,11 @@ public class SparkLoadJob extends BulkLoadJob {
         return indexToPushBrokerReaderParams.get(indexId);
     }
 
+<<<<<<< HEAD
     private Set<Long> submitPushTasks() throws UserException {
+=======
+    private Set<Long> submitPushTasks() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check db exist
         Database db;
         try {
@@ -477,7 +501,11 @@ public class SparkLoadJob extends BulkLoadJob {
         boolean hasLoadPartitions = false;
         Set<Long> totalTablets = Sets.newHashSet();
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             writeLock();
             try {
@@ -492,7 +520,12 @@ public class SparkLoadJob extends BulkLoadJob {
 
                 for (Map.Entry<Long, Set<Long>> entry : tableToLoadPartitions.entrySet()) {
                     long tableId = entry.getKey();
+<<<<<<< HEAD
                     OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (table == null) {
                         LOG.warn("table does not exist. id: {}", tableId);
                         continue;
@@ -500,17 +533,30 @@ public class SparkLoadJob extends BulkLoadJob {
 
                     Set<Long> partitionIds = entry.getValue();
                     for (long partitionId : partitionIds) {
+<<<<<<< HEAD
                         Partition partition = table.getPartition(partitionId);
                         if (partition == null) {
                             LOG.warn("partition does not exist. id: {}", partitionId);
                             continue;
                         }
                         long partitionVersion = partition.getVisibleVersion();
+=======
+                        PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                        if (physicalPartition == null) {
+                            LOG.warn("partition does not exist. id: {}", partitionId);
+                            continue;
+                        }
+                        long partitionVersion = physicalPartition.getVisibleVersion();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                         hasLoadPartitions = true;
                         int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
+<<<<<<< HEAD
                         List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
+=======
+                        List<MaterializedIndex> indexes = physicalPartition.getMaterializedIndices(IndexExtState.ALL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         for (MaterializedIndex index : indexes) {
                             long indexId = index.getId();
                             int schemaHash = indexToSchemaHash.get(indexId);
@@ -600,7 +646,11 @@ public class SparkLoadJob extends BulkLoadJob {
                 writeUnlock();
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -692,7 +742,11 @@ public class SparkLoadJob extends BulkLoadJob {
      * 1. Sends push tasks to Be
      * 2. Commit transaction after all push tasks execute successfully
      */
+<<<<<<< HEAD
     public void updateLoadingStatus() throws UserException {
+=======
+    public void updateLoadingStatus() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!checkState(JobState.LOADING)) {
             return;
         }
@@ -736,7 +790,11 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     private void tryCommitJob() throws UserException {
+=======
+    private void tryCommitJob() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                 .add("txn_id", transactionId)
                 .add("msg", "Load job try to commit txn")
@@ -748,7 +806,11 @@ public class SparkLoadJob extends BulkLoadJob {
 
         Database db = getDb();
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(
                     dbId, transactionId, commitInfos, Lists.newArrayList(),
@@ -758,7 +820,11 @@ public class SparkLoadJob extends BulkLoadJob {
             // retry in next loop
             LOG.info("Failed commit for txn {}, will retry. Error: {}", transactionId, e.getMessage());
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -821,7 +887,11 @@ public class SparkLoadJob extends BulkLoadJob {
     public void afterVisible(TransactionState txnState, boolean txnOperated) {
         super.afterVisible(txnState, txnOperated);
         // collect table-level metrics after spark load job finished
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (null == db) {
             return;
         }
@@ -883,6 +953,7 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -914,6 +985,8 @@ public class SparkLoadJob extends BulkLoadJob {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * log load job update info when job state changed to etl or loading
      */
@@ -1013,7 +1086,11 @@ public class SparkLoadJob extends BulkLoadJob {
             this.tDescriptorTable = null;
         }
 
+<<<<<<< HEAD
         public void init(List<Column> columns, BrokerDesc brokerDesc) throws UserException {
+=======
+        public void init(List<Column> columns, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // Generate tuple descriptor
             DescriptorTable descTable = new DescriptorTable();
             TupleDescriptor destTupleDesc = descTable.createTupleDescriptor();

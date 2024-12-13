@@ -47,6 +47,16 @@ public class ReplaceColumnRefRewriter {
         return origin.clone().accept(rewriter, null);
     }
 
+<<<<<<< HEAD
+=======
+    public ScalarOperator rewriteWithoutClone(ScalarOperator origin) {
+        if (origin == null) {
+            return null;
+        }
+        return origin.accept(rewriter, null);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private class Rewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
         @Override
         public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
@@ -66,15 +76,32 @@ public class ReplaceColumnRefRewriter {
             // The rewritten predicate will be rewritten continually,
             // Rewiring predicate shouldn't change the origin project columnRefMap
 
+<<<<<<< HEAD
             ScalarOperator mapperOperator = operatorMap.get(column).clone();
             if (isRecursively) {
                 while (mapperOperator.getChildren().isEmpty() && operatorMap.containsKey(mapperOperator)) {
+=======
+            ScalarOperator mapperOperator = operatorMap.get(column);
+            if (column.equals(mapperOperator)) {
+                return column;
+            }
+            if (!isRecursively) {
+                return mapperOperator.clone();
+            } else {
+                while (mapperOperator instanceof ColumnRefOperator && operatorMap.containsKey(mapperOperator)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ScalarOperator mapped = operatorMap.get(mapperOperator);
                     if (mapped.equals(mapperOperator)) {
                         break;
                     }
+<<<<<<< HEAD
                     mapperOperator = mapped.clone();
                 }
+=======
+                    mapperOperator = mapped;
+                }
+                mapperOperator = mapperOperator.clone();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int i = 0; i < mapperOperator.getChildren().size(); ++i) {
                     mapperOperator.setChild(i, mapperOperator.getChild(i).accept(this, null));
                 }

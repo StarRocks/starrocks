@@ -47,6 +47,15 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.NativeAccessController;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.BrokerMgr;
@@ -60,11 +69,17 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
+=======
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MetaReplayState;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -88,12 +103,21 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.LogUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
@@ -101,13 +125,20 @@ import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.statistics.ConnectorTableTriggerAnalyzeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.consistency.LockChecker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
@@ -118,6 +149,11 @@ import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.healthchecker.SafeModeChecker;
+<<<<<<< HEAD
+=======
+import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.journal.GlobalStateCheckpointWorker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -133,7 +169,11 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
+<<<<<<< HEAD
 import com.starrocks.leader.Checkpoint;
+=======
+import com.starrocks.leader.CheckpointController;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
@@ -141,6 +181,10 @@ import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.Load;
+<<<<<<< HEAD
+=======
+import com.starrocks.load.batchwrite.BatchWriteMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.loadv2.LoadEtlChecker;
 import com.starrocks.load.loadv2.LoadJobScheduler;
 import com.starrocks.load.loadv2.LoadLoadingChecker;
@@ -156,7 +200,10 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.memory.ProcProfileCollector;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
@@ -174,12 +221,15 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.DefaultAuthorizationProvider;
 import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -211,6 +261,10 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+<<<<<<< HEAD
+=======
+import com.starrocks.staros.StarMgrServer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -250,10 +304,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+=======
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -274,8 +335,12 @@ public class GlobalStateMgr {
      * Meta and Image context
      */
     private String imageDir;
+<<<<<<< HEAD
     private final MetaContext metaContext;
     private long epoch = 0;
+=======
+    private volatile long epoch = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
@@ -302,6 +367,10 @@ public class GlobalStateMgr {
     private final LoadMgr loadMgr;
     private final RoutineLoadMgr routineLoadMgr;
     private final StreamLoadMgr streamLoadMgr;
+<<<<<<< HEAD
+=======
+    private final BatchWriteMgr batchWriteMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final ExportMgr exportMgr;
     private final MaterializedViewMgr materializedViewMgr;
 
@@ -353,7 +422,13 @@ public class GlobalStateMgr {
 
     private static GlobalStateMgr CHECKPOINT = null;
     private static long checkpointThreadId = -1;
+<<<<<<< HEAD
     private Checkpoint checkpointer;
+=======
+    private CheckpointController checkpointController;
+    private CheckpointWorker checkpointWorker;
+    private boolean checkpointWorkerStarted = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private HAProtocol haProtocol = null;
 
@@ -435,6 +510,10 @@ public class GlobalStateMgr {
     private final CatalogMgr catalogMgr;
     private final ConnectorMgr connectorMgr;
     private final ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
+<<<<<<< HEAD
+=======
+    private ConnectorTableTriggerAnalyzeMgr connectorTableTriggerAnalyzeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final TaskManager taskManager;
     private final InsertOverwriteJobMgr insertOverwriteJobMgr;
@@ -491,6 +570,10 @@ public class GlobalStateMgr {
     private ProcProfileCollector procProfileCollector;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private TemporaryTableMgr temporaryTableMgr;
     private TemporaryTableCleaner temporaryTableCleaner;
 
@@ -504,6 +587,10 @@ public class GlobalStateMgr {
     private final Authorizer authorizer;
     private final DDLStmtExecutor ddlStmtExecutor;
     private final ShowExecutor showExecutor;
+<<<<<<< HEAD
+=======
+    private final ExecutorService queryDeployExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -625,13 +712,23 @@ public class GlobalStateMgr {
         // Alter Job Manager
         // Alter Job Manager
         this.alterJobMgr = new AlterJobMgr(
+<<<<<<< HEAD
                     new SchemaChangeHandler(),
                     new MaterializedViewHandler(),
                     new SystemHandler());
+=======
+                new SchemaChangeHandler(),
+                new MaterializedViewHandler(),
+                new SystemHandler());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
         this.routineLoadMgr = new RoutineLoadMgr();
+<<<<<<< HEAD
+=======
+        this.batchWriteMgr = new BatchWriteMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.exportMgr = new ExportMgr();
         this.materializedViewMgr = new MaterializedViewMgr();
 
@@ -674,9 +771,12 @@ public class GlobalStateMgr {
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
+<<<<<<< HEAD
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.stat = new TabletSchedulerStat();
 
         this.globalFunctionMgr = new GlobalFunctionMgr();
@@ -684,6 +784,7 @@ public class GlobalStateMgr {
         this.tabletChecker = new TabletChecker(tabletScheduler, stat);
 
         this.pendingLoadTaskScheduler =
+<<<<<<< HEAD
                     new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
                                 Config.desired_max_waiting_jobs, !isCkptGlobalState);
         // One load job will be split into multiple loading tasks, the queue size is not
@@ -691,6 +792,15 @@ public class GlobalStateMgr {
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
                     Config.max_broker_load_job_concurrency,
                     Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
+=======
+                new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
+                        Config.desired_max_waiting_jobs, !isCkptGlobalState);
+        // One load job will be split into multiple loading tasks, the queue size is not
+        // determined, so set desired_max_waiting_jobs * 10
+        this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
+                Config.max_broker_load_job_concurrency,
+                Config.desired_max_waiting_jobs * 10, !isCkptGlobalState);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         this.loadJobScheduler = new LoadJobScheduler();
         this.loadMgr = new LoadMgr(loadJobScheduler);
@@ -706,7 +816,11 @@ public class GlobalStateMgr {
         this.smallFileMgr = new SmallFileMgr();
 
         this.dynamicPartitionScheduler = new DynamicPartitionScheduler("DynamicPartitionScheduler",
+<<<<<<< HEAD
                     Config.dynamic_partition_check_interval_seconds * 1000L);
+=======
+                Config.dynamic_partition_check_interval_seconds * 1000L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         setMetaDir();
 
@@ -720,6 +834,10 @@ public class GlobalStateMgr {
         this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
         this.metadataMgr = new MetadataMgr(localMetastore, temporaryTableMgr, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+<<<<<<< HEAD
+=======
+        this.connectorTableTriggerAnalyzeMgr = new ConnectorTableTriggerAnalyzeMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         this.taskManager = new TaskManager();
         this.insertOverwriteJobMgr = new InsertOverwriteJobMgr();
@@ -803,6 +921,12 @@ public class GlobalStateMgr {
         this.ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.temporaryTableCleaner = new TemporaryTableCleaner();
+<<<<<<< HEAD
+=======
+        this.queryDeployExecutor =
+                ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
+                        "query-deploy", true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void destroyCheckpoint() {
@@ -894,10 +1018,13 @@ public class GlobalStateMgr {
         return auditEventProcessor;
     }
 
+<<<<<<< HEAD
     public static int getCurrentStateStarRocksMetaVersion() {
         return MetaContext.get().getStarRocksMetaVersion();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static boolean isCheckpointThread() {
         return Thread.currentThread().getId() == checkpointThreadId;
     }
@@ -939,8 +1066,13 @@ public class GlobalStateMgr {
         return metadataMgr;
     }
 
+<<<<<<< HEAD
     public ConnectorMetadata getMetadata() {
         return localMetastore;
+=======
+    public ConnectorTableTriggerAnalyzeMgr getConnectorTableTriggerAnalyzeMgr() {
+        return connectorTableTriggerAnalyzeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @VisibleForTesting
@@ -1037,6 +1169,13 @@ public class GlobalStateMgr {
         return showExecutor;
     }
 
+<<<<<<< HEAD
+=======
+    public ExecutorService getQueryDeployExecutor() {
+        return queryDeployExecutor;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public GtidGenerator getGtidGenerator() {
         return gtidGenerator;
     }
@@ -1053,7 +1192,11 @@ public class GlobalStateMgr {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
+<<<<<<< HEAD
                         LOG.warn("globalStateMgr lock is held by: {}", Util.dumpThread(owner, 50));
+=======
+                        LOG.warn("globalStateMgr lock is held by: {}", LogUtil.dumpThread(owner, 50));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
 
                     if (mustLock) {
@@ -1160,7 +1303,11 @@ public class GlobalStateMgr {
 
     protected void initJournal() throws JournalException, InterruptedException {
         BlockingQueue<JournalTask> journalQueue =
+<<<<<<< HEAD
                     new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+=======
+                new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
@@ -1183,6 +1330,7 @@ public class GlobalStateMgr {
             if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
                 lastLoggingTimeMs = System.currentTimeMillis();
                 LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
+<<<<<<< HEAD
                             "it maybe caused by one of the following reasons: " +
                             "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
                             "(you can check the create time of image file under meta/image dir). " +
@@ -1194,6 +1342,19 @@ public class GlobalStateMgr {
                             "please use ntp or other tools to keep clock synchronized. " +
                             "5. The configuration of edit_log_port has changed, please reset to the original value. " +
                             "6. The replayer thread may get stuck, please use jstack to find the details.");
+=======
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -1251,6 +1412,7 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
+<<<<<<< HEAD
             // Log meta_version
             int starrocksMetaVersion = MetaContext.get().getStarRocksMetaVersion();
             if (starrocksMetaVersion < FeConstants.STARROCKS_META_VERSION) {
@@ -1258,6 +1420,8 @@ public class GlobalStateMgr {
                 MetaContext.get().setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
             }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // Log the first frontend
             if (nodeMgr.isFirstTimeStartUp()) {
                 // if isFirstTimeStartUp is true, frontends must contain this Node.
@@ -1303,6 +1467,7 @@ public class GlobalStateMgr {
                 // configuration is retained to avoid system stability problems caused by
                 // changes in concurrency
                 variableMgr.setSystemVariable(variableMgr.getDefaultSessionVariable(), new SystemVariable(SetType.GLOBAL,
+<<<<<<< HEAD
                                         SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
                                         LiteralExpr.create("true", Type.BOOLEAN)),
                             false);
@@ -1317,6 +1482,13 @@ public class GlobalStateMgr {
             Config.enable_cloud_native_persistent_index_by_default = variableMgr.getDefaultSessionVariable()
                     .getEnableCloudNativePersistentIndexByDefault();
         } catch (UserException e) {
+=======
+                                SessionVariable.ENABLE_ADAPTIVE_SINK_DOP,
+                                LiteralExpr.create("true", Type.BOOLEAN)),
+                        false);
+            }
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
@@ -1341,6 +1513,7 @@ public class GlobalStateMgr {
             if (!getStarOSAgent().registerAndBootstrapService()) {
                 System.exit(-1);
             }
+<<<<<<< HEAD
         }
 
         // start checkpoint thread
@@ -1352,11 +1525,24 @@ public class GlobalStateMgr {
 
         checkpointer.start();
         LOG.info("checkpointer thread started. thread id is {}", checkpointThreadId);
+=======
+
+            StarMgrServer.getCurrentState().startCheckpointController();
+        }
+
+        // start checkpoint thread
+        checkpointController = new CheckpointController("global_state_checkpoint_controller", journal, "");
+        checkpointController.start();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         keyRotationDaemon.start();
 
         // heartbeat mgr
+<<<<<<< HEAD
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
+=======
+        heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), getEpoch());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         heartbeatMgr.start();
         // New load scheduler
         pendingLoadTaskScheduler.start();
@@ -1393,6 +1579,10 @@ public class GlobalStateMgr {
         // start routine load scheduler
         routineLoadScheduler.start();
         routineLoadTaskScheduler.start();
+<<<<<<< HEAD
+=======
+        batchWriteMgr.start();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // start dynamic partition task
         dynamicPartitionScheduler.start();
         // start daemon thread to update db used data quota for db txn manager periodically
@@ -1428,10 +1618,27 @@ public class GlobalStateMgr {
         }
         temporaryTableCleaner.start();
 
+<<<<<<< HEAD
+=======
+        connectorTableTriggerAnalyzeMgr.start();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // start threads that should run on all FE
     private void startAllNodeTypeDaemonThreads() {
+<<<<<<< HEAD
+=======
+        if (!checkpointWorkerStarted) {
+            checkpointWorker = new GlobalStateCheckpointWorker(journal);
+            // set "checkpointThreadId" before the checkpoint thread start, because the thread
+            // need to check the "checkpointThreadId" when running.
+            checkpointThreadId = checkpointWorker.getId();
+            checkpointWorker.start();
+            checkpointWorkerStarted = true;
+            LOG.info("global state mgr checkpoint worker thread started. thread id is {}", checkpointThreadId);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         portConnectivityChecker.start();
         tabletStatMgr.start();
         // load and export job label cleaner thread
@@ -1449,6 +1656,10 @@ public class GlobalStateMgr {
         domainResolver.start();
         if (RunMode.isSharedDataMode()) {
             compactionMgr.start();
+<<<<<<< HEAD
+=======
+            StarMgrServer.getCurrentState().startCheckpointWorker();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         configRefreshDaemon.start();
 
@@ -1507,6 +1718,7 @@ public class GlobalStateMgr {
         }
         replayedJournalId.set(imageLoader.getImageJournalId());
         LOG.info("start load image from {}. is ckpt: {}", curFile.getAbsolutePath(),
+<<<<<<< HEAD
                     GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
 
@@ -1544,6 +1756,45 @@ public class GlobalStateMgr {
                     .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
                     .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
                     .build();
+=======
+                GlobalStateMgr.isCheckpointThread());
+        long loadImageStartTime = System.currentTimeMillis();
+
+        Map<SRMetaBlockID, SRMetaBlockLoader> loadImages = ImmutableMap.<SRMetaBlockID, SRMetaBlockLoader>builder()
+                .put(SRMetaBlockID.NODE_MGR, nodeMgr::load)
+                .put(SRMetaBlockID.LOCAL_META_STORE, localMetastore::load)
+                .put(SRMetaBlockID.ALTER_MGR, alterJobMgr::load)
+                .put(SRMetaBlockID.CATALOG_RECYCLE_BIN, recycleBin::load)
+                .put(SRMetaBlockID.VARIABLE_MGR, variableMgr::load)
+                .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
+                .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
+                .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
+                .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
+                .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
+                .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
+                .put(SRMetaBlockID.LOAD_MGR, loadMgr::loadLoadJobsV2JsonFormat)
+                .put(SRMetaBlockID.SMALL_FILE_MGR, smallFileMgr::loadSmallFilesV2)
+                .put(SRMetaBlockID.PLUGIN_MGR, pluginMgr::load)
+                .put(SRMetaBlockID.DELETE_MGR, deleteMgr::load)
+                .put(SRMetaBlockID.ANALYZE_MGR, analyzeMgr::load)
+                .put(SRMetaBlockID.RESOURCE_GROUP_MGR, resourceGroupMgr::load)
+                .put(SRMetaBlockID.AUTHENTICATION_MGR, authenticationMgr::loadV2)
+                .put(SRMetaBlockID.AUTHORIZATION_MGR, authorizationMgr::loadV2)
+                .put(SRMetaBlockID.TASK_MGR, taskManager::loadTasksV2)
+                .put(SRMetaBlockID.CATALOG_MGR, catalogMgr::load)
+                .put(SRMetaBlockID.INSERT_OVERWRITE_JOB_MGR, insertOverwriteJobMgr::load)
+                .put(SRMetaBlockID.COMPACTION_MGR, compactionMgr::load)
+                .put(SRMetaBlockID.STREAM_LOAD_MGR, streamLoadMgr::load)
+                .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, materializedViewMgr::load)
+                .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
+                .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
+                .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
+                .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
+                .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
+                .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
+                .build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
         InputStream in = Files.newInputStream(curFile.toPath());
@@ -1565,7 +1816,11 @@ public class GlobalStateMgr {
                          *    the old version ignores the functions of the new version
                          */
                         LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
+<<<<<<< HEAD
                                     "(expect sr meta block id %s)", srMetaBlockID));
+=======
+                                "(expect sr meta block id %s)", srMetaBlockID));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         continue;
                     }
 
@@ -1589,8 +1844,13 @@ public class GlobalStateMgr {
         } catch (EOFException exception) {
             if (!metaMgrMustExists.isEmpty()) {
                 LOG.warn("Miss meta block [" + Joiner.on(",").join(new ArrayList<>(metaMgrMustExists)) + "], " +
+<<<<<<< HEAD
                             "This may not be a fatal error. It may be because there are new features in the version " +
                             "you upgraded this time, but there is no relevant metadata.");
+=======
+                        "This may not be a fatal error. It may be because there are new features in the version " +
+                        "you upgraded this time, but there is no relevant metadata.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 LOG.info("Load meta-image EOF, successful loading all requires meta module");
             }
@@ -1650,11 +1910,18 @@ public class GlobalStateMgr {
 
         if (starrocksMetaVersion != FeConstants.STARROCKS_META_VERSION) {
             LOG.error("Not compatible with meta version {}, current version is {}",
+<<<<<<< HEAD
                         starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
             System.exit(-1);
         }
 
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
+=======
+                    starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
+            System.exit(-1);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         LOG.info("finished to replay header from image");
@@ -1752,7 +2019,11 @@ public class GlobalStateMgr {
 
             long saveImageEndTime = System.currentTimeMillis();
             LOG.info("Finished save meta block {} in {} ms.",
+<<<<<<< HEAD
                         curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime));
+=======
+                    curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1789,7 +2060,11 @@ public class GlobalStateMgr {
 
     public void createTxnTimeoutChecker() {
         txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker",
+<<<<<<< HEAD
                     Config.transaction_clean_interval_second * 1000L) {
+=======
+                Config.transaction_clean_interval_second * 1000L) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
@@ -1827,13 +2102,21 @@ public class GlobalStateMgr {
                     metaReplayState.setOk();
                 } catch (JournalInconsistentException | InterruptedException e) {
                     LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+<<<<<<< HEAD
                                 replayedJournalId.get() + 1, e);
+=======
+                            replayedJournalId.get() + 1, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // TODO exit gracefully
                     Util.stdoutWithTime(e.getMessage());
                     System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal {}.",
+<<<<<<< HEAD
                                 replayedJournalId.get() + 1, e);
+=======
+                            replayedJournalId.get() + 1, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     metaReplayState.setException(e);
                     try {
                         Thread.sleep(5000);
@@ -1866,7 +2149,11 @@ public class GlobalStateMgr {
                         // we still need this log to observe this situation
                         // but service may be continued when there is no log being replayed.
                         LOG.warn("meta out of date. current time: {}, synchronized time: {}, has log: {}, fe type: {}",
+<<<<<<< HEAD
                                     currentTimeMs, synchronizedTimeMs, hasLog, feType);
+=======
+                                currentTimeMs, synchronizedTimeMs, hasLog, feType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         lastMetaOutOfDateLogTime = currentTimeMs;
                     }
                     if (hasLog || feType == FrontendNodeType.UNKNOWN) {
@@ -1895,8 +2182,11 @@ public class GlobalStateMgr {
                 }
             }
         };
+<<<<<<< HEAD
 
         replayer.setMetaContext(metaContext);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -1920,8 +2210,13 @@ public class GlobalStateMgr {
             replayJournalInner(cursor, false);
         } catch (InterruptedException | JournalInconsistentException e) {
             LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
+<<<<<<< HEAD
                         replayedJournalId.get() + 1,
                         e);
+=======
+                    replayedJournalId.get() + 1,
+                    e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
@@ -1935,8 +2230,13 @@ public class GlobalStateMgr {
         // verify if all log is replayed
         if (toJournalId != replayedJournalId.get()) {
             throw new JournalException(String.format(
+<<<<<<< HEAD
                         "should replay to %d but actual replayed journal id is %d",
                         toJournalId, replayedJournalId.get()));
+=======
+                    "should replay to %d but actual replayed journal id is %d",
+                    toJournalId, replayedJournalId.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         streamLoadMgr.cancelUnDurableTaskAfterRestart();
@@ -1950,7 +2250,11 @@ public class GlobalStateMgr {
      * return true if any journal is replayed
      */
     protected boolean replayJournalInner(JournalCursor cursor, boolean flowControl)
+<<<<<<< HEAD
                 throws JournalException, InterruptedException, JournalInconsistentException {
+=======
+            throws JournalException, InterruptedException, JournalInconsistentException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long startReplayId = replayedJournalId.get();
         long startTime = System.currentTimeMillis();
         long lineCnt = 0;
@@ -1972,7 +2276,11 @@ public class GlobalStateMgr {
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL, id: {}, data: {} !!!",
+<<<<<<< HEAD
                                 replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
+=======
+                            replayedJournalId.incrementAndGet(), journalEntityToReadableString(entity), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!readSucc) {
                         cursor.skipNext();
                     }
@@ -1980,7 +2288,11 @@ public class GlobalStateMgr {
                 }
                 // handled in outer loop
                 LOG.warn("catch exception when replaying journal, id: {}, data: {},",
+<<<<<<< HEAD
                             replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
+=======
+                        replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw e;
             }
 
@@ -2043,13 +2355,21 @@ public class GlobalStateMgr {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
                 if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
                     LOG.warn("skip bad replayed journal id {} because configured {}",
+<<<<<<< HEAD
                                 idStr, Config.metadata_journal_skip_bad_journal_ids);
+=======
+                            idStr, Config.metadata_journal_skip_bad_journal_ids);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return true;
                 }
             }
         } catch (Exception e) {
             LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
+<<<<<<< HEAD
                         Config.metadata_journal_skip_bad_journal_ids, e);
+=======
+                    Config.metadata_journal_skip_bad_journal_ids, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // 3. ignore_unknown_subtype = true will skip the subtype not found failure which happens on downgrading
@@ -2068,13 +2388,21 @@ public class GlobalStateMgr {
         }
 
         if (opCode != OperationType.OP_INVALID
+<<<<<<< HEAD
                     && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
+=======
+                && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (Config.metadata_journal_ignore_replay_failure) {
                 LOG.warn("skip ignorable journal load failure, opCode: {}", opCode);
                 return true;
             } else {
                 LOG.warn("the failure of opCode: {} is ignorable, " +
+<<<<<<< HEAD
                             "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
+=======
+                        "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return false;
             }
         }
@@ -2092,6 +2420,7 @@ public class GlobalStateMgr {
         };
     }
 
+<<<<<<< HEAD
     public Database getDb(String name) {
         return localMetastore.getDb(name);
     }
@@ -2112,6 +2441,8 @@ public class GlobalStateMgr {
         return localMetastore.getDb(dbId);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public EditLog getEditLog() {
         return editLog;
     }
@@ -2134,11 +2465,19 @@ public class GlobalStateMgr {
     }
 
     public SchemaChangeHandler getSchemaChangeHandler() {
+<<<<<<< HEAD
         return (SchemaChangeHandler) this.alterJobMgr.getSchemaChangeHandler();
     }
 
     public MaterializedViewHandler getRollupHandler() {
         return (MaterializedViewHandler) this.alterJobMgr.getMaterializedViewHandler();
+=======
+        return this.alterJobMgr.getSchemaChangeHandler();
+    }
+
+    public MaterializedViewHandler getRollupHandler() {
+        return this.alterJobMgr.getMaterializedViewHandler();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public BackupHandler getBackupHandler() {
@@ -2173,6 +2512,13 @@ public class GlobalStateMgr {
         return streamLoadMgr;
     }
 
+<<<<<<< HEAD
+=======
+    public BatchWriteMgr getBatchWriteMgr() {
+        return batchWriteMgr;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
         return routineLoadTaskScheduler;
     }
@@ -2202,11 +2548,15 @@ public class GlobalStateMgr {
     }
 
     public long getEpoch() {
+<<<<<<< HEAD
         return this.epoch;
     }
 
     public void setEpoch(long epoch) {
         this.epoch = epoch;
+=======
+        return haProtocol.getLatestEpoch();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public FrontendNodeType getFeType() {
@@ -2221,6 +2571,17 @@ public class GlobalStateMgr {
         return this.metastoreEventsProcessor;
     }
 
+<<<<<<< HEAD
+=======
+    public CheckpointWorker getCheckpointWorker() {
+        return checkpointWorker;
+    }
+
+    public CheckpointController getCheckpointController() {
+        return checkpointController;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setLeader(LeaderInfo info) {
         nodeMgr.setLeader(info);
     }
@@ -2258,7 +2619,11 @@ public class GlobalStateMgr {
     }
 
     public static short calcShortKeyColumnCount(List<Column> columns, Map<String, String> properties)
+<<<<<<< HEAD
                 throws DdlException {
+=======
+            throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Integer> sortKeyIdxes = new ArrayList<>();
         for (int i = 0; i < columns.size(); ++i) {
             Column column = columns.get(i);
@@ -2271,7 +2636,11 @@ public class GlobalStateMgr {
 
     public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
                                                 List<Integer> sortKeyIdxes)
+<<<<<<< HEAD
                 throws DdlException {
+=======
+            throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.debug("sort key size: {}", sortKeyIdxes.size());
         Preconditions.checkArgument(sortKeyIdxes.size() > 0);
         // figure out shortKeyColumnCount
@@ -2291,7 +2660,11 @@ public class GlobalStateMgr {
             }
             for (int pos = 0; pos < shortKeyColumnCount; pos++) {
                 if (indexColumns.get(sortKeyIdxes.get(pos)).getPrimitiveType() == PrimitiveType.VARCHAR &&
+<<<<<<< HEAD
                             pos != shortKeyColumnCount - 1) {
+=======
+                        pos != shortKeyColumnCount - 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new DdlException("Varchar should not in the middle of short keys.");
                 }
             }
@@ -2385,7 +2758,11 @@ public class GlobalStateMgr {
             }
 
             resultMap.put(fe.getHost(), refreshOtherFesTable(
+<<<<<<< HEAD
                         new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+=======
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()), tableName, partitions));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         String errMsg = "";
@@ -2419,7 +2796,11 @@ public class GlobalStateMgr {
         if (ConnectContext.get() == null || ConnectContext.get().getSessionVariable() == null) {
             timeout = Config.thrift_rpc_timeout_ms * 10;
         } else {
+<<<<<<< HEAD
             timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
+=======
+            timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         FutureTask<TStatus> task = new FutureTask<TStatus>(() -> {
@@ -2430,10 +2811,17 @@ public class GlobalStateMgr {
             request.setPartitions(partitions);
             try {
                 TRefreshTableResponse response = ThriftRPCRequestExecutor.call(
+<<<<<<< HEAD
                             ThriftConnectionPool.frontendPool,
                             thriftAddress,
                             timeout,
                             client -> client.refreshTable(request));
+=======
+                        ThriftConnectionPool.frontendPool,
+                        thriftAddress,
+                        timeout,
+                        client -> client.refreshTable(request));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return response.getStatus();
             } catch (Exception e) {
                 LOG.warn("call fe {} refreshTable rpc method failed", thriftAddress, e);
@@ -2450,7 +2838,11 @@ public class GlobalStateMgr {
 
     private boolean supportRefreshTableType(Table table) {
         return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
+<<<<<<< HEAD
                     || table.isJDBCTable() || table.isDeltalakeTable();
+=======
+                || table.isJDBCTable() || table.isDeltalakeTable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void refreshExternalTable(TableName tableName, List<String> partitions) {
@@ -2466,6 +2858,7 @@ public class GlobalStateMgr {
         table = metadataMgr.getTable(catalogName, dbName, tblName);
         if (table == null) {
             throw new StarRocksConnectorException("table %s.%s.%s not exists", catalogName, dbName,
+<<<<<<< HEAD
                         tblName);
         }
         if (!supportRefreshTableType(table)) {
@@ -2477,6 +2870,19 @@ public class GlobalStateMgr {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             Preconditions.checkState(table instanceof HiveMetaStoreTable);
             catalogName = ((HiveMetaStoreTable) table).getCatalogName();
+=======
+                    tblName);
+        }
+        if (!supportRefreshTableType(table)) {
+            throw new StarRocksConnectorException("can not refresh external table %s.%s.%s, " +
+                    "do not support refresh external table which type is %s", catalogName, dbName,
+                    tblName, table.getType());
+        }
+
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Preconditions.checkState(table.isHMSTable());
+            catalogName = (table).getCatalogName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
@@ -2500,14 +2906,22 @@ public class GlobalStateMgr {
         try {
             // sort all dbs
             for (long dbId : localMetastore.getDbIds()) {
+<<<<<<< HEAD
                 Database db = getDb(dbId);
+=======
+                Database db = localMetastore.getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Preconditions.checkNotNull(db);
                 lockedDbMap.put(dbId, db);
             }
 
             // lock all dbs
             for (Database db : lockedDbMap.values()) {
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.READ);
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             LOG.info("acquired all the dbs' read lock.");
 
@@ -2523,7 +2937,11 @@ public class GlobalStateMgr {
         } finally {
             // unlock all
             for (Database db : lockedDbMap.values()) {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             unlock();
         }
@@ -2606,10 +3024,13 @@ public class GlobalStateMgr {
         return execution;
     }
 
+<<<<<<< HEAD
     public MetaContext getMetaContext() {
         return metaContext;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void createBuiltinStorageVolume() {
         try {
             String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();

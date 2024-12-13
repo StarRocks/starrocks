@@ -18,7 +18,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
@@ -90,10 +94,17 @@ public class TableKeeper {
     }
 
     public boolean checkDatabaseExists() {
+<<<<<<< HEAD
         return GlobalStateMgr.getCurrentState().getDb(databaseName) != null;
     }
 
     public void createTable() throws UserException {
+=======
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
+    }
+
+    public void createTable() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RepoExecutor.getInstance().executeDDL(createTableSql);
     }
 
@@ -101,8 +112,12 @@ public class TableKeeper {
         int expectedReplicationNum =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getSystemTableExpectedReplicationNum();
         int replica = GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
                 .mayGetDb(databaseName)
                 .flatMap(db -> db.mayGetTable(tableName))
+=======
+                .getLocalMetastore().mayGetTable(databaseName, tableName)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(tbl -> ((OlapTable) tbl).getPartitionInfo().getMinReplicationNum())
                 .orElse((short) 1);
 
@@ -139,8 +154,12 @@ public class TableKeeper {
 
     private Optional<OlapTable> mayGetTable() {
         return GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
                 .mayGetDb(databaseName)
                 .flatMap(db -> db.mayGetTable(tableName))
+=======
+                .getLocalMetastore().mayGetTable(databaseName, tableName)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .flatMap(x -> Optional.of((OlapTable) x));
     }
 

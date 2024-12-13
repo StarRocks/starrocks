@@ -37,6 +37,10 @@ package com.starrocks.backup;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.FunctionName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
@@ -44,7 +48,14 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
 import com.starrocks.backup.mv.MvRestoreContext;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.catalog.Catalog;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FakeEditLog;
+import com.starrocks.catalog.Function;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -53,10 +64,18 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+<<<<<<< HEAD
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -104,13 +123,22 @@ public class RestoreJobTest {
 
     private long repoId = 20000;
 
+<<<<<<< HEAD
     @Mocked
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private GlobalStateMgr globalStateMgr;
 
     private MockBackupHandler backupHandler;
 
     private MockRepositoryMgr repoMgr;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    private EditLog editLog;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
         public MockBackupHandler(GlobalStateMgr globalStateMgr) {
@@ -136,35 +164,70 @@ public class RestoreJobTest {
     }
 
     @Mocked
+<<<<<<< HEAD
     private EditLog editLog;
     @Mocked
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private SystemInfoService systemInfoService;
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
+<<<<<<< HEAD
                 new BlobStorage("broker", Maps.newHashMap()));
+=======
+            new BlobStorage("broker", Maps.newHashMap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private BackupMeta backupMeta;
 
     @Before
     public void setUp() throws AnalysisException {
+<<<<<<< HEAD
+=======
+        globalStateMgr = GlobalStateMgr.getCurrentState();
+        new FakeEditLog();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         db = CatalogMocker.mockDb();
         backupHandler = new MockBackupHandler(globalStateMgr);
         repoMgr = new MockRepositoryMgr();
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
         MetricRepo.init();
+<<<<<<< HEAD
+=======
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+
+        AgentTaskQueue.clearAllTasks();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void testResetPartitionForRestore() {
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
         OlapTable localTbl = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
+<<<<<<< HEAD
                     expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
                     expectedRestoreTbl.getDefaultDistributionInfo());
 
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                     jobInfo, false, 3, 100000,
                     globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+=======
+                expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
+                expectedRestoreTbl.getDefaultDistributionInfo());
+
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
     }
@@ -173,6 +236,7 @@ public class RestoreJobTest {
     public void testRunBackupMultiSubPartitionTable() {
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
@@ -185,12 +249,28 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = editLog;
 
+=======
+
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
         };
 
+<<<<<<< HEAD
+=======
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> beIds = Lists.newArrayList();
         beIds.add(CatalogMocker.BACKEND1_ID);
         beIds.add(CatalogMocker.BACKEND2_ID);
@@ -217,6 +297,7 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
                 result = new Delegate() {
@@ -229,6 +310,8 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 repo.upload(anyString, anyString);
                 result = Status.OK;
                 minTimes = 0;
@@ -299,24 +382,57 @@ public class RestoreJobTest {
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+<<<<<<< HEAD
                     jobInfo, false, 3, 100000,
                     globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+=======
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         job.setRepo(repo);
         // pending
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+<<<<<<< HEAD
         Assert.assertEquals(1, job.getFileMapping().getMapping().size());
+=======
+        Assert.assertEquals(6, job.getFileMapping().getMapping().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // 2. snapshoting
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.SNAPSHOTING, job.getState());
+<<<<<<< HEAD
         Assert.assertEquals(4, AgentTaskQueue.getTaskNum());
+=======
+        Assert.assertEquals(12, AgentTaskQueue.getTaskNum());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // 3. snapshot finished
         List<AgentTask> agentTasks = Lists.newArrayList();
@@ -324,7 +440,11 @@ public class RestoreJobTest {
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND1_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND2_ID, runningTasks));
         agentTasks.addAll(AgentTaskQueue.getDiffTasks(CatalogMocker.BACKEND3_ID, runningTasks));
+<<<<<<< HEAD
         Assert.assertEquals(4, agentTasks.size());
+=======
+        Assert.assertEquals(12, agentTasks.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (AgentTask agentTask : agentTasks) {
             if (agentTask.getTaskType() != TTaskType.MAKE_SNAPSHOT) {
@@ -336,7 +456,11 @@ public class RestoreJobTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+<<<<<<< HEAD
                         task.getSignature(), taskStatus);
+=======
+                    task.getSignature(), taskStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
@@ -356,17 +480,25 @@ public class RestoreJobTest {
     public void testRunBackupRangeTable() {
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
+<<<<<<< HEAD
                 result = id.getAndIncrement();
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+=======
+                result = id.incrementAndGet();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -400,6 +532,7 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
                 result = new Delegate() {
@@ -412,6 +545,8 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 repo.upload(anyString, anyString);
                 result = Status.OK;
                 minTimes = 0;
@@ -456,7 +591,12 @@ public class RestoreJobTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
+<<<<<<< HEAD
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
@@ -474,12 +614,37 @@ public class RestoreJobTest {
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+<<<<<<< HEAD
                     jobInfo, false, 3, 100000,
                     globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+=======
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         job.setRepo(repo);
         // pending
         job.run();
@@ -511,7 +676,11 @@ public class RestoreJobTest {
             TStatus taskStatus = new TStatus(TStatusCode.OK);
             TBackend tBackend = new TBackend("", 0, 1);
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+<<<<<<< HEAD
                         task.getSignature(), taskStatus);
+=======
+                    task.getSignature(), taskStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(task, request));
         }
@@ -525,17 +694,25 @@ public class RestoreJobTest {
     public void testRunBackupListTable() {
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db;
 
                 globalStateMgr.getNextId();
                 minTimes = 0;
+<<<<<<< HEAD
                 result = id.getAndIncrement();
 
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+=======
+                result = id.incrementAndGet();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
@@ -569,6 +746,7 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
                 result = new Delegate() {
@@ -581,6 +759,8 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 repo.upload(anyString, anyString);
                 result = Status.OK;
                 minTimes = 0;
@@ -625,7 +805,12 @@ public class RestoreJobTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
+<<<<<<< HEAD
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());
@@ -643,6 +828,26 @@ public class RestoreJobTest {
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
@@ -725,7 +930,11 @@ public class RestoreJobTest {
             {
                 try {
                     GlobalStateMgr.getCurrentState().getColocateTableIndex()
+<<<<<<< HEAD
                                 .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
+=======
+                            .addTableToGroup((Database) any, (OlapTable) any, (String) any, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } catch (Exception e) {
                 }
                 result = true;
@@ -742,7 +951,11 @@ public class RestoreJobTest {
     public void testRestoreView() {
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db;
 
@@ -750,10 +963,13 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = id.incrementAndGet();
 
+<<<<<<< HEAD
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
@@ -762,6 +978,7 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 editLog.logBackupJob((BackupJob) any);
                 minTimes = 0;
                 result = new Delegate() {
@@ -774,6 +991,8 @@ public class RestoreJobTest {
 
         new Expectations() {
             {
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 repo.upload(anyString, anyString);
                 result = Status.OK;
                 minTimes = 0;
@@ -832,7 +1051,11 @@ public class RestoreJobTest {
 
         new MockUp<View>() {
             @Mock
+<<<<<<< HEAD
             public synchronized QueryStatement getQueryStatement() throws UserException {
+=======
+            public synchronized QueryStatement getQueryStatement() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return null;
             }
         };
@@ -858,7 +1081,11 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
+<<<<<<< HEAD
                 public synchronized QueryStatement init() throws UserException {
+=======
+                public synchronized QueryStatement init() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return null;
                 }
             };
@@ -897,7 +1124,11 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
+<<<<<<< HEAD
                 public synchronized QueryStatement init() throws UserException {
+=======
+                public synchronized QueryStatement init() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return null;
                 }
             };
@@ -926,4 +1157,36 @@ public class RestoreJobTest {
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRestoreAddFunction() {
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Function f1 = new Function(new FunctionName(db.getFullName(), "test_function"),
+                new Type[] {Type.INT}, new String[] {"argName"}, Type.INT, false);
+
+        backupMeta.setFunctions(Lists.newArrayList(f1));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+
+        job.addRestoredFunctions(db);
+    }
+
+    @Test
+    public void testRestoreAddCatalog() {
+        backupMeta = new BackupMeta(Lists.newArrayList());
+        Catalog catalog = new Catalog(1111111, "test_catalog", Maps.newHashMap(), "");
+
+        backupMeta.setCatalogs(Lists.newArrayList(catalog));
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                new BackupJobInfo(), false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.setRepo(repo);
+        job.addRestoredFunctions(db);
+        job.run();
+        job.run();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

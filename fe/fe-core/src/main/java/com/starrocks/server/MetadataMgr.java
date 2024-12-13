@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
@@ -32,6 +35,10 @@ import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.IcebergTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -44,6 +51,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.CatalogConnector;
@@ -55,6 +63,27 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.MetaPreparationItem;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoDefaultSource;
+import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -73,15 +102,28 @@ import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TSinkCommitInfo;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+=======
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -92,7 +134,12 @@ public class MetadataMgr {
     public class QueryMetadatas {
         private final Map<String, ConnectorMetadata> metadatas = new HashMap<>();
 
+<<<<<<< HEAD
         public QueryMetadatas() {}
+=======
+        public QueryMetadatas() {
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
             if (metadatas.containsKey(catalogName)) {
@@ -371,7 +418,11 @@ public class MetadataMgr {
         }
     }
 
+<<<<<<< HEAD
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+=======
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
@@ -495,6 +546,7 @@ public class MetadataMgr {
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
+<<<<<<< HEAD
         if (connectorTable != null) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
@@ -508,6 +560,33 @@ public class MetadataMgr {
             return null;
         }
         return database.getTable(tableId);
+=======
+        if (connectorTable != null && !connectorTable.isMetadataTable()) {
+            // Load meta information from ConnectorTblMetaInfoMgr for each external table.
+            connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
+        }
+
+        if (connectorTable != null && connectorTable.isMetadataTable()) {
+            MetadataTable metadataTable = (MetadataTable) connectorTable;
+            String originDbName = metadataTable.getOriginDb();
+            String originTableName = metadataTable.getOriginTable();
+            boolean originTableExist = connectorMetadata.map(metadata ->
+                    metadata.tableExists(originDbName, originTableName)).orElse(false);
+            if (!originTableExist) {
+                LOG.error("origin table not exists with {}.{}.{}", catalogName, dbName, tblName);
+                return null;
+            }
+        }
+        return connectorTable;
+    }
+
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        return connectorMetadata.map(metadata -> metadata.getTableVersionRange(dbName, table, startVersion, endVersion))
+                .orElse(TableVersionRange.empty().empty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Optional<Database> getDatabase(BaseTableInfo baseTableInfo) {
@@ -520,7 +599,11 @@ public class MetadataMgr {
 
     public Optional<Table> getTable(BaseTableInfo baseTableInfo) {
         if (baseTableInfo.isInternalCatalog()) {
+<<<<<<< HEAD
             return Optional.ofNullable(getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+=======
+            return Optional.ofNullable(localMetastore.getTable(baseTableInfo.getDbId(), baseTableInfo.getTableId()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return Optional.ofNullable(
                     getTable(baseTableInfo.getCatalogName(), baseTableInfo.getDbName(), baseTableInfo.getTableName()));
@@ -561,7 +644,11 @@ public class MetadataMgr {
         if (database == null) {
             return null;
         }
+<<<<<<< HEAD
         return database.getTable(tableId);
+=======
+        return localMetastore.getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {
@@ -592,16 +679,25 @@ public class MetadataMgr {
         return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);
     }
 
+<<<<<<< HEAD
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
         return listPartitionNames(catalogName, dbName, tableName, -1);
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName, long snapshotId) {
+=======
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
             try {
+<<<<<<< HEAD
                 connectorMetadata.get().listPartitionNames(dbName, tableName, snapshotId).forEach(partitionNames::add);
+=======
+                connectorMetadata.get().listPartitionNames(dbName, tableName, requestContext).forEach(partitionNames::add);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (Exception e) {
                 LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
                 throw e;
@@ -635,6 +731,7 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+<<<<<<< HEAD
     public List<PartitionKey> getPrunedPartitions(String catalogName, Table table, ScalarOperator predicate, long limit) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
@@ -648,6 +745,8 @@ public class MetadataMgr {
         return new ArrayList<>();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator, Column> columns) {
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(columns.keySet());
         List<String> columnNames = requiredColumnRefs.stream().map(col -> columns.get(col).getName()).collect(
@@ -668,14 +767,24 @@ public class MetadataMgr {
                 connectorTableColumnStats = new ConnectorTableColumnStats(
                         ColumnStatistic.buildFrom(columnStatisticList.get(i).getColumnStatistic()).
                                 setHistogram(histogram).build(),
+<<<<<<< HEAD
                         columnStatisticList.get(i).getRowCount());
+=======
+                        columnStatisticList.get(i).getRowCount(), columnStatisticList.get(i).getUpdateTime());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 connectorTableColumnStats = columnStatisticList.get(i);
             }
             if (connectorTableColumnStats != null) {
                 statistics.addColumnStatistic(columnRef, connectorTableColumnStats.getColumnStatistic());
                 if (!connectorTableColumnStats.isUnknown()) {
+<<<<<<< HEAD
                     statistics.setOutputRowCount(connectorTableColumnStats.getRowCount());
+=======
+                    double rowCount = Double.isNaN(statistics.getOutputRowCount()) ? connectorTableColumnStats.getRowCount()
+                            : Math.max(statistics.getOutputRowCount(), connectorTableColumnStats.getRowCount());
+                    statistics.setOutputRowCount(rowCount);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -688,7 +797,12 @@ public class MetadataMgr {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
+<<<<<<< HEAD
                                          long limit) {
+=======
+                                         long limit,
+                                         TableVersionRange versionRange) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
         // Get basic/histogram stats from internal statistics.
         Statistics internalStatistics = FeConstants.runningUnitTest ? null :
@@ -703,7 +817,11 @@ public class MetadataMgr {
             } else {
                 Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
                 Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
+<<<<<<< HEAD
                         session, table, columns, partitionKeys, predicate, limit)).orElse(null);
+=======
+                        session, table, columns, partitionKeys, predicate, limit, versionRange)).orElse(null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (connectorBasicStats != null && internalStatistics != null &&
                         internalStatistics.getColumnStatistics().values().stream().anyMatch(
                                 columnStatistic -> columnStatistic.getHistogram() != null)) {
@@ -737,6 +855,7 @@ public class MetadataMgr {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate) {
+<<<<<<< HEAD
         return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1);
     }
 
@@ -759,19 +878,82 @@ public class MetadataMgr {
             }
         }
         return ImmutableList.copyOf(files.build());
+=======
+        return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1, TableVersionRange.empty());
+    }
+
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getRemotePartitions(table, partitionNames);
+            } catch (Exception e) {
+                LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
+                        table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getDeleteFiles(table, snapshotId, predicate, content);
+            } catch (Exception e) {
+                LOG.error("Failed to get delete files on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return new HashSet<>();
+    }
+
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getRemoteFiles(table, params);
+            } catch (Exception e) {
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getRemoteFilesAsync(table, params);
+            } catch (Exception e) {
+                LOG.error("Failed to list remote file's metadata on catalog [{}], table [{}]", table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return RemoteFileInfoDefaultSource.EMPTY;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+<<<<<<< HEAD
         ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
         if (connectorMetadata.isPresent()) {
             try {
                 connectorMetadata.get().getPartitions(table, partitionNames).forEach(partitions::add);
+=======
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPartitions(table, partitionNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;
             }
         }
+<<<<<<< HEAD
         return partitions.build();
     }
 
@@ -781,6 +963,17 @@ public class MetadataMgr {
         if (connectorMetadata.isPresent()) {
             try {
                 return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+=======
+        return new ArrayList<>();
+    }
+
+    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName, long snapshotId,
+                                                    String serializedPredicate, MetadataTableType type) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (Exception e) {
                 LOG.error("Failed to get remote meta splits on catalog [{}], table [{}.{}]", catalogName, dbName, tableName, e);
                 throw e;
@@ -809,11 +1002,20 @@ public class MetadataMgr {
         connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
     }
 
+<<<<<<< HEAD
     public void finishSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> {
             try {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos);
+=======
+    public void finishSink(String catalogName, String dbName, String tableName,
+                           List<TSinkCommitInfo> sinkCommitInfos, String branch) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.finishSink(dbName, tableName, sinkCommitInfos, branch);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
                 throw new StarRocksConnectorException(e.getMessage());

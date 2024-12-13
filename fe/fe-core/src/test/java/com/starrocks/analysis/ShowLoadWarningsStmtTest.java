@@ -15,7 +15,11 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowLoadWarningsStmt;
@@ -55,13 +59,21 @@ public class ShowLoadWarningsStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNoDb() throws UserException, AnalysisException {
+=======
+    public void testNoDb() throws StarRocksException, AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AnalyzeTestUtil.getStarRocksAssert().useDatabase(null);
         analyzeFail("SHOW LOAD WARNINGS", "No database selected");
     }
 
     @Test
+<<<<<<< HEAD
     public void testNoWhere() throws UserException, AnalysisException {
+=======
+    public void testNoWhere() throws StarRocksException, AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
     }
 

@@ -26,7 +26,10 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedView;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.SRStringUtils;
@@ -49,6 +52,11 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -543,6 +551,7 @@ public class MVPartitionExprResolver {
     }
 
     /**
+<<<<<<< HEAD
      * This is the single ref base table partition expr method, we use it as the default method.
      */
     private static Pair<Expr, SlotRef> getMVPartitionExpr(Expr partitionExpr, QueryStatement stmt) {
@@ -582,6 +591,47 @@ public class MVPartitionExprResolver {
                                     "partition expr maps: %s", mvPartitionExprs, partitionExprMaps));
         }
         return partitionExprMaps;
+=======
+     * 1. Ensure the result `partitionExprMaps` is valid, otherwise use the original partition expr.
+     * 2. Ensure the result is ordered by mv's defined partition expression orders.
+     */
+    public static LinkedHashMap<Expr, SlotRef> getMVPartitionExprsChecked(List<Expr> mvRefPartitionExprs,
+                                                                          QueryStatement stmt,
+                                                                          List<BaseTableInfo> baseTableInfos) {
+        LinkedHashMap<Expr, SlotRef> mvPartitionExprMaps = Maps.newLinkedHashMap();
+        int refBaseTableCols = -1;
+        for (Expr mvRefPartitionExpr : mvRefPartitionExprs) {
+            List<MVPartitionExpr> partitionExprMaps = getMVPartitionExprs(mvRefPartitionExpr, stmt);
+            if (partitionExprMaps == null) {
+                LOG.warn("The partition expr maps slot ref should be from the base table, eqExprs:{}",
+                        partitionExprMaps);
+                throw new SemanticException("Failed to build mv partition expr from base table: " + stmt.getOrigStmt());
+            }
+            // If mv contains multi partition columns, needs to ensure each partition column refers the same base tables' count.
+            if (refBaseTableCols == -1) {
+                refBaseTableCols = partitionExprMaps.size();
+            } else if (refBaseTableCols != partitionExprMaps.size()) {
+                throw new SemanticException(String.format("The current partition expr maps size %s should be equal to " +
+                        "the size of the first partition expr maps: %s", partitionExprMaps.size(), refBaseTableCols));
+            }
+            partitionExprMaps.stream()
+                            .forEach(eq -> mvPartitionExprMaps.put(eq.getExpr(), eq.getSlotRef()));
+        }
+        if (baseTableInfos != null) {
+            Set<List<MVPartitionExpr>> mvPartitionExprs = Sets.newHashSet();
+            for (BaseTableInfo baseTableInfo : baseTableInfos) {
+                Table table = MvUtils.getTableChecked(baseTableInfo);
+                List<MVPartitionExpr> refPartitionExprs = MvUtils.getMvPartitionExpr(mvPartitionExprMaps, table);
+                if (!refPartitionExprs.isEmpty()) {
+                    mvPartitionExprs.add(refPartitionExprs);
+                }
+            }
+            Preconditions.checkState(mvPartitionExprs.size() <= mvPartitionExprMaps.size(),
+                    String.format("The size of mv partition exprs %s should be less or equal to the size of " +
+                                    "partition expr maps: %s", mvPartitionExprs, mvPartitionExprMaps));
+        }
+        return mvPartitionExprMaps;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -589,9 +639,15 @@ public class MVPartitionExprResolver {
      * which it comes from.
      * Constructs a mapping of partitioned expressions to slot references for join operations in a materialized view.
      */
+<<<<<<< HEAD
     private static Map<Expr, SlotRef> getMVPartitionExprs(Expr partitionExpr,
                                                           QueryStatement statement) {
         Map<Expr, SlotRef> eqExprs = Maps.newHashMap();
+=======
+    private static List<MVPartitionExpr> getMVPartitionExprs(Expr partitionExpr,
+                                                             QueryStatement statement) {
+        List<MVPartitionExpr> eqExprs = Lists.newArrayList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Exprs mvEquivalentExprs = resolveMVPartitionExpr(partitionExpr, statement);
         if (mvEquivalentExprs == null || mvEquivalentExprs.isEmpty()) {
             // no join predicate
@@ -602,9 +658,15 @@ public class MVPartitionExprResolver {
         Map<TableName, EqTableInfo> eqTableInfos = Maps.newHashMap();
         List<MVPartitionExpr> mvEquivalentPartitionExprs = getMVEquivalentPartExpr(mvEquivalentExprs);
         for (MVPartitionExpr eq : mvEquivalentPartitionExprs) {
+<<<<<<< HEAD
             Expr eqExpr = eq.getExpr();
             SlotRef slotRef = eq.getSlotRef();
             eqExprs.put(eqExpr, slotRef);
+=======
+            SlotRef slotRef = eq.getSlotRef();
+            Expr eqExpr = eq.getExpr();
+            eqExprs.add(eq);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             eqTableInfos.computeIfAbsent(slotRef.getTblNameWithoutAnalyzed(), (ignored) -> new EqTableInfo())
                     .addEqExprs(eqExpr);
         }
@@ -616,6 +678,7 @@ public class MVPartitionExprResolver {
         // t1 join a on t1.k1 = a.k1 join a on t1.k1 = date_trunc(a.k1)
         // t1 join a on t1.k1 = a.k1 join a on t1.k1 = a.k2
         // at least the partition expr should be in mvEquivalentExprsMap
+<<<<<<< HEAD
         eqExprs.entrySet().removeIf(entry -> {
             TableName tableName = entry.getValue().getTblNameWithoutAnalyzed();
             EqTableInfo eqTableInfo = eqTableInfos.get(tableName);
@@ -628,6 +691,23 @@ public class MVPartitionExprResolver {
             // only keeps the first one
             return !eqTableInfo.eqExprs.get(0).equals(entry.getKey());
         });
+=======
+        for (Iterator<MVPartitionExpr> iter = eqExprs.iterator(); iter.hasNext();) {
+            MVPartitionExpr eq = iter.next();
+            TableName tableName = eq.getSlotRef().getTblNameWithoutAnalyzed();
+            EqTableInfo eqTableInfo = eqTableInfos.get(tableName);
+            if (eqTableInfo == null) {
+                continue;
+            }
+            if (eqTableInfo.eqExprs.size() == 0) {
+                iter.remove();
+            }
+            // only keeps the first one
+            if (!eqTableInfo.eqExprs.get(0).equals(eq.getExpr())) {
+                iter.remove();
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return eqExprs;
     }
 }

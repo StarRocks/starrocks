@@ -233,14 +233,23 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
 
     private Map<Expr, SlotRef> checkMVPartitionExprs(String sql, Expr slot, int expect) {
         QueryStatement query = getQueryStatement(sql);
+<<<<<<< HEAD
         Map<Expr, SlotRef> result = MVPartitionExprResolver.getMVPartitionExprsChecked(slot, query, null);
+=======
+        Map<Expr, SlotRef> result = MVPartitionExprResolver.getMVPartitionExprsChecked(
+                Lists.newArrayList(slot), query, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(expect, result.size());
         return result;
     }
 
     @Test
     public void testFilterPartitionByUnion() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_union_filter\n" +
@@ -252,7 +261,13 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "union " +
                         "select k1, k2 from test.tbl16;", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_union_filter"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_union_filter"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
 
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -262,8 +277,17 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                     PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                     Map<Table, Set<String>> baseTables = getRefTableRefreshedPartitions(processor);
                     Assert.assertEquals(2, baseTables.size());
+<<<<<<< HEAD
                     Assert.assertEquals(Sets.newHashSet("p20220101"), baseTables.get(testDb.getTable("tbl15")));
                     Assert.assertEquals(Sets.newHashSet("p20220101"), baseTables.get(testDb.getTable("tbl16")));
+=======
+                    Assert.assertEquals(Sets.newHashSet("p20220101"), baseTables.get(
+                            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "tbl15")));
+                    Assert.assertEquals(Sets.newHashSet("p20220101"), baseTables.get(
+                            GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "tbl16")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     // insert new data into tbl16's p20220202 partition
                     String insertSql = "insert into tbl16 partition(p20220202) values('2022-02-02', 3, 10);";
@@ -287,7 +311,13 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "union " +
                         "select k1, k2 from test.tbl15;", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_union_filter"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_union_filter"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
 
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -310,7 +340,11 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
 
     @Test
     public void testFilterPartitionByJoinPredicate1() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         //normal case, join predicate is partition column
         // a.k1 = date_trunc(month, b.k1)
         starRocksAssert.withMaterializedView(
@@ -322,7 +356,13 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "as select a.k1, b.k2 from test.tbl15 as a join test.tbl16 as b " +
                         "on a.k1 = date_trunc('month', b.k1);", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
 
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
@@ -330,6 +370,7 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                     {
                         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                         Map<Table, Set<String>> baseTables = getRefTableRefreshedPartitions(processor);
                         Assert.assertEquals(2, baseTables.size());
@@ -337,6 +378,18 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                                 baseTables.get(testDb.getTable("tbl15")));
                         Assert.assertEquals(Sets.newHashSet("p20220101", "p20220102", "p20220103"),
                                 baseTables.get(testDb.getTable("tbl16")));
+=======
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+                        Map<Table, Set<String>> baseTables = getRefTableRefreshedPartitions(processor);
+                        Assert.assertEquals(2, baseTables.size());
+                        Assert.assertEquals(Sets.newHashSet("p20220101"),
+                                baseTables.get(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), "tbl15")));
+                        Assert.assertEquals(Sets.newHashSet("p20220101", "p20220102", "p20220103"),
+                                baseTables.get(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), "tbl16")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Assert.assertTrue(processor.getNextTaskRun() == null);
                     }
 
@@ -346,7 +399,12 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         new StmtExecutor(connectContext, SqlParser.parseSingleStatement(
                                 insertSql, connectContext.getSessionVariable().getSqlMode())).execute();
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+=======
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         // 1. updated partition of tbl16 is p20220202
                         // 2. date_trunc('month', p20220202) is '2022-02'
                         // 3. tbl15's associated partitions are p20220201 and p20220202
@@ -360,7 +418,11 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
 
     @Test
     public void testFilterPartitionByJoinPredicate3() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // join predicate has no equal condition
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
@@ -368,9 +430,18 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "distributed by hash(k2) buckets 10\n" +
                         "PROPERTIES('partition_refresh_number' = '10000')" +
                         "refresh deferred manual\n" +
+<<<<<<< HEAD
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k1 = tbl2.k1 or tbl1.k2 = tbl2.k2;", () -> {
 
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                        "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k1 = tbl2.k1 or tbl1.k2 = tbl2.k2;",
+                () -> {
+
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -381,7 +452,12 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         executeInsertSql(connectContext, "insert into tbl1 partition(p2) values('2022-02-02', 3, 10);");
                         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+=======
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Assert.assertEquals(Sets.newHashSet("p2"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -394,17 +470,30 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         executeInsertSql(connectContext, "insert into tbl2 partition(p2) values('2022-02-02', 3, 10);");
                         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
                         Assert.assertTrue(execPlan != null);
                         assertPlanContains(execPlan, "partitions=5/5\n     rollup: tbl1", "partitions=2/2\n     rollup: tbl2");
+=======
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+                        ExecPlan execPlan = processor.getMvContext().getExecPlan();
+                        Assert.assertTrue(execPlan != null);
+                        assertPlanContains(execPlan, "partitions=5/5\n     rollup: tbl1",
+                                "partitions=2/2\n     rollup: tbl2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 });
     }
 
     @Test
     public void testFilterPartitionByJoinPredicate31() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // join predicate is not mv partition expr
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
@@ -414,14 +503,24 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "refresh deferred manual\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 using(k1);", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
                 });
     }
 
     @Test
     public void testFilterPartitionByJoinPredicate4() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // nest table alias join
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
@@ -431,7 +530,13 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "as select a.k1, b.k2 from test.tbl15 as a join test.tbl16 as b " +
                         "on date_trunc('month', a.k1) = b.k1;", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -452,7 +557,11 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
 
     @Test
     public void testFilterPartitionByJoinPredicate5() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // nest table alias join
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
@@ -468,7 +577,13 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "  (select date_trunc('DAY', k1) as ds, k2 from (select * from tbl2)t ) b " +
                         "on date_trunc('DAY', a.k1) = b.ds and a.k2 = b.k2", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -498,7 +613,11 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
 
     @Test
     public void testFilterPartitionByJoinPredicate6() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // nest function in join predicate
         starRocksAssert.useDatabase("test").withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
@@ -512,14 +631,24 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "(select k1 as ds, k2 from tbl2) b " +
                         "on date_trunc('day', a.ds) = b.ds and a.k2 = b.k2 ;", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
                 });
     }
 
     @Test
     public void testFilterPartitionByJoinPredicate7() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // duplicate table join
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
@@ -534,14 +663,24 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "(select k1 as ds, k2 from tbl2) c " +
                         "on a.ds = c.ds and a.k2 = c.k2;", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
                 });
     }
 
     @Test
     public void testFilterPartitionByJoinPredicate8() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
                         "partition by k1\n" +
@@ -557,14 +696,24 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "(select date_trunc('day', k1) as ds, k2 from tbl1) c " +
                         "on a.ds = c.ds;", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
                 });
     }
 
     @Test
     public void testFilterPartitionByJoinPredicate9() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // unsupported function in join predicate
         starRocksAssert.withMaterializedView(
                 "create materialized view test.mv_join_predicate\n" +
@@ -579,7 +728,13 @@ public class MVPartitionExprResolverTest extends MVRefreshTestBase {
                         "(select date_add(k1, INTERVAL 1 DAY) as ds, k2 from tbl15) c " +
                         "on a.ds = c.ds and a.k2 = c.k2;", () -> {
 
+<<<<<<< HEAD
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_join_predicate"));
+=======
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_join_predicate"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());

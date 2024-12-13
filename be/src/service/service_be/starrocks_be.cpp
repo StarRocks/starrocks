@@ -27,12 +27,24 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+<<<<<<< HEAD
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/jdbc_driver_manager.h"
 #include "service/brpc.h"
 #include "service/service.h"
+=======
+#include "fs/s3/poco_common.h"
+#include "gutil/strings/join.h"
+#include "runtime/exec_env.h"
+#include "runtime/fragment_mgr.h"
+#include "runtime/global_variables.h"
+#include "runtime/jdbc_driver_manager.h"
+#include "service/brpc.h"
+#include "service/service.h"
+#include "service/service_be/arrow_flight_sql_service.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "service/service_be/http_service.h"
 #include "service/service_be/internal_service.h"
 #include "service/service_be/lake_service.h"
@@ -60,8 +72,11 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         config::datacache_enable = true;
         config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
         config::datacache_disk_size = std::to_string(config::block_cache_disk_size);
+<<<<<<< HEAD
         config::datacache_disk_path = config::block_cache_disk_path;
         config::datacache_meta_path = config::block_cache_meta_path;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         config::datacache_block_size = config::block_cache_block_size;
         config::datacache_max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
         config::datacache_checksum_enable = config::block_cache_checksum_enable;
@@ -71,7 +86,11 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
                      << ", you'd better use the configuration items prefixed `datacache` instead!";
     }
 
+<<<<<<< HEAD
 #if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
+=======
+#if !defined(WITH_STARCACHE)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (config::datacache_enable) {
         LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
         config::datacache_enable = false;
@@ -88,6 +107,7 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         }
         RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
                                                                       &cache_options.mem_space_size));
+<<<<<<< HEAD
         if (config::datacache_disk_path.value().empty()) {
             // If the disk cache does not be configured for datacache, set default path according storage path.
             std::vector<std::string> datacache_paths;
@@ -111,26 +131,83 @@ Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& stora
         if (!cache_options.disk_spaces.empty() && total_quota_byts == 0) {
             // If disk cache quota is zero, turn on the automatic adjust switch.
             config::datacache_auto_adjust_enable = true;
+=======
+
+        size_t total_quota_bytes = 0;
+        for (auto& root_path : storage_paths) {
+            // Because we have unified the datacache between datalake and starlet, we also need to unify the
+            // cache path and quota.
+            // To reuse the old cache data in `starlet_cache` directory, we try to rename it to the new `datacache`
+            // directory if it exists. To avoid the risk of cross disk renaming of a large amount of cached data,
+            // we do not automatically rename it when the source and destination directories are on different disks.
+            // In this case, users should manually remount the directories and restart them.
+            std::string datacache_path = root_path.path + "/datacache";
+            std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
+#ifdef USE_STAROS
+            if (config::datacache_unified_instance_enable) {
+                RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
+            }
+#endif
+            // Create it if not exist
+            Status st = FileSystem::Default()->create_dir_if_missing(datacache_path);
+            if (!st.ok()) {
+                LOG(ERROR) << "Fail to create datacache directory: " << datacache_path << ", reason: " << st.message();
+                return Status::InternalError("Fail to create datacache directory");
+            }
+
+            int64_t disk_size =
+                    DataCacheUtils::parse_conf_datacache_disk_size(datacache_path, config::datacache_disk_size, -1);
+#ifdef USE_STAROS
+            // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
+            // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
+            // and then automatically adjusted based on the current avalible disk space.
+            if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
+                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(
+                        datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1);
+                disk_size = std::max(disk_size, starlet_cache_size);
+            }
+#endif
+            cache_options.disk_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
+            total_quota_bytes += disk_size;
+        }
+
+        if (cache_options.disk_spaces.empty() || total_quota_bytes != 0) {
+            config::datacache_auto_adjust_enable = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // Adjust the default engine based on build switches.
         if (config::datacache_engine == "") {
 #if defined(WITH_STARCACHE)
             config::datacache_engine = "starcache";
+<<<<<<< HEAD
 #else
             config::datacache_engine = "cachelib";
 #endif
         }
         cache_options.meta_path = config::datacache_meta_path;
+=======
+#endif
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cache_options.block_size = config::datacache_block_size;
         cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
         cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
         cache_options.enable_checksum = config::datacache_checksum_enable;
         cache_options.enable_direct_io = config::datacache_direct_io_enable;
         cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
+<<<<<<< HEAD
         cache_options.skip_read_factor = starrocks::config::datacache_skip_read_factor;
         cache_options.scheduler_threads_per_cpu = starrocks::config::datacache_scheduler_threads_per_cpu;
         cache_options.engine = config::datacache_engine;
+=======
+        cache_options.skip_read_factor = config::datacache_skip_read_factor;
+        cache_options.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
+        cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
+        cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
+        cache_options.engine = config::datacache_engine;
+        cache_options.eviction_policy = config::datacache_eviction_policy;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return cache->init(cache_options);
     }
     return Status::OK();
@@ -177,6 +254,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(global_env->init());
     LOG(INFO) << process_name << " start step " << start_step++ << ": global env init successfully";
 
+<<<<<<< HEAD
+=======
+    // make sure global variables are initialized
+    auto* global_vars = GlobalVariables::GetInstance();
+    CHECK(global_vars->is_init()) << "global variables not initialized";
+    LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
@@ -189,11 +274,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(storage_engine->start_bg_threads());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
+<<<<<<< HEAD
 #ifdef USE_STAROS
     init_staros_worker();
     LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
 #endif
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!init_datacache(global_env, paths).ok()) {
         LOG(ERROR) << "Fail to init datacache";
         exit(1);
@@ -204,6 +292,19 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
 
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+    BlockCache* block_cache = BlockCache::instance();
+    if (config::datacache_unified_instance_enable && block_cache->is_initialized()) {
+        init_staros_worker(block_cache->starcache_instance());
+    } else {
+        init_staros_worker(nullptr);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": staros worker init successfully";
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // set up thrift client before providing any service to the external
     // because these services may use thrift client, for example, stream
     // load will send thrift rpc to FE after http server is started
@@ -234,11 +335,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto brpc_server = std::make_unique<brpc::Server>();
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
+<<<<<<< HEAD
     BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
     LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+=======
+    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
+
+    brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
@@ -278,6 +385,20 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
     LOG(INFO) << process_name << " start step " << start_step++ << ": start http server successfully";
 
+<<<<<<< HEAD
+=======
+    // Start Arrow Flight SQL server
+    auto arrow_flight_sql_server = std::make_unique<ArrowFlightSqlServer>();
+    if (auto status = arrow_flight_sql_server->start(config::arrow_flight_port); !status.ok()) {
+        LOG(ERROR) << process_name << " Arrow Flight Sql Server did not start correctly, exiting: " << status.message()
+                   << ". Its port might be occupied. You can modify `arrow_flight_port` in `be.conf` to an unused port "
+                      "or set it to -1 to disable it.";
+        shutdown_logging();
+        exit(1);
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": start arrow flight sql server successfully";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Start heartbeat server
     std::unique_ptr<ThriftServer> heartbeat_server;
     if (auto ret = create_heartbeat_server(exec_env, config::heartbeat_service_port,
@@ -312,6 +433,13 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     heartbeat_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": heartbeat server exit successfully";
 
+<<<<<<< HEAD
+=======
+    arrow_flight_sql_server->stop();
+    arrow_flight_sql_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": Arrow Flight SQL server exit successfully";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     http_server->stop();
     brpc_server->Stop(0);
     thrift_server->stop();
@@ -334,13 +462,25 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
 
+<<<<<<< HEAD
 #if defined(WITH_CACHELIB) || defined(WITH_STARCACHE)
+=======
+#if defined(WITH_STARCACHE)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (config::datacache_enable) {
         (void)BlockCache::instance()->shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";
     }
 #endif
 
+<<<<<<< HEAD
+=======
+    if (config::enable_poco_client_for_aws_sdk) {
+        starrocks::poco::HTTPSessionPools::instance().shutdown();
+        LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     http_server->join();
     http_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";

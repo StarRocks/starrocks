@@ -4,8 +4,11 @@ displayed_sidebar: docs
 
 # rand, random
 
+<<<<<<< HEAD
 ## Description
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Returns a random floating-point number between 0 (inclusive) and 1 (exclusive).
 
 ## Syntax

@@ -129,7 +129,11 @@ SHOW INDEXES FROM lineorder_partial;
 
 :::note
 
+<<<<<<< HEAD
 Creating a bitmap index is an asynchronous process. Using the above statement, you can only view indexes that have been created successfully.
+=======
+Creating a bitmap index is an asynchronous process. Using the above statement, you can only view indexes that have successfully finished being created.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 :::
 

@@ -15,8 +15,11 @@
 #pragma once
 
 #include <memory>
+<<<<<<< HEAD
 #include <tuple>
 #include <unordered_map>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -33,6 +36,10 @@
 #include "exprs/agg/count.h"
 #include "exprs/agg/covariance.h"
 #include "exprs/agg/distinct.h"
+<<<<<<< HEAD
+=======
+#include "exprs/agg/ds_hll_count_distinct.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
@@ -40,6 +47,11 @@
 #include "exprs/agg/hll_union.h"
 #include "exprs/agg/hll_union_count.h"
 #include "exprs/agg/intersect_count.h"
+<<<<<<< HEAD
+=======
+#include "exprs/agg/mann_whitney.h"
+#include "exprs/agg/map_agg.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/nullable_aggregate.h"
@@ -119,6 +131,13 @@ public:
         return std::make_shared<GroupConcatAggregateFunctionV2>();
     }
 
+<<<<<<< HEAD
+=======
+    static auto MakeMannWhitneyUTestAggregateFunction() {
+        return std::make_shared<MannWhitneyUTestAggregateFunction>();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <LogicalType LT>
     static auto MakeMaxAggregateFunction();
 
@@ -185,6 +204,12 @@ public:
     static AggregateFunctionPtr MakeHllNdvAggregateFunction();
 
     template <LogicalType T>
+<<<<<<< HEAD
+=======
+    static AggregateFunctionPtr MakeHllSketchAggregateFunction();
+
+    template <LogicalType T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
@@ -197,6 +222,15 @@ public:
     template <LogicalType PT>
     static AggregateFunctionPtr MakePercentileDiscAggregateFunction();
 
+<<<<<<< HEAD
+=======
+    template <LogicalType LT>
+    static AggregateFunctionPtr MakeLowCardPercentileBinAggregateFunction();
+
+    template <LogicalType PT>
+    static AggregateFunctionPtr MakeLowCardPercentileCntAggregateFunction();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
 
@@ -382,6 +416,14 @@ AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
 }
 
 template <LogicalType LT>
+<<<<<<< HEAD
+=======
+AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
+    return std::make_shared<HllSketchAggregateFunction<LT>>();
+}
+
+template <LogicalType LT>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
     return std::make_shared<HllNdvAggregateFunction<LT, true>>();
 }
@@ -396,6 +438,19 @@ AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
+<<<<<<< HEAD
+=======
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakeLowCardPercentileBinAggregateFunction() {
+    return std::make_shared<LowCardPercentileBinAggregateFunction<PT>>();
+}
+
+template <LogicalType PT>
+AggregateFunctionPtr AggregateFactory::MakeLowCardPercentileCntAggregateFunction() {
+    return std::make_shared<LowCardPercentileCntAggregateFunction<PT>>();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
     return std::make_shared<BitmapAggAggregateFunction<LT>>();

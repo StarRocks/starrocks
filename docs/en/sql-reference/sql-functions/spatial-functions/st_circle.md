@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Circle
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a WKT (WEll Known Text) to a circle on the sphere of the earth.
 

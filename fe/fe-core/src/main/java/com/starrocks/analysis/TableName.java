@@ -126,6 +126,7 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     }
 
     public void normalization(ConnectContext connectContext) {
+<<<<<<< HEAD
         try {
             if (Strings.isNullOrEmpty(catalog)) {
                 if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
@@ -146,6 +147,24 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
             }
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());
+=======
+        if (Strings.isNullOrEmpty(catalog)) {
+            if (Strings.isNullOrEmpty(connectContext.getCurrentCatalog())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalog);
+            }
+            catalog = connectContext.getCurrentCatalog();
+        }
+
+        if (Strings.isNullOrEmpty(db)) {
+            db = connectContext.getDatabase();
+            if (Strings.isNullOrEmpty(db)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
+        }
+
+        if (Strings.isNullOrEmpty(tbl)) {
+            throw new SemanticException("Table name is null");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -251,8 +270,17 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     @Override
     public boolean equals(Object o) {
+<<<<<<< HEAD
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
+=======
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TableName tableName = (TableName) o;
         return Objects.equals(catalog, tableName.catalog)
                 && Objects.equals(tbl, tableName.tbl)

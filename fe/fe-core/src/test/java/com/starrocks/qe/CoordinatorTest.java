@@ -138,7 +138,12 @@ public class CoordinatorTest extends PlanTestBase {
 
         OlapTable olapTable = getOlapTable("t0");
         List<Long> olapTableTabletIds =
+<<<<<<< HEAD
                 olapTable.getAllPartitions().stream().flatMap(x -> x.getBaseIndex().getTabletIdsInOrder().stream())
+=======
+                olapTable.getAllPartitions().stream().flatMap(x -> x.getDefaultPhysicalPartition().getBaseIndex()
+                                .getTabletIdsInOrder().stream())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .collect(Collectors.toList());
         Assert.assertFalse(olapTableTabletIds.isEmpty());
         tupleDesc.setTable(olapTable);

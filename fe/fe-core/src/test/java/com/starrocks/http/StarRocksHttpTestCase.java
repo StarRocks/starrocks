@@ -34,6 +34,10 @@
 
 package com.starrocks.http;
 
+<<<<<<< HEAD
+=======
+import com.fasterxml.jackson.core.type.TypeReference;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -89,11 +93,20 @@ import mockit.Mocked;
 import okhttp3.Credentials;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+<<<<<<< HEAD
+=======
+import okhttp3.Response;
+import okhttp3.ResponseBody;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
+<<<<<<< HEAD
+=======
+import java.io.IOException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -103,6 +116,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+<<<<<<< HEAD
+=======
+import static org.junit.Assert.assertNotNull;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public abstract class StarRocksHttpTestCase {
 
     public OkHttpClient networkClient = new OkHttpClient.Builder()
@@ -116,10 +134,16 @@ public abstract class StarRocksHttpTestCase {
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
+<<<<<<< HEAD
+=======
+    protected static final String ES_TABLE_NAME = "es_table";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected static long testBackendId1 = 1000;
     protected static long testBackendId2 = 1001;
     protected static long testBackendId3 = 1002;
 
+<<<<<<< HEAD
     private static long testReplicaId1 = 2000;
     private static long testReplicaId2 = 2001;
     private static long testReplicaId3 = 2002;
@@ -127,6 +151,16 @@ public abstract class StarRocksHttpTestCase {
     protected static long testDbId = 100L;
     protected static long testTableId = 200L;
     private static long testPartitionId = 201L;
+=======
+    protected static long testReplicaId1 = 2000;
+    protected static long testReplicaId2 = 2001;
+    protected static long testReplicaId3 = 2002;
+
+    protected static long testDbId = 100L;
+    protected static long testTableId = 200L;
+    protected static long testPartitionId = 201L;
+    protected static long testPhysicalPartitionId = 202L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static long testIndexId = testTableId; // the base indexid == tableid
     protected static long tabletId = 400L;
 
@@ -137,7 +171,10 @@ public abstract class StarRocksHttpTestCase {
 
     protected static String URI;
     protected static String BASE_URL;
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected static final String AUTH_KEY = "Authorization";
     protected String rootAuth = Credentials.basic("root", "");
 
@@ -170,9 +207,16 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+<<<<<<< HEAD
         Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
         partition.updateVisibleVersion(testStartVersion);
         partition.setNextVersion(testStartVersion + 1);
+=======
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -227,9 +271,16 @@ public abstract class StarRocksHttpTestCase {
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+<<<<<<< HEAD
         Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
         partition.updateVisibleVersion(testStartVersion);
         partition.setNextVersion(testStartVersion + 1);
+=======
+        Partition partition = new Partition(testPartitionId, testPhysicalPartitionId,
+                "testPartition", baseIndex, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // table
         PartitionInfo partitionInfo = new SinglePartitionInfo();
@@ -277,7 +328,11 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(table);
         OlapTable table1 = newTable(TABLE_NAME + 1);
         db.registerTableUnlocked(table1);
+<<<<<<< HEAD
         EsTable esTable = newEsTable("es_table");
+=======
+        EsTable esTable = newEsTable(ES_TABLE_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         db.registerTableUnlocked(esTable);
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
@@ -287,6 +342,7 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(db.getId());
                 minTimes = 0;
                 result = db;
@@ -295,15 +351,25 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = db;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb("emptyDb");
                 minTimes = 0;
                 result = null;
 
                 globalStateMgr.getDb(anyString);
+=======
+                globalStateMgr.getLocalMetastore().getDb("emptyDb");
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = new Database();
 
@@ -323,6 +389,7 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(localMetastore) {
             {
+<<<<<<< HEAD
                 localMetastore.listDbNames();
                 minTimes = 0;
                 result = Lists.newArrayList("testDb");
@@ -330,6 +397,15 @@ public abstract class StarRocksHttpTestCase {
                 localMetastore.getFullNameToDb();
                 minTimes = 0;
                 result = nameToDb;
+=======
+                localMetastore.getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                localMetastore.getDb(testDbId);
+                minTimes = 0;
+                result = db;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -345,7 +421,11 @@ public abstract class StarRocksHttpTestCase {
         db.registerTableUnlocked(table);
         OlapTable table1 = newTable(TABLE_NAME + 1);
         db.registerTableUnlocked(table1);
+<<<<<<< HEAD
         EsTable esTable = newEsTable("es_table");
+=======
+        EsTable esTable = newEsTable(ES_TABLE_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         db.registerTableUnlocked(esTable);
         OlapTable newEmptyTable = newEmptyTable("test_empty_table");
         db.registerTableUnlocked(newEmptyTable);
@@ -355,6 +435,7 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(db.getId());
                 minTimes = 0;
                 result = db;
@@ -363,10 +444,13 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = db;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.isLeader();
                 minTimes = 0;
                 result = true;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb("emptyDb");
                 minTimes = 0;
                 result = null;
@@ -375,6 +459,8 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = new Database();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getLoadInstance();
                 minTimes = 0;
                 result = new Load();
@@ -386,6 +472,13 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;
                 result = metadataMgr;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -404,7 +497,22 @@ public abstract class StarRocksHttpTestCase {
                 result = newEmptyTable;
             }
         };
+<<<<<<< HEAD
         ;
+=======
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                localMetastore.getDb(testDbId);
+                minTimes = 0;
+                result = db;
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return globalStateMgr;
     }
@@ -451,12 +559,20 @@ public abstract class StarRocksHttpTestCase {
     }
 
     @Before
+<<<<<<< HEAD
     public void setUp() {
+=======
+    public void setUp() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         setUpWithGlobalStateMgr(globalStateMgr);
     }
 
+<<<<<<< HEAD
     public void setUpWithCatalog() {
+=======
+    public void setUpWithCatalog() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         setUpWithGlobalStateMgr(globalStateMgr);
 
@@ -489,7 +605,11 @@ public abstract class StarRocksHttpTestCase {
         };
     }
 
+<<<<<<< HEAD
     protected void setUpWithGlobalStateMgr(GlobalStateMgr globalStateMgr) {
+=======
+    private void setUpWithGlobalStateMgr(GlobalStateMgr globalStateMgr) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
         NodeMgr nodeMgr = new NodeMgr();
@@ -555,7 +675,11 @@ public abstract class StarRocksHttpTestCase {
         httpServer.shutDown();
     }
 
+<<<<<<< HEAD
     protected void doSetUp() {
+=======
+    protected void doSetUp() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -614,4 +738,15 @@ public abstract class StarRocksHttpTestCase {
 
         request.getContext().write(responseObj).addListener(ChannelFutureListener.CLOSE);
     }
+<<<<<<< HEAD
+=======
+
+    protected static Map<String, Object> parseResponseBody(Response response) throws IOException {
+        assertNotNull(response);
+        ResponseBody body = response.body();
+        assertNotNull(body);
+        String bodyStr = body.string();
+        return objectMapper.readValue(bodyStr, new TypeReference<>() {});
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

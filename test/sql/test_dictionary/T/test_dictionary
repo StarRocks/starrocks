@@ -240,7 +240,11 @@ DROP DICTIONARY test_dictionary_definition_7;
 
 DROP TABLE t_dictionary_definition;
 
+<<<<<<< HEAD
 -- name: test_dictionary_error
+=======
+-- name: test_dictionary_error @slow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE TABLE `t_dictionary_error` (
   `id1` BIGINT NOT NULL COMMENT "",
   `id2` BIGINT NOT NULL COMMENT "",
@@ -534,7 +538,11 @@ INSERT INTO t_dictionary_common_expression VALUES (1,2,3,4);
 CREATE DICTIONARY test_dictionary_common_expression USING t_dictionary_common_expression (id1 KEY, id2 VALUE, id3 VALUE, id4 VALUE);
 function: wait_refresh_dictionary_finish("test_dictionary_common_expression", "FINISHED")
 
+<<<<<<< HEAD
 explain SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+=======
+[UC]explain select dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
 
 DROP DICTIONARY test_dictionary_common_expression;

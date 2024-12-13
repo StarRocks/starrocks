@@ -23,6 +23,10 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -97,17 +101,29 @@ public class TransactionChecker {
     public static TransactionChecker create(TransactionState txn, Database db) {
         List<PartitionChecker> partitions = new ArrayList<>();
         for (TableCommitInfo tableCommitInfo : txn.getIdToTableCommitInfos().values()) {
+<<<<<<< HEAD
             OlapTable table = (OlapTable) db.getTable(tableCommitInfo.getTableId());
+=======
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), tableCommitInfo.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null || table.isCloudNativeTableOrMaterializedView()) {
                 continue;
             }
 
             Locker locker = new Locker();
             try {
+<<<<<<< HEAD
                 locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
 
                 for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
+=======
+                locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+
+                for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                     if (partition == null) {
                         continue;
@@ -124,7 +140,11 @@ public class TransactionChecker {
                     partitions.add(partitionChecker);
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return new TransactionChecker(partitions);

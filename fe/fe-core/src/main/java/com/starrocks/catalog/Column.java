@@ -43,6 +43,10 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TypeDef;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.combinator.AggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -57,6 +61,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.IndexDef;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TAggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TColumn;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.text.translate.UnicodeUnescaper;
@@ -104,6 +112,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // column is not key and has aggregate type: aggregate type is name of aggregate function.
     @SerializedName(value = "aggregationType")
     private AggregateType aggregationType;
+<<<<<<< HEAD
+=======
+    // aggStateDesc is used for common aggregate function state with intermediate result type in aggregate key model.
+    // if aggregationType is AGG_STATE_UNION, aggStateDesc should not be null.
+    @SerializedName("aggStateDesc")
+    protected AggStateDesc aggStateDesc = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // if isAggregationTypeImplicit is true, the actual aggregation type will not be shown in show create table
     // the key type of table is duplicate or unique: the isAggregationTypeImplicit of value columns are true
@@ -152,23 +167,39 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     }
 
     public Column(String name, Type dataType) {
+<<<<<<< HEAD
         this(name, dataType, false, null, false, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
+=======
+        this(name, dataType, false, null, null, false, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type dataType, boolean isAllowNull) {
+<<<<<<< HEAD
         this(name, dataType, false, null, isAllowNull, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
+=======
+        this(name, dataType, false, null, null, isAllowNull, null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type dataType, boolean isAllowNull, String comment) {
+<<<<<<< HEAD
         this(name, dataType, false, null, isAllowNull, null, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
+=======
+        this(name, dataType, false, null, null, isAllowNull, null, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkArgument(dataType.isValid());
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
+<<<<<<< HEAD
         this(name, type, isKey, aggregateType, false,
+=======
+        this(name, type, isKey, aggregateType, null, false,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 new ColumnDef.DefaultValueDef(true, new StringLiteral(defaultValue)), comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
@@ -176,12 +207,17 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType,
                   ColumnDef.DefaultValueDef defaultValue,
                   String comment) {
+<<<<<<< HEAD
         this(name, type, isKey, aggregateType, false, defaultValue, comment,
+=======
+        this(name, type, isKey, aggregateType, null, false, defaultValue, comment,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
                   ColumnDef.DefaultValueDef defaultValueDef, String comment) {
+<<<<<<< HEAD
         this(name, type, isKey, aggregateType, isAllowNull, defaultValueDef, comment,
                 COLUMN_UNIQUE_ID_INIT_VALUE);
     }
@@ -193,6 +229,20 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, boolean isAllowNull,
                   ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId, String physicalName) {
+=======
+        this(name, type, isKey, aggregateType, null, isAllowNull, defaultValueDef, comment,
+                COLUMN_UNIQUE_ID_INIT_VALUE);
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId) {
+        this(name, type, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef, comment, columnUniqId, "");
+    }
+
+    public Column(String name, Type type, boolean isKey, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                  boolean isAllowNull, ColumnDef.DefaultValueDef defaultValueDef, String comment, int columnUniqId,
+                  String physicalName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.name = name;
         if (this.name == null) {
             this.name = "";
@@ -206,6 +256,16 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 this.type.getPrimitiveType() != PrimitiveType.INVALID_TYPE);
 
         this.aggregationType = aggregateType;
+<<<<<<< HEAD
+=======
+        if (aggregateType != null && aggregateType == AggregateType.AGG_STATE_UNION) {
+            Preconditions.checkArgument(aggStateDesc != null, "aggStateDesc should not be null if " +
+                    "aggregation type is AGG_STATE_UNION");
+        }
+        this.aggStateDesc = aggStateDesc;
+        this.type.setAggStateDesc(aggStateDesc);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.isAggregationTypeImplicit = false;
         this.isKey = isKey;
         this.isAllowNull = isAllowNull;
@@ -230,7 +290,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     public Column(Column column) {
         this.name = column.getName();
         this.columnId = column.getColumnId();
+<<<<<<< HEAD
         this.type = column.type;
+=======
+        this.aggStateDesc = column.aggStateDesc;
+        this.type = column.type;
+        this.type.setAggStateDesc(column.aggStateDesc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.aggregationType = column.getAggregationType();
         this.isAggregationTypeImplicit = column.isAggregationTypeImplicit();
         this.isKey = column.isKey();
@@ -275,7 +341,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 defaultValueDef = new ColumnDef.DefaultValueDef(false, null);
             }
         }
+<<<<<<< HEAD
         return new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, isAllowNull,
+=======
+        return new ColumnDef(name, new TypeDef(type), null, isKey, aggregationType, aggStateDesc, isAllowNull,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 defaultValueDef, isAutoIncrement,
                 generatedColumnExpr != null ? generatedColumnExpr.convertToColumnNameExpr(table.getIdToColumn()) : null,
                 comment);
@@ -428,6 +498,13 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (null != this.aggregationType) {
             tColumn.setAggregation_type(this.aggregationType.toThrift());
         }
+<<<<<<< HEAD
+=======
+        if (null != this.aggStateDesc) {
+            TAggStateDesc tAggStateDesc = this.aggStateDesc.toThrift();
+            tColumn.setAgg_state_desc(tAggStateDesc);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tColumn.setIs_key(this.isKey);
         tColumn.setIs_allow_null(this.isAllowNull);
         tColumn.setIs_auto_increment(this.isAutoIncrement);
@@ -460,6 +537,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.aggregationType != other.aggregationType) {
             throw new DdlException("Can not change aggregation type");
         }
+<<<<<<< HEAD
+=======
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
+            throw new DdlException("Can not change aggregation state desc type");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (this.isAllowNull && !other.isAllowNull) {
             throw new DdlException("Can not change from nullable to non-nullable");
@@ -586,7 +669,15 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         String typeStr = type.toSql();
         sb.append(typeStr).append(" ");
         if (isAggregated() && !isAggregationTypeImplicit) {
+<<<<<<< HEAD
             sb.append(aggregationType.name()).append(" ");
+=======
+            if (aggregationType == AggregateType.AGG_STATE_UNION) {
+                sb.append(aggStateDesc.toSql()).append(" ");
+            } else {
+                sb.append(aggregationType.name()).append(" ");
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         if (isAllowNull) {
             sb.append("NULL ");
@@ -776,6 +867,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (this.aggregationType != other.getAggregationType()) {
             return false;
         }
+<<<<<<< HEAD
+=======
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
+            return false;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
             return false;
         }
@@ -810,6 +907,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
                 AggregateType.isNullOrNone(other.getAggregationType())))) {
             return false;
         }
+<<<<<<< HEAD
+=======
+        if (this.aggStateDesc != null && !this.aggStateDesc.equals(other.aggStateDesc)) {
+            return false;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
             return false;
         }
@@ -849,6 +952,12 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (columnId == null || Strings.isNullOrEmpty(columnId.getId())) {
             columnId = ColumnId.create(name);
         }
+<<<<<<< HEAD
+=======
+        if (this.aggStateDesc != null) {
+            this.type.setAggStateDesc(this.aggStateDesc);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -892,4 +1001,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
             tColumn.setIs_bloom_filter_column(true);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public AggStateDesc getAggStateDesc() {
+        return this.aggStateDesc;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

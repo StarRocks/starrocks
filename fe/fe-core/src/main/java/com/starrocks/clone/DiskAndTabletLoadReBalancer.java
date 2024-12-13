@@ -514,11 +514,20 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // in the second round, we will migrate the tablet that will break the tablet distribution balance.
             for (int round = 1; round <= 2; round++) {
                 PARTITION:
+<<<<<<< HEAD
                 for (Pair<Long, Long> partitionMVId : hState.sortedPartitions) {
                     List<Long> hPartitionTablets = hState.partitionTablets.get(partitionMVId);
                     List<Long> lPartitionTablets = lState.partitionTablets.computeIfAbsent(partitionMVId,
                             pmId -> new LinkedList<>());
                     int replicaTotalCnt = partitionReplicaCnt.getOrDefault(partitionMVId.first, 0);
+=======
+                for (Pair<Long, Long> physicalPartitionAndMaterializedIndexId : hState.sortedPartitions) {
+                    List<Long> hPartitionTablets = hState.partitionTablets.get(physicalPartitionAndMaterializedIndexId);
+                    List<Long> lPartitionTablets =
+                            lState.partitionTablets.computeIfAbsent(physicalPartitionAndMaterializedIndexId,
+                                    pmId -> new LinkedList<>());
+                    int replicaTotalCnt = partitionReplicaCnt.getOrDefault(physicalPartitionAndMaterializedIndexId.first, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     int slotOfHighBE = hPartitionTablets.size() - (replicaTotalCnt / beStats.size());
                     int slotOfLowBE = ((replicaTotalCnt + beStats.size() - 1) / beStats.size())
                             - lPartitionTablets.size();
@@ -548,7 +557,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         if (olapTable == null) {
                             continue;
                         }
+<<<<<<< HEAD
                         PhysicalPartition physicalPartition = olapTable.getPartition(tabletMeta.getPhysicalPartitionId());
+=======
+                        PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (physicalPartition == null) {
                             continue;
                         }
@@ -717,10 +730,17 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         Locker locker = new Locker();
         try {
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
             return (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
         } finally {
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+            return (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -794,7 +814,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     continue OUT;
                 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 OlapTable olapTable = getOlapTableById(tabletMeta.getDbId(), tabletMeta.getTableId());
                 if (olapTable == null) {
                     continue;
@@ -960,7 +983,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     }
 
     /**
+<<<<<<< HEAD
      * @return map : (partition, index) => tablets
+=======
+     * @return map : (physical partition id, index) => tablets
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     private Map<Pair<Long, Long>, Set<Long>> getPartitionTablets(long beId, TStorageMedium medium, long pathHash) {
         Map<Pair<Long, Long>, Set<Long>> partitionTablets = Maps.newHashMap();
@@ -1015,7 +1042,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
@@ -1050,7 +1081,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             return cnt;
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1460,7 +1495,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
         Locker locker = new Locker();
         try {
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return result;
@@ -1531,7 +1570,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 result.add(new Pair<>(entry.getKey(), entry.getValue()));
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return result;
@@ -1547,7 +1590,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         Locker locker = new Locker();
         try {
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PhysicalPartition physicalPartition = globalStateMgr.getLocalMetastore()
                     .getPhysicalPartitionIncludeRecycleBin(olapTable, tabletMeta.getPhysicalPartitionId());
             if (physicalPartition == null) {
@@ -1582,7 +1629,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return statusPair.first != LocalTablet.TabletHealthStatus.LOCATION_MISMATCH &&
                     statusPair.first != LocalTablet.TabletHealthStatus.HEALTHY;
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1625,7 +1676,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             int partitionBatchNum = Config.tablet_checker_partition_batch_num;
             int partitionChecked = 0;
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             lockStart = System.nanoTime();
             try {
                 TABLE:
@@ -1652,8 +1707,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
                             LOG.debug("partition checked reached batch value, release lock");
+<<<<<<< HEAD
                             locker.unLockDatabase(db, LockType.READ);
                             locker.lockDatabase(db, LockType.READ);
+=======
+                            locker.unLockDatabase(db.getId(), LockType.READ);
+                            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             LOG.debug("balancer get lock again");
                             lockStart = System.nanoTime();
                             if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
@@ -1739,15 +1799,22 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                 }
 
                                 pStat.skew = maxNum - minNum;
+<<<<<<< HEAD
                                 LOG.info("add partition stat: {} id: {}",
                                         pStat, new Pair<>(physicalPartition.getId(), idx.getId()));
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             }
                         }
                     }
                 }
             } finally {
                 lockTotalTime += System.nanoTime() - lockStart;
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -1791,7 +1858,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 for (Table table : globalStateMgr.getLocalMetastore().getTablesIncludeRecycleBin(db)) {
                     // check table is olap table or colocate table
@@ -1809,11 +1880,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                 *
                                 globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(),
                                         partition.getId());
+<<<<<<< HEAD
                         partitionReplicaCnt.put(partition.getId(), replicaTotalCnt);
                     }
                 }
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            partitionReplicaCnt.put(physicalPartition.getId(), replicaTotalCnt);
+                        }
+                    }
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -1826,6 +1907,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                                        Map<Long, Integer> partitionReplicaCnt,
                                                        int backendCnt,
                                                        boolean sortPartition) {
+<<<<<<< HEAD
         Map<Pair<Long, Long>, Set<Long>> partitionTablets = getPartitionTablets(backendId, medium, -1L);
         Map<Pair<Long, Long>, List<Long>> partitionTabletList = new HashMap<>();
         for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
@@ -1840,6 +1922,22 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 int skew1 = partitionTablets.get(p1).size()
                         - partitionReplicaCnt.getOrDefault(p1.first, 0) / backendCnt;
                 int skew2 = partitionTablets.get(p2).size()
+=======
+        Map<Pair<Long, Long>, Set<Long>> physicalPartitionTablets = getPartitionTablets(backendId, medium, -1L);
+        Map<Pair<Long, Long>, List<Long>> partitionTabletList = new HashMap<>();
+        for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : physicalPartitionTablets.entrySet()) {
+            partitionTabletList.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+        }
+        Map<Pair<Long, Long>, Double> partitionAvgReplicaSize = getPartitionAvgReplicaSize(backendId, physicalPartitionTablets);
+        List<Pair<Long, Long>> physicalPartitionAndMaterializedIndexId = new ArrayList<>(physicalPartitionTablets.keySet());
+        if (sortPartition) {
+            physicalPartitionAndMaterializedIndexId.sort((p1, p2) -> {
+                // skew is (tablet cnt on current BE - average tablet cnt on every BE)
+                // sort partitions by skew in desc order, if skew is same, sort by avgReplicaSize in desc order.
+                int skew1 = physicalPartitionTablets.get(p1).size()
+                        - partitionReplicaCnt.getOrDefault(p1.first, 0) / backendCnt;
+                int skew2 = physicalPartitionTablets.get(p2).size()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         - partitionReplicaCnt.getOrDefault(p2.first, 0) / backendCnt;
                 if (skew2 != skew1) {
                     return skew2 - skew1;
@@ -1866,7 +1964,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex(),
                 medium,
                 partitionTabletList,
+<<<<<<< HEAD
                 partitions);
+=======
+                physicalPartitionAndMaterializedIndexId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         backendBalanceState.init();
         return backendBalanceState;
     }
@@ -2013,13 +2115,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             TabletInvertedIndex tabletInvertedIndex,
                             TStorageMedium medium,
                             Map<Pair<Long, Long>, List<Long>> partitionTablets,
+<<<<<<< HEAD
                             List<Pair<Long, Long>> partitions) {
+=======
+                            List<Pair<Long, Long>> physicalPartitionAndMaterializedIndexId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.backendId = backendId;
             this.statistic = statistic;
             this.tabletInvertedIndex = tabletInvertedIndex;
             this.medium = medium;
             this.partitionTablets = partitionTablets;
+<<<<<<< HEAD
             this.sortedPartitions = partitions;
+=======
+            this.sortedPartitions = physicalPartitionAndMaterializedIndexId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         void init() {

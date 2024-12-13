@@ -145,6 +145,10 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
 
         private boolean isValidScanOperatorType(OperatorType operatorType) {
             if (operatorType == OperatorType.PHYSICAL_HIVE_SCAN || operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN ||
+<<<<<<< HEAD
+=======
+                    operatorType == OperatorType.PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN ||
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     operatorType == OperatorType.PHYSICAL_FILE_SCAN ||
                     operatorType == OperatorType.PHYSICAL_HUDI_SCAN ||
                     operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN ||
@@ -168,6 +172,10 @@ public class DataCachePopulateRewriteRule implements TreeRewriteRule {
         private boolean checkIsFullPartitionScan(ScanOperatorPredicates scanOperatorPredicates, OperatorType operatorType) {
             if (operatorType == OperatorType.PHYSICAL_ICEBERG_SCAN ||
                     operatorType == OperatorType.PHYSICAL_DELTALAKE_SCAN ||
+<<<<<<< HEAD
+=======
+                    operatorType == OperatorType.PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN ||
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     operatorType == OperatorType.PHYSICAL_PAIMON_SCAN) {
                 // For iceberg/delta lake is very expensive to get all partitions,
                 // so we didn't set the correct idToPartitionKey/selectedPartitionIds here.

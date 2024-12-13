@@ -46,7 +46,14 @@ public class EquationRewriter {
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
 
     private AggregateFunctionRewriter aggregateFunctionRewriter;
+<<<<<<< HEAD
     boolean underAggFunctionRewriteContext;
+=======
+    boolean isUnderAggFuncNormalizerContext;
+
+    private final EquivalentShuttle defaultShuttle = new EquivalentShuttle(new EquivalentShuttleContext(null,
+            false, true, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
@@ -57,17 +64,29 @@ public class EquationRewriter {
         this.columnMapping = columnMapping;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setAggregateFunctionRewriter(AggregateFunctionRewriter aggregateFunctionRewriter) {
         this.aggregateFunctionRewriter = aggregateFunctionRewriter;
     }
 
+<<<<<<< HEAD
     public boolean isUnderAggFunctionRewriteContext() {
         return underAggFunctionRewriteContext;
     }
 
     public void setUnderAggFunctionRewriteContext(boolean underAggFunctionRewriteContext) {
         this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
+=======
+    public boolean isUnderAggFuncNormalizerContext() {
+        return isUnderAggFuncNormalizerContext;
+    }
+
+    public void setUnderAggFuncNormalizerContext(boolean underAggFuncNormalizerContext) {
+        this.isUnderAggFuncNormalizerContext = underAggFuncNormalizerContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isColWithOnlyGroupByKeys(ScalarOperator expr) {
@@ -109,7 +128,11 @@ public class EquationRewriter {
                 return tmp.get();
             }
 
+<<<<<<< HEAD
             // rewrite by equivalent
+=======
+            // rewrite by equivalent which only can be predicate type here.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ScalarOperator rewritten = rewriteByEquivalent(predicate, IRewriteEquivalent.RewriteEquivalentType.PREDICATE);
             if (rewritten != null) {
                 shuttleContext.setRewrittenByEquivalent(true);
@@ -156,7 +179,11 @@ public class EquationRewriter {
             }
 
             // rewrite by equivalent
+<<<<<<< HEAD
             ScalarOperator rewritten = rewriteByEquivalent(call, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE);
+=======
+            ScalarOperator rewritten = rewriteByEquivalent(call, shuttleContext.getRewriteEquivalentType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (rewritten != null) {
                 shuttleContext.setRewrittenByEquivalent(true);
                 return rewritten;
@@ -164,6 +191,7 @@ public class EquationRewriter {
 
             // retry again by using aggregateFunctionRewriter when predicate cannot be rewritten.
             if (aggregateFunctionRewriter != null && aggregateFunctionRewriter.canRewriteAggFunction(call) &&
+<<<<<<< HEAD
                     !isUnderAggFunctionRewriteContext()) {
                 ScalarOperator newChooseScalarOp = aggregateFunctionRewriter.rewriteAggFunction(call);
                 if (newChooseScalarOp != null) {
@@ -172,6 +200,19 @@ public class EquationRewriter {
                     // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
                     rewritten = newChooseScalarOp.accept(this, null);
                     setUnderAggFunctionRewriteContext(false);
+=======
+                    !isUnderAggFuncNormalizerContext()) {
+                boolean isRollup = shuttleContext == null ? false : shuttleContext.isRollup();
+                rewritten = aggregateFunctionRewriter.rewriteAggFunction(call, isRollup);
+                if (rewritten != null) {
+                    setUnderAggFuncNormalizerContext(true);
+                    // NOTE: To avoid repeating `rewriteAggFunction` by `aggregateFunctionRewriter`, use
+                    // `underAggFunctionRewriteContext` to mark it's under agg function rewriter and no need rewrite again.
+                    setUnderAggFuncNormalizerContext(false);
+                    if (aggregateFunctionRewriter.getNewColumnRefToAggFuncMap() != null) {
+                        shuttleContext.setNewColumnRefToAggFuncMap(aggregateFunctionRewriter.getNewColumnRefToAggFuncMap());
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return rewritten;
                 }
             }
@@ -227,11 +268,19 @@ public class EquationRewriter {
         }
     }
 
+<<<<<<< HEAD
     private final EquivalentShuttle shuttle = new EquivalentShuttle(new EquivalentShuttleContext(null,
             false, true, IRewriteEquivalent.RewriteEquivalentType.AGGREGATE));
 
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
         return expr.accept(shuttle, null);
+=======
+    /**
+     * Replace expr with target column with default shuttle by using expr's equivalent.
+     */
+    public ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
+        return expr.accept(defaultShuttle, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**

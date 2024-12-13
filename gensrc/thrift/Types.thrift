@@ -167,7 +167,12 @@ enum TAggregationType {
     NONE,
     BITMAP_UNION,
     REPLACE_IF_NOT_NULL,
+<<<<<<< HEAD
     PERCENTILE_UNION
+=======
+    PERCENTILE_UNION,
+    AGG_STATE_UNION
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum TPushType {
@@ -283,7 +288,14 @@ enum TFunctionBinaryType {
   IR,
 
   // StarRocks customized UDF in jar.
+<<<<<<< HEAD
   SRJAR
+=======
+  SRJAR,
+  
+  // 
+  PYTHON
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Represents a fully qualified function name.
@@ -329,6 +341,17 @@ struct TTableFunction {
   3: optional bool is_left_join
 }
 
+<<<<<<< HEAD
+=======
+struct TAggStateDesc {
+    1: optional string agg_func_name
+    2: optional list<TTypeDesc> arg_types
+    3: optional TTypeDesc ret_type
+    4: optional bool result_nullable
+    5: optional i32 func_version
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Represents a function in the Catalog.
 struct TFunction {
   // Fully qualified function name.
@@ -361,6 +384,10 @@ struct TFunction {
 
   11: optional i64 id
   12: optional string checksum
+<<<<<<< HEAD
+=======
+  13: optional TAggStateDesc agg_state_desc
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   // Builtin Function id, used to mark the function in the vectorization engine,
   // and it's different with `id` because `id` is use for serialized and cache
@@ -372,6 +399,11 @@ struct TFunction {
   // Ignore nulls
   33: optional bool ignore_nulls
   34: optional bool isolated
+<<<<<<< HEAD
+=======
+  35: optional string input_type
+  36: optional string content
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum TLoadJobState {
@@ -407,7 +439,18 @@ enum TTableType {
     DELTALAKE_TABLE,
     TABLE_FUNCTION_TABLE,
     ODPS_TABLE,
+<<<<<<< HEAD
     LOGICAL_ICEBERG_METADATA_TABLE
+=======
+    LOGICAL_ICEBERG_METADATA_TABLE,
+    ICEBERG_REFS_TABLE,
+    ICEBERG_HISTORY_TABLE,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE,
+    ICEBERG_SNAPSHOTS_TABLE,
+    ICEBERG_MANIFESTS_TABLE,
+    ICEBERG_FILES_TABLE,
+    ICEBERG_PARTITIONS_TABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum TKeysType {
@@ -585,4 +628,8 @@ struct TSnapshotInfo {
 enum TTxnType {
     TXN_NORMAL = 0,
     TXN_REPLICATION = 1
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

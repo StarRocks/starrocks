@@ -51,7 +51,11 @@ public class ComputeNodeProcDir implements ProcDirInterface {
                 .add("SystemDecommissioned").add("ClusterDecommissioned").add("ErrMsg")
                 .add("Version")
                 .add("CpuCores").add("MemLimit").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct")
+<<<<<<< HEAD
                 .add("DataCacheMetrics").add("HasStoragePath");
+=======
+                .add("DataCacheMetrics").add("HasStoragePath").add("StatusCode");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TITLE_NAMES = builder.build();
         builder = new ImmutableList.Builder<String>()
                 .addAll(TITLE_NAMES)
@@ -167,6 +171,10 @@ public class ComputeNodeProcDir implements ProcDirInterface {
             }
 
             computeNodeInfo.add(String.valueOf(computeNode.isSetStoragePath()));
+<<<<<<< HEAD
+=======
+            computeNodeInfo.add(computeNode.getStatus().name());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));

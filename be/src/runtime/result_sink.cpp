@@ -54,7 +54,11 @@ namespace starrocks {
 
 ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& t_output_expr, const TResultSink& sink,
                        int buffer_size)
+<<<<<<< HEAD
         : _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+=======
+        : _row_desc(row_desc), _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!sink.__isset.type || sink.type == TResultSinkType::MYSQL_PROTOCAL) {
         _sink_type = TResultSinkType::MYSQL_PROTOCAL;
     } else {

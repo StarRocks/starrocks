@@ -24,8 +24,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -34,6 +37,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
@@ -86,7 +94,11 @@ public class OptExternalPartitionPruner {
     }
 
     public static LogicalScanOperator prunePartitionsImpl(OptimizerContext context,
+<<<<<<< HEAD
             LogicalScanOperator logicalScanOperator) {
+=======
+                                                          LogicalScanOperator logicalScanOperator) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (logicalScanOperator instanceof LogicalEsScanOperator) {
             LogicalEsScanOperator operator = (LogicalEsScanOperator) logicalScanOperator;
             EsTablePartitions esTablePartitions = operator.getEsTablePartitions();
@@ -223,7 +235,12 @@ public class OptExternalPartitionPruner {
         return true;
     }
 
+<<<<<<< HEAD
     // Note: The isConstant() method cannot be used here. If the child of CallOperator is constant, isConstant() will return true, but partition pruning cannot be performed.
+=======
+    // Note: The isConstant() method cannot be used here. If the child of CallOperator is constant, isConstant() will return
+    // true, but partition pruning cannot be performed.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static boolean isConstantOrColumnRef(ScalarOperator scalarOperator) {
         return (scalarOperator instanceof ConstantOperator) || scalarOperator.isColumnRef();
     }
@@ -242,7 +259,12 @@ public class OptExternalPartitionPruner {
 
     // get equivalence predicate which column ref is partition column
     public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
+<<<<<<< HEAD
             List<Column> partitionColumns, ScalarOperator predicate) {
+=======
+                                                                                List<Column> partitionColumns,
+                                                                                ScalarOperator predicate) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionColumns.isEmpty()) {
             return Lists.newArrayList();
         }
@@ -280,15 +302,26 @@ public class OptExternalPartitionPruner {
     }
 
     private static void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
+<<<<<<< HEAD
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+=======
+                                          Map<ColumnRefOperator,
+                                                  ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                          Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table table = operator.getTable();
         // RemoteScanPartitionPruneRule may be run multiple times, such like after MaterializedViewRewriter rewrite，
         // the predicates of scan operator may changed, it need to re-compute the ScanOperatorPredicates.
         operator.getScanOperatorPredicates().clear();
+<<<<<<< HEAD
         if (table instanceof HiveMetaStoreTable) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
             List<Column> partitionColumns = hmsTable.getPartitionColumns();
+=======
+        if (table.isHMSTable()) {
+            List<Column> partitionColumns = table.getPartitionColumns();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
@@ -299,18 +332,33 @@ public class OptExternalPartitionPruner {
 
             if (context.getDumpInfo() != null) {
                 context.getDumpInfo()
+<<<<<<< HEAD
                         .getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), hmsTable.getTableName())
+=======
+                        .getHMSTable(table.getResourceName(), table.getCatalogDBName(), table.getCatalogTableName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .setPartitionNames(new ArrayList<>());
             }
 
             List<Pair<PartitionKey, Long>> partitionKeys = Lists.newArrayList();
+<<<<<<< HEAD
             if (!hmsTable.isUnPartitioned()) {
+=======
+            if (!table.isUnPartitioned()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!context.getSessionVariable().isAllowHiveWithoutPartitionFilter()
                         && !checkPartitionPredicates(operator, partitionColumns)) {
                     LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
                     throw new AnalysisException("Partition pruning is invalid, please check: "
                             + "1. The partition predicate must be included. "
+<<<<<<< HEAD
                             + "2. The left and right children of the partition predicate cannot be function parameters.");
+=======
+                            + "2. The left and right children of the partition predicate cannot be function parameters. "
+                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
 
                 // get partition names
@@ -321,19 +369,32 @@ public class OptExternalPartitionPruner {
                 if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
                     List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+<<<<<<< HEAD
                             .listPartitionNamesByValue(hmsTable.getCatalogName(), hmsTable.getDbName(),
                                     hmsTable.getTableName(), partitionValues);
                 } else {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(),
                                     hmsTable.getTableName());
+=======
+                            .listPartitionNamesByValue(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), partitionValues);
+                } else {
+                    partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
 
                 List<PartitionKey> keys = new ArrayList<>();
                 List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
+<<<<<<< HEAD
                     PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
+=======
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     keys.add(partitionKey);
                     ids.add(context.getNextUniquePartitionId());
                 }
@@ -382,7 +443,12 @@ public class OptExternalPartitionPruner {
     }
 
     private static void classifyConjuncts(LogicalScanOperator operator,
+<<<<<<< HEAD
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
+=======
+                                          Map<ColumnRefOperator,
+                                                  ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws AnalysisException {
         for (ScalarOperator scalarOperator : Utils.extractConjuncts(operator.getPredicate())) {
             List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
@@ -395,11 +461,20 @@ public class OptExternalPartitionPruner {
     }
 
     private static void computePartitionInfo(LogicalScanOperator operator, OptimizerContext context,
+<<<<<<< HEAD
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
         Table table = operator.getTable();
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         if (table instanceof HiveMetaStoreTable) {
+=======
+                                             Map<ColumnRefOperator,
+                                                     ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+                                             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+        Table table = operator.getTable();
+        ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
+        if (table.isHMSTable()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
                             scanOperatorPredicates.getPartitionConjuncts(), null);
@@ -418,6 +493,7 @@ public class OptExternalPartitionPruner {
 
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
+<<<<<<< HEAD
         } else if (table instanceof IcebergTable) {
             IcebergTable icebergTable = (IcebergTable) table;
             if (!icebergTable.getSnapshot().isPresent()) {
@@ -441,13 +517,21 @@ public class OptExternalPartitionPruner {
 
             scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
             scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (table instanceof PaimonTable) {
             PaimonTable paimonTable = (PaimonTable) table;
             List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
                     .map(ColumnRefOperator::getName)
                     .collect(Collectors.toList());
+<<<<<<< HEAD
             List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                     paimonTable.getCatalogName(), table, null, -1, operator.getPredicate(), fieldNames, -1);
+=======
+            GetRemoteFilesParams params =
+                    GetRemoteFilesParams.newBuilder().setPredicate(operator.getPredicate()).setFieldNames(fieldNames).build();
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (fileInfos.isEmpty()) {
                 return;
             }
@@ -477,7 +561,11 @@ public class OptExternalPartitionPruner {
      * @throws AnalysisException
      */
     private static Collection<Long> partitionPrune(Table table, PartitionInfo partitionInfo,
+<<<<<<< HEAD
             Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
+=======
+                                                   Map<String, PartitionColumnFilter> columnFilters) throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionInfo == null) {
             return null;
         }
@@ -580,7 +668,12 @@ public class OptExternalPartitionPruner {
     }
 
     private static BinaryPredicateOperator buildMinMaxConjunct(BinaryType type, ScalarOperator left,
+<<<<<<< HEAD
             ScalarOperator right, LogicalScanOperator operator) throws AnalysisException {
+=======
+                                                               ScalarOperator right, LogicalScanOperator operator)
+            throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         ColumnRefOperator columnRefOperator = (ColumnRefOperator) left;
         scanOperatorPredicates.getMinMaxColumnRefMap().putIfAbsent(columnRefOperator,

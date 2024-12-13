@@ -30,13 +30,23 @@ import java.util.Map;
 public class CloudConfigurationFactoryTest {
 
     @Test
+<<<<<<< HEAD
     public void testBuildCloudConfigurationForTabular() {
+=======
+    public void testBuildCloudConfigurationForVendedCredentials() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> map = new HashMap<>();
         map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
         map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
         map.put(S3FileIOProperties.SESSION_TOKEN, "token");
+<<<<<<< HEAD
         map.put(AwsClientProperties.CLIENT_REGION, "region");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
+=======
+        map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
+        map.put(AwsClientProperties.CLIENT_REGION, "region");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assert.assertEquals(
@@ -44,7 +54,24 @@ public class CloudConfigurationFactoryTest {
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                         "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+<<<<<<< HEAD
                         "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+=======
+                        "region='region', endpoint=''}, enablePathStyleAccess=true, enableSSL=true}",
+                cloudConfiguration.toConfString());
+
+        map.remove(AwsClientProperties.CLIENT_REGION);
+        map.remove(S3FileIOProperties.PATH_STYLE_ACCESS);
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+        Assert.assertNotNull(cloudConfiguration);
+        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        Assert.assertEquals(
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='us-east-1', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 cloudConfiguration.toConfString());
     }
 

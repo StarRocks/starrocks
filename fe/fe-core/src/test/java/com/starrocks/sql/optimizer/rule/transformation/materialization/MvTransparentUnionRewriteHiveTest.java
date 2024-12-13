@@ -291,6 +291,7 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testTransparentRewriteWithJoinMv() {
         withPartialJoinMv(() -> {
             {
@@ -309,6 +310,24 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                     PlanTestBase.assertNotContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
+=======
+    public void testTransparentRewriteWithJoinMv1() {
+        withPartialJoinMv(() -> {
+            String[] sqls = {
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate='1998-01-01';",
+                    "SELECT a.l_orderkey, a.l_suppkey, a.l_shipdate, b.o_orderkey, b.o_custkey FROM " +
+                            " hive0.partitioned_db.lineitem_par as a JOIN hive0.partitioned_db.orders b " +
+                            " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
+                            "WHERE a.l_shipdate='1998-01-01' and a.l_suppkey > 100;",
+            };
+            for (String query : sqls) {
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertNotContains(plan, ":UNION");
+                PlanTestBase.assertContains(plan, "mv0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         });
     }
@@ -389,8 +408,13 @@ public class MvTransparentUnionRewriteHiveTest extends MvRewriteTestBase {
                                         "     PREAGGREGATION: ON\n" +
                                         "     partitions=3/4", // case 1
                                 "     TABLE: lineitem_par\n" +
+<<<<<<< HEAD
                                         "     PARTITION PREDICATES: (41: l_shipdate < '1998-01-02') OR " +
                                         "(41: l_shipdate IS NULL), 41: l_shipdate >= '1998-01-01'\n" +
+=======
+                                        "     PARTITION PREDICATES: 41: l_shipdate >= '1998-01-01', " +
+                                        "(41: l_shipdate < '1998-01-02') OR (41: l_shipdate IS NULL)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                         "     NON-PARTITION PREDICATES: 40: l_suppkey > 1\n" +
                                         "     MIN/MAX PREDICATES: 40: l_suppkey > 1\n" +
                                         "     partitions=1/6",

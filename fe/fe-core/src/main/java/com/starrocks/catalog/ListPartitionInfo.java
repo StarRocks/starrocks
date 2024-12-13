@@ -56,6 +56,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
+<<<<<<< HEAD
+=======
+import static com.starrocks.persist.gson.GsonUtils.GSON;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class ListPartitionInfo extends PartitionInfo {
 
@@ -460,20 +464,48 @@ public class ListPartitionInfo extends PartitionInfo {
         return partitionColumnIds.size();
     }
 
+<<<<<<< HEAD
     public String getValuesFormat(long partitionId) {
         if (!idToLiteralExprValues.isEmpty()) {
             List<LiteralExpr> literalExprs = idToLiteralExprValues.get(partitionId);
             if (literalExprs != null) {
                 return this.valuesToString(literalExprs);
+=======
+    /**
+     * Use json's format for latter use.
+     */
+    public String getValuesFormat(long partitionId) {
+        if (!idToLiteralExprValues.isEmpty()) {
+            List<LiteralExpr> literalExprs = idToLiteralExprValues.get(partitionId);
+            if (CollectionUtils.isNotEmpty(literalExprs)) {
+                List<List<String>> jsonValues = literalExprs.stream()
+                        .map(literalExpr -> Lists.newArrayList(literalExpr.getStringValue()))
+                        .collect(Collectors.toList());
+                return GSON.toJson(jsonValues);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         if (!idToMultiLiteralExprValues.isEmpty()) {
             List<List<LiteralExpr>> lists = idToMultiLiteralExprValues.get(partitionId);
+<<<<<<< HEAD
             if (lists != null) {
                 return this.multiValuesToString(lists);
             }
         }
         return "";
+=======
+            if (CollectionUtils.isNotEmpty(lists)) {
+                List<List<String>> jsonValues = lists.stream()
+                        .map(literalExprs -> literalExprs.stream()
+                                .map(LiteralExpr::getStringValue)
+                                .collect(Collectors.toList()))
+                        .collect(Collectors.toList());
+                return GSON.toJson(jsonValues);
+            }
+        }
+        return "";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void handleNewListPartitionDescs(Map<ColumnId, Column> idToColumn,

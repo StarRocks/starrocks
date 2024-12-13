@@ -26,8 +26,14 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.CompressionUtils;
+import com.starrocks.common.util.ParseUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.Load;
 import com.starrocks.proto.PGetFileSchemaResult;
@@ -39,6 +45,12 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -55,6 +67,10 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableFunctionTable;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections4.ListUtils;
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.fs.FileStatus;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
@@ -68,6 +84,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
+<<<<<<< HEAD
+=======
+import java.util.function.Consumer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -85,6 +105,16 @@ public class TableFunctionTable extends Table {
         SUPPORTED_FORMATS.add(CSV);
     }
 
+<<<<<<< HEAD
+=======
+    private static final List<Column> LIST_FILES_COLUMNS = new SchemaBuilder()
+            .column("PATH", Type.STRING)
+            .column("SIZE", Type.BIGINT)
+            .column("IS_DIR", Type.BOOLEAN)
+            .column("MODIFICATION_TIME", Type.DATETIME)
+            .build();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_FILES = 1;
     private static final int DEFAULT_AUTO_DETECT_SAMPLE_ROWS = 500;
 
@@ -99,6 +129,10 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_PARTITION_BY = "partition_by";
 
     public static final String PROPERTY_COLUMNS_FROM_PATH = "columns_from_path";
+<<<<<<< HEAD
+=======
+    private static final String PROPERTY_STRICT_MODE = LoadStmt.STRICT_MODE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_ROWS = "auto_detect_sample_rows";
@@ -111,16 +145,36 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
     public static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
 
+<<<<<<< HEAD
     private String path;
     private String format;
     private String compressionType;
 
+=======
+    private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
+
+    private String path;
+    private String format;
+    private boolean listFilesOnly = false;
+
+    // for load data
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private int autoDetectSampleFiles;
     private int autoDetectSampleRows;
 
     private List<String> columnsFromPath = new ArrayList<>();
+<<<<<<< HEAD
     private final Map<String, String> properties;
 
+=======
+    private boolean strictMode = false;
+    private final Map<String, String> properties;
+
+    private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
+
+    // for unload data
+    private String compressionType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private Optional<List<Integer>> partitionColumnIDs = Optional.empty();
     private boolean writeSingleFile;
     private long targetMaxFileSize;
@@ -136,16 +190,28 @@ public class TableFunctionTable extends Table {
     // PARQUET format options
     private boolean parquetUseLegacyEncoding = false;
 
+<<<<<<< HEAD
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
     // Ctor for load data via table function
     public TableFunctionTable(Map<String, String> properties) throws DdlException {
+=======
+    // Ctor for load data / list files via table function
+    public TableFunctionTable(Map<String, String> properties) throws DdlException {
+        this(properties, null);
+    }
+
+    // Ctor for load data / list files via table function
+    public TableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc)
+            throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(TableType.TABLE_FUNCTION);
         super.setId(-1);
         super.setName("table_function_table");
         this.properties = properties;
 
         parseProperties();
+<<<<<<< HEAD
         parseFiles();
 
 
@@ -160,6 +226,18 @@ public class TableFunctionTable extends Table {
         columns.addAll(getSchemaFromPath());
 
         setNewFullSchema(columns);
+=======
+
+        if (listFilesOnly) {
+            setSchemaForListFiles();
+        } else {
+            setSchemaForLoad();
+        }
+
+        if (pushDownSchemaFunc != null) {
+            pushDownSchemaFunc.accept(this);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // Ctor for unload data via table function
@@ -169,7 +247,30 @@ public class TableFunctionTable extends Table {
         checkNotNull(sessionVariable, "sessionVariable is null");
         this.properties = properties;
         parsePropertiesForUnload(columns, sessionVariable);
+<<<<<<< HEAD
         super.setNewFullSchema(columns);
+=======
+        setNewFullSchema(columns);
+    }
+
+    private void setSchemaForLoad() throws DdlException {
+        parseFilesForLoad();
+
+        // infer schema from files
+        List<Column> columns = new ArrayList<>();
+        if (path.startsWith(FAKE_PATH)) {
+            columns.add(new Column("col_int", Type.INT));
+            columns.add(new Column("col_string", Type.VARCHAR));
+        } else {
+            columns = getFileSchema();
+        }
+        columns.addAll(getSchemaFromPath());
+        setNewFullSchema(columns);
+    }
+
+    private void setSchemaForListFiles() {
+        setNewFullSchema(LIST_FILES_COLUMNS);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -177,10 +278,43 @@ public class TableFunctionTable extends Table {
         return true;
     }
 
+<<<<<<< HEAD
     public List<TBrokerFileStatus> fileList() {
         return fileStatuses;
     }
 
+=======
+    // for load
+    public List<TBrokerFileStatus> loadFileList() {
+        return fileStatuses;
+    }
+
+    // for list files
+    // must be consistent with list files schema
+    public List<List<String>> listFilesAndDirs() {
+        List<List<String>> files = Lists.newArrayList();
+        try {
+            List<String> pieces = Splitter.on(",").trimResults().omitEmptyStrings().splitToList(path);
+            for (String piece : ListUtils.emptyIfNull(pieces)) {
+                List<FileStatus> fileStatuses = HdfsUtil.listFileMeta(piece, new BrokerDesc(properties), false);
+                for (FileStatus fStatus : fileStatuses) {
+                    List<String> fileInfo = Lists.newArrayList(
+                            fStatus.getPath().toString(),
+                            String.valueOf(fStatus.getLen()),
+                            String.valueOf(fStatus.isDirectory()),
+                            ScalarOperatorFunctions.fromUnixTime(
+                                    ConstantOperator.createBigint(fStatus.getModificationTime() / 1000)).getVarchar());
+                    files.add(fileInfo);
+                }
+            }
+            return files;
+        } catch (StarRocksException e) {
+            LOG.warn("failed to parse files", e);
+            throw new SemanticException("failed to parse files: " + e.getMessage());
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public Map<String, String> getProperties() {
         return properties;
@@ -223,6 +357,13 @@ public class TableFunctionTable extends Table {
         return path;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isListFilesOnly() {
+        return listFilesOnly;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void parseProperties() throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of table function");
@@ -233,6 +374,20 @@ public class TableFunctionTable extends Table {
             throw new DdlException("path is null. Please add properties(path='xxx') when create table");
         }
 
+<<<<<<< HEAD
+=======
+        if (properties.containsKey(PROPERTY_LIST_FILES_ONLY)) {
+            String property = properties.get(PROPERTY_LIST_FILES_ONLY);
+            listFilesOnly = ParseUtil.parseBooleanValue(property, PROPERTY_LIST_FILES_ONLY);
+        }
+
+        if (!listFilesOnly) {
+            parsePropertiesForLoad(properties);
+        }
+    }
+
+    private void parsePropertiesForLoad(Map<String, String> properties) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         format = properties.get(PROPERTY_FORMAT);
         if (Strings.isNullOrEmpty(format)) {
             throw new DdlException("format is null. Please add properties(format='xxx') when create table");
@@ -250,6 +405,13 @@ public class TableFunctionTable extends Table {
             }
         }
 
+<<<<<<< HEAD
+=======
+        if (properties.containsKey(PROPERTY_STRICT_MODE)) {
+            strictMode = Boolean.parseBoolean(properties.get(PROPERTY_STRICT_MODE));
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!properties.containsKey(PROPERTY_AUTO_DETECT_SAMPLE_FILES)) {
             autoDetectSampleFiles = DEFAULT_AUTO_DETECT_SAMPLE_FILES;
         } else {
@@ -324,7 +486,11 @@ public class TableFunctionTable extends Table {
         }
     }
 
+<<<<<<< HEAD
     private void parseFiles() throws DdlException {
+=======
+    private void parseFilesForLoad() throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             // fake:// is a faked path, for testing purpose
             if (path.startsWith("fake://")) {
@@ -345,7 +511,11 @@ public class TableFunctionTable extends Table {
             for (String piece : ListUtils.emptyIfNull(pieces)) {
                 HdfsUtil.parseFile(piece, new BrokerDesc(properties), fileStatuses);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error("parse files error", e);
             throw new DdlException("failed to parse files", e);
         }
@@ -383,7 +553,11 @@ public class TableFunctionTable extends Table {
             THdfsProperties hdfsProperties = new THdfsProperties();
             HdfsUtil.getTProperties(filelist.get(0).path, new BrokerDesc(properties), hdfsProperties);
             params.setHdfs_properties(hdfsProperties);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new TException("failed to parse files: " + e.getMessage());
         }
 
@@ -488,6 +662,13 @@ public class TableFunctionTable extends Table {
         return columnsFromPath;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isStrictMode() {
+        return strictMode;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
@@ -652,4 +833,24 @@ public class TableFunctionTable extends Table {
             this.parquetUseLegacyEncoding = useLegacyEncoding.equalsIgnoreCase("true");
         }
     }
+<<<<<<< HEAD
+=======
+
+    private static class SchemaBuilder {
+        private List<Column> columns;
+
+        public SchemaBuilder() {
+            columns = Lists.newArrayList();
+        }
+
+        public SchemaBuilder column(String name, Type type) {
+            columns.add(new Column(name, type, false, null, true, null, ""));
+            return this;
+        }
+
+        public List<Column> build() {
+            return columns;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

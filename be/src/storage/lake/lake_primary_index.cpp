@@ -79,8 +79,13 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
+<<<<<<< HEAD
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
     if (metadata->enable_persistent_index() && (fix_size <= 128)) {
+=======
+
+    if (metadata->enable_persistent_index()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_persistent_index == nullptr);
 
         switch (metadata->persistent_index_type()) {

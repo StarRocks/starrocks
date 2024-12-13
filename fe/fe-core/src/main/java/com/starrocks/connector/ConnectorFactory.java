@@ -48,7 +48,11 @@ public class ConnectorFactory {
 
             InformationSchemaConnector informationSchemaConnector =
                     new InformationSchemaConnector(context.getCatalogName());
+<<<<<<< HEAD
             TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName());
+=======
+            TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName(), context.getType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new CatalogConnector(lazyConnector, informationSchemaConnector, tableMetaConnector);
         } catch (Exception e) {
             LOG.error(String.format("create [%s] connector failed", context.getType()), e);

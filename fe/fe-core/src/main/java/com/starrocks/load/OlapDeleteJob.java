@@ -57,8 +57,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -123,7 +128,11 @@ public class OlapDeleteJob extends DeleteJob {
         List<Predicate> conditions = getDeleteConditions();
 
         try (AutoCloseableLock ignore =
+<<<<<<< HEAD
                     new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+=======
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
             // count total replica num
@@ -298,16 +307,27 @@ public class OlapDeleteJob extends DeleteJob {
      */
     public void checkAndUpdateQuorum() throws MetaNotFoundException {
         long dbId = deleteInfo.getDbId();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");
         }
 
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
+<<<<<<< HEAD
             Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPartitionId());
             if (replicaNum == null) {
                 // should not happen
                 throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPartitionId() +
+=======
+            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPhysicalPartitionId());
+            if (replicaNum == null) {
+                // should not happen
+                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPhysicalPartitionId() +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             " when commit delete job");
             }
             if (tDeleteInfo.getFinishedReplicas().size() == replicaNum) {
@@ -339,8 +359,13 @@ public class OlapDeleteJob extends DeleteJob {
         return pushTasks;
     }
 
+<<<<<<< HEAD
     public boolean addFinishedReplica(long partitionId, long tabletId, Replica replica) {
         tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(partitionId, tabletId));
+=======
+    public boolean addFinishedReplica(long physicalPartitionId, long tabletId, Replica replica) {
+        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(physicalPartitionId, tabletId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TabletDeleteInfo tDeleteInfo = tabletDeleteInfoMap.get(tabletId);
         return tDeleteInfo.addFinishedReplica(replica);
     }
@@ -390,7 +415,11 @@ public class OlapDeleteJob extends DeleteJob {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+=======
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long transactionId = getTransactionId();
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         try {

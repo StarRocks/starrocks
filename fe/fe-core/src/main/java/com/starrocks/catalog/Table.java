@@ -120,10 +120,17 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         ODPS,
         @SerializedName("BLACKHOLE")
         BLACKHOLE,
+<<<<<<< HEAD
         @SerializedName("KUDU")
         KUDU,
         @SerializedName("METADATA")
         METADATA,
+=======
+        @SerializedName("METADATA")
+        METADATA,
+        @SerializedName("KUDU")
+        KUDU,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
         @SerializedName("ICEBERG_VIEW")
@@ -178,11 +185,19 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * When OlapTable is changing schema, the fullSchema is (c1 int, c2 int, c3 int, SHADOW_NAME_PREFIX_c3 bigint)
      * The fullSchema of OlapTable is mainly used by Scanner of Load job.
      * NOTICE: The columns of baseIndex is placed before the SHADOW_NAME_PREFIX columns
+<<<<<<< HEAD
      *
      * If you want to get all visible columns, you should call getBaseSchema() method, which is override in
      * subclasses.
      * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
      *
+=======
+     * <p>
+     * If you want to get all visible columns, you should call getBaseSchema() method, which is override in
+     * subclasses.
+     * If you want to get the mv columns, you should call getIndexToSchema in Subclass OlapTable.
+     * <p>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * If we are simultaneously executing multiple light schema change tasks, there may be occasional concurrent
      * read-write operations between these tasks with a relatively low probability.
      * Therefore, we choose to use a CopyOnWriteArrayList.
@@ -260,6 +275,17 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
+<<<<<<< HEAD
+=======
+    public String getResourceName() {
+        throw new NotImplementedException();
+    }
+
+    public String getCatalogDBName() {
+        throw new NotImplementedException();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getName() {
         return name;
     }
@@ -268,10 +294,27 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         this.name = name;
     }
 
+<<<<<<< HEAD
+=======
+    // Table in catalog could be dropped and created
+    // Even they share the same name, they are different tables.
+    // So we use table identifier to diff them.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getTableIdentifier() {
         return name;
     }
 
+<<<<<<< HEAD
+=======
+    // Table name is the name written in native table.
+    // but catalog table name is name defined in catalog.
+    // If we use resource mapping, they are probably different.
+    // And if we use catalog, I think we should stick to this catalog table name.
+    public String getCatalogTableName() {
+        throw new NotImplementedException();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setType(TableType type) {
         this.type = type;
     }
@@ -300,14 +343,28 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.HIVE_VIEW;
     }
 
+<<<<<<< HEAD
     public boolean isAnalyzableExternalTable() {
         return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isIcebergView() {
         return type == TableType.ICEBERG_VIEW;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isMetadataTable() {
+        return type == TableType.METADATA;
+    }
+
+    public boolean isAnalyzableExternalTable() {
+        return IS_ANALYZABLE_EXTERNAL_TABLE.contains(type);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isView() {
         return isOlapView() || isConnectorView();
     }
@@ -388,6 +445,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.KUDU;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isHMSTable() {
+        return type == TableType.HIVE || type == TableType.HUDI || type == TableType.ODPS;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // for create table
     public boolean isOlapOrCloudNativeTable() {
         return isOlapTable() || isCloudNativeTable();
@@ -453,13 +517,25 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return new ArrayList<>(nameToColumn.values());
     }
 
+<<<<<<< HEAD
+=======
+    public void addColumn(Column column) {
+        fullSchema.add(column);
+        nameToColumn.put(column.getName(), column);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getCreateTime() {
         return createTime;
     }
 
     public String getTableLocation() {
+<<<<<<< HEAD
         String msg = "The getTableLocation() method needs to be implemented.";
         throw new NotImplementedException(msg);
+=======
+        throw new NotImplementedException();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Map<String, Column> getNameToColumn() {
@@ -670,7 +746,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     /**
      * Delete this table permanently. Implementations can perform necessary cleanup work.
      *
+<<<<<<< HEAD
      * @param dbId ID of the database to which the table belongs
+=======
+     * @param dbId   ID of the database to which the table belongs
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param replay is this a log replay operation.
      * @return Returns true if the deletion task was performed successfully, false otherwise.
      */
@@ -680,6 +760,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     /**
      * Delete thie table from {@link CatalogRecycleBin}
+<<<<<<< HEAD
+=======
+     *
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param replay is this a log relay operation.
      * @return Returns true if the deletion task was performed successfully, false otherwise.
      */
@@ -722,6 +806,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getDataColumnNames() {
+        throw new NotImplementedException();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Column> getPartitionColumns() {
         throw new NotImplementedException();
     }
@@ -742,6 +833,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isTemporal() {
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean hasUniqueConstraints() {
         List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
         return uniqueConstraint != null;

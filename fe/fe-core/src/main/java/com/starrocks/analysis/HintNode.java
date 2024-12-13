@@ -60,7 +60,11 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
         // the entire query
         QUERY,
         // part of a query. Like hint in select * from (select hint from tbl),
+<<<<<<< HEAD
         // we may want the hint only takes effect in the subquery in the futuer.
+=======
+        // we may want the hint only takes effect in the subquery in the future.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CLAUSE
     }
 }

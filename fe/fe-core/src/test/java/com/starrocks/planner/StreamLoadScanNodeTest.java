@@ -53,7 +53,11 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.qe.ConnectContext;
@@ -178,7 +182,11 @@ public class StreamLoadScanNodeTest {
     }
 
     private StreamLoadScanNode getStreamLoadScanNode(TupleDescriptor dstDesc, TStreamLoadPutRequest request)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
         StreamLoadScanNode scanNode =
                 new StreamLoadScanNode(streamLoadInfo.getId(), new PlanNodeId(1), dstDesc, dstTable, streamLoadInfo);
@@ -186,7 +194,11 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -224,13 +236,20 @@ public class StreamLoadScanNodeTest {
         scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         TPlanNode planNode = new TPlanNode();
         scanNode.toThrift(planNode);
+<<<<<<< HEAD
 
         Assert.assertEquals(1, scanNode.getNumInstances());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
     }
 
     @Test(expected = AnalysisException.class)
+<<<<<<< HEAD
     public void testLostV2() throws UserException {
+=======
+    public void testLostV2() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -260,7 +279,11 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = ParsingException.class)
+<<<<<<< HEAD
     public void testBadColumns(@Mocked GlobalStateMgr globalStateMgr) throws UserException, UserException {
+=======
+    public void testBadColumns(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -290,7 +313,11 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testColumnsNormal() throws UserException, UserException {
+=======
+    public void testColumnsNormal() throws StarRocksException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -361,7 +388,11 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testHllColumnsNormal() throws UserException {
+=======
+    public void testHllColumnsNormal() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -410,8 +441,13 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testHllColumnsNoHllHash() throws UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testHllColumnsNoHllHash() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -465,8 +501,13 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testHllColumnsFail() throws UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testHllColumnsFail() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -495,8 +536,13 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testUnsupportedFType() throws UserException, UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testUnsupportedFType() throws StarRocksException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -525,8 +571,13 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testColumnsUnknownRef() throws UserException, UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testColumnsUnknownRef() throws StarRocksException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -575,7 +626,11 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testWhereNormal() throws UserException, UserException {
+=======
+    public void testWhereNormal() throws StarRocksException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -625,7 +680,11 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = ParsingException.class)
+<<<<<<< HEAD
     public void testWhereBad() throws UserException, UserException {
+=======
+    public void testWhereBad() throws StarRocksException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -677,8 +736,13 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testWhereUnknownRef() throws UserException, UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testWhereUnknownRef() throws StarRocksException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -727,8 +791,13 @@ public class StreamLoadScanNodeTest {
         scanNode.toThrift(planNode);
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testWhereNotBool() throws UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testWhereNotBool() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Analyzer analyzer = new Analyzer(globalStateMgr, connectContext);
         DescriptorTable descTbl = analyzer.getDescTbl();
 
@@ -781,7 +850,11 @@ public class StreamLoadScanNodeTest {
     }
 
     @Test(expected = DdlException.class)
+<<<<<<< HEAD
     public void testLoadInitColumnsMappingColumnNotExist() throws UserException {
+=======
+    public void testLoadInitColumnsMappingColumnNotExist() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = Lists.newArrayList();
         columns.add(new Column("c1", Type.INT, true, null, false, null, ""));
         columns.add(new Column("c2", ScalarType.createVarchar(10), true, null, false, null, ""));

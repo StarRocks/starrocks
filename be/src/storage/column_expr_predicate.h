@@ -30,7 +30,11 @@ class Column;
 // And this class has a big limitation that it does not support range evaluatation. In another word, `from` supposed to be 0 always.
 // The fundamental reason is `ExprContext` requires `Column*` as a total piece, unless we can create a class to represent `ColumnSlice`.
 // And that task is almost impossible.
+<<<<<<< HEAD
 class ColumnExprPredicate : public ColumnPredicate {
+=======
+class ColumnExprPredicate final : public ColumnPredicate {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     static StatusOr<ColumnExprPredicate*> make_column_expr_predicate(TypeInfoPtr type_info, ColumnId column_id,
                                                                      RuntimeState* state, ExprContext* expr_ctx,
@@ -38,9 +42,15 @@ public:
 
     ~ColumnExprPredicate() override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
     [[nodiscard]] Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+=======
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_original_bloom_filter() const override { return false; }
@@ -49,8 +59,13 @@ public:
     PredicateType type() const override { return PredicateType::kExpr; }
     bool can_vectorized() const override { return true; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                                     ObjectPool* obj_pool) const override;
+=======
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string debug_string() const override;
     RuntimeState* runtime_state() const { return _state; }
     const SlotDescriptor* slot_desc() const { return _slot_desc; }
@@ -86,6 +101,7 @@ private:
     mutable std::vector<uint8_t> _tmp_select;
 };
 
+<<<<<<< HEAD
 class ColumnTruePredicate : public ColumnPredicate {
 public:
     ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(std::move(type_info), column_id) {}
@@ -93,12 +109,26 @@ public:
     [[nodiscard]] Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
     [[nodiscard]] Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
     [[nodiscard]] Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+=======
+class ColumnTruePredicate final : public ColumnPredicate {
+public:
+    ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(std::move(type_info), column_id) {}
+    ~ColumnTruePredicate() override = default;
+    Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+    Status evaluate_or(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
     bool support_original_bloom_filter() const override { return false; }
     PredicateType type() const override { return PredicateType::kTrue; }
     bool can_vectorized() const override { return true; }
+<<<<<<< HEAD
     [[nodiscard]] Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                                     ObjectPool* obj_pool) const override;
+=======
+    Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
+                      ObjectPool* obj_pool) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string debug_string() const override;
 };
 

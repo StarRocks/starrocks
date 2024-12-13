@@ -72,10 +72,18 @@ public:
     typedef typename std::set<T>::iterator iterator_type;
     ColumnValueRange();
     ColumnValueRange(std::string col_name, LogicalType type, T min, T max);
+<<<<<<< HEAD
 
     [[nodiscard]] Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
 
     [[nodiscard]] Status add_range(SQLFilterOp op, T value);
+=======
+    ColumnValueRange(std::string col_name, LogicalType type, T type_min, T type_max, T min, T max);
+
+    Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
+
+    Status add_range(SQLFilterOp op, T value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void set_precision(int precision);
 
@@ -123,8 +131,16 @@ public:
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
 
+<<<<<<< HEAD
     void to_olap_filter(std::vector<TCondition>& filters);
 
+=======
+    template <bool Negative = false>
+    void to_olap_filter(std::vector<TCondition>& filters);
+
+    TCondition to_olap_not_null_filter() const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void clear();
 
 private:
@@ -153,9 +169,15 @@ public:
     OlapScanKeys() = default;
 
     template <class T>
+<<<<<<< HEAD
     [[nodiscard]] Status extend_scan_key(ColumnValueRange<T>& range, int32_t max_scan_key_num);
 
     [[nodiscard]] Status get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* key_range);
+=======
+    Status extend_scan_key(ColumnValueRange<T>& range, int32_t max_scan_key_num);
+
+    Status get_key_range(std::vector<std::unique_ptr<OlapScanRange>>* key_range);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool has_range_value() const { return _has_range_value; }
 

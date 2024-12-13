@@ -125,7 +125,11 @@ public class StatisticProcDir implements ProcDirInterface {
                 // skip information_schema database
                 continue;
             }
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(dbId);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 continue;
             }
@@ -133,7 +137,11 @@ public class StatisticProcDir implements ProcDirInterface {
             ++totalDbNum;
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 int dbTableNum = 0;
                 int dbPartitionNum = 0;
@@ -141,7 +149,11 @@ public class StatisticProcDir implements ProcDirInterface {
                 int dbTabletNum = 0;
                 int dbReplicaNum = 0;
 
+<<<<<<< HEAD
                 for (Table table : db.getTables()) {
+=======
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!table.isNativeTableOrMaterializedView()) {
                         continue;
                     }
@@ -210,7 +222,11 @@ public class StatisticProcDir implements ProcDirInterface {
                 totalTabletNum += dbTabletNum;
                 totalReplicaNum += dbReplicaNum;
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } // end for dbs
 
@@ -259,7 +275,11 @@ public class StatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid db id format: " + dbIdStr);
         }
 
+<<<<<<< HEAD
         if (globalStateMgr.getDb(dbId) == null) {
+=======
+        if (globalStateMgr.getLocalMetastore().getDb(dbId) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new AnalysisException("Invalid db id: " + dbIdStr);
         }
 

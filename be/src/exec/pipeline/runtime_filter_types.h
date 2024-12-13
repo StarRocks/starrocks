@@ -18,11 +18,19 @@
 #include <utility>
 
 #include "common/statusor.h"
+<<<<<<< HEAD
 #include "exec/hash_join_node.h"
+=======
+#include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
+<<<<<<< HEAD
+=======
+#include "util/defer_op.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::pipeline {
 class RuntimeFilterHolder;
@@ -47,6 +55,7 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
+<<<<<<< HEAD
     RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, ColumnPtr column,
                                  MutableJoinRuntimeFilterPtr runtime_filter)
             : multi_partitioned(multi_partitioned),
@@ -56,6 +65,19 @@ struct RuntimeBloomFilterBuildParam {
     bool multi_partitioned;
     bool eq_null;
     ColumnPtr column;
+=======
+    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, std::vector<ColumnPtr> columns,
+                                 MutableJoinRuntimeFilterPtr runtime_filter)
+            : multi_partitioned(multi_partitioned),
+              eq_null(eq_null),
+              is_empty(is_empty),
+              columns(std::move(columns)),
+              runtime_filter(std::move(runtime_filter)) {}
+    bool multi_partitioned;
+    bool eq_null;
+    bool is_empty;
+    std::vector<ColumnPtr> columns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MutableJoinRuntimeFilterPtr runtime_filter;
 };
 
@@ -143,11 +165,21 @@ public:
     }
 
     void set_collector(TPlanNodeId id, RuntimeFilterCollectorPtr&& collector) {
+<<<<<<< HEAD
         get_holder(id, -1)->set_collector(std::move(collector));
     }
 
     void set_collector(TPlanNodeId id, int32_t sequence_id, RuntimeFilterCollectorPtr&& collector) {
         get_holder(id, sequence_id)->set_collector(std::move(collector));
+=======
+        auto holder = get_holder(id, -1);
+        holder->set_collector(std::move(collector));
+    }
+
+    void set_collector(TPlanNodeId id, int32_t sequence_id, RuntimeFilterCollectorPtr&& collector) {
+        auto holder = get_holder(id, sequence_id);
+        holder->set_collector(std::move(collector));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void close_all_in_filters(RuntimeState* state) {
@@ -275,10 +307,16 @@ public:
 
     // HashJoinBuildOperator call add_partial_filters to gather partial runtime filters. the last HashJoinBuildOperator
     // will merge partial runtime filters into total one finally.
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<bool> add_partial_filters(
             size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
             OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
             RuntimeBloomFilters&& bloom_filter_descriptors) {
+=======
+    StatusOr<bool> add_partial_filters(size_t idx, size_t ht_row_count, RuntimeInFilters&& partial_in_filters,
+                                       OptRuntimeBloomFilterBuildParams&& partial_bloom_filter_build_params,
+                                       RuntimeBloomFilters&& bloom_filter_descriptors) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(idx < _partial_bloom_filter_build_params.size());
         // both _ht_row_counts, _partial_in_filters, _partial_bloom_filter_build_params are reserved beforehand,
         // each HashJoinBuildOperator mutates its corresponding slot indexed by driver_sequence, so concurrent
@@ -300,7 +338,11 @@ public:
         return {_bloom_filter_descriptors.begin(), _bloom_filter_descriptors.end()};
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status merge_local_in_filters() {
+=======
+    Status merge_local_in_filters() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         bool can_merge_in_filters = true;
         size_t num_rows = 0;
         ssize_t k = -1;
@@ -359,7 +401,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status merge_local_bloom_filters() {
+=======
+    Status merge_local_bloom_filters() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_bloom_filter_descriptors.empty()) {
             return Status::OK();
         }
@@ -371,7 +417,11 @@ public:
         }
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status merge_singleton_local_bloom_filters() {
+=======
+    Status merge_singleton_local_bloom_filters() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_partial_bloom_filter_build_params.empty()) {
             return Status::OK();
         }
@@ -438,12 +488,17 @@ public:
                 auto& opt_param = opt_params[i];
                 DCHECK(opt_param.has_value());
                 auto& param = opt_param.value();
+<<<<<<< HEAD
                 if (param.column == nullptr || param.column->empty()) {
                     continue;
                 }
                 auto status = RuntimeFilterHelper::fill_runtime_bloom_filter(param.column, desc->build_expr_type(),
                                                                              desc->runtime_filter(),
                                                                              kHashJoinKeyColumnOffset, param.eq_null);
+=======
+                auto status = RuntimeFilterHelper::fill_runtime_bloom_filter(
+                        param, desc->build_expr_type(), desc->runtime_filter(), kHashJoinKeyColumnOffset);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!status.ok()) {
                     desc->set_runtime_filter(nullptr);
                     break;
@@ -453,7 +508,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status merge_multi_partitioned_local_bloom_filters() {
+=======
+    Status merge_multi_partitioned_local_bloom_filters() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_partial_bloom_filter_build_params.empty()) {
             return Status::OK();
         }
@@ -519,7 +578,11 @@ public:
                 auto& opt_param = opt_params[i];
                 DCHECK(opt_param.has_value());
                 auto& param = opt_param.value();
+<<<<<<< HEAD
                 if (param.column == nullptr || param.column->empty()) {
+=======
+                if (param.is_empty) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     continue;
                 }
                 rf->concat(param.runtime_filter.get());

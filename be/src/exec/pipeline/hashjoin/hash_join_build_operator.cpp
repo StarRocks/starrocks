@@ -17,11 +17,20 @@
 #include <numeric>
 #include <utility>
 
+<<<<<<< HEAD
+=======
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/query_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/race_detect.h"
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
@@ -55,7 +64,11 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
 }
 void HashJoinBuildOperator::close(RuntimeState* state) {
     COUNTER_SET(_join_builder->build_metrics().hash_table_memory_usage,
+<<<<<<< HEAD
                 _join_builder->hash_join_builder()->hash_table_mem_usage());
+=======
+                _join_builder->hash_join_builder()->ht_mem_usage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _join_builder->unref(state);
 
     Operator::close(state);
@@ -107,15 +120,27 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ((HashJoinBuildOperatorFactory*)_factory)
             ->retain_string_key_columns(_driver_sequence, _join_builder->string_key_columns());
 
+<<<<<<< HEAD
+=======
+    if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
+        // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
+        DCHECK(_join_builder->is_done());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // push colocate partial runtime filter
     bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists(partial_in_filters.begin(), partial_in_filters.end());
+<<<<<<< HEAD
         if (partial_bloom_filters.size() != partial_bloom_filter_build_params.size()) {
             // if in short-circuit mode, phase is EOS. partial_bloom_filter_build_params is empty.
             DCHECK(_join_builder->is_done());
         } else {
+=======
+        if (partial_bloom_filters.size() == partial_bloom_filter_build_params.size()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (size_t i = 0; i < partial_bloom_filters.size(); ++i) {
                 if (partial_bloom_filter_build_params[i].has_value()) {
                     partial_bloom_filters[i]->set_or_concat(partial_bloom_filter_build_params[i]->runtime_filter.get(),
@@ -167,6 +192,13 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+bool HashJoinBuildOperator::is_finished() const {
+    return _is_finished || _join_builder->is_finished();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(
         int32_t id, int32_t plan_node_id, HashJoinerFactoryPtr hash_joiner_factory,
         std::unique_ptr<PartialRuntimeFilterMerger>&& partial_rf_merger,

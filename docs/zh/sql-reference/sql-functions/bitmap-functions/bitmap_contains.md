@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_contains
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算输入值是否在 Bitmap 列中。
 

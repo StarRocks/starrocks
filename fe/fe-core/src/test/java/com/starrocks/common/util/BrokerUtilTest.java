@@ -40,7 +40,11 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -80,7 +84,11 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             assertEquals(1, columns.size());
             assertEquals(Collections.singletonList("v1"), columns);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             fail();
         }
 
@@ -88,14 +96,22 @@ public class BrokerUtilTest {
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             fail();
+<<<<<<< HEAD
         } catch (UserException ignored) {
+=======
+        } catch (StarRocksException ignored) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         path = "/path/to/dir/k1=v1/xxx.csv";
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k2"));
             fail();
+<<<<<<< HEAD
         } catch (UserException ignored) {
+=======
+        } catch (StarRocksException ignored) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         path = "/path/to/dir/k1=v2/k1=v1/xxx.csv";
@@ -103,7 +119,11 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             assertEquals(1, columns.size());
             assertEquals(Collections.singletonList("v1"), columns);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             fail();
         }
 
@@ -112,7 +132,11 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             assertEquals(2, columns.size());
             assertEquals(Lists.newArrayList("v1", "v2"), columns);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             fail();
         }
 
@@ -120,14 +144,22 @@ public class BrokerUtilTest {
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             fail();
+<<<<<<< HEAD
         } catch (UserException ignored) {
+=======
+        } catch (StarRocksException ignored) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         path = "/path/to/dir/k2=v2/k1=v1/xxx.csv";
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2", "k3"));
             fail();
+<<<<<<< HEAD
         } catch (UserException ignored) {
+=======
+        } catch (StarRocksException ignored) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         path = "/path/to/dir/k2=v2//k1=v1//xxx.csv";
@@ -135,7 +167,11 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             assertEquals(2, columns.size());
             assertEquals(Lists.newArrayList("v1", "v2"), columns);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             fail();
         }
 
@@ -144,7 +180,11 @@ public class BrokerUtilTest {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             assertEquals(2, columns.size());
             assertEquals(Lists.newArrayList("v1", "=v2="), columns);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             fail();
         }
 
@@ -152,14 +192,22 @@ public class BrokerUtilTest {
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Lists.newArrayList("k1", "k2"));
             fail();
+<<<<<<< HEAD
         } catch (UserException ignored) {
+=======
+        } catch (StarRocksException ignored) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         path = "/path/to/dir/k1=2/a/xxx.csv";
         try {
             List<String> columns = BrokerUtil.parseColumnsFromPath(path, Collections.singletonList("k1"));
             fail();
+<<<<<<< HEAD
         } catch (UserException ignored) {
+=======
+        } catch (StarRocksException ignored) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ignored.printStackTrace();
         }
 
@@ -168,7 +216,11 @@ public class BrokerUtilTest {
     @Test
     public void testReadFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                              @Injectable BrokerMgr brokerMgr)
+<<<<<<< HEAD
             throws TException, UserException {
+=======
+            throws TException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // list response
         TBrokerListResponse listResponse = new TBrokerListResponse();
         TBrokerOperationStatus status = new TBrokerOperationStatus();
@@ -230,7 +282,11 @@ public class BrokerUtilTest {
     @Test
     public void testWriteFile(@Mocked TFileBrokerService.Client client, @Mocked GlobalStateMgr globalStateMgr,
                               @Injectable BrokerMgr brokerMgr)
+<<<<<<< HEAD
             throws TException, UserException {
+=======
+            throws TException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // open writer response
         TBrokerOpenWriterResponse openWriterResponse = new TBrokerOpenWriterResponse();
         TBrokerOperationStatus status = new TBrokerOperationStatus();

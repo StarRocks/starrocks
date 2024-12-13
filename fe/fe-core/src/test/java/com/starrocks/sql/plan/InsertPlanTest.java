@@ -675,7 +675,13 @@ public class InsertPlanTest extends PlanTestBase {
                     "  1:Project\n" +
                     "  |  <slot 1> : 1: pk\n" +
                     "  |  <slot 4> : CAST(2: v1 AS VARCHAR)\n" +
+<<<<<<< HEAD
                     "  |  <slot 5> : 3: v2\n");
+=======
+                    "  |  <slot 5> : 3: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         {
             // KesType is AGG_KEYS
@@ -806,8 +812,13 @@ public class InsertPlanTest extends PlanTestBase {
         Column k2 = new Column("k2", Type.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
+<<<<<<< HEAD
         builder.setRemoteDbName("iceberg_db");
         builder.setRemoteTableName("iceberg_table");
+=======
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         builder.setSrTableName("iceberg_table");
         builder.setFullSchema(Lists.newArrayList(k1, k2));
         builder.setNativeTable(nativeTable);

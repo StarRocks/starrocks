@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # last_day
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the last day of an input DATE or DATETIME expression based on the specified date part. For example, `last_day('2023-05-10', 'month')` returns the last day of the month in which '2023-05-10' falls.
 

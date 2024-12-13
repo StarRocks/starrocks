@@ -54,7 +54,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     private Set<Long> totalInvolvedBackends;
     private Set<Long> errorReplicaIds;
+<<<<<<< HEAD
     private Set<Long> dirtyPartitionSet;
+=======
+    private Set<Long> dirtyPhysicalPartitionSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private Set<ColumnId> invalidDictCacheColumns;
     private Map<ColumnId, Long> validDictCacheColumns;
 
@@ -78,7 +82,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
         totalInvolvedBackends = Sets.newHashSet();
         errorReplicaIds = Sets.newHashSet();
+<<<<<<< HEAD
         dirtyPartitionSet = Sets.newHashSet();
+=======
+        dirtyPhysicalPartitionSet = Sets.newHashSet();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
 
@@ -110,6 +118,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (tableId != table.getId()) {
                 continue;
             }
+<<<<<<< HEAD
             long partitionId = tabletMeta.getPhysicalPartitionId();
             if (table.getPhysicalPartition(partitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
@@ -118,6 +127,16 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 continue;
             }
             dirtyPartitionSet.add(partitionId);
+=======
+            long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+            if (table.getPhysicalPartition(physicalPartitionId) == null) {
+                // this can happen when partitionId == -1 (tablet being dropping)
+                // or partition really not exist.
+                LOG.warn("partition {} not exist, ignore tablet {}", physicalPartitionId, tabletId);
+                continue;
+            }
+            dirtyPhysicalPartitionSet.add(physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
                     .add(tabletCommitInfos.get(i).getBackendId());
             allCommittedBackends.add(tabletCommitInfos.get(i).getBackendId());
@@ -173,7 +192,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
 
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+<<<<<<< HEAD
             if (!dirtyPartitionSet.contains(partition.getId())) {
+=======
+            if (!dirtyPhysicalPartitionSet.contains(partition.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 continue;
             }
 
@@ -253,7 +276,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         txnState.getErrorReplicas().addAll(errorReplicaIds);
+<<<<<<< HEAD
         for (long partitionId : dirtyPartitionSet) {
+=======
+        for (long physicalPartitionId : dirtyPhysicalPartitionSet) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PartitionCommitInfo partitionCommitInfo;
             if (isFirstPartition) {
 
@@ -264,14 +291,22 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
                 });
+<<<<<<< HEAD
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
+=======
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         -1,
                         System.currentTimeMillis(),
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
             } else {
+<<<<<<< HEAD
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
+=======
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         -1,
                         System.currentTimeMillis() /* use as partition visible time */);
             }
@@ -292,10 +327,17 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                           List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
             locker.lockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(txnState.getDbId());
+        if (db != null) {
+            Locker locker = new Locker();
+            locker.lockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
                 // update write failed backend/replica
@@ -319,7 +361,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             } catch (Exception e) {
                 LOG.warn("Fail to execute postAbort", e);
             } finally {
+<<<<<<< HEAD
                 locker.unLockTablesWithIntensiveDbLock(db, txnState.getTableIdList(), LockType.READ);
+=======
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 

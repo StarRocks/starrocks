@@ -43,7 +43,11 @@ public class DeltaLakeConnectorTest {
     @Test
     public void testCreateDeltaLakeConnectorWithException1() {
         Map<String, String> properties = ImmutableMap.of("type", "deltalake",
+<<<<<<< HEAD
                 "hive.metastore.TYPE", "glue",  "aws.glue.access_key", "xxxxx",
+=======
+                "hive.metastore.TYPE", "glue", "aws.glue.access_key", "xxxxx",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "aws.glue.secret_key", "xxxx",
                 "aws.glue.region", "us-west-2");
         try {
@@ -60,7 +64,11 @@ public class DeltaLakeConnectorTest {
     @Test
     public void testCreateDeltaLakeConnectorWithException2() {
         Map<String, String> properties = ImmutableMap.of("type", "deltalake",
+<<<<<<< HEAD
                 "hive.metastore.type", "error_metastore",  "aws.glue.access_key", "xxxxx",
+=======
+                "hive.metastore.type", "error_metastore", "aws.glue.access_key", "xxxxx",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "aws.glue.secret_key", "xxxx",
                 "aws.glue.region", "us-west-2");
         try {
@@ -70,7 +78,11 @@ public class DeltaLakeConnectorTest {
             Assert.assertTrue(e instanceof StarRocksConnectorException);
             Assert.assertEquals("Failed to init connector [type: deltalake, name: delta0]. " +
                     "msg: Getting analyzing error. Detail message: hive metastore type [error_metastore] " +
+<<<<<<< HEAD
                             "is not supported.", e.getMessage());
+=======
+                    "is not supported.", e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -84,4 +96,14 @@ public class DeltaLakeConnectorTest {
         Assert.assertEquals(0, catalogConnector.estimateSize());
         Assert.assertEquals(4, catalogConnector.estimateCount().size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDeltaLakeRemoteFileInfo() {
+        FileScanTask fileScanTask = null;
+        DeltaRemoteFileInfo deltaRemoteFileInfo = new DeltaRemoteFileInfo(fileScanTask);
+        Assert.assertNull(deltaRemoteFileInfo.getFileScanTask());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -17,7 +17,10 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+<<<<<<< HEAD
 #include <optional>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <unordered_map>
 #include <unordered_set>
 
@@ -26,6 +29,11 @@
 #include "exec/hash_join_components.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/spill/partition.h"
+<<<<<<< HEAD
+=======
+#include "exec/spill/spill_components.h"
+#include "exec/spill/spiller_factory.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -79,7 +87,11 @@ public:
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
 
 private:
+<<<<<<< HEAD
     bool spilled() const { return _join_builder->spiller()->spilled(); }
+=======
+    bool spilled() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ngram_search
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算两个字符串的 ngram 相似度。
 

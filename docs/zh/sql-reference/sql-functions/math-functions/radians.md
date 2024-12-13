@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # radians
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将参数 `x`转为弧度，`x` 是角度。
 

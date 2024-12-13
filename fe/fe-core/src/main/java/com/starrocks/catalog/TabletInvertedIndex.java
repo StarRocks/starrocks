@@ -38,11 +38,15 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ImmutableMap;
+<<<<<<< HEAD
 import com.google.common.collect.ListMultimap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -62,12 +66,22 @@ import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TStorageMedium;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.HashMap;
 import java.util.HashSet;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -108,11 +122,19 @@ public class TabletInvertedIndex implements MemoryTrackable {
     public TabletInvertedIndex() {
     }
 
+<<<<<<< HEAD
     private void readLock() {
         this.lock.readLock().lock();
     }
 
     private void readUnlock() {
+=======
+    public void readLock() {
+        this.lock.readLock().lock();
+    }
+
+    public void readUnlock() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.lock.readLock().unlock();
     }
 
@@ -124,6 +146,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         this.lock.writeLock().unlock();
     }
 
+<<<<<<< HEAD
     public void tabletReport(long backendId, Map<Long, TTablet> backendTablets,
                              final HashMap<Long, TStorageMedium> storageMediumMap,
                              ListMultimap<Long, Long> tabletSyncMap,
@@ -477,6 +500,8 @@ public class TabletInvertedIndex implements MemoryTrackable {
                 backendTabletNumReport);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Long getTabletIdByReplica(long replicaId) {
         readLock();
         try {
@@ -508,6 +533,7 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     private boolean needSync(Replica replicaInFe, TTabletInfo backendTabletInfo) {
         if (backendTabletInfo.isSetUsed() && !backendTabletInfo.isUsed()) {
             // tablet is bad, do not sync
@@ -589,6 +615,8 @@ public class TabletInvertedIndex implements MemoryTrackable {
         return backendTabletInfo.getVersion() < replicaInFe.getLastReportVersion();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // always add tablet before adding replicas
     public void addTablet(long tabletId, TabletMeta tabletMeta) {
         if (GlobalStateMgr.isCheckpointThread()) {
@@ -866,6 +894,13 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Long, Replica> getReplicaMetaWithBackend(Long backendId) {
+        return backingReplicaMetaTable.row(backendId);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // just for test
     public void clear() {
         writeLock();

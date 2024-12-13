@@ -26,7 +26,11 @@
 namespace orc {
 
 Int128 Int128::maximumValue() {
+<<<<<<< HEAD
     return {0x7fffffffffffffff, 0xfffffffffffffff};
+=======
+    return {0x7fffffffffffffff, 0xffffffffffffffff};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Int128 Int128::minimumValue() {

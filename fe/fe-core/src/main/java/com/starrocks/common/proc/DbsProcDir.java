@@ -83,9 +83,15 @@ public class DbsProcDir implements ProcDirInterface {
 
         Database db;
         try {
+<<<<<<< HEAD
             db = globalStateMgr.getDb(Long.parseLong(dbIdOrName));
         } catch (NumberFormatException e) {
             db = globalStateMgr.getDb(dbIdOrName);
+=======
+            db = globalStateMgr.getLocalMetastore().getDb(Long.parseLong(dbIdOrName));
+        } catch (NumberFormatException e) {
+            db = globalStateMgr.getLocalMetastore().getDb(dbIdOrName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (db == null) {
@@ -110,15 +116,25 @@ public class DbsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> dbInfos = new ArrayList<List<Comparable>>();
         for (String dbName : dbNames) {
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(dbName);
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 continue;
             }
             List<Comparable> dbInfo = new ArrayList<Comparable>();
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
             try {
                 int tableNum = db.getTables().size();
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                int tableNum = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 dbInfo.add(db.getId());
                 dbInfo.add(dbName);
                 dbInfo.add(tableNum);
@@ -135,7 +151,11 @@ public class DbsProcDir implements ProcDirInterface {
                 dbInfo.add(replicaQuota);
 
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             dbInfos.add(dbInfo);
         }

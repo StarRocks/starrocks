@@ -216,8 +216,13 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         JDBCTable jdbcTable = (JDBCTable) table;
         String query = getPartitionQuery(table);
         try (PreparedStatement ps = connection.prepareStatement(query)) {
+<<<<<<< HEAD
             ps.setString(1, jdbcTable.getDbName());
             ps.setString(2, jdbcTable.getJdbcTable());
+=======
+            ps.setString(1, jdbcTable.getCatalogDBName());
+            ps.setString(2, jdbcTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {

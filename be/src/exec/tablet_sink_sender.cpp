@@ -29,7 +29,11 @@ TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToT
                                    std::unordered_map<int64_t, NodeChannel*> node_channels,
                                    std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
                                    TWriteQuorumType::type write_quorum_type, int num_repicas)
+<<<<<<< HEAD
         : _load_id(std::move(std::move(load_id))),
+=======
+        : _load_id(std::move(load_id)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _txn_id(txn_id),
           _index_id_to_tablet_be_map(std::move(index_id_to_tablet_be_map)),
           _partition_params(partition_params),

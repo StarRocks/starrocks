@@ -76,7 +76,11 @@ public class StarMgrServerTest {
                 return 0;
             }
         };
+<<<<<<< HEAD
         Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L));
+=======
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<StarOSBDBJEJournalSystem>() {
             @Mock
@@ -87,6 +91,10 @@ public class StarMgrServerTest {
                 return 1;
             }
         };
+<<<<<<< HEAD
         Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L));
+=======
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

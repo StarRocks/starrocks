@@ -124,6 +124,10 @@ Status Tablet::_init_once_action() {
         // make sure there is no dcg cache when init tablet to avoid potential unconsistent read
         StorageEngine::instance()->clear_rowset_delta_column_group_cache(*rowset);
         _rs_version_map[version] = std::move(rowset);
+<<<<<<< HEAD
+=======
+        _gtid_to_version_map[rs_meta->gtid()] = version.second;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // init incremental rowset
@@ -214,10 +218,18 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         auto it = _rs_version_map.find(version);
         DCHECK(it != _rs_version_map.end());
         StorageEngine::instance()->add_unused_rowset(it->second);
+<<<<<<< HEAD
+=======
+        _gtid_to_version_map.erase(it->second->rowset_meta()->gtid());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _rs_version_map.erase(it);
     }
     for (auto& [v, rowset] : _stale_rs_version_map) {
         StorageEngine::instance()->add_unused_rowset(rowset);
+<<<<<<< HEAD
+=======
+        _gtid_to_version_map.erase(rowset->rowset_meta()->gtid());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     _stale_rs_version_map.clear();
 
@@ -230,6 +242,10 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
             return st;
         }
         _rs_version_map[version] = std::move(rowset);
+<<<<<<< HEAD
+=======
+        _gtid_to_version_map[rs_meta->gtid()] = version.second;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (config::enable_event_based_compaction_framework) {
@@ -331,6 +347,12 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
 
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
+<<<<<<< HEAD
+=======
+    _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
+    VLOG(2) << "add rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+            << " to tablet=" << full_name();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _timestamped_version_tracker.add_version(rowset->version());
 
     std::vector<RowsetSharedPtr> rowsets_to_delete;
@@ -387,6 +409,12 @@ void Tablet::modify_rowsets_without_lock(const std::vector<RowsetSharedPtr>& to_
     for (auto& rs : to_add) {
         rs_metas_to_add.push_back(rs->rowset_meta());
         _rs_version_map[rs->version()] = rs;
+<<<<<<< HEAD
+=======
+        _gtid_to_version_map[rs->rowset_meta()->gtid()] = rs->version().second;
+        VLOG(2) << "add rowset gtid=" << rs->rowset_meta()->gtid() << " version=" << rs->version()
+                << " to tablet=" << full_name();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         _timestamped_version_tracker.add_version(rs->version());
         ++_newly_created_rowset_num;
@@ -591,6 +619,12 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     _tablet_meta->add_rs_meta(rowset->rowset_meta());
     _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
     _rs_version_map[rowset->version()] = rowset;
+<<<<<<< HEAD
+=======
+    _gtid_to_version_map[rowset->rowset_meta()->gtid()] = rowset->version().second;
+    VLOG(2) << "add incremental rowset gtid=" << rowset->rowset_meta()->gtid() << " version=" << rowset->version()
+            << " to tablet=" << full_name();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _inc_rs_version_map[rowset->version()] = rowset;
     if (need_binlog) {
         // BinlogManager#commit_ingestion needs the data disk size of rowset, and will
@@ -615,6 +649,17 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 }
 
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+<<<<<<< HEAD
+=======
+    // There are several scenarios where _committed_rs_map might be modified:
+    //   1. Adding to _committed_rs_map when committing a transaction.
+    //   2. Removing from _committed_rs_map when publishing a transaction.
+    //   3. Clear _committed_rs_map during a schema update.
+    // Add and Delete from _committed_rs_map is thread safe but there are concurrent issue between
+    // add(delete) and clear operation.
+    // So we use schema_lock to prevent the concurrent issue.
+    std::shared_lock l(_schema_lock);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
         VLOG(2) << "tablet: " << tablet_id()
                 << " too many committed without schema rowset : " << _committed_rs_map.size();
@@ -629,6 +674,10 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
 }
 
 void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
+<<<<<<< HEAD
+=======
+    std::shared_lock l(_schema_lock);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (rowset != nullptr) {
         _committed_rs_map.erase(rowset->rowset_id());
     }
@@ -758,6 +807,10 @@ void Tablet::delete_expired_stale_rowset() {
                 if (it != _stale_rs_version_map.end()) {
                     // delete rowset
                     stale_rowsets.emplace_back(it->second);
+<<<<<<< HEAD
+=======
+                    _gtid_to_version_map.erase(it->second->rowset_meta()->gtid());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     _stale_rs_version_map.erase(it);
                 } else {
                     LOG(WARNING) << "delete stale rowset tablet=" << full_name() << " version["
@@ -840,6 +893,38 @@ Status Tablet::capture_consistent_rowsets(const Version& spec_version, std::vect
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status Tablet::capture_consistent_rowsets(const int64_t gtid, std::vector<RowsetSharedPtr>* rowsets) const {
+    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+    if (_updates != nullptr) {
+        return _updates->get_applied_rowsets_by_gtid(gtid, rowsets);
+    }
+    int64_t version = 0;
+    std::stringstream ss;
+    ss << "capture_consistent_rowsets: tablet_id: " << tablet_id() << " gtid: " << gtid;
+    auto it = _gtid_to_version_map.upper_bound(gtid);
+    if (it != _gtid_to_version_map.begin()) {
+        --it;
+        version = it->second;
+        ss << " version: " << version;
+    } else {
+        ss << " no rowset before it";
+        if (!_gtid_to_version_map.empty()) {
+            ss << ", first gtid is " << _gtid_to_version_map.begin()->first << " version is "
+               << _gtid_to_version_map.begin()->second;
+        }
+        return Status::InvalidArgument(ss.str());
+    }
+    VLOG(2) << ss.str();
+    Version spec_version{0, version};
+    std::vector<Version> version_path;
+    RETURN_IF_ERROR(capture_consistent_versions(spec_version, &version_path));
+    RETURN_IF_ERROR(_capture_consistent_rowsets_unlocked(version_path, rowsets));
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& version_path,
                                                     std::vector<RowsetSharedPtr>* rowsets) const {
     DCHECK(rowsets != nullptr && rowsets->empty());
@@ -879,7 +964,11 @@ bool Tablet::version_for_delete_predicate_unlocked(const Version& version) {
     return _tablet_meta->version_for_delete_predicate(version);
 }
 
+<<<<<<< HEAD
 bool Tablet::has_delete_predicates(const Version& version) {
+=======
+StatusOr<bool> Tablet::has_delete_predicates(const Version& version) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_lock rlock(get_header_lock());
     const auto& preds = _tablet_meta->delete_predicates();
     return std::any_of(preds.begin(), preds.end(), [&version](const auto& pred) {
@@ -1089,6 +1178,10 @@ void Tablet::delete_all_files() {
         (void)it.second->remove();
     }
     _rs_version_map.clear();
+<<<<<<< HEAD
+=======
+    _gtid_to_version_map.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (const auto& it : _inc_rs_version_map) {
         (void)it.second->remove();
     }

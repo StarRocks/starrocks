@@ -41,7 +41,13 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableRef;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
 import com.starrocks.thrift.TNormalHashJoinNode;
@@ -115,9 +121,29 @@ public class HashJoinNode extends JoinNode {
             msg.hash_join_node.setBuild_runtime_filters(
                     RuntimeFilterDescription.toThriftRuntimeFilterDescriptions(buildRuntimeFilters));
         }
+<<<<<<< HEAD
         msg.hash_join_node.setLate_materialization(enableLateMaterialization);
         msg.hash_join_node.setBuild_runtime_filters_from_planner(
                 ConnectContext.get().getSessionVariable().getEnableGlobalRuntimeFilter());
+=======
+        SessionVariable sv = ConnectContext.get().getSessionVariable();
+
+        msg.hash_join_node.setLate_materialization(enableLateMaterialization);
+        // predicate filtration rate
+        double predicateRate = getCardinality() / (double) getChild(0).getCardinality();
+        if (enableLateMaterialization) {
+            // If join late materialize is turned on higher filtering can lead to performance degradation.
+            if (predicateRate > Config.partition_hash_join_min_cardinality_rate) {
+                msg.hash_join_node.setEnable_partition_hash_join(sv.enablePartitionHashJoin());
+            } else {
+                msg.hash_join_node.setEnable_partition_hash_join(false);
+            }
+        } else {
+            msg.hash_join_node.setEnable_partition_hash_join(sv.enablePartitionHashJoin());
+        }
+        msg.hash_join_node.setBuild_runtime_filters_from_planner(sv.getEnableGlobalRuntimeFilter());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionExprs != null) {
             msg.hash_join_node.setPartition_exprs(Expr.treesToThrift(partitionExprs));
         }
@@ -128,8 +154,12 @@ public class HashJoinNode extends JoinNode {
         }
 
         if (getCanLocalShuffle()) {
+<<<<<<< HEAD
             msg.hash_join_node.setInterpolate_passthrough(
                     ConnectContext.get().getSessionVariable().isHashJoinInterpolatePassthrough());
+=======
+            msg.hash_join_node.setInterpolate_passthrough(sv.isHashJoinInterpolatePassthrough());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

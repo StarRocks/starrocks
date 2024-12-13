@@ -23,13 +23,23 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+<<<<<<< HEAD
 #include "exprs/jit/ir_helper.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
 #include "simd/mulselector.h"
 #include "types/logical_type_infra.h"
 #include "util/percentile_value.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 /**
@@ -71,6 +81,10 @@ public:
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
     }
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_compilable(RuntimeState* state) const override {
         if (_has_case_expr) {
             return state->can_jit_expr(CompilableExprType::CASE) && IRHelper::support_jit(WhenType) &&
@@ -240,6 +254,10 @@ public:
         out << "}" << (is_constant() ? "c:" : "") << (is_nullable() ? "n:" : "") << type().debug_string();
         return out.str();
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string debug_string() const override {
         std::stringstream out;

@@ -49,8 +49,13 @@ public:
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
+<<<<<<< HEAD
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
+=======
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
@@ -64,6 +69,11 @@ public:
 
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override;
 
+<<<<<<< HEAD
+=======
+    void update_profile() override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
@@ -179,6 +189,13 @@ private:
 
     void _flush_stale_memtables();
 
+<<<<<<< HEAD
+=======
+    void _update_peer_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+    void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
@@ -226,12 +243,19 @@ private:
     std::map<string, string> _column_to_expr_value;
 
     // Profile counters
+<<<<<<< HEAD
     // replicated_storage=false, the number of tablets
     // replicated_storage=true, the number of primary tablets
     RuntimeProfile::Counter* _primary_tablets_num = nullptr;
     // Only available for replicated_storage=true, the number of
     // secondary tablets
     RuntimeProfile::Counter* _secondary_tablets_num = nullptr;
+=======
+    // Number of times that update_profile() is called
+    RuntimeProfile::Counter* _profile_update_counter = nullptr;
+    // Accumulated time for update_profile()
+    RuntimeProfile::Counter* _profile_update_timer = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Number of times that open() is called
     RuntimeProfile::Counter* _open_counter = nullptr;
     // Accumulated time of open()
@@ -250,6 +274,12 @@ private:
     RuntimeProfile::Counter* _wait_replica_timer = nullptr;
     // Accumulated time to wait for txn persist in add_chunk()
     RuntimeProfile::Counter* _wait_txn_persist_timer = nullptr;
+<<<<<<< HEAD
+=======
+
+    std::atomic<bool> _is_updating_profile{false};
+    std::unique_ptr<RuntimeProfile> _tablets_profile;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,

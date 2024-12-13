@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_trunc
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据指定的精度级别 `fmt`，将一个日期时间截断。
 

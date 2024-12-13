@@ -23,6 +23,10 @@ public class TrinoQueryTest extends TrinoTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

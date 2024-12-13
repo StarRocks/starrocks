@@ -36,7 +36,13 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
@@ -48,7 +54,10 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -60,7 +69,13 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.List;
+=======
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Optional;
 
 /*
@@ -262,23 +277,38 @@ public abstract class AlterJobV2 implements Writable {
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
+<<<<<<< HEAD
         OlapTable tbl = (OlapTable) db.getTable(tableId);
+=======
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
         }
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             if (tbl.isOlapTable()) {
                 unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                         GlobalStateMgr.getCurrentState().getTabletScheduler());
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.READ);
         }
 
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ);
+        }
+
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
                 errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
@@ -298,7 +328,11 @@ public abstract class AlterJobV2 implements Writable {
                 return true;
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tbl.getId()), LockType.WRITE);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -345,4 +379,17 @@ public abstract class AlterJobV2 implements Writable {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public void addTabletIdMap(long partitionId, long rollupTabletId, long baseTabletId) {
+    }
+
+    public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
+    }
+
+    public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
+        return Collections.emptyMap();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

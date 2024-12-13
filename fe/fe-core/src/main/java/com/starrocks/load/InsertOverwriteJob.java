@@ -45,11 +45,24 @@ public class InsertOverwriteJob {
     @SerializedName(value = "sourcePartitionNames")
     private List<String> sourcePartitionNames;
 
+<<<<<<< HEAD
 
     private transient InsertStmt insertStmt;
 
     public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId,
                               long targetTableId, long warehouseId) {
+=======
+    @SerializedName(value = "dynamicOverwrite")
+    private boolean dynamicOverwrite = false;
+
+    private transient InsertStmt insertStmt;
+
+    public InsertOverwriteJob() {
+    }
+
+    public InsertOverwriteJob(long jobId, InsertStmt insertStmt, long targetDbId,
+                              long targetTableId, long warehouseId, boolean dynamicOverwrite) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.jobId = jobId;
         this.insertStmt = insertStmt;
         this.sourcePartitionIds = insertStmt.getTargetPartitionIds();
@@ -57,15 +70,28 @@ public class InsertOverwriteJob {
         this.targetDbId = targetDbId;
         this.targetTableId = targetTableId;
         this.warehouseId = warehouseId;
+<<<<<<< HEAD
     }
 
     // used to replay InsertOverwriteJob
     public InsertOverwriteJob(long jobId, long targetDbId, long targetTableId, List<Long> sourcePartitionIds) {
+=======
+        this.dynamicOverwrite = dynamicOverwrite;
+    }
+
+    // used to replay InsertOverwriteJob
+    public InsertOverwriteJob(long jobId, long targetDbId, long targetTableId,
+                              List<Long> sourcePartitionIds, boolean dynamicOverwrite) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.jobId = jobId;
         this.targetDbId = targetDbId;
         this.targetTableId = targetTableId;
         this.sourcePartitionIds = sourcePartitionIds;
         this.jobState = InsertOverwriteJobState.OVERWRITE_PENDING;
+<<<<<<< HEAD
+=======
+        this.dynamicOverwrite = dynamicOverwrite;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getJobId() {
@@ -128,4 +154,11 @@ public class InsertOverwriteJob {
     public long getWarehouseId() {
         return warehouseId;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isDynamicOverwrite() {
+        return dynamicOverwrite;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -76,9 +76,12 @@ CREATE DATABASE test_table_with_null;
 USE test_table_with_null;
 -- result:
 -- !result
+<<<<<<< HEAD
 SET enable_insert_strict = false;
 -- result:
 -- !result
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
 -- result:
 -- !result
@@ -122,6 +125,7 @@ Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" 
 INSERT INTO t2 VALUES (1, NULL), (2, NULL);
 -- result:
 -- !result
+<<<<<<< HEAD
 INSERT INTO t1 SELECT * FROM t2;
 -- result:
 -- !result
@@ -132,6 +136,18 @@ INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
 -- result:
 -- !result
 INSERT INTO t1 SELECT 1, NULL;
+=======
+INSERT INTO t1 properties ("max_filter_ratio" = "1") SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 properties ("max_filter_ratio" = "1") SELECT 1, NULL;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 -- !result
 SELECT * FROM t1;
@@ -147,10 +163,17 @@ CREATE TABLE t1 ( id BIGINT NOT NULL, idx BIGINT AUTO_INCREMENT )
 Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
 -- result:
 -- !result
+<<<<<<< HEAD
 INSERT INTO t1 (id, idx) SELECT * FROM t2;
 -- result:
 -- !result
 INSERT INTO t1 (id, idx) SELECT id, idx FROM t2;
+=======
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT * FROM t2;
+-- result:
+-- !result
+INSERT INTO t1 (id, idx) properties ("max_filter_ratio" = "1") SELECT id, idx FROM t2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 -- !result
 INSERT INTO t1 (id) SELECT id FROM t2;
@@ -169,9 +192,12 @@ DROP TABLE t1;
 DROP TABLE t2;
 -- result:
 -- !result
+<<<<<<< HEAD
 SET enable_insert_strict = true;
 -- result:
 -- !result
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "true");
 -- result:
 -- !result
@@ -529,7 +555,11 @@ CREATE TABLE `t_auto_increment_incorrect_col_id` (
   `k2` string default "abc" COMMENT "",
   `k3` BIGINT AUTO_INCREMENT COMMENT "",
   `k4` string default "bcd"COMMENT ""
+<<<<<<< HEAD
 ) ENGINE=OLAP 
+=======
+) ENGINE=OLAP
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
@@ -582,7 +612,11 @@ CREATE TABLE `t_auto_increment_partial_update_only` (
   `k2` BIGINT NOT NULL COMMENT "",
   `k3` BIGINT NOT NULL COMMENT "",
   `k4` BIGINT AUTO_INCREMENT COMMENT ""
+<<<<<<< HEAD
 ) ENGINE=OLAP 
+=======
+) ENGINE=OLAP
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PRIMARY KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 1
 PROPERTIES (
@@ -651,4 +685,8 @@ DROP TABLE t_auto_increment_partial_update_only;
 -- !result
 DROP DATABASE test_auto_increment_partial_update_only;
 -- result:
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

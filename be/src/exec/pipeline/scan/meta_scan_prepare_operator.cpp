@@ -30,7 +30,11 @@ MetaScanPrepareOperator::MetaScanPrepareOperator(OperatorFactory* factory, int32
                                                  int32_t driver_sequence, const std::string& operator_name,
                                                  MetaScanContextPtr scan_ctx)
         : SourceOperator(factory, id, operator_name, plan_node_id, true, driver_sequence),
+<<<<<<< HEAD
           _scan_ctx(std::move(std::move(scan_ctx))) {}
+=======
+          _scan_ctx(std::move(scan_ctx)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Status MetaScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
@@ -58,8 +62,12 @@ StatusOr<ChunkPtr> MetaScanPrepareOperator::pull_chunk(RuntimeState* state) {
 MetaScanPrepareOperatorFactory::MetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id,
                                                                const std::string& operator_name,
                                                                std::shared_ptr<MetaScanContextFactory> scan_ctx_factory)
+<<<<<<< HEAD
         : SourceOperatorFactory(id, operator_name, plan_node_id),
           _scan_ctx_factory(std::move(std::move(scan_ctx_factory))) {}
+=======
+        : SourceOperatorFactory(id, operator_name, plan_node_id), _scan_ctx_factory(std::move(scan_ctx_factory)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Status MetaScanPrepareOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();

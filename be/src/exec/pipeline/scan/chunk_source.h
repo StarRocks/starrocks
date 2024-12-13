@@ -77,6 +77,10 @@ public:
 
     virtual bool reach_limit() { return false; }
 
+<<<<<<< HEAD
+=======
+    virtual void update_chunk_exec_stats(RuntimeState* state) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Used to print custom error msg in be.out when coredmp
     // Don't do heavey work, it calls frequently
     virtual const std::string get_custom_coredump_msg() const { return ""; }

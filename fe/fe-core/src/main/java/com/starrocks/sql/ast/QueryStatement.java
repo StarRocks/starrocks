@@ -39,6 +39,11 @@ public class QueryStatement extends StatementBase {
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
 
+<<<<<<< HEAD
+=======
+    private int queryStartIndex = -1;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public QueryStatement(QueryRelation queryRelation, OriginStatement originStatement) {
         super(queryRelation.getPos());
         this.queryRelation = queryRelation;
@@ -75,6 +80,17 @@ public class QueryStatement extends StatementBase {
         return RedirectStatus.NO_FORWARD;
     }
 
+<<<<<<< HEAD
+=======
+    public int getQueryStartIndex() {
+        return queryStartIndex;
+    }
+
+    public void setQueryStartIndex(int idx) {
+        this.queryStartIndex = idx;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // only for prepare execute query
     public boolean isPointQuery() {
         if (queryRelation == null || !(queryRelation instanceof SelectRelation)) {

@@ -28,6 +28,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.ExplainBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.ComputeNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.THdfsScanRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TScanRange;
@@ -37,8 +41,15 @@ import com.starrocks.thrift.TUniqueId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 /**
@@ -79,6 +90,11 @@ public class FragmentInstance {
 
     private FragmentInstanceExecState execution = null;
 
+<<<<<<< HEAD
+=======
+    private final Map<Integer, Set<Long>> node2SentPartitionIds = Maps.newHashMap();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public FragmentInstance(ComputeNode worker, ExecutionFragment execFragment) {
         this.worker = worker;
         this.execFragment = execFragment;
@@ -232,7 +248,10 @@ public class FragmentInstance {
         this.groupExecutionScanDop = groupExecutionScanDop;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public FragmentInstanceExecState getExecution() {
         return execution;
     }
@@ -297,11 +316,46 @@ public class FragmentInstance {
         return bucketSeqToDriverSeq;
     }
 
+<<<<<<< HEAD
     public void addScanRanges(Integer scanId, List<TScanRangeParams> scanRanges) {
+=======
+    private void removeDuplicatedPartitionValues(Integer scanId, List<TScanRangeParams> scanRangeParamsList) {
+        Set<Long> sentPartitionIds = node2SentPartitionIds.computeIfAbsent(scanId, k -> new HashSet<>());
+        for (TScanRangeParams scanRangeParams : scanRangeParamsList) {
+            TScanRange scanRange = scanRangeParams.scan_range;
+            if (!scanRange.isSetHdfs_scan_range()) {
+                continue;
+            }
+            THdfsScanRange hdfsScanRange = scanRange.getHdfs_scan_range();
+            if (!(hdfsScanRange.isSetPartition_id() && hdfsScanRange.isSetPartition_value())) {
+                continue;
+            }
+            if (sentPartitionIds.contains(hdfsScanRange.getPartition_id())) {
+                // this partition value has been sent down to BE before.
+                // no need to send it anymore.
+                hdfsScanRange.unsetPartition_value();
+            } else {
+                sentPartitionIds.add(hdfsScanRange.getPartition_id());
+            }
+        }
+    }
+
+    public void resetAllScanRanges() {
+        node2ScanRanges.clear();
+        node2DriverSeqToScanRanges.clear();
+    }
+
+    public void addScanRanges(Integer scanId, List<TScanRangeParams> scanRanges) {
+        removeDuplicatedPartitionValues(scanId, scanRanges);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         node2ScanRanges.computeIfAbsent(scanId, k -> new ArrayList<>()).addAll(scanRanges);
     }
 
     public void addScanRanges(Integer scanId, Integer driverSeq, List<TScanRangeParams> scanRanges) {
+<<<<<<< HEAD
+=======
+        removeDuplicatedPartitionValues(scanId, scanRanges);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         node2DriverSeqToScanRanges.computeIfAbsent(scanId, k -> new HashMap<>())
                 .computeIfAbsent(driverSeq, k -> new ArrayList<>()).addAll(scanRanges);
     }

@@ -19,14 +19,23 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class CancelAlterTableStatementAnalyzer {
 
     public static void analyze(CancelAlterTableStmt statement, ConnectContext context) {
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, statement.getDbTableName());
         // Check db.
         if (context.getGlobalStateMgr().getDb(statement.getDbName()) == null) {
+=======
+        statement.getDbTableName().normalization(context);
+        // Check db.
+        if (context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName()) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }
     }

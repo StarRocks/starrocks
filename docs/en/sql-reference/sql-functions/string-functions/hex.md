@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 If `x` is a numerical value, this function returns a hexadecimal string representation of the value.
 

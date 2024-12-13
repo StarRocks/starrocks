@@ -278,6 +278,10 @@ public class ExecutionDAG {
         if (build != null) {
             captureVersionFragment = build;
             fragments.add(build);
+<<<<<<< HEAD
+=======
+            idToFragment.put(captureVersionFragment.getFragmentId(), captureVersionFragment);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

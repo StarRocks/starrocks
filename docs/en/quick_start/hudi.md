@@ -50,7 +50,11 @@ Change directory into `demo/documentation-samples/hudi` and look at the files. T
 | **`metastore_db`**       | Postgres DB used to store the Hive metadata                         |
 | **`hive_metastore`**     | Provides the Apache Hive metastore                                  |
 | **`minio`** and **`mc`** | MinIO Object Storage and MinIO command line client                  |
+<<<<<<< HEAD
 | **`spark-hudi`**         | MinIO Object Storage                                                |
+=======
+| **`spark-hudi`**         | Distributed computing and Transactional data lake platform          |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Configuration files
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cos
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 求参数 `x` 的余弦值。
 

@@ -138,6 +138,12 @@ public abstract class StatisticsCollectJob {
         // acceleration, then page cache is better filled with the user's data.
         sessionVariable.setUsePageCache(false);
         sessionVariable.setEnableMaterializedViewRewrite(false);
+<<<<<<< HEAD
+=======
+        // set the max task num of connector io tasks per scan operator to 4, default is 16,
+        // to avoid generate too many chunk source for collect stats in BE
+        sessionVariable.setConnectorIoTasksPerScanOperator(4);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {

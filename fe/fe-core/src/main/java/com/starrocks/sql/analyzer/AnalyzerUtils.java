@@ -44,6 +44,12 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
@@ -52,7 +58,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -76,9 +85,12 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -156,6 +168,13 @@ public class AnalyzerUtils {
     public static final Set<String> MV_DATE_TRUNC_SUPPORTED_PARTITION_FORMAT =
             ImmutableSet.of("hour", "day", "week", "month", "year");
 
+<<<<<<< HEAD
+=======
+    public static final String DEFAULT_PARTITION_NAME_PREFIX = "p";
+
+    public static final String PARTITION_NAME_PREFIX_SPLIT = "_";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static String getOrDefaultDatabase(String dbName, ConnectContext context) {
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = context.getDatabase();
@@ -211,7 +230,11 @@ public class AnalyzerUtils {
             dbName = context.getDatabase();
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return null;
         }
@@ -447,7 +470,11 @@ public class AnalyzerUtils {
                 return;
             }
 
+<<<<<<< HEAD
             Database db = session.getGlobalStateMgr().getDb(dbName);
+=======
+            Database db = session.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 return;
             }
@@ -584,7 +611,13 @@ public class AnalyzerUtils {
             return super.visitTableFunction(node, context);
         }
 
+<<<<<<< HEAD
         /** treat {@link NormalizedTableFunctionRelation} as JoinRelation **/
+=======
+        /**
+         * treat {@link NormalizedTableFunctionRelation} as JoinRelation
+         **/
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
             return super.visitJoin(node, context);
@@ -774,6 +807,15 @@ public class AnalyzerUtils {
         return allTableAndViewRelations;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
+        List<FileTableFunctionRelation> fileTableFunctionRelations = Lists.newArrayList();
+        new AnalyzerUtils.FileTableFunctionRelationsCollector(fileTableFunctionRelations).visit(statementBase);
+        return fileTableFunctionRelations;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * CopySafe:
      * 1. OlapTable & MaterializedView, that support the copyOnlyForQuery interface
@@ -862,6 +904,7 @@ public class AnalyzerUtils {
             }
             // For external tables, their db/table names are case-insensitive, need to get real names of them.
             if (table.isHiveTable() || table.isHudiTable()) {
+<<<<<<< HEAD
                 HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
                 TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
                         hiveMetaStoreTable.getTableName());
@@ -875,6 +918,20 @@ public class AnalyzerUtils {
                 PaimonTable paimonTable = (PaimonTable) table;
                 TableName tableName = new TableName(paimonTable.getCatalogName(), paimonTable.getDbName(),
                         paimonTable.getTableName());
+=======
+                TableName tableName =
+                        new TableName(table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
+                tables.put(tableName, table);
+            } else if (table.isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getCatalogDBName(),
+                        icebergTable.getCatalogTableName());
+                tables.put(tableName, table);
+            } else if (table.isPaimonTable()) {
+                PaimonTable paimonTable = (PaimonTable) table;
+                TableName tableName = new TableName(paimonTable.getCatalogName(), paimonTable.getCatalogDBName(),
+                        paimonTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 tables.put(tableName, table);
             } else {
                 tables.put(node.getName(), table);
@@ -932,10 +989,18 @@ public class AnalyzerUtils {
         class TableIndexId {
             long tableId;
             long baseIndexId;
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             public TableIndexId(long tableId, long indexId) {
                 this.tableId = tableId;
                 this.baseIndexId = indexId;
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Override
             public boolean equals(Object o) {
                 if (this == o) {
@@ -1163,12 +1228,36 @@ public class AnalyzerUtils {
         }
     }
 
+<<<<<<< HEAD
     public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
         Set<TableName> tableNames = Sets.newHashSet();
         if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null && !db.isSystemDatabase()) {
                 Table table = db.getTable(tableId);
+=======
+    private static class FileTableFunctionRelationsCollector extends AstTraverser<Void, Void> {
+
+        private final List<FileTableFunctionRelation> fileTableFunctionRelations;
+
+        public FileTableFunctionRelationsCollector(List<FileTableFunctionRelation> fileTableFunctionRelations) {
+            this.fileTableFunctionRelations = fileTableFunctionRelations;
+        }
+
+        @Override
+        public Void visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            fileTableFunctionRelations.add(node);
+            return null;
+        }
+    }
+
+    public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
+        Set<TableName> tableNames = Sets.newHashSet();
+        if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null && !db.isSystemDatabase()) {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
@@ -1187,9 +1276,15 @@ public class AnalyzerUtils {
     }
 
     private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
         if (db != null && !db.isSystemDatabase()) {
             for (Table table : db.getTables()) {
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+        if (db != null && !db.isSystemDatabase()) {
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isOlapOrCloudNativeTable()) {
                     continue;
                 }
@@ -1348,13 +1443,23 @@ public class AnalyzerUtils {
     }
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+<<<<<<< HEAD
                                                                               List<List<String>> partitionValues)
+=======
+                                                                              List<List<String>> partitionValues,
+                                                                              boolean isTemp,
+                                                                              String partitionNamePrefix)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws AnalysisException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             PartitionMeasure measure = checkAndGetPartitionMeasure(olapTable.getIdToColumn(),
                     (ExpressionRangePartitionInfo) partitionInfo);
+<<<<<<< HEAD
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, measure,
+=======
+            return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     (ExpressionRangePartitionInfo) partitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
@@ -1362,7 +1467,10 @@ public class AnalyzerUtils {
                     .toDistributionDesc(olapTable.getIdToColumn());
             Map<String, String> partitionProperties =
                     ImmutableMap.of("replication_num", String.valueOf(replicationNum));
+<<<<<<< HEAD
             String partitionPrefix = "p";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             List<String> partitionColNames = Lists.newArrayList();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
@@ -1372,11 +1480,24 @@ public class AnalyzerUtils {
                     String formatValue = getFormatPartitionValue(value);
                     formattedPartitionValue.add(formatValue);
                 }
+<<<<<<< HEAD
                 String partitionName = partitionPrefix + Joiner.on("_").join(formattedPartitionValue);
+=======
+                String partitionName = DEFAULT_PARTITION_NAME_PREFIX + Joiner.on("_").join(formattedPartitionValue);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (partitionName.length() > FeConstants.MAX_LIST_PARTITION_NAME_LENGTH) {
                     partitionName = partitionName.substring(0, FeConstants.MAX_LIST_PARTITION_NAME_LENGTH)
                             + "_" + Integer.toHexString(partitionName.hashCode());
                 }
+<<<<<<< HEAD
+=======
+                if (partitionNamePrefix != null) {
+                    if (partitionNamePrefix.contains(PARTITION_NAME_PREFIX_SPLIT)) {
+                        throw new AnalysisException("partition name prefix can not contain " + PARTITION_NAME_PREFIX_SPLIT);
+                    }
+                    partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!partitionColNames.contains(partitionName)) {
                     MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
                             partitionName, Collections.singletonList(partitionValue), partitionProperties);
@@ -1388,7 +1509,11 @@ public class AnalyzerUtils {
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
             listPartitionDesc.setSystem(true);
             return new AddPartitionClause(listPartitionDesc, distributionDesc,
+<<<<<<< HEAD
                     partitionProperties, false);
+=======
+                    partitionProperties, isTemp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             throw new AnalysisException("automatic partition only support partition by value.");
         }
@@ -1419,13 +1544,24 @@ public class AnalyzerUtils {
     private static AddPartitionClause getAddPartitionClauseForRangePartition(
             OlapTable olapTable,
             List<List<String>> partitionValues,
+<<<<<<< HEAD
+=======
+            boolean isTemp,
+            String partitionPrefix,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PartitionMeasure measure,
             ExpressionRangePartitionInfo expressionRangePartitionInfo) throws AnalysisException {
         String granularity = measure.getGranularity();
         long interval = measure.getInterval();
         Type firstPartitionColumnType = expressionRangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn())
                 .get(0).getType();
+<<<<<<< HEAD
         String partitionPrefix = "p";
+=======
+        if (partitionPrefix == null) {
+            partitionPrefix = DEFAULT_PARTITION_NAME_PREFIX;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Short replicationNum = olapTable.getTableProperty().getReplicationNum();
         DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
                 .toDistributionDesc(olapTable.getIdToColumn());
@@ -1495,7 +1631,11 @@ public class AnalyzerUtils {
         }
         RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(partitionColNames, partitionDescs);
         rangePartitionDesc.setSystem(true);
+<<<<<<< HEAD
         return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, false);
+=======
+        return new AddPartitionClause(rangePartitionDesc, distributionDesc, partitionProperties, isTemp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
@@ -1657,6 +1797,10 @@ public class AnalyzerUtils {
     /**
      * Check if the function is a non-deterministic function with strict mode, eg current_date/current_timestamp also
      * is treated as non-deterministic function too.
+<<<<<<< HEAD
+=======
+     *
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param node the node to check
      * @return true if node contains non-deterministic functions, false otherwise.
      */
@@ -1690,8 +1834,14 @@ public class AnalyzerUtils {
     /**
      * Check the partition expr is legal and extract partition columns
      * TODO: support date_trunc('week', dt) for normal olap table.
+<<<<<<< HEAD
      * @param expr partition expr
      * @param columnDefs partition column defs
+=======
+     *
+     * @param expr                      partition expr
+     * @param columnDefs                partition column defs
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param supportedDateTruncFormats date trunc supported formats which are a bit different bewtween mv and olap table
      * @return partition column names
      */

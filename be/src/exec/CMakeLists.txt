@@ -37,8 +37,13 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+<<<<<<< HEAD
     multi_olap_table_sink.cpp
     write_combined_txn_log.cpp
+=======
+    write_combined_txn_log.cpp
+    multi_olap_table_sink.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
@@ -102,7 +107,10 @@ set(EXEC_FILES
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
     cache_select_scanner.cpp
+<<<<<<< HEAD
     mor_processor.cpp
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -113,6 +121,10 @@ set(EXEC_FILES
     schema_scanner.cpp
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
+<<<<<<< HEAD
+=======
+    arrow_flight_batch_reader.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp

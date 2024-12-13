@@ -46,17 +46,24 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
+<<<<<<< HEAD
 import com.starrocks.cluster.Cluster;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.bdbje.Timestamp;
+<<<<<<< HEAD
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.load.DeleteInfo;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.LoadErrorHub;
+=======
+import com.starrocks.load.ExportJob;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
@@ -73,7 +80,10 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.AutoIncrementInfo;
+<<<<<<< HEAD
 import com.starrocks.persist.BackendIdsUpdateInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.BatchDropInfo;
@@ -100,12 +110,19 @@ import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropDictionaryInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.DropPartitionsInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.DropResourceOperationLog;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.DropWarehouseLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.HbPackage;
+<<<<<<< HEAD
 import com.starrocks.persist.ImpersonatePrivInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
@@ -126,7 +143,10 @@ import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
+<<<<<<< HEAD
 import com.starrocks.persist.ShardInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableAddOrDropColumnsInfo;
 import com.starrocks.persist.TableInfo;
@@ -136,12 +156,18 @@ import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
+<<<<<<< HEAD
 import com.starrocks.qe.SessionVariable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
+<<<<<<< HEAD
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -172,7 +198,11 @@ import java.io.IOException;
 
 // this is the value written to bdb or local edit files. key is an auto-increasing long.
 public class JournalEntity implements Writable {
+<<<<<<< HEAD
     public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
+=======
+    public static final Logger LOG = LogManager.getLogger(JournalEntity.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private short opCode = OperationType.OP_INVALID;
     private Writable data;
@@ -209,9 +239,13 @@ public class JournalEntity implements Writable {
         switch (opCode) {
             case OperationType.OP_SAVE_NEXTID:
             case OperationType.OP_ERASE_DB:
+<<<<<<< HEAD
             case OperationType.OP_ERASE_TABLE:
             case OperationType.OP_ERASE_PARTITION:
             case OperationType.OP_META_VERSION:
+=======
+            case OperationType.OP_ERASE_PARTITION:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_DROP_ALL_BROKER:
             case OperationType.OP_DROP_REPOSITORY: {
                 data = new Text();
@@ -236,12 +270,15 @@ public class JournalEntity implements Writable {
                 data = DropDbInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_ALTER_DB:
             case OperationType.OP_RENAME_DB: {
                 data = new DatabaseInfo();
                 ((DatabaseInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_ALTER_DB_V2:
             case OperationType.OP_RENAME_DB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DatabaseInfo.class);
@@ -251,12 +288,15 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CreateTableInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_DROP_TABLE:
             case OperationType.OP_DROP_ROLLUP: {
                 data = new DropInfo();
                 ((DropInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_DROP_TABLE_V2:
             case OperationType.OP_DROP_ROLLUP_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), DropInfo.class);
@@ -290,9 +330,14 @@ public class JournalEntity implements Writable {
                 data = DropPartitionInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_MODIFY_PARTITION: {
                 data = new ModifyPartitionInfo();
                 ((ModifyPartitionInfo) data).readFields(in);
+=======
+            case OperationType.OP_DROP_PARTITIONS: {
+                data = DropPartitionsInfo.read(in);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             }
             case OperationType.OP_MODIFY_PARTITION_V2: {
@@ -303,6 +348,7 @@ public class JournalEntity implements Writable {
                 data = BatchModifyPartitionsInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_RECOVER_DB:
             case OperationType.OP_RECOVER_TABLE:
             case OperationType.OP_RECOVER_PARTITION: {
@@ -310,6 +356,8 @@ public class JournalEntity implements Writable {
                 ((RecoverInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_RECOVER_DB_V2:
             case OperationType.OP_RECOVER_TABLE_V2:
             case OperationType.OP_RECOVER_PARTITION_V2: {
@@ -320,6 +368,7 @@ public class JournalEntity implements Writable {
                 data = BatchDropInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_RENAME_TABLE:
             case OperationType.OP_RENAME_ROLLUP:
             case OperationType.OP_RENAME_PARTITION: {
@@ -327,6 +376,8 @@ public class JournalEntity implements Writable {
                 ((TableInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_RENAME_TABLE_V2:
             case OperationType.OP_RENAME_ROLLUP_V2:
             case OperationType.OP_RENAME_PARTITION_V2: {
@@ -356,18 +407,24 @@ public class JournalEntity implements Writable {
             case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS:
                 data = AlterMaterializedViewBaseTableInfosLog.read(in);
                 break;
+<<<<<<< HEAD
             case OperationType.OP_BACKUP_JOB: {
                 data = AbstractJob.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_BACKUP_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), AbstractJob.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_RESTORE_JOB: {
                 data = AbstractJob.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_RESTORE_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), AbstractJob.class);
                 break;
@@ -381,14 +438,18 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ConsistencyCheckInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_EXPORT_CREATE:
                 data = new ExportJob();
                 ((ExportJob) data).readFields(in);
                 break;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_EXPORT_CREATE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ExportJob.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_EXPORT_UPDATE_STATE:
                 data = new ExportJob.StateTransfer();
                 ((ExportJob.StateTransfer) data).readFields(in);
@@ -403,14 +464,23 @@ public class JournalEntity implements Writable {
                 data = new DeleteInfo();
                 ((DeleteInfo) data).readFields(in);
                 break;
+=======
+            case OperationType.OP_EXPORT_UPDATE_INFO_V2:
+                data = GsonUtils.GSON.fromJson(Text.readString(in), ExportJob.ExportUpdateInfo.class);
+                break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_FINISH_MULTI_DELETE: {
                 data = MultiDeleteInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_ADD_REPLICA:
             case OperationType.OP_UPDATE_REPLICA:
             case OperationType.OP_DELETE_REPLICA:
             case OperationType.OP_CLEAR_ROLLUP_INFO: {
+=======
+            case OperationType.OP_ADD_REPLICA: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 data = ReplicaPersistInfo.read(in);
                 break;
             }
@@ -424,6 +494,7 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ReplicaPersistInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_ADD_BACKEND:
             case OperationType.OP_DROP_BACKEND:
             case OperationType.OP_BACKEND_STATE_CHANGE: {
@@ -431,6 +502,8 @@ public class JournalEntity implements Writable {
                 ((Backend) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_ADD_BACKEND_V2:
             case OperationType.OP_DROP_BACKEND_V2:
             case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
@@ -453,6 +526,7 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Frontend.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_SET_LOAD_ERROR_HUB: {
                 data = new LoadErrorHub.Param();
                 ((LoadErrorHub.Param) data).readFields(in);
@@ -471,15 +545,20 @@ public class JournalEntity implements Writable {
                 ((LeaderInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_LEADER_INFO_CHANGE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), LeaderInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_TIMESTAMP: {
                 data = new Timestamp();
                 ((Timestamp) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_TIMESTAMP_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Timestamp.class);
                 break;
@@ -488,6 +567,7 @@ public class JournalEntity implements Writable {
                 data = MetaVersion.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_GLOBAL_VARIABLE: {
                 data = new SessionVariable();
                 ((SessionVariable) data).readFields(in);
@@ -503,16 +583,21 @@ public class JournalEntity implements Writable {
                 ((BrokerMgr.ModifyBrokerInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_ADD_BROKER_V2:
             case OperationType.OP_DROP_BROKER_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BrokerMgr.ModifyBrokerInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
                 data = new BackendIdsUpdateInfo();
                 ((BackendIdsUpdateInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TransactionState.class);
                 break;
@@ -521,10 +606,13 @@ public class JournalEntity implements Writable {
                 data = TransactionStateBatch.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_CREATE_REPOSITORY: {
                 data = Repository.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_CREATE_REPOSITORY_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Repository.class);
                 break;
@@ -533,6 +621,7 @@ public class JournalEntity implements Writable {
                 data = TruncateTableInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_COLOCATE_ADD_TABLE:
             case OperationType.OP_COLOCATE_REMOVE_TABLE:
             case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ:
@@ -542,6 +631,8 @@ public class JournalEntity implements Writable {
                 ((ColocatePersistInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_COLOCATE_ADD_TABLE_V2:
             case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2:
             case OperationType.OP_COLOCATE_MARK_UNSTABLE_V2:
@@ -549,84 +640,114 @@ public class JournalEntity implements Writable {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), ColocatePersistInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_MODIFY_TABLE_COLOCATE: {
                 data = new TablePropertyInfo();
                 ((TablePropertyInfo) data).readFields(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TablePropertyInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_HEARTBEAT: {
                 data = HbPackage.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_HEARTBEAT_V2: {
                 data = HbPackage.readV2(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_ADD_FUNCTION: {
                 data = Function.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_ADD_FUNCTION_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), Function.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_DROP_FUNCTION: {
                 data = FunctionSearchDesc.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_DROP_FUNCTION_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), FunctionSearchDesc.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_BACKEND_TABLETS_INFO: {
                 data = BackendTabletsInfo.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_BACKEND_TABLETS_INFO_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BackendTabletsInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
                 data = RoutineLoadJob.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), RoutineLoadJob.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB:
             case OperationType.OP_REMOVE_ROUTINE_LOAD_JOB: {
                 data = RoutineLoadOperation.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), RoutineLoadOperation.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
                 data = StreamLoadTask.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_CREATE_STREAM_LOAD_TASK_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), StreamLoadTask.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_CREATE_LOAD_JOB: {
                 data = com.starrocks.load.loadv2.LoadJob.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_CREATE_LOAD_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), LoadJob.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_END_LOAD_JOB: {
                 data = LoadJobFinalOperation.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_END_LOAD_JOB_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), LoadJobFinalOperation.class);
                 break;
@@ -664,18 +785,24 @@ public class JournalEntity implements Writable {
             case OperationType.OP_UPDATE_TASK_RUN_STATE:
                 data = TaskRunPeriodStatusChange.read(in);
                 break;
+<<<<<<< HEAD
             case OperationType.OP_DROP_TASK_RUNS:
                 data = DropTaskRunsLog.read(in);
                 break;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_ARCHIVE_TASK_RUNS: {
                 data = ArchiveTaskRunsLog.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_CREATE_SMALL_FILE:
             case OperationType.OP_DROP_SMALL_FILE: {
                 data = SmallFile.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_CREATE_SMALL_FILE_V2:
             case OperationType.OP_DROP_SMALL_FILE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), SmallFile.class);
@@ -685,18 +812,24 @@ public class JournalEntity implements Writable {
                 data = AlterJobV2.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_BATCH_ADD_ROLLUP: {
                 data = BatchAlterJobPersistInfo.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_BATCH_ADD_ROLLUP_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BatchAlterJobPersistInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_MODIFY_DISTRIBUTION_TYPE: {
                 data = TableInfo.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), TableInfo.class);
                 break;
@@ -824,6 +957,7 @@ public class JournalEntity implements Writable {
                 data = ModifyTableColumnOperationLog.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_GRANT_IMPERSONATE: {
                 data = ImpersonatePrivInfo.read(in);
                 break;
@@ -832,6 +966,8 @@ public class JournalEntity implements Writable {
                 data = ImpersonatePrivInfo.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_CREATE_CATALOG: {
                 data = Catalog.read(in);
                 break;
@@ -852,6 +988,7 @@ public class JournalEntity implements Writable {
                 data = InsertOverwriteStateChangeInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_ADD_UNUSED_SHARD: { // Deprecated
                 data = ShardInfo.read(in);
                 break;
@@ -860,6 +997,8 @@ public class JournalEntity implements Writable {
                 data = ShardInfo.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_STARMGR: {
                 data = StarMgrJournal.read(in);
                 break;
@@ -872,18 +1011,24 @@ public class JournalEntity implements Writable {
                 data = AlterUserInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_UPDATE_USER_PROP_V2: {
                 data = UserPropertyInfo.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_UPDATE_USER_PROP_V3: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), UserPropertyInfo.class);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_DROP_USER_V2: {
                 data = UserIdentity.read(in);
                 break;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_DROP_USER_V3: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), UserIdentity.class);
                 break;
@@ -897,6 +1042,7 @@ public class JournalEntity implements Writable {
                 data = RolePrivilegeCollectionInfo.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_AUTH_UPGRADE_V2:
                 // for compatibility reason, just ignore the auth upgrade log
                 break;
@@ -946,13 +1092,87 @@ public class JournalEntity implements Writable {
             case OperationType.OP_REPLICATION_JOB:
                 data = ReplicationJobLog.read(in);
                 break;
+=======
+            case OperationType.OP_AUTH_UPGRADE_V2: {
+                // for compatibility reason, just ignore the auth upgrade log
+                break;
+            }
+            case OperationType.OP_MV_JOB_STATE: {
+                data = MVMaintenanceJob.read(in);
+                break;
+            }
+            case OperationType.OP_MV_EPOCH_UPDATE: {
+                data = MVEpoch.read(in);
+                break;
+            }
+            case OperationType.OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS: {
+                data = TableAddOrDropColumnsInfo.read(in);
+                break;
+            }
+            case OperationType.OP_SET_DEFAULT_STORAGE_VOLUME: {
+                data = SetDefaultStorageVolumeLog.read(in);
+                break;
+            }
+            case OperationType.OP_DROP_STORAGE_VOLUME: {
+                data = DropStorageVolumeLog.read(in);
+                break;
+            }
+            case OperationType.OP_CREATE_STORAGE_VOLUME:
+            case OperationType.OP_UPDATE_STORAGE_VOLUME: {
+                data = StorageVolume.read(in);
+                break;
+            }
+            case OperationType.OP_PIPE: {
+                data = PipeOpEntry.read(in);
+                break;
+            }
+            case OperationType.OP_CREATE_DICTIONARY: {
+                data = Dictionary.read(in);
+                break;
+            }
+            case OperationType.OP_DROP_DICTIONARY: {
+                data = DropDictionaryInfo.read(in);
+                break;
+            }
+            case OperationType.OP_MODIFY_DICTIONARY_MGR: {
+                data = DictionaryMgrInfo.read(in);
+                break;
+            }
+            case OperationType.OP_DECOMMISSION_DISK: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DecommissionDiskInfo.class);
+                break;
+            }
+            case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDecommissionDiskInfo.class);
+                break;
+            }
+            case OperationType.OP_DISABLE_DISK: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), DisableDiskInfo.class);
+                break;
+            }
+            case OperationType.OP_CANCEL_DISABLE_DISK: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
+                break;
+            }
+            case OperationType.OP_REPLICATION_JOB: {
+                data = ReplicationJobLog.read(in);
+                break;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_DELETE_REPLICATION_JOB: {
                 data = ReplicationJobLog.read(in);
                 break;
             }
+<<<<<<< HEAD
             case OperationType.OP_RECOVER_PARTITION_VERSION:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
                 break;
+=======
+            case OperationType.OP_RECOVER_PARTITION_VERSION: {
+                data = GsonUtils.GSON.fromJson(Text.readString(in), PartitionVersionRecoveryInfo.class);
+                break;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_ADD_KEY: {
                 data = new Text(Text.readBinary(in));
                 break;

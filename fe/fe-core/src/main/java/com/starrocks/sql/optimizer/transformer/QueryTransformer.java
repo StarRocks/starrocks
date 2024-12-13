@@ -565,10 +565,17 @@ public class QueryTransformer {
                 }
 
                 for (int childIdx = 0; childIdx < groupingFunction.getChildren().size(); ++childIdx) {
+<<<<<<< HEAD
                     SlotRef slotRef = (SlotRef) groupingFunction.getChild(childIdx);
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(slotRef, subOpt.getExpressionMapping(), columnRefFactory);
+=======
+                    Expr expr = groupingFunction.getChild(childIdx);
+
+                    ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
+                            .translate(expr, subOpt.getExpressionMapping(), columnRefFactory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {

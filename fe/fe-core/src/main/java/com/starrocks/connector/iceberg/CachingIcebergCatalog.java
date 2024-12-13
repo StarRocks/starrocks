@@ -16,25 +16,45 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+=======
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.Config;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
+=======
+import com.starrocks.qe.SessionVariable;
+import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StarRocksIcebergTableScan;
+<<<<<<< HEAD
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
@@ -42,11 +62,19 @@ import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
+=======
+import org.apache.iceberg.Table;
+import org.apache.iceberg.TableMetadata;
+import org.apache.iceberg.TableOperations;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.IOException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -58,7 +86,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingIcebergCatalog implements IcebergCatalog {
@@ -70,7 +101,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final String catalogName;
     private final IcebergCatalog delegate;
     private final Cache<IcebergTableName, Table> tables;
+<<<<<<< HEAD
     private final Cache<IcebergTableName, List<String>> partitionNames;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final Cache<String, Database> databases;
     private final ExecutorService backgroundExecutor;
 
@@ -80,6 +114,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
 
+<<<<<<< HEAD
+=======
+    private final LoadingCache<IcebergTableName, Map<String, Partition>> partitionCache;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public CachingIcebergCatalog(String catalogName, IcebergCatalog delegate, IcebergCatalogProperties icebergProperties,
                                  ExecutorService executorService) {
         this.catalogName = catalogName;
@@ -90,8 +129,20 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
         this.tables = newCacheBuilder(icebergProperties.getIcebergTableCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+<<<<<<< HEAD
         this.partitionNames = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
                 enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build();
+=======
+        this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(),
+                enableCache ? DEFAULT_CACHE_NUM : NEVER_CACHE).build(
+                CacheLoader.from(key -> {
+                    Table nativeTable = getTable(key.dbName, key.tableName);
+                    IcebergTable icebergTable =
+                            IcebergTable.builder().setCatalogDBName(key.dbName).setCatalogTableName(key.tableName)
+                                    .setNativeTable(nativeTable).build();
+                    return delegate.getPartitions(icebergTable, key.snapshotId, null);
+                }));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.dataFileCache = enableCache ?
                 newCacheBuilder(
                         icebergProperties.getIcebergMetaCacheTtlSec(), icebergProperties.getIcebergManifestCacheMaxNum()).build()
@@ -113,12 +164,21 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return delegate.listAllDatabases();
     }
 
+<<<<<<< HEAD
     public void createDb(String dbName, Map<String, String> properties) {
         delegate.createDb(dbName, properties);
     }
 
     public void dropDb(String dbName) throws MetaNotFoundException {
         delegate.dropDb(dbName);
+=======
+    public void createDB(String dbName, Map<String, String> properties) {
+        delegate.createDB(dbName, properties);
+    }
+
+    public void dropDB(String dbName) throws MetaNotFoundException {
+        delegate.dropDB(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         databases.invalidate(dbName);
     }
 
@@ -172,7 +232,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
         boolean dropped = delegate.dropTable(dbName, tableName, purge);
+<<<<<<< HEAD
         tables.invalidate(new IcebergTableName(dbName, tableName));
+=======
+        invalidateCache(new IcebergTableName(dbName, tableName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return dropped;
     }
 
@@ -196,6 +260,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String dbName, String tableName, long snapshotId, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName, snapshotId);
         if (partitionNames.asMap().containsKey(icebergTableName)) {
@@ -246,6 +311,33 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
 
         return new ArrayList<>(partitionNames);
+=======
+    public Map<String, Partition> getPartitions(IcebergTable icebergTable, long snapshotId,
+                                                ExecutorService executorService) {
+        IcebergTableName key =
+                new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
+        return partitionCache.getUnchecked(key);
+    }
+
+    @Override
+    public List<String> listPartitionNames(IcebergTable icebergTable, ConnectorMetadatRequestContext requestContext,
+                                           ExecutorService executorService) {
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
+        // optimization for query mv rewrite, we can optionally return null to bypass it.
+        // if we don't have cache right now, which means it probably takes time to load it during query,
+        // so we can do load in background while return null to bypass this synchronous process.
+        if (requestContext.isQueryMVRewrite() && sv.isEnableConnectorAsyncListPartitions()) {
+            long snapshotId = requestContext.getSnapshotId();
+            IcebergTableName key =
+                    new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
+            Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
+            if (cacheValue == null) {
+                backgroundExecutor.submit(() -> partitionCache.refresh(key));
+                return null;
+            }
+        }
+        return IcebergCatalog.super.listPartitionNames(icebergTable, requestContext, executorService);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -257,7 +349,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public synchronized void refreshTable(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (tables.getIfPresent(icebergTableName) == null) {
+<<<<<<< HEAD
             partitionNames.invalidate(icebergTableName);
+=======
+            partitionCache.invalidate(icebergTableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             BaseTable currentTable = (BaseTable) tables.getIfPresent(icebergTableName);
             BaseTable updateTable = (BaseTable) delegate.getTable(dbName, tableName);
@@ -302,6 +398,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
+<<<<<<< HEAD
         List<String> updatedPartitionNames = updatedTable.spec().isPartitioned() ?
                 listPartitionNamesWithSnapshotId(updatedTable, dbName, tableName, updatedSnapshotId, executorService) :
                 new ArrayList<>();
@@ -310,6 +407,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             partitionNames.put(updatedIcebergTableName, updatedPartitionNames);
             tables.put(updatedIcebergTableName, updatedTable);
             partitionNames.invalidate(baseIcebergTableName);
+=======
+        partitionCache.invalidate(baseIcebergTableName);
+        partitionCache.getUnchecked(updatedIcebergTableName);
+        synchronized (this) {
+            tables.put(updatedIcebergTableName, updatedTable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         TableMetadata updatedTableMetadata = updatedTable.operations().current();
@@ -346,7 +449,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                         Config.background_refresh_metadata_time_secs_since_last_access_secs) {
                     return;
                 }
+<<<<<<< HEAD
                 
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 refreshTable(identifier.dbName, identifier.tableName, backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName, identifier.tableName, e);
@@ -355,6 +462,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
+<<<<<<< HEAD
     public void invalidateCacheWithoutTable(IcebergTableName icebergTableName) {
         partitionNames.invalidate(icebergTableName);
     }
@@ -362,6 +470,26 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public void invalidateCache(IcebergTableName icebergTableName) {
         tables.invalidate(icebergTableName);
         partitionNames.invalidate(icebergTableName);
+=======
+    @Override
+    public void invalidatePartitionCache(String dbName, String tableName) {
+        // will invalidate all snapshots of this table
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        partitionCache.invalidate(key);
+    }
+
+    @Override
+    public void invalidateCache(String dbName, String tableName) {
+        IcebergTableName key = new IcebergTableName(dbName, tableName);
+        invalidateCache(key);
+
+    }
+
+    private void invalidateCache(IcebergTableName key) {
+        tables.invalidate(key);
+        // will invalidate all snapshots of this table
+        partitionCache.invalidate(key);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -388,10 +516,21 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     public static class IcebergTableName {
         private final String dbName;
         private final String tableName;
+<<<<<<< HEAD
+=======
+        // if as cache key for `getTable`, ignoreSnapshotId = true
+        // otherwise it's false
+        private boolean ignoreSnapshotId = false;
+        // -1 mean it's an empty table without any snapshot.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private long snapshotId = -1;
 
         public IcebergTableName(String dbName, String tableName) {
             this(dbName, tableName, -1);
+<<<<<<< HEAD
+=======
+            this.ignoreSnapshotId = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         public IcebergTableName(String dbName, String tableName, long snapshotId) {
@@ -410,7 +549,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             }
             IcebergTableName that = (IcebergTableName) o;
             return dbName.equalsIgnoreCase(that.dbName) && tableName.equalsIgnoreCase(that.tableName) &&
+<<<<<<< HEAD
                     (snapshotId == -1 || snapshotId == that.snapshotId);
+=======
+                    (ignoreSnapshotId || snapshotId == that.snapshotId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         @Override
@@ -428,6 +571,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public List<Pair<List<Object>, Long>> getSamples() {
         Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
@@ -437,11 +581,35 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 databases.size());
 
         List<Object> partitions = partitionNames.asMap().values()
+=======
+    private List<List<String>> getAllCachedPartitionNames() {
+        List<List<String>> ans = new ArrayList<>();
+        for (Map<String, Partition> kv : partitionCache.asMap().values()) {
+            ans.add(new ArrayList<>(kv.keySet()));
+        }
+        return ans;
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        Pair<List<Object>, Long> dbSamples = Pair.create(databases.asMap().values()
+                        .stream()
+                        .limit(MEMORY_META_SAMPLES)
+                        .collect(Collectors.toList()),
+                databases.size());
+
+        List<List<String>> partitionNames = getAllCachedPartitionNames();
+        List<Object> partitions = partitionNames
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .stream()
                 .flatMap(List::stream)
                 .limit(MEMORY_FILE_SAMPLES)
                 .collect(Collectors.toList());
+<<<<<<< HEAD
         long partitionTotal = partitionNames.asMap().values()
+=======
+        long partitionTotal = partitionNames
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .stream()
                 .mapToLong(List::size)
                 .sum();
@@ -473,6 +641,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public Map<String, Long> estimateCount() {
         Map<String, Long> counter = new HashMap<>();
+<<<<<<< HEAD
         counter.put("Database", databases.size());
         counter.put("Table", tables.size());
         counter.put("PartitionNames", partitionNames.asMap().values()
@@ -480,6 +649,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 .mapToLong(List::size)
                 .sum());
         counter.put("ManifestOfDataFile",  dataFileCache.asMap().values()
+=======
+        List<List<String>> partitionNames = getAllCachedPartitionNames();
+        counter.put("Database", databases.size());
+        counter.put("Table", tables.size());
+        counter.put("PartitionNames", partitionNames
+                .stream()
+                .mapToLong(List::size)
+                .sum());
+        counter.put("ManifestOfDataFile", dataFileCache.asMap().values()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .stream()
                 .mapToLong(Set::size)
                 .sum());

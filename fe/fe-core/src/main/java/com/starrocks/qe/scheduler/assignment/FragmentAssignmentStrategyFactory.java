@@ -48,7 +48,11 @@ public class FragmentAssignmentStrategyFactory {
                     executionDAG.isGatherOutput(), random);
         } else {
             return new LocalFragmentAssignmentStrategy(connectContext, workerProvider, jobSpec.isEnablePipeline(),
+<<<<<<< HEAD
                     jobSpec.isLoadType());
+=======
+                    jobSpec.isLoadType(), jobSpec.isIncrementalScanRanges());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

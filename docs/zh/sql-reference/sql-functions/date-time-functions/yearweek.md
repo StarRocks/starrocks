@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # yearweek
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回给定日期对应的年份和周数。该函数和 MySQL yearweek() 函数原理相同。
 

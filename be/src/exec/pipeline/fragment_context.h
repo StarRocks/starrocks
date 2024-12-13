@@ -141,7 +141,11 @@ public:
     bool enable_resource_group() const { return _workgroup != nullptr; }
 
     // STREAM MV
+<<<<<<< HEAD
     [[nodiscard]] Status reset_epoch();
+=======
+    Status reset_epoch();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void set_is_stream_pipeline(bool is_stream_pipeline) { _is_stream_pipeline = is_stream_pipeline; }
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
     void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
@@ -171,7 +175,16 @@ public:
 
     void set_report_when_finish(bool report) { _report_when_finish = report; }
 
+<<<<<<< HEAD
 private:
+=======
+    // acquire runtime filter from cache
+    void acquire_runtime_filters();
+
+private:
+    void _close_stream_load_contexts();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool _enable_group_execution = false;
     // Id of this query
     TUniqueId _query_id;
@@ -209,7 +222,10 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
+<<<<<<< HEAD
     bool _channel_stream_load = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
@@ -246,7 +262,11 @@ public:
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
 
+<<<<<<< HEAD
     [[nodiscard]] Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
+=======
+    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void unregister(const TUniqueId& fragment_id);
 
     void cancel(const Status& status);

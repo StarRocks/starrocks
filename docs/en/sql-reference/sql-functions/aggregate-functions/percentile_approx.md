@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_approx
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the approximation of the pth percentile, where the value of p is between 0 and 1.
 

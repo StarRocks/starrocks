@@ -334,7 +334,11 @@ public class ColumnTest {
 
     @Test
     public void testLscColumn() {
+<<<<<<< HEAD
         Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, false,
+=======
+        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, null, false,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
 
         Index i0 = new Index("i0",

@@ -26,9 +26,17 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
+<<<<<<< HEAD
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+=======
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
@@ -251,6 +259,7 @@ public class KuduMetadata implements ConnectorMetadata {
 
     private String getKuduFullTableName(KuduTable table) {
         return table.getKuduTableName().orElse(
+<<<<<<< HEAD
                 getKuduFullTableName(table.getDbName(), table.getTableName()));
     }
 
@@ -258,6 +267,13 @@ public class KuduMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> fieldNames, long limit) {
+=======
+                getKuduFullTableName(table.getCatalogDBName(), table.getCatalogTableName()));
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
         String kuduTableName = getKuduFullTableName(kuduTable);
@@ -268,11 +284,19 @@ public class KuduMetadata implements ConnectorMetadata {
             throw new RuntimeException(e);
         }
         KuduScanToken.KuduScanTokenBuilder builder = kuduClient.newScanTokenBuilder(nativeTable);
+<<<<<<< HEAD
         builder.setProjectedColumnNames(fieldNames);
         if (limit > 0) {
             builder.limit(limit);
         }
         addConstraintPredicates(nativeTable, builder, predicate);
+=======
+        builder.setProjectedColumnNames(params.getFieldNames());
+        if (params.getLimit() > 0) {
+            builder.limit(params.getLimit());
+        }
+        addConstraintPredicates(nativeTable, builder, params.getPredicate());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<KuduScanToken> tokens = builder.build();
         List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                 KuduRemoteFileDesc.createKuduRemoteFileDesc(tokens));
@@ -306,7 +330,12 @@ public class KuduMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
+<<<<<<< HEAD
                                          long limit) {
+=======
+                                         long limit,
+                                         TableVersionRange versionRange) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -316,7 +345,11 @@ public class KuduMetadata implements ConnectorMetadata {
         long rowCount;
         if (metastore.isPresent()) {
             HivePartitionStats tableStatistics =
+<<<<<<< HEAD
                     metastore.get().getTableStatistics(kuduTable.getDbName(), kuduTable.getTableName());
+=======
+                    metastore.get().getTableStatistics(kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             rowCount = tableStatistics.getCommonStats().getRowNums();
         } else {
             try {

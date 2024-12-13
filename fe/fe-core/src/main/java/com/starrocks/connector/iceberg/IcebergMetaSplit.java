@@ -15,11 +15,31 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.RemoteMetaSplit;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.metadata.MetadataTableType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.share.iceberg.ManifestFileBean;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.util.SerializationUtil;
 
+<<<<<<< HEAD
 public class IcebergMetaSplit implements RemoteMetaSplit {
+=======
+import java.util.List;
+
+public class IcebergMetaSplit implements RemoteMetaSplit {
+    public static final String PLACEHOLDER_FILE = "placeholder_file";
+    public static final long PLACEHOLDER_FILE_LENGTH = 1L;
+    public static final String PLACEHOLDER_FILE_PATH = "placeholder_file_path";
+    public static final List<MetadataTableType> ONLY_NEED_SINGLE_SPLIT = List.of(
+            MetadataTableType.REFS,
+            MetadataTableType.HISTORY,
+            MetadataTableType.METADATA_LOG_ENTRIES,
+            MetadataTableType.SNAPSHOTS,
+            MetadataTableType.MANIFESTS);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final String manifestFile;
     private final long length;
     private final String path;
@@ -30,6 +50,18 @@ public class IcebergMetaSplit implements RemoteMetaSplit {
         return new IcebergMetaSplit(serializedFile, file.length(), file.path());
     }
 
+<<<<<<< HEAD
+=======
+    // A placeholder split for some lightweight metadata table query
+    public static IcebergMetaSplit placeholderSplit() {
+        return new IcebergMetaSplit(PLACEHOLDER_FILE, PLACEHOLDER_FILE_LENGTH, PLACEHOLDER_FILE_PATH);
+    }
+
+    public static boolean onlyNeedSingleSplit(MetadataTableType tableType) {
+        return ONLY_NEED_SINGLE_SPLIT.contains(tableType);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public IcebergMetaSplit(String manifestFile, long length, String path) {
         this.manifestFile = manifestFile;
         this.length = length;

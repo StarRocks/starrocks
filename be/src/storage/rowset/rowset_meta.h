@@ -90,6 +90,15 @@ public:
 
     int64_t end_version() const { return _rowset_meta_pb->end_version(); }
 
+<<<<<<< HEAD
+=======
+    bool has_gtid() const { return _rowset_meta_pb->has_gtid(); }
+
+    int64_t gtid() const { return _rowset_meta_pb->gtid(); }
+
+    void set_gtid(int64_t gtid) { _rowset_meta_pb->set_gtid(gtid); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
 
     int64_t num_rows_upt() const { return _rowset_meta_pb->num_rows_upt(); }
@@ -283,6 +292,13 @@ public:
         return false;
     }
 
+<<<<<<< HEAD
+=======
+    const string& get_segment_encryption_meta(int segment_id) const;
+    const string& get_uptfile_encryption_meta(int upt_file_id) const;
+    const string& get_delfile_encryption_meta(int del_file_id) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     bool _deserialize_from_pb(std::string_view value) {
         return _rowset_meta_pb->ParseFromArray(value.data(), value.size());

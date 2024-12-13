@@ -16,7 +16,10 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -144,7 +147,11 @@ public class CompactionMgrTest {
                 PartitionIdentifier partitionIdentifier = new PartitionIdentifier(1, 2, 3);
                 Database db = new Database();
                 Table table = new LakeTable();
+<<<<<<< HEAD
                 PhysicalPartition partition = new Partition(123, "aaa", null, null);
+=======
+                PhysicalPartition partition = new PhysicalPartition(123, "aaa", 123,  null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 CompactionJob job = new CompactionJob(db, table, partition, txnId, false);
                 r.put(partitionIdentifier, job);
                 return r;
@@ -183,9 +190,28 @@ public class CompactionMgrTest {
                 }
                 return true;
             }
+<<<<<<< HEAD
         };
 
         UtFrameUtils.PseudoImage.setUpImageVersion();
+=======
+
+            @Mock
+            public boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+                if (partitionId == 3) {
+                    return true;
+                }
+                if (partitionId == 4) {
+                    return false;
+                }
+                if (partitionId == 5) {
+                    return false;
+                }
+                return true;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         compactionMgr.save(image.getImageWriter());
         CompactionMgr compactionMgr2 = new CompactionMgr();

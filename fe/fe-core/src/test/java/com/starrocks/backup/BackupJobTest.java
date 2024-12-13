@@ -48,6 +48,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -62,6 +66,10 @@ import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.GtidGenerator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -136,7 +144,11 @@ public class BackupJobTest {
     private EditLog editLog;
 
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
+<<<<<<< HEAD
             new BlobStorage("broker", Maps.newHashMap()));
+=======
+                new BlobStorage("broker", Maps.newHashMap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @BeforeClass
     public static void start() {
@@ -153,14 +165,23 @@ public class BackupJobTest {
         File backupDir = new File(BackupHandler.BACKUP_ROOT_DIR.toString());
         if (backupDir.exists()) {
             Files.walk(BackupHandler.BACKUP_ROOT_DIR,
+<<<<<<< HEAD
                             FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
                     .forEach(File::delete);
+=======
+                                    FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                        .forEach(File::delete);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Before
     public void setUp() {
+<<<<<<< HEAD
 
+=======
+        globalStateMgr = GlobalStateMgr.getCurrentState();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
 
@@ -171,12 +192,33 @@ public class BackupJobTest {
         View view = UnitTestUtil.createTestView(viewId);
         db.registerTableUnlocked(view);
 
+<<<<<<< HEAD
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
+=======
+        LockManager lockManager = new LockManager();
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = lockManager;
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = id.getAndIncrement();
@@ -184,6 +226,21 @@ public class BackupJobTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", "testTable");
+                minTimes = 0;
+                result = db.getTable(tblId);
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", UnitTestUtil.VIEW_NAME);
+                minTimes = 0;
+                result = db.getTable(viewId);
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
+                minTimes = 0;
+                result = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -262,7 +319,11 @@ public class BackupJobTest {
         TStatus taskStatus = new TStatus(TStatusCode.OK);
         TBackend tBackend = new TBackend("", 0, 1);
         TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+<<<<<<< HEAD
                 snapshotTask.getSignature(), taskStatus);
+=======
+                    snapshotTask.getSignature(), taskStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         request.setSnapshot_files(snapshotFiles);
         request.setSnapshot_path(snapshotPath);
         Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
@@ -293,7 +354,11 @@ public class BackupJobTest {
         Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
         Map<Long, List<String>> tabletFileMap = Maps.newHashMap();
         request = new TFinishTaskRequest(tBackend, TTaskType.UPLOAD,
+<<<<<<< HEAD
                 upTask.getSignature(), taskStatus);
+=======
+                    upTask.getSignature(), taskStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         request.setTablet_files(tabletFileMap);
 
         Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
@@ -354,7 +419,12 @@ public class BackupJobTest {
         try {
             // test get backup info
             job.getInfo();
+<<<<<<< HEAD
         } catch (Exception ignore) { }
+=======
+        } catch (Exception ignore) {
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

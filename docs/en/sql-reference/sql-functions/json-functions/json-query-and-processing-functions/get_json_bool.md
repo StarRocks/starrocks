@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_bool
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Parses and gets the boolean value from a specified JSON path in a JSON string.
 

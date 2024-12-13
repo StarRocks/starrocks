@@ -20,8 +20,13 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.alter.LakeTableRollupBuilder;
+import com.starrocks.catalog.Column;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
@@ -46,7 +51,10 @@ import org.apache.logging.log4j.Logger;
 import java.util.List;
 import java.util.Optional;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class LakeTableHelper {
     private static final Logger LOG = LogManager.getLogger(LakeTableHelper.class);
 
@@ -81,6 +89,14 @@ public class LakeTableHelper {
         return new LakeTableAlterJobV2Builder(table);
     }
 
+<<<<<<< HEAD
+=======
+    static AlterJobV2Builder rollUp(OlapTable table) {
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
+        return new LakeTableRollupBuilder(table);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static boolean removeShardRootDirectory(ShardInfo shardInfo) {
         DropTableRequest request = new DropTableRequest();
         final String path = shardInfo.getFilePath().getFullPath();
@@ -156,12 +172,22 @@ public class LakeTableHelper {
         return ret;
     }
 
+<<<<<<< HEAD
     public static boolean isSharedPartitionDirectory(PhysicalPartition partition, long warehouseId) throws StarClientException {
         ShardInfo shardInfo = getAssociatedShardInfo(partition, warehouseId).orElse(null);
         if (shardInfo == null) {
             return false;
         }
         return isSharedDirectory(shardInfo.getFilePath().getFullPath(), partition.getId());
+=======
+    public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, long warehouseId)
+            throws StarClientException {
+        ShardInfo shardInfo = getAssociatedShardInfo(physicalPartition, warehouseId).orElse(null);
+        if (shardInfo == null) {
+            return false;
+        }
+        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), physicalPartition.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -173,8 +199,13 @@ public class LakeTableHelper {
      *
      * @return true if the directory is a shared directory, false otherwise
      */
+<<<<<<< HEAD
     public static boolean isSharedDirectory(String path, long partitionId) {
         return !path.endsWith(String.format("/%d", partitionId));
+=======
+    public static boolean isSharedDirectory(String path, long physicalPartitionId) {
+        return !path.endsWith(String.format("/%d", physicalPartitionId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -200,6 +231,7 @@ public class LakeTableHelper {
             }
         }
         return maxId;
+<<<<<<< HEAD
     } 
 
     public static boolean supportCombinedTxnLog(long dbId, List<Long> tableIdList,
@@ -228,5 +260,18 @@ public class LakeTableHelper {
             }
         }
         return true;
+=======
+    }
+
+    public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && isLoadingTransaction(sourceType);
+    }
+
+    private static boolean isLoadingTransaction(TransactionState.LoadJobSourceType sourceType) {
+        return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
+                sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

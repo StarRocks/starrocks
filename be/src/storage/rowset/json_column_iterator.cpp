@@ -61,6 +61,7 @@ public:
         }
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
 
     [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
@@ -70,16 +71,35 @@ public:
     [[nodiscard]] Status seek_to_first() override;
 
     [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+=======
+    Status init(const ColumnIteratorOptions& opts) override;
+
+    Status next_batch(size_t* n, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    Status seek_to_first() override;
+
+    Status seek_to_ordinal(ordinal_t ord) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ordinal_t get_current_ordinal() const override { return _flat_iters[0]->get_current_ordinal(); }
 
     ordinal_t num_rows() const override { return _flat_iters[0]->num_rows(); }
 
+<<<<<<< HEAD
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+=======
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation) override;
+
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     template <typename FUNC>
@@ -283,7 +303,11 @@ Status JsonFlatColumnIterator::seek_to_ordinal(ordinal_t ord) {
 
 Status JsonFlatColumnIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                           const ColumnPredicate* del_predicate,
+<<<<<<< HEAD
                                                           SparseRange<>* row_ranges) {
+=======
+                                                          SparseRange<>* row_ranges, CompoundNodeType pred_relation) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }
@@ -299,6 +323,7 @@ public:
 
     ~JsonDynamicFlatIterator() override = default;
 
+<<<<<<< HEAD
     [[nodiscard]] Status init(const ColumnIteratorOptions& opts) override;
 
     [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
@@ -308,17 +333,36 @@ public:
     [[nodiscard]] Status seek_to_first() override;
 
     [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+=======
+    Status init(const ColumnIteratorOptions& opts) override;
+
+    Status next_batch(size_t* n, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    Status seek_to_first() override;
+
+    Status seek_to_ordinal(ordinal_t ord) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ordinal_t get_current_ordinal() const override { return _json_iter->get_current_ordinal(); }
 
     ordinal_t num_rows() const override { return _json_iter->num_rows(); }
 
     /// for vectorized engine
+<<<<<<< HEAD
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+=======
+    Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation) override;
+
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     template <typename FUNC>
@@ -416,8 +460,13 @@ Status JsonDynamicFlatIterator::seek_to_ordinal(ordinal_t ord) {
 
 Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                                            const ColumnPredicate* del_predicate,
+<<<<<<< HEAD
                                                            SparseRange<>* row_ranges) {
     return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
+=======
+                                                           SparseRange<>* row_ranges, CompoundNodeType pred_relation) {
+    return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 class JsonMergeIterator final : public ColumnIterator {
@@ -449,8 +498,13 @@ public:
 
     /// for vectorized engine
     [[nodiscard]] Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+<<<<<<< HEAD
                                                     const ColumnPredicate* del_predicate,
                                                     SparseRange<>* row_ranges) override;
+=======
+                                                    const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                    CompoundNodeType pred_relation) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
@@ -609,7 +663,12 @@ Status JsonMergeIterator::seek_to_ordinal(ordinal_t ord) {
 }
 
 Status JsonMergeIterator::get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
+<<<<<<< HEAD
                                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
+=======
+                                                     const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                                     CompoundNodeType pred_relation) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     row_ranges->add({0, static_cast<rowid_t>(_reader->num_rows())});
     return Status::OK();
 }

@@ -117,6 +117,7 @@ public class TestLockException {
 
         Database db = new Database(1, "db");
         Locker locker = new Locker();
+<<<<<<< HEAD
         Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(db, LockType.READ));
         Assert.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db, LockType.READ, 10000));
 
@@ -126,6 +127,18 @@ public class TestLockException {
                 db, 2L, LockType.READ));
         Assert.assertFalse(locker.tryLockTablesWithIntensiveDbLock(
                 db, Lists.newArrayList(2L), LockType.READ, 10000, TimeUnit.MILLISECONDS));
+=======
+        Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(db.getId(), LockType.READ));
+        Assert.assertThrows(ErrorReportException.class, () -> locker.tryLockDatabase(db.getId(), LockType.READ,
+                10000, TimeUnit.MILLISECONDS));
+
+        Assert.assertThrows(ErrorReportException.class, () -> locker.lockTablesWithIntensiveDbLock(
+                1L, Lists.newArrayList(2L), LockType.READ));
+        Assert.assertThrows(ErrorReportException.class, () -> locker.lockTableWithIntensiveDbLock(
+                1L, 2L, LockType.READ));
+        Assert.assertFalse(locker.tryLockTablesWithIntensiveDbLock(
+                db.getId(), Lists.newArrayList(2L), LockType.READ, 10000, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

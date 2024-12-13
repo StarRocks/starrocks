@@ -14,14 +14,27 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
 
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.RewriteContext;
+
+import java.util.Map;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class EquivalentShuttleContext {
     private final RewriteContext rewriteContext;
     private final boolean isRollup;
     private boolean isUseEquivalent;
     private boolean isRewrittenByEquivalent;
     private IRewriteEquivalent.RewriteEquivalentType rewriteEquivalentType;
+<<<<<<< HEAD
+=======
+    private Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public EquivalentShuttleContext(RewriteContext rewriteContext, boolean isRollup, boolean isRewrittenByEquivalent,
                                     IRewriteEquivalent.RewriteEquivalentType type) {
@@ -29,7 +42,13 @@ public class EquivalentShuttleContext {
         this.isRollup = isRollup;
         this.isUseEquivalent = isRewrittenByEquivalent;
         this.rewriteEquivalentType = type;
+<<<<<<< HEAD
     }    public boolean isUseEquivalent() {
+=======
+    }
+
+    public boolean isUseEquivalent() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return isUseEquivalent;
     }
 
@@ -45,7 +64,29 @@ public class EquivalentShuttleContext {
         isRewrittenByEquivalent = rewrittenByEquivalent;
     }
 
+<<<<<<< HEAD
     public RewriteContext getRewriteContext() {
         return rewriteContext;
     }
+=======
+    public boolean isRewrittenByRewriter() {
+        return newColumnRefToAggFuncMap != null;
+    }
+
+    public void setNewColumnRefToAggFuncMap(Map<ColumnRefOperator, CallOperator> newColumnRefToAggFuncMap) {
+        this.newColumnRefToAggFuncMap = newColumnRefToAggFuncMap;
+    }
+
+    public Map<ColumnRefOperator, CallOperator> getNewColumnRefToAggFuncMap() {
+        return newColumnRefToAggFuncMap;
+    }
+
+    public RewriteContext getRewriteContext() {
+        return rewriteContext;
+    }
+
+    public IRewriteEquivalent.RewriteEquivalentType getRewriteEquivalentType() {
+        return rewriteEquivalentType;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -54,7 +54,11 @@ public class NodeMgrTest {
         NodeMgr nodeMgr = new NodeMgr();
         Frontend fe = new Frontend(FrontendNodeType.FOLLOWER, "node1", "10.0.0.3", 9010);
         fe.handleHbResponse(new FrontendHbResponse("node1", 9030, 9020, 1,
+<<<<<<< HEAD
                 System.currentTimeMillis(), System.currentTimeMillis(), "v1"), true);
+=======
+                System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         nodeMgr.replayAddFrontend(fe);
 
         Assert.assertTrue(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9020));

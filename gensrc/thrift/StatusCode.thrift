@@ -111,6 +111,11 @@ enum TStatusCode {
 
     CAPACITY_LIMIT_EXCEED = 58,
 
+<<<<<<< HEAD
+=======
+    SHUTDOWN = 59, // the service is shutting down
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED = 60,
     BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED = 61,
 }

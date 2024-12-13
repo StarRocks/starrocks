@@ -105,8 +105,13 @@ public class HiveConnectorTest {
         Assert.assertTrue(metadata instanceof HiveMetadata);
         com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
+<<<<<<< HEAD
         Assert.assertEquals("db1", hiveTable.getDbName());
         Assert.assertEquals("tbl1", hiveTable.getTableName());
+=======
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());

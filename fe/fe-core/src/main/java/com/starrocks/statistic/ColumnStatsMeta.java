@@ -17,7 +17,13 @@ package com.starrocks.statistic;
 import com.google.gson.annotations.SerializedName;
 
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.util.Objects;
+=======
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Meta of column-level statistics
@@ -33,10 +39,30 @@ public class ColumnStatsMeta {
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
 
+<<<<<<< HEAD
     public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime) {
         this.columnName = columnName;
         this.type = type;
         this.updateTime = updateTime;
+=======
+    @SerializedName("sampledPartitions")
+    private Set<Long> sampledPartitionsHashValue;
+
+    @SerializedName("allPartitionSize")
+    private int allPartitionSize;
+
+    public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime) {
+        this(columnName, type, updateTime, new HashSet<>(), -1);
+    }
+
+    public ColumnStatsMeta(String columnName, StatsConstants.AnalyzeType type, LocalDateTime updateTime,
+                           Set<Long> sampledPartitionsHashValue, int allPartitionSize) {
+        this.columnName = columnName;
+        this.type = type;
+        this.updateTime = updateTime;
+        this.sampledPartitionsHashValue = sampledPartitionsHashValue;
+        this.allPartitionSize = allPartitionSize;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getColumnName() {
@@ -63,8 +89,26 @@ public class ColumnStatsMeta {
         this.updateTime = updateTime;
     }
 
+<<<<<<< HEAD
     public String simpleString() {
         return String.format("(%s,%s)", columnName, type.toString());
+=======
+    public Set<Long> getSampledPartitionsHashValue() {
+        return sampledPartitionsHashValue;
+    }
+
+    public int getAllPartitionSize() {
+        return allPartitionSize;
+    }
+
+    public String simpleString() {
+        if (type == StatsConstants.AnalyzeType.SAMPLE && sampledPartitionsHashValue != null) {
+            return String.format("(%s,%s,sampled_partition_size=%d,all_partition_size=%d)", columnName, type,
+                    sampledPartitionsHashValue.size(), allPartitionSize);
+        } else {
+            return String.format("(%s,%s)", columnName, type.toString());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

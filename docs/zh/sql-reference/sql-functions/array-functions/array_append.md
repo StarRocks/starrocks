@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_append
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 在数组末尾添加一个新的元素。返回 ARRAY 类型的值。
 

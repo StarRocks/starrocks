@@ -19,7 +19,11 @@ import com.google.gson.JsonObject;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.common.util.Util;
+=======
+import com.starrocks.common.util.LogUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.CollectionUtils;
@@ -27,15 +31,26 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.lang.management.ManagementFactory;
+<<<<<<< HEAD
 import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+=======
+import java.lang.management.ThreadMXBean;
+import java.util.Collection;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class LockChecker extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(LockChecker.class);
+<<<<<<< HEAD
+=======
+    private static final int DEFAULT_STACK_RESERVE_LEVELS = 20;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public LockChecker() {
         super("DeadlockChecker", 1000 * Config.lock_checker_interval_second);
@@ -58,6 +73,7 @@ public class LockChecker extends FrontendDaemon {
             QueryableReentrantReadWriteLock lock = db.getRwLock();
             // holder information
             Thread exclusiveLockThread = lock.getOwner();
+<<<<<<< HEAD
             List<Long> sharedLockThreadIds = lock.getSharedLockThreadIds();
             if (exclusiveLockThread != null) {
                 long lockStartTime = db.getRwLock().getExclusiveLockTime();
@@ -84,12 +100,34 @@ public class LockChecker extends FrontendDaemon {
                     ownerInfo.addProperty("lockState", "readLocked");
                     ownerInfo.addProperty("slowReadLockCount", slowReadLockCnt);
                     ownerInfo.addProperty("dumpThreads", infos.toString());
+=======
+            Set<Thread> sharedLockThreads = lock.getSharedLockThreads();
+            if (exclusiveLockThread != null) {
+                long lockStartTime = db.getRwLock().getExclusiveLockStartTimeMs();
+                if (lockStartTime > 0L && System.currentTimeMillis() - lockStartTime > Config.slow_lock_threshold_ms) {
+                    hasSlowLock = true;
+                    ownerInfo.addProperty("status", "exclusive");
+                    ownerInfo.addProperty("id", exclusiveLockThread.getId());
+                    ownerInfo.addProperty("name", exclusiveLockThread.getName());
+                    ownerInfo.addProperty("heldFor", (System.currentTimeMillis() - lockStartTime) + " ms");
+                    ownerInfo.add("stack", LogUtil.getStackTraceToJsonArray(
+                            exclusiveLockThread, 0, DEFAULT_STACK_RESERVE_LEVELS));
+                }
+            } else if (!sharedLockThreads.isEmpty()) {
+                JsonArray currReaders =
+                        lock.getCurrReadersInfoToJsonArray(true, true, DEFAULT_STACK_RESERVE_LEVELS);
+                if (!currReaders.isEmpty()) {
+                    hasSlowLock = true;
+                    ownerInfo.addProperty("status", "shared");
+                    ownerInfo.add("currReaders", currReaders);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
             if (hasSlowLock) {
                 ownerInfo.addProperty("lockDbName", db.getFullName());
                 // waiters
+<<<<<<< HEAD
                 Collection<Thread> waiters = lock.getQueuedThreads();
                 JsonArray waiterIds = new JsonArray();
                 for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
@@ -101,6 +139,10 @@ public class LockChecker extends FrontendDaemon {
                     }
                 }
                 ownerInfo.add("lockWaiters", waiterIds);
+=======
+                ownerInfo.add("queuedReaders", getLockWaiterInfoJsonArray(lock.getQueuedReaderThreads()));
+                ownerInfo.add("queuedWriters", getLockWaiterInfoJsonArray(lock.getQueuedWriterThreads()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 dbLocks.add(ownerInfo);
             }
         }
@@ -132,7 +174,14 @@ public class LockChecker extends FrontendDaemon {
             long[] ids = tmx.findDeadlockedThreads();
             if (ids != null) {
                 for (long id : ids) {
+<<<<<<< HEAD
                     LOG.info("deadlock thread: {}", Util.dumpThread(tmx.getThreadInfo(id, 50), 50));
+=======
+                    LOG.info("deadlock thread: {}", LogUtil.getStackTraceToJsonArray(
+                            tmx.getThreadInfo(id, 50),
+                            0,
+                            DEFAULT_STACK_RESERVE_LEVELS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }

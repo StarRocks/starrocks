@@ -13,6 +13,10 @@
 // limitations under the License.
 
 #include "simd/simd.h"
+<<<<<<< HEAD
+=======
+#include "util/runtime_profile.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #define JOIN_HASH_MAP_TPP
 
@@ -899,7 +903,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     }
 
 #define RETURN_IF_CHUNK_FULL()                                   \
+<<<<<<< HEAD
     if (match_count > state->chunk_size()) {                     \
+=======
+    if (UNLIKELY(match_count > state->chunk_size())) {           \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _probe_state->next[i] = _table_items->next[build_index]; \
         _probe_state->cur_probe_index = i;                       \
         _probe_state->cur_build_index = build_index;             \
@@ -1028,6 +1036,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         }
     }
 
+<<<<<<< HEAD
+=======
+    [[maybe_unused]] size_t probe_cont = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
         if constexpr (first_probe) {
@@ -1035,7 +1048,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         }
         size_t build_index = _probe_state->next[i];
         if (build_index != 0) {
+<<<<<<< HEAD
             do {
+=======
+            if (_table_items->used_buckets == _table_items->row_count) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                     _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
@@ -1047,8 +1064,30 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
                     }
                     RETURN_IF_CHUNK_FULL()
                 }
+<<<<<<< HEAD
                 build_index = _table_items->next[build_index];
             } while (build_index != 0);
+=======
+                probe_cont++;
+            } else {
+                do {
+                    if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                        _probe_state->probe_index[match_count] = i;
+                        _probe_state->build_index[match_count] = build_index;
+                        match_count++;
+
+                        if constexpr (first_probe) {
+                            _probe_state->cur_row_match_count++;
+                            _probe_state->probe_match_filter[i] = 1;
+                        }
+                        RETURN_IF_CHUNK_FULL()
+                    }
+                    probe_cont++;
+                    auto next_index = _table_items->next[build_index];
+                    build_index = next_index;
+                } while (build_index != 0);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if constexpr (first_probe) {
                 if (_probe_state->cur_row_match_count > 1) {
@@ -1062,6 +1101,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
         }
     }
 
+<<<<<<< HEAD
+=======
+    // COUNTER_UPDATE(_probe_state->probe_counter, probe_cont);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if constexpr (first_probe) {
         CHECK_MATCH()
     }

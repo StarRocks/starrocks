@@ -38,7 +38,11 @@ public class AutoCloseableLockerTest {
         Database db = new Database(0, "db");
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
 
+<<<<<<< HEAD
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(1L), LockType.WRITE)) {
+=======
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(1L), LockType.WRITE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertTrue(lockManager.isOwner(1, new Locker(), LockType.WRITE));
         }
         Assert.assertFalse(lockManager.isOwner(1, new Locker(), LockType.WRITE));
@@ -49,7 +53,11 @@ public class AutoCloseableLockerTest {
         Database db = new Database(0, "db");
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
 
+<<<<<<< HEAD
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, null, LockType.WRITE)) {
+=======
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), null, LockType.WRITE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             //test
         } catch (NullPointerException e) {
             Assert.assertFalse(lockManager.isOwner(1, new Locker(), LockType.WRITE));

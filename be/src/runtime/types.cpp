@@ -129,9 +129,13 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         curr_node.__set_scalar_type(TScalarType());
         TScalarType& scalar_type = curr_node.scalar_type;
         scalar_type.__set_type(starrocks::to_thrift(type));
+<<<<<<< HEAD
         if (len != -1) {
             scalar_type.__set_len(len);
         }
+=======
+        scalar_type.__set_len(len);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scale != -1) {
             scalar_type.__set_scale(scale);
         }
@@ -165,9 +169,13 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         node->set_type(TTypeNodeType::SCALAR);
         PScalarType* scalar_type = node->mutable_scalar_type();
         scalar_type->set_type(starrocks::to_thrift(type));
+<<<<<<< HEAD
         if (len != -1) {
             scalar_type->set_len(len);
         }
+=======
+        scalar_type->set_len(len);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scale != -1) {
             scalar_type->set_scale(scale);
         }

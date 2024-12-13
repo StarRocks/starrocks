@@ -95,6 +95,11 @@ public class FragmentInstanceExecState {
     private final TNetworkAddress address;
     private final long lastMissingHeartbeatTime;
 
+<<<<<<< HEAD
+=======
+    private FragmentInstance fragmentInstance;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Create a fake backendExecState, only user for stream load profile.
      */
@@ -127,7 +132,10 @@ public class FragmentInstanceExecState {
                 request,
                 profile,
                 worker, address, worker.getLastMissingHeartbeatTime());
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private FragmentInstanceExecState(JobSpec jobSpec,
@@ -491,4 +499,23 @@ public class FragmentInstanceExecState {
             return this == FINISHED || this == FAILED;
         }
     }
+<<<<<<< HEAD
+=======
+
+    public FragmentInstance getFragmentInstance() {
+        return fragmentInstance;
+    }
+
+    public void setFragmentInstance(FragmentInstance fragmentInstance) {
+        this.fragmentInstance = fragmentInstance;
+    }
+
+    public TExecPlanFragmentParams getRequestToDeploy() {
+        return requestToDeploy;
+    }
+
+    public void setRequestToDeploy(TExecPlanFragmentParams requestToDeploy) {
+        this.requestToDeploy = requestToDeploy;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

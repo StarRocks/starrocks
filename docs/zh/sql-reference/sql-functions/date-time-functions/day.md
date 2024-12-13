@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # day
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回指定日期中的天信息。
 

@@ -34,7 +34,10 @@ public class BDBHATest {
     @BeforeClass
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
+<<<<<<< HEAD
         UtFrameUtils.PseudoImage.setUpImageVersion();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -78,7 +81,11 @@ public class BDBHATest {
         // one joined successfully
         new Frontend(FrontendNodeType.FOLLOWER, "node1", "192.168.2.4", 9010)
                 .handleHbResponse(new FrontendHbResponse("n1", 8030, 9050,
+<<<<<<< HEAD
                                 1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1"),
+=======
+                                1000, System.currentTimeMillis(), System.currentTimeMillis(), "v1", 0.5f),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         false);
         Assert.assertEquals(2,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());

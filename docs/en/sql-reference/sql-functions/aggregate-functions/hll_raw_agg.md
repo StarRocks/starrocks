@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_raw_agg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function is an aggregate function that is used to aggregate HLL fields. It returns an HLL value.
 

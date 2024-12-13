@@ -184,7 +184,11 @@ public class PipeManager {
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
+<<<<<<< HEAD
         long dbId = GlobalStateMgr.getCurrentState().mayGetDb(name.getDbName())
+=======
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(name.getDbName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(Database::getId)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_NO_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());

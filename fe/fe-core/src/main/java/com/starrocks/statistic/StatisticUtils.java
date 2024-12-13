@@ -18,14 +18,26 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
+=======
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.TypeDef;
+<<<<<<< HEAD
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -48,7 +60,10 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.load.streamload.StreamLoadTxnCommitAttachment;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -71,10 +86,23 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+=======
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.collect.Maps.immutableEntry;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
@@ -95,6 +123,10 @@ public class StatisticUtils {
         context.getSessionVariable().setEnableLoadProfile(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
+<<<<<<< HEAD
+=======
+        context.getSessionVariable().setInsertTimeoutS((int) Config.statistic_collect_query_timeout);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         context.getSessionVariable().setEnablePipelineEngine(true);
         context.getSessionVariable().setCboCteReuse(true);
         context.getSessionVariable().setCboCTERuseRatio(0);
@@ -165,8 +197,13 @@ public class StatisticUtils {
         }
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null != db && null != db.getTable(tableId)) {
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
         }
@@ -178,7 +215,11 @@ public class StatisticUtils {
         if (FeConstants.runningUnitTest) {
             return true;
         }
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(StatsConstants.STATISTICS_DB_NAME);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(StatsConstants.STATISTICS_DB_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> tableNameList = Lists.newArrayList(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME, StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
@@ -190,7 +231,11 @@ public class StatisticUtils {
 
         for (String tableName : tableNameList) {
             // check table
+<<<<<<< HEAD
             Table table = db.getTable(tableName);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 return false;
             }
@@ -200,7 +245,11 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
+<<<<<<< HEAD
                 if (partition.getBaseIndex().getTablets().stream()
+=======
+                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
                     return false;
                 }
@@ -212,7 +261,11 @@ public class StatisticUtils {
 
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
+<<<<<<< HEAD
             long maxTime = table.getPartitions().stream().map(Partition::getVisibleVersionTime)
+=======
+            long maxTime = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
@@ -225,8 +278,24 @@ public class StatisticUtils {
         }
     }
 
+<<<<<<< HEAD
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
         long time = partition.getVisibleVersionTime();
+=======
+    public static Set<String> getUpdatedPartitionNames(Table table, LocalDateTime checkTime) {
+        // get updated partitions
+        Set<String> updatedPartitions = null;
+        try {
+            updatedPartitions = ConnectorPartitionTraits.build(table).getUpdatedPartitionNames(checkTime, 60);
+        } catch (Exception e) {
+            // ConnectorPartitionTraits do not support all type of table, ignore exception
+        }
+        return updatedPartitions;
+    }
+
+    public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
+        long time = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
     }
 
@@ -303,22 +372,38 @@ public class StatisticUtils {
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
+<<<<<<< HEAD
                     new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+=======
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
         } else if (tableName.equals(StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(
+<<<<<<< HEAD
                     new ColumnDef("table_uuid",  new TypeDef(tableUUIDType)),
+=======
+                    new ColumnDef("table_uuid", new TypeDef(tableUUIDType)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new ColumnDef("column_name", new TypeDef(columnNameType)),
                     new ColumnDef("catalog_name", new TypeDef(catalogNameType)),
                     new ColumnDef("db_name", new TypeDef(dbNameType)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
+<<<<<<< HEAD
                     new ColumnDef("buckets", new TypeDef(bucketsType), false, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null,
+=======
+                    new ColumnDef("buckets", new TypeDef(bucketsType), false, null, null,
+                            true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
@@ -457,6 +542,7 @@ public class StatisticUtils {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
         if (table.isHiveTable() || table.isHudiTable()) {
+<<<<<<< HEAD
             HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
                     hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
@@ -468,6 +554,18 @@ public class StatisticUtils {
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(table.getCatalogName(),
+                    table.getCatalogDBName(), table.getCatalogTableName());
+        } else if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
+                    icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
                     table.getType().name());
@@ -536,4 +634,88 @@ public class StatisticUtils {
         }
         return baseColumnType;
     }
+<<<<<<< HEAD
+=======
+
+    // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
+    // and return an ordered list of partitionNames.
+    // In order to ensure more accurate sampling, put min and max in the sampled result.
+    public static List<String> getRandomPartitionsSample(List<String> partitions, int sampleSize) {
+        checkArgument(sampleSize > 0, "sampleSize is expected to be greater than zero");
+
+        if (partitions.size() <= sampleSize) {
+            return partitions;
+        }
+
+        List<String> result = new ArrayList<>();
+        int left = sampleSize;
+        String min = partitions.get(0);
+        String max = partitions.get(0);
+        for (String partition : partitions) {
+            if (partition.compareTo(min) < 0) {
+                min = partition;
+            } else if (partition.compareTo(max) > 0) {
+                max = partition;
+            }
+        }
+
+        result.add(min);
+        left--;
+        if (left > 0) {
+            result.add(max);
+            left--;
+        }
+
+        if (left > 0) {
+            HashFunction hashFunction = Hashing.murmur3_128();
+            Comparator<Map.Entry<String, Long>> hashComparator = Map.Entry.<String, Long>comparingByValue()
+                    .thenComparing(Map.Entry::getKey);
+
+            partitions.stream()
+                    .filter(partition -> !result.contains(partition))
+                    .map(partition -> immutableEntry(partition, hashFunction.hashUnencodedChars(partition).asLong()))
+                    .sorted(hashComparator)
+                    .limit(left)
+                    .forEachOrdered(entry -> result.add(entry.getKey()));
+        }
+        return Lists.newArrayList(result);
+    }
+
+    public static List<String> getLatestPartitionsSample(List<String> partitions, int sampleSize) {
+        checkArgument(sampleSize > 0, "sampleSize is expected to be greater than zero");
+
+        if (partitions.size() <= sampleSize) {
+            return partitions;
+        }
+
+        LinkedHashSet<String> sortedSet = new LinkedHashSet<>();
+        int left = sampleSize;
+        String min = partitions.get(0);
+        String max = partitions.get(0);
+        for (String partition : partitions) {
+            if (partition.compareTo(min) < 0) {
+                min = partition;
+            } else if (partition.compareTo(max) > 0) {
+                max = partition;
+            }
+        }
+
+        sortedSet.add(max);
+        left--;
+        if (left > 0) {
+            sortedSet.add(min);
+            left--;
+        }
+
+        if (left > 0) {
+            partitions.stream()
+                    .filter(partition -> !sortedSet.contains(partition))
+                    .sorted(Comparator.reverseOrder())
+                    .limit(left)
+                    .forEachOrdered(sortedSet::add);
+        }
+
+        return new ArrayList<>(sortedSet);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

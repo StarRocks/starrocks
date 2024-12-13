@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # xx_hash3_64
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the 64-bit xxhash3 hash value of the input string. xx_hash3_64 has better performance than [murmur_hash3_32](./murmur_hash3_32.md) by using AVX2 instruction and has state-of-art hash quality which is broadly integrated with many software.
 

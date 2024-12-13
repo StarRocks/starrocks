@@ -21,6 +21,10 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class IntervalLiteral extends LiteralExpr {
     private final Expr value;
     private final UnitIdentifier unitIdentifier;
@@ -45,7 +49,11 @@ public class IntervalLiteral extends LiteralExpr {
 
     @Override
     protected String toSqlImpl() {
+<<<<<<< HEAD
         return "interval " + value.toSql() + unitIdentifier;
+=======
+        return "interval " + value.toSql() + " " + unitIdentifier.toSql();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

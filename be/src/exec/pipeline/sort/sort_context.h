@@ -69,13 +69,21 @@ public:
     bool is_partition_ready() const;
     void cancel();
 
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk();
+=======
+    StatusOr<ChunkPtr> pull_chunk();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void set_runtime_filter_collector(RuntimeFilterHub* hub, int32_t plan_node_id,
                                       std::unique_ptr<RuntimeFilterCollector>&& collector);
 
 private:
+<<<<<<< HEAD
     [[nodiscard]] Status _init_merger();
+=======
+    Status _init_merger();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeState* _state;
     const TTopNType::type _topn_type;
@@ -104,8 +112,14 @@ public:
     SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                        std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
                        const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
+<<<<<<< HEAD
                        int64_t offset, int64_t limit, const std::string& sort_keys,
                        const std::vector<OrderByType>& order_by_types,
+=======
+                       bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
+                       const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset, int64_t limit,
+                       const std::string& sort_keys, const std::vector<OrderByType>& order_by_types,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters);
 
     SortContextPtr create(int32_t idx);

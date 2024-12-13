@@ -17,7 +17,10 @@
 #include <memory>
 #include <utility>
 
+<<<<<<< HEAD
 #include "column/column_pool.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/olap_scan_node.h"
@@ -70,7 +73,11 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
+<<<<<<< HEAD
     if (!_conjunct_ctxs.empty() || !_predicates.empty()) {
+=======
+    if (!_conjunct_ctxs.empty() || !_pred_tree.empty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _expr_filter_timer = ADD_TIMER(_parent->_runtime_profile, "ExprFilterTime");
     }
 
@@ -118,8 +125,11 @@ void TabletScanner::close(RuntimeState* state) {
     _reader.reset();
     _predicate_free_pool.clear();
     Expr::close(_conjunct_ctxs, state);
+<<<<<<< HEAD
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(state->chunk_size() * 512);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _is_closed = true;
 }
 
@@ -147,9 +157,15 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
+<<<<<<< HEAD
     auto parser = _pool.add(new PredicateParser(_tablet_schema));
 
     ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager.get_predicate_tree(parser, _predicate_free_pool));
+=======
+    auto parser = _pool.add(new OlapPredicateParser(_tablet_schema));
+
+    ASSIGN_OR_RETURN(auto pred_tree, _parent->_conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Improve for select * from table limit x, x is small
     if (pred_tree.empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
@@ -165,6 +181,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
+<<<<<<< HEAD
     for (const auto& [_, col_nodes] : _pred_tree.root().col_children_map()) {
         for (const auto& col_node : col_nodes) {
             _predicates.add(col_node.col_pred());
@@ -175,6 +192,10 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
 
     GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
     RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool));
+=======
+    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool, _pred_tree));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -287,11 +308,19 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
+<<<<<<< HEAD
         if (!_predicates.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
             RETURN_IF_ERROR(_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+=======
+        if (!_pred_tree.empty()) {
+            SCOPED_TIMER(_expr_filter_timer);
+            size_t nrows = chunk->num_rows();
+            _selection.resize(nrows);
+            RETURN_IF_ERROR(_pred_tree.evaluate(chunk, _selection.data(), 0, nrows));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }

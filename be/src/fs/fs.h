@@ -33,6 +33,10 @@ struct ResultFileOptions;
 class TUploadReq;
 class TDownloadReq;
 struct WritableFileOptions;
+<<<<<<< HEAD
+=======
+class FileSystem;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct SpaceInfo {
     // Total size of the filesystem, in bytes
@@ -47,13 +51,23 @@ struct FSOptions {
 private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
               const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
+<<<<<<< HEAD
               const TCloudConfiguration* cloud_configuration)
+=======
+              const TCloudConfiguration* cloud_configuration,
+              const std::unordered_map<std::string, std::string>& fs_options = {})
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             : scan_range_params(scan_range_params),
               export_sink(export_sink),
               result_file_options(result_file_options),
               upload(upload),
               download(download),
+<<<<<<< HEAD
               cloud_configuration(cloud_configuration) {}
+=======
+              cloud_configuration(cloud_configuration),
+              _fs_options(fs_options) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public:
     FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
@@ -73,6 +87,12 @@ public:
     FSOptions(const TCloudConfiguration* cloud_configuration)
             : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
 
+<<<<<<< HEAD
+=======
+    FSOptions(const std::unordered_map<std::string, std::string>& fs_options)
+            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const THdfsProperties* hdfs_properties() const;
 
     const TBrokerScanRangeParams* scan_range_params;
@@ -81,6 +101,20 @@ public:
     const TUploadReq* upload;
     const TDownloadReq* download;
     const TCloudConfiguration* cloud_configuration;
+<<<<<<< HEAD
+=======
+    const std::unordered_map<std::string, std::string> _fs_options;
+
+    static constexpr const char* FS_S3_ENDPOINT = "fs.s3a.endpoint";
+    static constexpr const char* FS_S3_ENDPOINT_REGION = "fs.s3a.endpoint.region";
+    static constexpr const char* FS_S3_ACCESS_KEY = "fs.s3a.access.key";
+    static constexpr const char* FS_S3_SECRET_KEY = "fs.s3a.secret.key";
+    static constexpr const char* FS_S3_PATH_STYLE_ACCESS = "fs.s3a.path.style.access";
+    static constexpr const char* FS_S3_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
+    static constexpr const char* FS_S3_READ_AHEAD_RANGE = "fs.s3a.readahead.range";
+    static constexpr const char* FS_S3_RETRY_LIMIT = "fs.s3a.retry.limit";
+    static constexpr const char* FS_S3_RETRY_INTERVAL = "fs.s3a.retry.interval";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 struct SequentialFileOptions {
@@ -112,6 +146,10 @@ struct FileInfo {
     std::string path;
     std::optional<int64_t> size;
     std::string encryption_meta;
+<<<<<<< HEAD
+=======
+    std::shared_ptr<FileSystem> fs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 struct FileWriteStat {
@@ -138,8 +176,15 @@ public:
     FileSystem() = default;
     virtual ~FileSystem() = default;
 
+<<<<<<< HEAD
     static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
                                                                         FSOptions options = FSOptions());
+=======
+    static StatusOr<std::shared_ptr<FileSystem>> Create(std::string_view uri, const FSOptions& options);
+
+    static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
+                                                                        const FSOptions& options = FSOptions());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 

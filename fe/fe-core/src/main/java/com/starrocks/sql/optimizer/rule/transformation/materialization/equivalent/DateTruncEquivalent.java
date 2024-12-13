@@ -25,6 +25,11 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.util.Set;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.common.TimeUnitUtils.DATE_TRUNC_SUPPORTED_TIME_MAP;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
     public static final DateTruncEquivalent INSTANCE = new DateTruncEquivalent();
 
@@ -61,6 +66,12 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
         if (!checkDateTrucFunc(func)) {
             return false;
         }
+<<<<<<< HEAD
+=======
+        if (!(op1.getChild(0) instanceof ConstantOperator)) {
+            return false;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
                 ((ConstantOperator) op1.getChild(0)),
                 op2);
@@ -114,8 +125,42 @@ public class DateTruncEquivalent extends IPredicateRewriteEquivalent {
             }
             predicate.setChild(0, replace);
             return predicate;
+<<<<<<< HEAD
         } else {
             return null;
         }
+=======
+        } else if (newInput instanceof CallOperator) {
+            // only in rollup aggregate, `date_trunc('day', dt) as dt` can be rewritten to `date_trunc('month', dt)`
+            if (!shuttleContext.isRollup()) {
+                return null;
+            }
+            CallOperator newCall = (CallOperator) newInput;
+            if (!checkDateTrucFunc(newCall)) {
+                return null;
+            }
+            CallOperator oldCall = (CallOperator) eqContext.getInput();
+            ConstantOperator oldChild0 = (ConstantOperator) oldCall.getChild(0);
+            // ensure col ref is the same in date_trunc
+            if (!newCall.getChild(1).equals(oldCall.getChild(1))) {
+                return null;
+            }
+            ConstantOperator newChild0 = (ConstantOperator) newCall.getChild(0);
+            if (!DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(oldChild0.getVarchar()) ||
+                    !DATE_TRUNC_SUPPORTED_TIME_MAP.containsKey(newChild0.getVarchar())) {
+                // only can rewrite date_trunc('day', col) to date_trunc('month', col)
+                return null;
+            }
+            int oldTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(oldChild0.getVarchar());
+            int newTimeUnit = DATE_TRUNC_SUPPORTED_TIME_MAP.get(newChild0.getVarchar());
+            if (oldTimeUnit > newTimeUnit) {
+                return null;
+            }
+            CallOperator rewritten = (CallOperator) newCall.clone();
+            rewritten.setChild(1, replace);
+            return rewritten;
+        }
+        return null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

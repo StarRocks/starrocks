@@ -43,7 +43,11 @@ public class TPCHPlanTest extends PlanTestBase {
     @Test
     public void testJoin() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+=======
+        OlapTable table1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(table1, 10000);
         runFileUnitTest("optimized-plan/join");
         setTableStatistics(table1, 0);

@@ -42,10 +42,17 @@ public class CTEPlanTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         globalStateMgr.setStatisticStorage(new TestStorage());
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 20000000);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t1, 2000000);
     }
 
@@ -839,10 +846,17 @@ public class CTEPlanTest extends PlanTestBase {
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setEnableLambdaPushdown(true);
+<<<<<<< HEAD
 
         assertContains(plan, "predicates: CAST(CAST(CAST(4: array_min AS SMALLINT) + 1 AS INT) + " +
                 "CAST(CAST(4: array_min AS SMALLINT) + 2 AS INT) AS BIGINT) + CAST(CAST(4: array_min AS SMALLINT) + " +
                 "3 AS BIGINT) < 10");
+=======
+        assertContains(plan, "  |  predicates: " +
+                "CAST(CAST(9: cast + 1 AS INT) + CAST(9: cast + 2 AS INT) AS BIGINT) + CAST(9: cast + 3 AS BIGINT) < 10\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 9> : CAST(4: array_min AS SMALLINT)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -867,6 +881,7 @@ public class CTEPlanTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLambdaPushdown(true);
         defaultCTEReuse();
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
 
         assertContains(plan,
                 "CAST(CAST(CAST(array_min(array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])) " +
@@ -874,6 +889,15 @@ public class CTEPlanTest extends PlanTestBase {
                         "coalesce(<slot 3>, 0), [1,2,3])) AS SMALLINT) + 2 AS INT) AS BIGINT) + " +
                         "CAST(CAST(array_min(array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])) AS SMALLINT) + " +
                         "3 AS BIGINT) < 10");
+=======
+        assertContains(plan, "  1:SELECT\n" +
+                "  |  predicates: " +
+                "CAST(CAST(14: cast + 1 AS INT) + CAST(14: cast + 2 AS INT) AS BIGINT) + CAST(14: cast + 3 AS BIGINT) < 10\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 12> : array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])\n" +
+                "  |    <slot 13> : array_min(12: array_map)\n" +
+                "  |    <slot 14> : CAST(13: array_min AS SMALLINT)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

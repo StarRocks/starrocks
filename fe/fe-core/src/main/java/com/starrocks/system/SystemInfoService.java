@@ -56,8 +56,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -441,11 +446,19 @@ public class SystemInfoService implements GsonPostProcessable {
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
         List<Long> dbs = globalStateMgr.getLocalMetastore().getDbIds();
 
+<<<<<<< HEAD
         dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
             try {
                 db.getTables().stream()
+=======
+        dbs.stream().map(dbId -> globalStateMgr.getLocalMetastore().getDb(dbId)).forEach(db -> {
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .filter(Table::isOlapTableOrMaterializedView)
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
@@ -469,7 +482,11 @@ public class SystemInfoService implements GsonPostProcessable {
                                     });
                         }));
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         });
     }
@@ -781,7 +798,11 @@ public class SystemInfoService implements GsonPostProcessable {
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                             .getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
+<<<<<<< HEAD
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+=======
+                throw new StarRocksException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         if (computeNode.getBrpcPort() < 0) {
@@ -985,7 +1006,11 @@ public class SystemInfoService implements GsonPostProcessable {
         if (node instanceof Backend) {
             AtomicLong atomicLong;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);

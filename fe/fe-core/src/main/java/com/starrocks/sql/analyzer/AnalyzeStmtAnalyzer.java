@@ -23,10 +23,18 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Partition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -101,7 +109,11 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(session, statement.getTableName());
+=======
+            statement.getTableName().normalization(session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
 
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -128,14 +140,35 @@ public class AnalyzeStmtAnalyzer {
                 statement.setColumnNames(realColumnNames);
             }
 
+<<<<<<< HEAD
+=======
+            if (statement.getPartitionNames() != null) {
+                if (!analyzeTable.isNativeTableOrMaterializedView()) {
+                    throw new SemanticException("Analyze partition only support olap table");
+                }
+                List<Long> pidList = Lists.newArrayList();
+                for (String partitionName : statement.getPartitionNames().getPartitionNames()) {
+                    Partition p = analyzeTable.getPartition(partitionName);
+                    if (p == null) {
+                        throw new SemanticException("Partition '%s' not found", partitionName);
+                    }
+                    pidList.add(p.getId());
+                }
+                statement.setPartitionIds(pidList);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+<<<<<<< HEAD
                 if (!statement.getAnalyzeTypeDesc().isHistogram() && statement.isSample()) {
                     throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!analyzeTable.isAnalyzableExternalTable()) {
                     throw new SemanticException(
                             "Analyze external table only support hive, iceberg, deltalake and odps table",
@@ -160,10 +193,13 @@ public class AnalyzeStmtAnalyzer {
                         throw new SemanticException("External catalog don't support analyze all tables, please give a" +
                                 " specific table");
                     }
+<<<<<<< HEAD
                     if (statement.isSample()) {
                         throw new SemanticException("External table %s don't support SAMPLE analyze",
                                 statement.getTableName().toString());
                     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     String catalogName = Strings.isNullOrEmpty(tbl.getCatalog()) ?
                             session.getCurrentCatalog() : tbl.getCatalog();
                     tbl.setCatalog(catalogName);
@@ -179,7 +215,14 @@ public class AnalyzeStmtAnalyzer {
                 }
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
+<<<<<<< HEAD
                     Database db = MetaUtils.getDatabase(session, tbl);
+=======
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), tbl.getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", tbl.getCatalogAndDb());
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     if (statement.isNative() &&
                             StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -188,8 +231,17 @@ public class AnalyzeStmtAnalyzer {
 
                     statement.setDbId(db.getId());
                 } else if (null != statement.getTableName().getTbl()) {
+<<<<<<< HEAD
                     MetaUtils.normalizationTableName(session, statement.getTableName());
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
+=======
+                    statement.getTableName().normalization(session);
+                    Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getDb(statement.getTableName().getCatalog(), statement.getTableName().getDb());
+                    if (db == null) {
+                        throw new SemanticException("Database %s is not found", statement.getTableName().getCatalogAndDb());
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Table analyzeTable = MetaUtils.getSessionAwareTable(session, db, statement.getTableName());
 
                     if (analyzeTable.isTemporaryTable()) {
@@ -312,13 +364,21 @@ public class AnalyzeStmtAnalyzer {
                 } else {
                     List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(tableName.getCatalog(), tableName.getDb(),
+<<<<<<< HEAD
                                     tableName.getTbl());
+=======
+                                    tableName.getTbl(), ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     List<PartitionKey> keys = new ArrayList<>();
                     try {
                         for (String partName : partitionNames) {
                             List<String> values = toPartitionValues(partName);
                             PartitionKey partitionKey = createPartitionKey(values, analyzeTable.getPartitionColumns(),
+<<<<<<< HEAD
                                     analyzeTable.getType());
+=======
+                                    analyzeTable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             keys.add(partitionKey);
                         }
                     } catch (AnalysisException e) {
@@ -331,7 +391,10 @@ public class AnalyzeStmtAnalyzer {
                                             OptimizerConfig.defaultConfig()),
                                     tableName.getCatalog(), analyzeTable, Maps.newHashMap(), keys, null);
                     totalRows = tableStats.getOutputRowCount();
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 double sampleRows = totalRows *
                         Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
@@ -355,7 +418,11 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(session, statement.getTableName());
+=======
+            statement.getTableName().normalization(session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 statement.setExternal(true);
             }
@@ -364,7 +431,11 @@ public class AnalyzeStmtAnalyzer {
 
         @Override
         public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext session) {
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(session, statement.getTableName());
+=======
+            statement.getTableName().normalization(session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 statement.setExternal(true);
             }

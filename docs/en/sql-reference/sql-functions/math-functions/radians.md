@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # radians
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts `x` from an angle to a radian.
 

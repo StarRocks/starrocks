@@ -132,7 +132,12 @@ public class HDFSBackendSelectorTest {
         );
 
         HDFSBackendSelector selector =
+<<<<<<< HEAD
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+=======
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
@@ -152,7 +157,12 @@ public class HDFSBackendSelectorTest {
                 true
         );
         selector =
+<<<<<<< HEAD
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+=======
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             selector.computeScanRangeAssignment();
             Assert.fail();
@@ -198,7 +208,12 @@ public class HDFSBackendSelectorTest {
         );
 
         HDFSBackendSelector selector =
+<<<<<<< HEAD
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+=======
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         selector.computeScanRangeAssignment();
 
         long avg = (scanRangeNumber * scanRangeSize) / hostNumber + 1;
@@ -245,7 +260,12 @@ public class HDFSBackendSelectorTest {
                 true
         );
         HDFSBackendSelector selector =
+<<<<<<< HEAD
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, false, false);
+=======
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HashRing hashRing = selector.makeHashRing();
         Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
         ConsistentHashRing consistentHashRing = (ConsistentHashRing) hashRing;
@@ -304,7 +324,12 @@ public class HDFSBackendSelectorTest {
         );
 
         HDFSBackendSelector selector =
+<<<<<<< HEAD
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider, true, false);
+=======
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        true, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         selector.computeScanRangeAssignment();
 
         Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
@@ -313,4 +338,66 @@ public class HDFSBackendSelectorTest {
             System.out.printf("%s -> %d bytes\n", entry.getKey(), entry.getValue());
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testHdfsScanNodeIncrementalScanRanges() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+
+                ConnectContext.get();
+                result = context;
+
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+
+        int scanRangeNumber = 1;
+        int hostNumber = 3;
+        List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeNumber);
+        FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(hostNumber);
+        DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                ImmutableMap.of(),
+                computeNodes,
+                ImmutableMap.of(),
+                computeNodes,
+                true
+        );
+
+        HDFSBackendSelector selector =
+                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                        false, false, true);
+        selector.computeScanRangeAssignment();
+        Assert.assertEquals(assignment.size(), 3);
+        int scanRanges = 0;
+        for (Map<Integer, List<TScanRangeParams>> scanNodes : assignment.values()) {
+            Assert.assertEquals(scanNodes.size(), 1);
+            List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
+            Assert.assertTrue(scanRangeParams.size() >= 1);
+            TScanRangeParams last = scanRangeParams.get(scanRangeParams.size() - 1);
+            Assert.assertTrue(last.isSetEmpty());
+            Assert.assertTrue(last.isSetHas_more());
+            Assert.assertTrue(last.isEmpty());
+            Assert.assertTrue(last.has_more == false);
+            for (TScanRangeParams p : scanRangeParams) {
+                if (!p.isEmpty()) {
+                    scanRanges += 1;
+                }
+            }
+        }
+        Assert.assertEquals(scanRanges, scanRangeNumber);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

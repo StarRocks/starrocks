@@ -51,7 +51,11 @@ int32_t CompactionUtils::get_read_chunk_size(int64_t mem_limit, int32_t config_c
 }
 
 Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t max_rows_per_segment,
+<<<<<<< HEAD
                                                        CompactionAlgorithm algorithm, Version version,
+=======
+                                                       CompactionAlgorithm algorithm, Version version, int64_t gtid,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                        std::unique_ptr<RowsetWriter>* output_rowset_writer,
                                                        const TabletSchemaCSPtr& tablet_schema) {
     RowsetWriterContext context;
@@ -68,6 +72,10 @@ Status CompactionUtils::construct_output_rowset_writer(Tablet* tablet, uint32_t 
     context.max_rows_per_segment = max_rows_per_segment;
     context.writer_type =
             (algorithm == VERTICAL_COMPACTION ? RowsetWriterType::kVertical : RowsetWriterType::kHorizontal);
+<<<<<<< HEAD
+=======
+    context.gtid = gtid;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     context.is_compaction = true;
     Status st = RowsetFactory::create_rowset_writer(context, output_rowset_writer);
     if (!st.ok()) {

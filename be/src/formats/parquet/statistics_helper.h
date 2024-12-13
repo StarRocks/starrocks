@@ -16,8 +16,13 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
+<<<<<<< HEAD
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
+=======
+#include "exprs/in_const_predicate.hpp"
+#include "formats/parquet/metadata.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "formats/parquet/schema.h"
 #include "runtime/types.h"
 
@@ -27,7 +32,11 @@ class StatisticsHelper {
 public:
     enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL };
 
+<<<<<<< HEAD
     static Status decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
+=======
+    static Status decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                            const TypeDescriptor& type, const ParquetField* field,
                                            const std::string& timezone);
 
@@ -36,6 +45,22 @@ public:
     static Status in_filter_on_min_max_stat(const std::vector<std::string>& min_values,
                                             const std::vector<std::string>& max_values, ExprContext* ctx,
                                             const ParquetField* field, const std::string& timezone, Filter& selected);
+<<<<<<< HEAD
 };
 
 } // namespace starrocks::parquet
+=======
+
+    // get min/max value from row group stats
+    static Status get_min_max_value(const FileMetaData* file_meta_data, const TypeDescriptor& type,
+                                    const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
+                                    std::vector<std::string>& min_values, std::vector<std::string>& max_values);
+
+    static Status get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls);
+
+    static bool has_correct_min_max_stats(const FileMetaData* file_metadata,
+                                          const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order);
+};
+
+} // namespace starrocks::parquet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

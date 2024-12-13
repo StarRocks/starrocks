@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weeks_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Subtracts a specified number of weeks from a datetime or date value.
 

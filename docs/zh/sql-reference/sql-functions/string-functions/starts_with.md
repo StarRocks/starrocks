@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # starts_with
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 如果字符串以指定前缀开头返回 1，否则返回 0，任意参数为 NULL 则返回 NULL。
 

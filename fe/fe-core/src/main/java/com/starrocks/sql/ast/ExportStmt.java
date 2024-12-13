@@ -178,17 +178,29 @@ public class ExportStmt extends StatementBase {
     }
 
     public void checkTable(GlobalStateMgr globalStateMgr) {
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
         }
         Table table = db.getTable(tblName.getTbl());
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
+        if (db == null) {
+            throw new SemanticException("Db does not exist. name: " + tblName.getDb());
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
         }
 
         try (AutoCloseableLock ignore =
+<<<<<<< HEAD
                     new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+=======
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:

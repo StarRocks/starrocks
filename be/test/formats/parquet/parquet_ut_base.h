@@ -18,6 +18,10 @@
 
 #include "common/global_types.h"
 #include "common/object_pool.h"
+<<<<<<< HEAD
+=======
+#include "exec/hdfs_scanner.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Exprs_types.h"
@@ -46,6 +50,12 @@ public:
     static void create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id,
                                                        TPrimitiveType::type type, std::set<std::string>& values,
                                                        std::vector<TExpr>* tExprs);
+<<<<<<< HEAD
+=======
+
+    static void setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
+                                        RuntimeState* runtime_state, HdfsScannerContext* params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks::parquet

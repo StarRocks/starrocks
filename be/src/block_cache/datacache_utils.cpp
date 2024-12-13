@@ -20,6 +20,10 @@
 
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
+<<<<<<< HEAD
+=======
+#include "util/disk_info.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/parse_util.h"
 
 namespace starrocks {
@@ -156,4 +160,30 @@ void DataCacheUtils::clean_residual_datacache(const std::string& disk_path) {
     LOG_IF(WARNING, !st.ok()) << "fail to clean residual datacache data, reason: " << st.message();
 }
 
+<<<<<<< HEAD
+=======
+Status DataCacheUtils::change_disk_path(const std::string& old_disk_path, const std::string& new_disk_path) {
+    std::filesystem::path old_path(old_disk_path);
+    std::filesystem::path new_path(new_disk_path);
+    if (std::filesystem::exists(old_path)) {
+        if (DiskInfo::disk_id(old_path.c_str()) != DiskInfo::disk_id(new_path.c_str())) {
+            LOG(ERROR) << "fail to rename the old dataache directory [" << old_path.string() << "] to the new one ["
+                       << new_path.string() << "] because they are located on different disks.";
+            return Status::InternalError("The old datacache directory is different from the new one");
+        }
+        std::error_code ec;
+        std::filesystem::remove_all(new_path, ec);
+        if (!ec) {
+            std::filesystem::rename(old_path, new_path, ec);
+        }
+        if (ec) {
+            LOG(ERROR) << "fail to rename the old dataache directory [" << old_path.string() << "] to the new one ["
+                       << new_path.string() << "], reason: " << ec.message();
+            return Status::InternalError("fail to handle the old starlet_cache data");
+        }
+    }
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

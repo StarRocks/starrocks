@@ -14,6 +14,7 @@
 
 #include "meta_helper.h"
 
+<<<<<<< HEAD
 #include <boost/algorithm/string.hpp>
 
 #include "formats/utils.h"
@@ -62,11 +63,25 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
     }
 }
 
+=======
+#include "formats/parquet/metadata.h"
+#include "formats/parquet/schema.h"
+#include "formats/utils.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "runtime/descriptors.h"
+
+namespace starrocks::parquet {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
+<<<<<<< HEAD
         SlotDescriptor* slotDesc = materialized_column.slot_desc;
+=======
+        const SlotDescriptor* slotDesc = materialized_column.slot_desc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         int32_t field_idx = -1;
         if (slotDesc->col_unique_id() != -1) {
@@ -170,6 +185,7 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     return has_valid_child;
 }
 
+<<<<<<< HEAD
 const ParquetField* ParquetMetaHelper::get_parquet_field(const SlotDescriptor* slot_desc) const {
     if (slot_desc->col_unique_id() != -1) {
         return _file_metadata->schema().get_stored_column_by_field_id(slot_desc->col_unique_id());
@@ -180,6 +196,8 @@ const ParquetField* ParquetMetaHelper::get_parquet_field(const SlotDescriptor* s
     }
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void IcebergMetaHelper::_init_field_mapping() {
     for (const auto& each : _t_iceberg_schema->fields) {
         _field_name_2_iceberg_field.emplace(Utils::format_name(each.name, _case_sensitive), &each);
@@ -244,6 +262,7 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     return has_valid_child;
 }
 
+<<<<<<< HEAD
 void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
         const std::vector<SlotDescriptor*>& slots) const {
@@ -263,6 +282,8 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
     }
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
@@ -293,6 +314,7 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
     }
 }
 
+<<<<<<< HEAD
 const ParquetField* IcebergMetaHelper::get_parquet_field(const SlotDescriptor* slot_desc) const {
     auto it = _field_name_2_iceberg_field.find(Utils::format_name(slot_desc->col_name(), _case_sensitive));
     if (it == _field_name_2_iceberg_field.end()) {
@@ -302,4 +324,6 @@ const ParquetField* IcebergMetaHelper::get_parquet_field(const SlotDescriptor* s
     return _file_metadata->schema().get_stored_column_by_field_id(field_id);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::parquet

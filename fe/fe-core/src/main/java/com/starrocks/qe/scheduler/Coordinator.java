@@ -15,6 +15,10 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.analysis.DescriptorTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Status;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -26,6 +30,10 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.slot.DeployState;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
@@ -80,16 +88,44 @@ public abstract class Coordinator {
                                                 long warehouseId);
 
         Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+<<<<<<< HEAD
                                                 DescriptorTable descTable, List<PlanFragment> fragments,
                                                 List<ScanNode> scanNodes);
+=======
+                                                          DescriptorTable descTable, List<PlanFragment> fragments,
+                                                          List<ScanNode> scanNodes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // ------------------------------------------------------------------------------------
     // Common methods for scheduling.
     // ------------------------------------------------------------------------------------
+<<<<<<< HEAD
 
     public void exec() throws Exception {
         startScheduling();
+=======
+    public static class ScheduleOption {
+        public boolean doDeploy = true;
+        public boolean useQueryDeployExecutor = false;
+    }
+
+    public void exec() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        startScheduling(option);
+    }
+
+    public void execWithoutDeploy() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.doDeploy = false;
+        startScheduling(option);
+    }
+
+    public void execWithQueryDeployExecutor() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.useQueryDeployExecutor = true;
+        startScheduling(option);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -100,15 +136,21 @@ public abstract class Coordinator {
      *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
      * </ul>
      * <p>
+<<<<<<< HEAD
      *
      * @param needDeploy Whether deploying fragment instances to workers.
      */
     public abstract void startScheduling(boolean needDeploy) throws Exception;
+=======
+     */
+    public abstract void startScheduling(ScheduleOption option) throws Exception;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
         return Status.OK;
     }
 
+<<<<<<< HEAD
     public void startScheduling() throws Exception {
         startScheduling(true);
     }
@@ -117,6 +159,8 @@ public abstract class Coordinator {
         startScheduling(false);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract String getSchedulerExplain();
 
     public abstract void updateFragmentExecStatus(TReportExecStatusParams params);
@@ -129,6 +173,14 @@ public abstract class Coordinator {
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
+<<<<<<< HEAD
+=======
+    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+            throws StarRocksException {
+        return List.of();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract void onFinished();
 
     public abstract LogicalSlot getSlot();

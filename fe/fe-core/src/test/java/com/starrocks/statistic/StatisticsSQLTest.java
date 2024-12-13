@@ -121,14 +121,23 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("stat0");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("stat0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         t0StatsTableId = t0.getId();
     }
 
     @Test
     public void testSampleStatisticsSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("stat0");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
         List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING);
@@ -159,8 +168,13 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testFullStatisticsSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("stat0");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = Lists.newArrayList("j1", "s1");
@@ -183,8 +197,13 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testFullStatisticsSQLWithStruct() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("struct_a");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
@@ -208,8 +227,13 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testHistogramStatisticsSQLWithStruct() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("struct_a");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
@@ -218,7 +242,11 @@ public class StatisticsSQLTest extends PlanTestBase {
                 Maps.newHashMap());
         for (String col : columnNames) {
             String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
+<<<<<<< HEAD
                     db, t0, 3L, col);
+=======
+                    db, t0, 3L, col, 0.1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "0:OlapScanNode\n" +
@@ -231,7 +259,11 @@ public class StatisticsSQLTest extends PlanTestBase {
             sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
+=======
+            assertCContains(plan, "AGGREGATE (update finalize)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  output: histogram");
         }
     }
@@ -269,8 +301,13 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeFullSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
@@ -293,8 +330,13 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeSampleSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (Column column : t0.getColumns()) {
             if (!column.getType().canStatistic()) {
@@ -414,7 +456,11 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testQuota() {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("complex_table");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("complex_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertContains(StatisticUtils.quoting(t0, "v2.a2.b2['+']"), "`v2.a2.b2['+']`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3"), "`struct_a.c3.d3`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_b"), "`struct_a.c3.d3`.`struct_b`");

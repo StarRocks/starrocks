@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # e
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回自然对数函数的底数。
 

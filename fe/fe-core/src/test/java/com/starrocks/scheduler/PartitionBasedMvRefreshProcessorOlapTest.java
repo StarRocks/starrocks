@@ -261,8 +261,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testUnionAllMvWithPartition() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("union_all_mv"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "union_all_mv"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         try {
@@ -287,8 +293,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testWithPartition() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv1"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         try {
@@ -352,8 +364,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testMvWithoutPartition() {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_without_partition"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         try {
@@ -372,6 +390,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         executeInsertSql(connectContext, insertSql);
 
         refreshMVRange(materializedView.getName(), null, null, false);
+<<<<<<< HEAD
         Assert.assertEquals(1, materializedView.getPartition("p202112_202201").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202201_202202").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
@@ -384,6 +403,30 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202203_202204").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
+=======
+        Assert.assertEquals(1, materializedView.getPartition("p202112_202201")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202201_202202")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p202202_202203")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p202203_202204")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+
+        refreshMVRange(materializedView.getName(), "2021-12-03", "2022-04-05", false);
+        Assert.assertEquals(1, materializedView.getPartition("p202112_202201")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202201_202202")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p202202_202203")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p202203_202204")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         insertSql = "insert into tbl4 partition(p3) values('2022-03-02',21,102);";
         executeInsertSql(connectContext, insertSql);
@@ -391,6 +434,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         executeInsertSql(connectContext, insertSql);
 
         refreshMVRange(materializedView.getName(), "2021-12-03", "2022-03-01", false);
+<<<<<<< HEAD
         Assert.assertEquals(2, materializedView.getPartition("p202112_202201").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202201_202202").getVisibleVersion());
         Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
@@ -403,6 +447,30 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         Assert.assertEquals(1, materializedView.getPartition("p202202_202203").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202203_202204").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
+=======
+        Assert.assertEquals(2, materializedView.getPartition("p202112_202201")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202201_202202")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p202202_202203")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p202203_202204")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+
+        refreshMVRange(materializedView.getName(), "2021-12-03", "2022-05-06", true);
+        Assert.assertEquals(2, materializedView.getPartition("p202112_202201")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202201_202202")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p202202_202203")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202203_202204")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205")
+                .getDefaultPhysicalPartition().getVisibleVersion());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -420,8 +488,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @NotNull
     private MaterializedView refreshMaterializedView(String materializedViewName, String start, String end) throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(materializedViewName));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), materializedViewName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         refreshMVRange(materializedView.getName(), start, end, false);
         return materializedView;
     }
@@ -435,8 +509,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 taskRunCounter.incrementAndGet();
             }
         };
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_without_partition"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
 
@@ -456,8 +536,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     @Test
     public void testMVClearQueryInfo() throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_without_partition"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_without_partition"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
@@ -488,7 +574,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         insertSql = "insert into tbl1 partition(p1) values('2022-01-01', 2, 10);";
         executeInsertSql(connectContext, insertSql);
 
+<<<<<<< HEAD
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+=======
+        OlapTable tbl1 =
+                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         initAndExecuteTaskRun(taskRun);
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
                 materializedView.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
@@ -511,7 +602,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
     private void testRefreshWithFailure(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
+<<<<<<< HEAD
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+=======
+        OlapTable tbl1 =
+                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // insert new data into tbl1's p0 partition
         // update base table tbl1's p0 version to 3
         String insertSql = "insert into tbl1 partition(p0) values('2021-12-01', 2, 10);";
@@ -548,12 +644,21 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (tableOptional.isEmpty() || !tableOptional.get().isOlapTable()) {
                         continue;
                     }
+<<<<<<< HEAD
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+=======
+                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
+<<<<<<< HEAD
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+=======
+                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -590,7 +695,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
     private void testBaseTablePartitionReplace(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p2, p2 replace with tp2 after collect and before insert overwrite
+<<<<<<< HEAD
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+=======
+        OlapTable tbl1 =
+                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(
@@ -602,12 +712,21 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (!table.isOlapTable()) {
                         continue;
                     }
+<<<<<<< HEAD
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+=======
+                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
+<<<<<<< HEAD
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+=======
+                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -654,7 +773,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
     public void testBaseTableAddPartitionWhileSync(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
+<<<<<<< HEAD
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+=======
+        OlapTable tbl1 =
+                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(MaterializedView materializedView) {
@@ -668,12 +792,21 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (!tableOptional.get().isOlapTable()) {
                         continue;
                     }
+<<<<<<< HEAD
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+=======
+                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
+<<<<<<< HEAD
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+=======
+                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -719,7 +852,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                                       TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p3, add partition p99 after collect and before insert overwrite
+<<<<<<< HEAD
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+=======
+        OlapTable tbl1 =
+                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -759,7 +897,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
     public void testBaseTableDropPartitionWhileSync(Database testDb, MaterializedView materializedView, TaskRun taskRun)
             throws Exception {
         // mv need refresh with base table partition p4, drop partition p4 after collect and before insert overwrite
+<<<<<<< HEAD
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+=======
+        OlapTable tbl1 =
+                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             private Map<Long, TableSnapshotInfo> collectBaseTableSnapshotInfos(MaterializedView materializedView) {
@@ -770,12 +913,21 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     if (!table.isOlapTable()) {
                         continue;
                     }
+<<<<<<< HEAD
                     Database baseDb = GlobalStateMgr.getCurrentState().getDb(baseTableInfo.getDbId());
+=======
+                    Database baseDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(baseTableInfo.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (baseDb == null) {
                         throw new SemanticException("Materialized view base db: " +
                                 baseTableInfo.getDbId() + " not exist.");
                     }
+<<<<<<< HEAD
                     OlapTable olapTable = (OlapTable) baseDb.getTable(baseTableInfo.getTableId());
+=======
+                    OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(baseDb.getId(), baseTableInfo.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (olapTable == null) {
                         throw new SemanticException("Materialized view base table: " +
                                 baseTableInfo.getTableId() + " not exist.");
@@ -812,7 +964,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                                        TaskRun taskRun)
             throws Exception {
         // drop partition p4 after collect and before insert overwrite
+<<<<<<< HEAD
         OlapTable tbl1 = ((OlapTable) testDb.getTable("tbl1"));
+=======
+        OlapTable tbl1 =
+                ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<PartitionBasedMvRefreshProcessor>() {
             @Mock
             public void refreshMaterializedView(MvTaskRunContext mvContext, ExecPlan execPlan,
@@ -869,13 +1026,22 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
 
         String mvName = "mv_with_test_refresh";
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withMaterializedView("create materialized view test.mv_with_test_refresh\n" +
                 "partition by k1\n" +
                 "distributed by hash(k2) buckets 10\n" +
                 "refresh deferred manual\n" +
                 "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+<<<<<<< HEAD
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+=======
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
@@ -904,7 +1070,11 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         // PARTITION p3 values [('2022-03-01'),('2022-04-01'))
         // PARTITION p4 values [('2022-04-01'),('2022-05-01'))
 
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String mvName = "mv_reverse_refresh";
         starRocksAssert.withMaterializedView("create materialized view test.mv_reverse_refresh\n" +
                 "partition by k1\n" +
@@ -912,7 +1082,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "refresh deferred manual\n" +
                 "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
 
+<<<<<<< HEAD
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+=======
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
@@ -995,8 +1170,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "'storage_medium' = 'SSD'" +
                 ")\n" +
                 "as select k1, k2 from tbl1;");
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_config1"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_config1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
         executeInsertSql(connectContext, insertSql);
@@ -1042,8 +1223,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "'session.enable_spill' = 'false'" +
                 ")\n" +
                 "as select k1, k2 from tbl1;");
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_config2"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_config2"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
         executeInsertSql(connectContext, insertSql);
@@ -1067,8 +1254,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "properties('replication_num' = '1',\n" +
                 "'storage_medium' = 'SSD')\n" +
                 "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_ssd"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_with_ssd"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         refreshMVRange(materializedView.getName(), false);
         refreshMVRange(materializedView.getName(), false);
@@ -1085,15 +1278,25 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         "'storage_medium' = 'SSD',\n" +
                         "'storage_cooldown_time' = '2222-04-21 20:45:11')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;");
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_use_ssd_and_cooldown"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "mv_use_ssd_and_cooldown"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         refreshMVRange(materializedView.getName(), false);
         refreshMVRange(materializedView.getName(), false);
     }
 
     @Test
     public void testMVOnListPartitionTables1() throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String createSQL = "CREATE TABLE test.list_partition_tbl1 (\n" +
                 "      id BIGINT,\n" +
                 "      age SMALLINT,\n" +
@@ -1117,7 +1320,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "distributed by hash(dt, province) buckets 10 " +
                 "as select dt, province, avg(age) from list_partition_tbl1 group by dt, province;";
         starRocksAssert.withMaterializedView(sql);
+<<<<<<< HEAD
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("list_partition_mv1"));
+=======
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "list_partition_mv1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         // run 1
@@ -1178,8 +1386,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         ")\n" +
                         "AS SELECT t1.k1, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
                         "tbl5 t2 on t1.k1=t2.dt group by t1.k1");
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("partition_prune_non_ref_tables1"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "partition_prune_non_ref_tables1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
 
@@ -1242,8 +1456,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         ")\n" +
                         "AS SELECT t1.k1 as k11, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
                         "tbl5 t2 on t1.k1=t2.dt group by t1.k1");
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("partition_prune_non_ref_tables2"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "partition_prune_non_ref_tables2"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
 
@@ -1306,8 +1526,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         ")\n" +
                         "AS SELECT t1.k1, sum(t1.k2) as sum1, avg(t2.k2) as avg1 FROM tbl4 as t1 join " +
                         "tbl5 t2 on t1.k1=t2.dt where t1.k1>'2022-01-01' and t1.k2>0 group by t1.k1");
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("partition_prune_non_ref_tables1"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "partition_prune_non_ref_tables1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
 
@@ -1365,9 +1591,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                 "refresh async \n" +
                 "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
 
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table tbl1 = testDb.getTable("tbl1");
         MaterializedView mv = ((MaterializedView) testDb.getTable("test_drop_partition_mv1"));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table tbl1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1");
+        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_drop_partition_mv1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
@@ -1453,16 +1686,31 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "PROPERTIES('partition_refresh_number' = '1')" +
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;");
+<<<<<<< HEAD
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_join0"));
+=======
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_with_join0"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
                     Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                     Map<String, String> testProperties = task.getProperties();
                     testProperties.put(TaskRun.IS_TEST, "true");
 
+<<<<<<< HEAD
                     OlapTable tbl1 = (OlapTable) testDb.getTable("tt1");
                     OlapTable tbl2 = (OlapTable) testDb.getTable("tt2");
+=======
+                    OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(testDb.getFullName(), "tt1");
+                    OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(testDb.getFullName(), "tt2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                     taskRun.executeTaskRun();
@@ -1472,9 +1720,17 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     {
                         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assert.assertTrue(mvContext.hasNextBatchPartition());
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+=======
+                        MvTaskRunContext mvContext =
+                                ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+                        Assert.assertTrue(mvContext.hasNextBatchPartition());
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         System.out.println(processor.getMVTaskRunExtraMessage());
                         Assert.assertEquals(Sets.newHashSet("p1"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
@@ -1496,9 +1752,17 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     {
                         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assert.assertTrue(!mvContext.hasNextBatchPartition());
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+=======
+                        MvTaskRunContext mvContext =
+                                ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+                        Assert.assertTrue(!mvContext.hasNextBatchPartition());
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         System.out.println(processor.getMVTaskRunExtraMessage());
                         Assert.assertEquals(Sets.newHashSet("p2"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
@@ -1557,18 +1821,38 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;",
                             (name) -> {
                                 String mvName = (String) name;
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                                 MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
                                 Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
 
                                 OlapTable tbl1 = (OlapTable) testDb.getTable("tt1");
                                 OlapTable tbl2 = (OlapTable) testDb.getTable("tt2");
+=======
+                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), mvName));
+                                Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
+
+                                OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), "tt1");
+                                OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), "tt2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
                                 taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                                 taskRun.executeTaskRun();
 
+<<<<<<< HEAD
                                 executeInsertSql(connectContext, "insert into tt1 partition(p1) values('2022-01-02', 3, 10);");
                                 executeInsertSql(connectContext, "insert into tt1 partition(p2) values('2022-02-02', 3, 10);");
+=======
+                                executeInsertSql(connectContext,
+                                        "insert into tt1 partition(p1) values('2022-01-02', 3, 10);");
+                                executeInsertSql(connectContext,
+                                        "insert into tt1 partition(p2) values('2022-02-02', 3, 10);");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 executeInsertSql(connectContext, "insert into tt2 values('2022-02-02', 3, 10);");
 
                                 List<String> tt1Partitions = ImmutableList.of("p0", "p1", "p2");
@@ -1589,12 +1873,22 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
                                     MaterializedView.AsyncRefreshContext asyncRefreshContext =
                                             materializedView.getRefreshScheme().getAsyncRefreshContext();
+<<<<<<< HEAD
                                     Map<Long, Map<String, MaterializedView.BasePartitionInfo>> baseTableVisibleVersionMap =
+=======
+                                    Map<Long, Map<String, MaterializedView.BasePartitionInfo>>
+                                            baseTableVisibleVersionMap =
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                             asyncRefreshContext.getBaseTableVisibleVersionMap();
                                     System.out.println(baseTableVisibleVersionMap);
 
                                     Assert.assertTrue(baseTableVisibleVersionMap.containsKey(tbl1.getId()));
+<<<<<<< HEAD
                                     Assert.assertTrue(baseTableVisibleVersionMap.get(tbl1.getId()).containsKey(tt1Partition));
+=======
+                                    Assert.assertTrue(
+                                            baseTableVisibleVersionMap.get(tbl1.getId()).containsKey(tt1Partition));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     Assert.assertTrue(baseTableVisibleVersionMap.containsKey(tbl2.getId()));
                                     taskRun = processor.getNextTaskRun();
                                     Assert.assertTrue(isEnd ? taskRun == null : taskRun != null);
@@ -1637,6 +1931,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "PROPERTIES('partition_refresh_number' = '1')" +
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;");
+<<<<<<< HEAD
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_join0"));
@@ -1645,6 +1940,20 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
                     OlapTable tbl1 = (OlapTable) testDb.getTable("tt1");
                     OlapTable tbl2 = (OlapTable) testDb.getTable("tt2");
+=======
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "mv_with_join0"));
+                    Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
+                    TaskRun taskRun = buildMVTaskRun(materializedView, TEST_DB_NAME);
+
+                    OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(testDb.getFullName(), "tt1");
+                    OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(testDb.getFullName(), "tt2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                     taskRun.executeTaskRun();
 
@@ -1654,9 +1963,17 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     {
                         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assert.assertTrue(mvContext.hasNextBatchPartition());
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+=======
+                        MvTaskRunContext mvContext =
+                                ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+                        Assert.assertTrue(mvContext.hasNextBatchPartition());
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         System.out.println(processor.getMVTaskRunExtraMessage());
                         Assert.assertEquals(Sets.newHashSet("p0"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
@@ -1679,9 +1996,17 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                     {
                         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
                         taskRun.executeTaskRun();
+<<<<<<< HEAD
                         MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
                         Assert.assertTrue(!mvContext.hasNextBatchPartition());
                         PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+=======
+                        MvTaskRunContext mvContext =
+                                ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+                        Assert.assertTrue(!mvContext.hasNextBatchPartition());
+                        PartitionBasedMvRefreshProcessor processor =
+                                (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         System.out.println(processor.getMVTaskRunExtraMessage());
                         Assert.assertEquals(Sets.newHashSet("p1"),
                                 processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
@@ -1737,8 +2062,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
                                 MaterializedView materializedView = ((MaterializedView) testDb.getTable((String) mvName));
+=======
+                                Database testDb =
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), (String) mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
 
                                 // initial refresh
@@ -1760,7 +2093,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     Map<Long, TableSnapshotInfo> snapshotInfoMap = processor.getSnapshotBaseTables();
                                     Assert.assertEquals(1, snapshotInfoMap.size());
                                     TableSnapshotInfo tableSnapshotInfo =
+<<<<<<< HEAD
                                             snapshotInfoMap.get(testDb.getTable("mock_tbl").getId());
+=======
+                                            snapshotInfoMap.get(
+                                                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                            .getTable(testDb.getFullName(), "mock_tbl")
+                                                            .getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     Assert.assertEquals(Sets.newHashSet("p0", "p1", "p2"),
                                             tableSnapshotInfo.getRefreshedPartitionInfos().keySet());
 
@@ -1790,7 +2130,14 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     Map<Long, TableSnapshotInfo> snapshotInfoMap = processor.getSnapshotBaseTables();
                                     Assert.assertEquals(1, snapshotInfoMap.size());
                                     TableSnapshotInfo tableSnapshotInfo =
+<<<<<<< HEAD
                                             snapshotInfoMap.get(testDb.getTable("mock_tbl").getId());
+=======
+                                            snapshotInfoMap.get(
+                                                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                            .getTable(testDb.getFullName(), "mock_tbl")
+                                                            .getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     System.out.println(processor.getMVTaskRunExtraMessage());
                                     Assert.assertEquals(Sets.newHashSet("p0", "p1", "p2", "p3"),
                                             tableSnapshotInfo.getRefreshedPartitionInfos().keySet());
@@ -1831,8 +2178,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "properties('replication_num' = '1', 'partition_refresh_number'='1')\n" +
                                     "as select k1, k2, v1 from mock_tbl;",
                             (mvName) -> {
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
                                 MaterializedView materializedView = ((MaterializedView) testDb.getTable((String) mvName));
+=======
+                                Database testDb =
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), (String) mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 Assert.assertEquals(1, materializedView.getPartitionExprMaps().size());
 
                                 // initial refresh
@@ -1854,13 +2209,25 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     Map<Long, TableSnapshotInfo> snapshotInfoMap = processor.getSnapshotBaseTables();
                                     Assert.assertEquals(1, snapshotInfoMap.size());
                                     TableSnapshotInfo tableSnapshotInfo =
+<<<<<<< HEAD
                                             snapshotInfoMap.get(testDb.getTable("mock_tbl").getId());
+=======
+                                            snapshotInfoMap.get(
+                                                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                            .getTable(testDb.getFullName(), "mock_tbl")
+                                                            .getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     Assert.assertEquals(Sets.newHashSet("p0"),
                                             tableSnapshotInfo.getRefreshedPartitionInfos().keySet());
 
                                     MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
                                     System.out.println(processor.getMVTaskRunExtraMessage());
+<<<<<<< HEAD
                                     Assert.assertTrue(extraMessage.getMvPartitionsToRefresh().contains("p20210723_20210724"));
+=======
+                                    Assert.assertTrue(
+                                            extraMessage.getMvPartitionsToRefresh().contains("p20210723_20210724"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     Assert.assertEquals(Sets.newHashSet("p0"),
                                             extraMessage.getBasePartitionsToRefreshMap().get("mock_tbl"));
                                     Assert.assertTrue(processor.getNextTaskRun() == null);
@@ -1880,14 +2247,26 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     Map<Long, TableSnapshotInfo> snapshotInfoMap = processor.getSnapshotBaseTables();
                                     Assert.assertEquals(1, snapshotInfoMap.size());
                                     TableSnapshotInfo tableSnapshotInfo =
+<<<<<<< HEAD
                                             snapshotInfoMap.get(testDb.getTable("mock_tbl").getId());
+=======
+                                            snapshotInfoMap.get(
+                                                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                            .getTable(testDb.getFullName(), "mock_tbl")
+                                                            .getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     System.out.println(processor.getMVTaskRunExtraMessage());
                                     Assert.assertEquals(Sets.newHashSet("p1", "p2"),
                                             tableSnapshotInfo.getRefreshedPartitionInfos().keySet());
 
                                     MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
                                     System.out.println(processor.getMVTaskRunExtraMessage());
+<<<<<<< HEAD
                                     Assert.assertTrue(extraMessage.getMvPartitionsToRefresh().contains("p20210811_20210812"));
+=======
+                                    Assert.assertTrue(
+                                            extraMessage.getMvPartitionsToRefresh().contains("p20210811_20210812"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     Assert.assertEquals(Sets.newHashSet("p1", "p2"),
                                             extraMessage.getBasePartitionsToRefreshMap().get("mock_tbl"));
                                     Assert.assertTrue(processor.getNextTaskRun() == null);
@@ -1930,8 +2309,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select k1, k2 from mockTbl;",
                             () -> {
                                 String mvName = "mock_mv0";
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
                                 MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+=======
+                                Database testDb =
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
                                 executeInsertSql(connectContext, mTable.getGenerateDataSQL());
@@ -1962,7 +2349,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                                 materializedView.getName());
                                 System.out.println(status);
                                 status.setLastJobTaskRunStatus(taskRunStatuses);
+<<<<<<< HEAD
                                 ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus = status.getRefreshJobStatus();
+=======
+                                ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus =
+                                        status.getRefreshJobStatus();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 System.out.println(refreshJobStatus);
                                 Assert.assertEquals(refreshJobStatus.isForce(), false);
                                 Assert.assertEquals(refreshJobStatus.isRefreshFinished(), true);
@@ -2015,8 +2407,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select k1, k2 from mockTbl;",
                             () -> {
                                 String mvName = "mock_mv0";
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
                                 MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+=======
+                                Database testDb =
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
                                 executeInsertSql(connectContext, mTable.getGenerateDataSQL());
@@ -2051,7 +2451,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                         new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
                                                 materializedView.getName());
                                 status.setLastJobTaskRunStatus(taskNameJobStatusMap.get(mvTaskName));
+<<<<<<< HEAD
                                 ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus = status.getRefreshJobStatus();
+=======
+                                ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus =
+                                        status.getRefreshJobStatus();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 System.out.println(refreshJobStatus);
                                 Assert.assertEquals(refreshJobStatus.isForce(), false);
                                 Assert.assertEquals(refreshJobStatus.isRefreshFinished(), true);
@@ -2102,8 +2507,16 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "as select k1, k2 from mockTbl;",
                             () -> {
                                 String mvName = "mock_mv0";
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
                                 MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+=======
+                                Database testDb =
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), mvName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
 
                                 // refresh materialized view(force)
@@ -2129,7 +2542,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                         new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
                                                 materializedView.getName());
                                 status.setLastJobTaskRunStatus(taskNameJobStatusMap.get(mvTaskName));
+<<<<<<< HEAD
                                 ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus = status.getRefreshJobStatus();
+=======
+                                ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus =
+                                        status.getRefreshJobStatus();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 System.out.println(refreshJobStatus);
                                 Assert.assertEquals(refreshJobStatus.isForce(), true);
                                 Assert.assertEquals(refreshJobStatus.isRefreshFinished(), true);
@@ -2185,10 +2603,18 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;",
                             () -> {
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
                                 MaterializedView materializedView =
                                         ((MaterializedView) testDb.getTable("mv_with_join0"));
+=======
+                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), "mv_with_join0"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
                                 Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                                 Map<String, String> testProperties = task.getProperties();
@@ -2206,7 +2632,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                 String jobID = "";
                                 {
                                     TaskRunStatus taskRunStatus =
+<<<<<<< HEAD
                                             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+=======
+                                            taskRun.initStatus(UUIDUtil.genUUID().toString(),
+                                                    System.currentTimeMillis());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     taskRun.executeTaskRun();
                                     taskRunStatus.setState(Constants.TaskRunState.SUCCESS);
 
@@ -2246,7 +2677,12 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
                                 {
                                     TaskRunStatus taskRunStatus =
+<<<<<<< HEAD
                                             taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+=======
+                                            taskRun.initStatus(UUIDUtil.genUUID().toString(),
+                                                    System.currentTimeMillis());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     taskRun.executeTaskRun();
                                     taskRunStatus.setState(Constants.TaskRunState.SUCCESS);
 
@@ -2327,10 +2763,18 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                                     "refresh deferred manual\n" +
                                     "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;",
                             () -> {
+<<<<<<< HEAD
                                 Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
                                 MaterializedView materializedView =
                                         ((MaterializedView) testDb.getTable("mv_with_join0"));
+=======
+                                Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+                                MaterializedView materializedView =
+                                        ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(testDb.getFullName(), "mv_with_join0"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
                                 Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
                                 Map<String, String> testProperties = task.getProperties();
@@ -2392,8 +2836,15 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                         "as select k1, k2 from tbl1;",
                 () -> {
                     Config.enable_mv_refresh_query_rewrite = false;
+<<<<<<< HEAD
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     MaterializedView materializedView = ((MaterializedView) testDb.getTable("test_mv1"));
+=======
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    MaterializedView materializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "test_mv1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     String insertSql = "insert into tbl1 partition(p3) values('2022-03-01', 3, 10);";
                     executeInsertSql(connectContext, insertSql);
@@ -2430,6 +2881,10 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             "RuleBaseOptimize",
                             "CostBaseOptimize",
                             "PhysicalRewrite",
+<<<<<<< HEAD
+=======
+                            "DynamicRewrite",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "PlanValidate",
                             "InputDependenciesChecker",
                             "TypeChecker",

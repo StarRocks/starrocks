@@ -254,5 +254,8 @@ void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::pr
 }
 
 template class BackendInternalServiceImpl<PInternalService>;
+<<<<<<< HEAD
 template class BackendInternalServiceImpl<doris::PBackendService>;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

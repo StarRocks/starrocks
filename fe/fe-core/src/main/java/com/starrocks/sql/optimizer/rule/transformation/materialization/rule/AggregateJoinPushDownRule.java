@@ -41,6 +41,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_AGG_PUSH_DOWN_REWRITE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Support to push down aggregate functions below join operator and rewrite the query by mv transparently.
@@ -59,11 +63,20 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
  * Rewrite it by:
  * select a.dt, a.col, cardinality(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
  * from
+<<<<<<< HEAD
  *  (select id, dt, col, array_agg_unique(count_distinct_im_uv) from mv0 group by id,dt,col) as a join b on a.id = b.id
  * group by a.dt, a.cal;
  *
  * Rewrite result:
  * select a.dt, a.col, cardinility(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
+=======
+ *  ( select id, dt, col, array_agg_unique(count_distinct_im_uv) as count_distinct_im_uv from mv0 group by id, dt, col
+ *  ) as a join b on a.id = b.id
+ * group by a.dt, a.cal;
+ *
+ * Rewrite result:
+ * select a.dt, a.col, cardinality(array_agg_unique(a.count_distinct_im_uv)) as count_distinct_im_uv
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
  * from mv0 as a join b on a.id = b.id group by a.dt, a.cal;
  */
 public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
@@ -83,7 +96,11 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         if (!context.getSessionVariable().isEnableMaterializedViewPushDownRewrite()) {
             return false;
         }
+<<<<<<< HEAD
         if (Utils.isOptHasAppliedRule(input, Operator.OP_PUSH_DOWN_BIT)) {
+=======
+        if (Utils.isOptHasAppliedRule(input, OP_MV_AGG_PUSH_DOWN_REWRITE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
         return super.check(input, context);
@@ -168,6 +185,10 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     @Override
     public IMaterializedViewRewriter createRewriter(OptimizerContext optimizerContext,
                                                     MvRewriteContext mvContext) {
+<<<<<<< HEAD
         return new AggregatedMaterializedViewPushDownRewriter(mvContext, optimizerContext, this);
+=======
+        return new AggregatedMaterializedViewPushDownRewriter(mvContext, this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

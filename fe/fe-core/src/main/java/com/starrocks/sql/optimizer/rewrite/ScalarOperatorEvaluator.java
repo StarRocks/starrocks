@@ -222,7 +222,26 @@ public enum ScalarOperatorEvaluator {
 
         FunctionInvoker invoker = functions.get(signature);
 
+<<<<<<< HEAD
         return invoker != null && invoker.isMonotonic;
+=======
+        return invoker != null && isMonotonicFunc(invoker, call);
+    }
+
+    public boolean isFEConstantFunction(CallOperator call) {
+        FunctionSignature signature;
+        if (call.getFunction() != null) {
+            Function fn = call.getFunction();
+            List<Type> argTypes = Arrays.asList(fn.getArgs());
+            signature = new FunctionSignature(fn.functionName().toUpperCase(), argTypes, fn.getReturnType());
+        } else {
+            List<Type> argTypes = call.getArguments().stream().map(ScalarOperator::getType).collect(Collectors.toList());
+            signature = new FunctionSignature(call.getFnName().toUpperCase(), argTypes, call.getType());
+        }
+
+        FunctionInvoker invoker = functions.get(signature);
+        return invoker != null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private boolean isMonotonicFunc(FunctionInvoker invoker, CallOperator operator) {
@@ -230,7 +249,13 @@ public enum ScalarOperatorEvaluator {
             return false;
         }
 
+<<<<<<< HEAD
         if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())) {
+=======
+        if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())
+                || (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(invoker.getSignature().getName())
+                && operator.getChildren().size() == 2)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             String pattern = operator.getChild(1).toString();
             if (pattern.isEmpty()) {
                 return true;

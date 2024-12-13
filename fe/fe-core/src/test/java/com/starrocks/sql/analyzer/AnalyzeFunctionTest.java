@@ -267,7 +267,11 @@ public class AnalyzeFunctionTest {
                 "CREATE FUNCTION f(INT, INT, CHAR(10), BIGINT, ...) RETURNS INT",
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+<<<<<<< HEAD
                 "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT INTERMEDIATE INT",
+=======
+                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 getConnectContext());
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "CREATE TABLE FUNCTION f(INT, INT) RETURNS INT",

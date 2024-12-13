@@ -31,12 +31,20 @@ import java.util.Map;
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("hive", "glue", "dlf");
+<<<<<<< HEAD
+=======
+    private final Map<String, String> properties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final String catalogName;
     private final HudiConnectorInternalMgr internalMgr;
     private final HudiMetadataFactory metadataFactory;
 
     public HudiConnector(ConnectorContext context) {
+<<<<<<< HEAD
         Map<String, String> properties = context.getProperties();
+=======
+        this.properties = context.getProperties();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogName = context.getCatalogName();
@@ -62,7 +70,12 @@ public class HudiConnector implements Connector {
                 internalMgr.getPullRemoteFileExecutor(),
                 internalMgr.isSearchRecursive(),
                 hdfsEnvironment,
+<<<<<<< HEAD
                 internalMgr.getMetastoreType()
+=======
+                internalMgr.getMetastoreType(),
+                properties
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         );
     }
 

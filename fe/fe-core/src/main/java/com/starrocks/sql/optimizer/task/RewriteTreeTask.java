@@ -66,6 +66,17 @@ public class RewriteTreeTask extends OptimizerTask {
 
     protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
 
+<<<<<<< HEAD
+=======
+        root = applyRules(parent, childIndex, root);
+        // prune cte column depend on prune right child first
+        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
+            rewrite(root, i, root.getInputs().get(i));
+        }
+    }
+
+    protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Rule rule : rules) {
             if (rule.exhausted(context.getOptimizerContext())) {
                 continue;
@@ -92,11 +103,15 @@ public class RewriteTreeTask extends OptimizerTask {
             change++;
             deriveLogicalProperty(root);
         }
+<<<<<<< HEAD
 
         // prune cte column depend on prune right child first
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {
             rewrite(root, i, root.getInputs().get(i));
         }
+=======
+        return root;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     protected boolean match(Pattern pattern, OptExpression root) {

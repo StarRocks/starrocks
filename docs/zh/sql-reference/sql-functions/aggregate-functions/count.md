@@ -5,7 +5,11 @@ displayed_sidebar: docs
 
 # count
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算总行数。
 

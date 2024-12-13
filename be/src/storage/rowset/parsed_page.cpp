@@ -36,11 +36,19 @@
 
 #include <fmt/format.h>
 
+<<<<<<< HEAD
+=======
+#include <cstddef>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <memory>
 
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "simd/simd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/encoding_info.h"
@@ -208,6 +216,27 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    size_t read_null_count() override {
+        DCHECK_EQ(_offset_in_page, 0);
+        size_t nrows_to_read = _num_rows;
+        size_t count = 0;
+        if (_has_null) {
+            while (nrows_to_read > 0) {
+                bool is_null = false;
+                size_t this_run = _null_decoder.GetNextRun(&is_null, nrows_to_read);
+                if (is_null) {
+                    count += this_run;
+                }
+                nrows_to_read -= this_run;
+                _offset_in_page += this_run;
+            }
+        }
+        return count;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     friend Status parse_page_v1(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,
@@ -302,6 +331,19 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    size_t read_null_count() override {
+        DCHECK_EQ(_offset_in_page, 0);
+        size_t count = 0;
+        if (_null_flags.size() > 0) {
+            count = SIMD::count_nonzero(_null_flags.data(), _num_rows);
+            _offset_in_page += _num_rows;
+        }
+        return count;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     friend Status parse_page_v2(std::unique_ptr<ParsedPage>* result, PageHandle handle, const Slice& body,
                                 const DataPageFooterPB& footer, const EncodingInfo* encoding,

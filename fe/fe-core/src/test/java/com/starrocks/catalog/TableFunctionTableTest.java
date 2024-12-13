@@ -17,7 +17,11 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.qe.SqlModeHelper;
@@ -52,6 +56,10 @@ public class TableFunctionTableTest {
         properties.put("path", "fake://some_bucket/some_path/*");
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
+<<<<<<< HEAD
+=======
+        properties.put("strict_mode", "true");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         properties.put("auto_detect_sample_files", "10");
         properties.put("csv.column_separator", ",");
         properties.put("csv.row_delimiter", "\n");
@@ -154,6 +162,10 @@ public class TableFunctionTableTest {
             Assert.assertEquals("ORC", Deencapsulation.getField(table, "format"));
             Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
+<<<<<<< HEAD
+=======
+            Assert.assertEquals(true, table.isStrictMode());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
             Assert.assertEquals("\n", table.getCsvRowDelimiter());
             Assert.assertEquals(",", table.getCsvColumnSeparator());
@@ -181,13 +193,26 @@ public class TableFunctionTableTest {
             properties.put("auto_detect_sample_files", "not_a_number");
             new TableFunctionTable(properties);
         });
+<<<<<<< HEAD
+=======
+        Assertions.assertThrows(SemanticException.class, () -> {
+            Map<String, String> properties = newProperties();
+            properties.put("list_files_only", "not_true_false");
+            new TableFunctionTable(properties);
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testNoFilesFound() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
+<<<<<<< HEAD
             public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+=======
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -234,7 +259,12 @@ public class TableFunctionTableTest {
     public void testIllegalCSVTrimSpace() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
+<<<<<<< HEAD
             public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+=======
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

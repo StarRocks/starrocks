@@ -45,12 +45,21 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.OlapTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
@@ -110,12 +119,21 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
 
+<<<<<<< HEAD
     public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
     public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
 
     public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_RUNNING;
 
+=======
+    public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_PENDING;
+    public static LongCounterMetric COUNTER_QUERY_QUEUE_SLOT_RUNNING;
+
+    public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
+    public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
             new MetricWithLabelGroup<>("category",
                     () -> new LongCounterMetric("query_queue_v2_category_pending_slots", MetricUnit.REQUESTS,
@@ -726,7 +744,11 @@ public final class MetricRepo {
             List<PKafkaOffsetProxyResult> offsetProxyResults;
             try {
                 offsetProxyResults = KafkaUtil.getBatchOffsets(requests);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("get batch offsets failed", e);
                 return;
             }
@@ -845,15 +867,42 @@ public final class MetricRepo {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         for (String dbName : dbNames) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (null == db) {
                 continue;
             }
 
             // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
+<<<<<<< HEAD
             for (Table table : db.getTables()) {
                 long tableId = table.getId();
                 String tableName = table.getName();
+=======
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+                long tableId = table.getId();
+                String tableName = table.getName();
+
+                if (table.isNativeTableOrMaterializedView()) {
+                    // table size metrics
+                    GaugeMetric<Long> tableSizeBytesTotal = new GaugeMetric<Long>("table_size_bytes",
+                            MetricUnit.BYTES, "total size of table in bytes") {
+                        @Override
+                        public Long getValue() {
+                            OlapTable olapTable = (OlapTable) table;
+                            return olapTable.getDataSize();
+                        }
+                    };
+                    tableSizeBytesTotal.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("tbl_name", tableName))
+                            .addLabel(new MetricLabel("tbl_id", String.valueOf(tableId)));
+                    visitor.visit(tableSizeBytesTotal);
+                }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
                 for (Metric m : entity.getMetrics()) {
                     if (minifyTableMetrics && (null == m.getValue() ||
@@ -876,7 +925,11 @@ public final class MetricRepo {
                 "database_num", MetricUnit.OPERATIONS, "count of database");
         int dbNum = 0;
         for (String dbName : dbNames) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (null == db) {
                 continue;
             }
@@ -886,6 +939,19 @@ public final class MetricRepo {
             tableNum.setValue(db.getTableNumber());
             tableNum.addLabel(new MetricLabel("db_name", dbName));
             visitor.visit(tableNum);
+<<<<<<< HEAD
+=======
+
+            GaugeMetric<Long> dbSizeBytesTotal = new GaugeMetric<Long>("db_size_bytes",
+                    MetricUnit.BYTES, "total size of db in bytes") {
+                @Override
+                public Long getValue() {
+                    return db.getUsedDataQuotaWithLock();
+                }
+            };
+            dbSizeBytesTotal.addLabel(new MetricLabel("db_name", dbName));
+            visitor.visit(dbSizeBytesTotal);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         databaseNum.setValue(dbNum);
         visitor.visit(databaseNum);

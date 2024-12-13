@@ -50,7 +50,11 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.MetadataMgr;
+=======
+import com.starrocks.server.LocalMetastore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.thrift.TStorageMedium;
@@ -131,7 +135,11 @@ public class LakeTableAlterDataCachePartitionDurationTest {
 
         table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
         MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "t0", index, dist);
+=======
+        Partition partition = new Partition(partitionId, partitionId + 100, "t0", index, dist);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TStorageMedium storage = TStorageMedium.HDD;
         TabletMeta tabletMeta = new TabletMeta(db.getId(), table.getId(), partition.getId(), index.getId(), 0, storage, true);
         for (int i = 0; i < NUM_BUCKETS; i++) {
@@ -178,14 +186,24 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "7 months");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
 
+<<<<<<< HEAD
         new MockUp<MetadataMgr>() {
             @Mock
             public Database getDb(String catalogName, String dbName) {
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return db;
             }
 
             @Mock
+<<<<<<< HEAD
             public Table getTable(String catalogName, String dbName, String tblName) {
+=======
+            public Table getTable(String dbName, String tblName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return table;
             }
         };
@@ -213,14 +231,24 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "2 days");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
 
+<<<<<<< HEAD
         new MockUp<MetadataMgr>() {
             @Mock
             public Database getDb(String catalogName, String dbName) {
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return db;
             }
 
             @Mock
+<<<<<<< HEAD
             public Table getTable(String catalogName, String dbName, String tblName) {
+=======
+            public Table getTable(String dbName, String tblName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return table;
             }
         };
@@ -243,14 +271,24 @@ public class LakeTableAlterDataCachePartitionDurationTest {
         Map<String, String> properties = new HashMap<>();
         properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "4 hours");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+<<<<<<< HEAD
         new MockUp<MetadataMgr>() {
             @Mock
             public Database getDb(String catalogName, String dbName) {
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return db;
             }
 
             @Mock
+<<<<<<< HEAD
             public Table getTable(String catalogName, String dbName, String tblName) {
+=======
+            public Table getTable(String dbName, String tblName) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return table;
             }
         };

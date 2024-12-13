@@ -29,11 +29,14 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -44,7 +47,11 @@ public class ExportMgrTest {
 
     @Test
     public void testExpiredJob() throws Exception {
+<<<<<<< HEAD
         Config.history_job_keep_max_second = 100;
+=======
+        Config.history_job_keep_max_second = 10;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ExportMgr mgr = new ExportMgr();
 
         // 1. create job 1
@@ -83,6 +90,7 @@ public class ExportMgrTest {
         Assert.assertNull(jobResultNull);
         ExportJob jobResultNotExist = mgr.getExportByQueryId(new UUID(4, 4));
         Assert.assertNull(jobResultNotExist);
+<<<<<<< HEAD
 
         // 5. save image
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
@@ -106,6 +114,8 @@ public class ExportMgrTest {
         Assert.assertEquals(saveChecksum, loadChecksum);
 
         tempFile.delete();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

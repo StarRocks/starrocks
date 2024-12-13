@@ -58,8 +58,11 @@ select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
 drop database ngram_bloom_filter_db_1;
 -- result:
 -- !result
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- name: test_ngram_bloom_filter_default
 create database ngram_bloom_filter_db_2;
 -- result:
@@ -106,8 +109,11 @@ show index from ngram_index_default_3;
 -- result:
 ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "2")	
 -- !result
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- name: test_ngram_bloom_filter_like
 CREATE TABLE ngram_index_like(
     timestamp DATETIME NOT NULL,
@@ -134,8 +140,11 @@ select * from ngram_index_like where username like '_hin%';
 -- result:
 2023-01-01 00:00:00	chinese	3
 -- !result
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- name: test_ngram_bloom_filter_case_insensitive
 CREATE TABLE ngram_index_case_in_sensitive(
     timestamp DATETIME NOT NULL,
@@ -207,8 +216,11 @@ select * from ngram_index_case_in_sensitive order by ngram_search_case_insensiti
 2023-01-01 00:00:00	AaBAa	3
 2023-01-01 00:00:00	aAbac	3
 -- !result
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- name: test_ngram_bloom_filter_char
 create database ngram_bloom_filter_db_3;
 -- result:
@@ -234,8 +246,11 @@ insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"ch
 select * from ngram_index_char where username like '_hiaa%';
 -- result:
 -- !result
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- name: test_bloom_filter
 create database ngram_bloom_filter_db_4;
 -- result:
@@ -303,6 +318,7 @@ select * from common_duplicate where c2 ="abc" order by c0;
 select * from common_duplicate where c1 = 2;
 -- result:
 2	2	abc
+<<<<<<< HEAD
 -- !result
 
 -- name: test_bloom_filter_bug
@@ -339,4 +355,6 @@ select * from t where c2 in (1,2) and c2 is not null;
 2	2	2
 3	3	1
 4	4	2
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result

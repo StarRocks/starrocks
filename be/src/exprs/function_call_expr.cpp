@@ -20,7 +20,10 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
@@ -40,6 +43,7 @@ DEFINE_FAIL_POINT(expr_prepare_fragment_thread_local_call_failed);
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
+<<<<<<< HEAD
 Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
@@ -61,6 +65,63 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
 
     _fn_desc = BuiltinFunctions::find_builtin_function(fid);
 
+=======
+const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function_by_fid(const TFunction& fn) {
+    // branch-3.0 is 150102~150104, branch-3.1 is 150103~150105
+    // refs: https://github.com/StarRocks/starrocks/pull/17803
+    // @todo: remove this code when branch-3.0 is deprecated
+    int64_t fid = fn.fid;
+    if (fn.fid == 150102 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL32) {
+        fid = 150103;
+    } else if (fn.fid == 150103 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL64) {
+        fid = 150104;
+    } else if (fn.fid == 150104 && _type.type == TYPE_ARRAY && _type.children[0].type == TYPE_DECIMAL128) {
+        fid = 150105;
+    }
+    return BuiltinFunctions::find_builtin_function(fid);
+}
+
+const FunctionDescriptor* VectorizedFunctionCallExpr::_get_function(const TFunction& fn,
+                                                                    const std::vector<TypeDescriptor>& arg_types,
+                                                                    const TypeDescriptor& return_type,
+                                                                    std::vector<bool> arg_nullables) {
+    if (fn.__isset.agg_state_desc) {
+        // For _state combinator function, it's created according to the agg_state_desc rather than fid.
+        auto agg_state_desc = AggStateDesc::from_thrift(fn.agg_state_desc);
+        _agg_state_func = std::make_shared<AggStateFunction>(agg_state_desc, return_type, std::move(arg_nullables));
+        auto execute_func = std::bind(&AggStateFunction::execute, _agg_state_func.get(), std::placeholders::_1,
+                                      std::placeholders::_2);
+        auto prepare_func = std::bind(&AggStateFunction::prepare, _agg_state_func.get(), std::placeholders::_1,
+                                      std::placeholders::_2);
+        auto close_func = std::bind(&AggStateFunction::close, _agg_state_func.get(), std::placeholders::_1,
+                                    std::placeholders::_2);
+        _agg_func_desc = std::make_shared<FunctionDescriptor>(fn.name.function_name, arg_types.size(), execute_func,
+                                                              prepare_func, close_func, true, false);
+        return _agg_func_desc.get();
+    } else {
+        return _get_function_by_fid(fn);
+    }
+}
+
+Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
+
+    // parpare result type and arg types
+    FunctionContext::TypeDesc return_type = _type;
+    if (!_fn.__isset.fid && !_fn.__isset.agg_state_desc) {
+        return Status::InternalError("Vectorized engine doesn't implement agg state function " +
+                                     _fn.name.function_name);
+    }
+    std::vector<FunctionContext::TypeDesc> args_types;
+    std::vector<bool> arg_nullblaes;
+    for (Expr* child : _children) {
+        args_types.push_back(child->type());
+        arg_nullblaes.emplace_back(child->is_nullable());
+    }
+
+    // initialize function descriptor
+    _fn_desc = _get_function(_fn, args_types, return_type, arg_nullblaes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_fn_desc == nullptr || _fn_desc->scalar_function == nullptr) {
         return Status::InternalError("Vectorized engine doesn't implement function " + _fn.name.function_name);
     }
@@ -74,6 +135,7 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     FAIL_POINT_TRIGGER_RETURN_ERROR(expr_prepare_failed);
 
+<<<<<<< HEAD
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
     std::vector<FunctionContext::TypeDesc> args_types;
 
@@ -81,6 +143,8 @@ Status VectorizedFunctionCallExpr::prepare(starrocks::RuntimeState* state, starr
         args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // todo: varargs use for allocate slice memory, need compute buffer size
     //  for varargs in vectorized engine?
     _fn_context_index = context->register_func(state, return_type, args_types);
@@ -192,11 +256,15 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     }
     RETURN_IF_ERROR(result);
     if (_fn_desc->check_overflow) {
+<<<<<<< HEAD
         std::string err_msg;
         if (UNLIKELY(result.value()->capacity_limit_reached(&err_msg))) {
             return Status::InternalError(
                     fmt::format("Result column of function {} exceed limit: {}", _fn_desc->name, err_msg));
         }
+=======
+        RETURN_IF_ERROR(result.value()->capacity_limit_reached());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // For no args function call (pi, e)

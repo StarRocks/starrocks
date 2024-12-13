@@ -84,24 +84,41 @@ public class ColumnRenameTest {
 
     @Test
     public void testReplayRenameColumn() throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = testDb.getTable("tbl1");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
 
+<<<<<<< HEAD
         table = testDb.getTable("tbl2");
+=======
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
+<<<<<<< HEAD
         table = testDb.getTable("tbl3");
+=======
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());
 
+<<<<<<< HEAD
         table = testDb.getTable("tbl4");
+=======
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "tbl4");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         columnRenameInfo = new ColumnRenameInfo(testDb.getId(), table.getId(), "k1", "k3");
         GlobalStateMgr.getCurrentState().getLocalMetastore().replayRenameColumn(columnRenameInfo);
         Assert.assertEquals("k3", table.getColumn("k3").getName());

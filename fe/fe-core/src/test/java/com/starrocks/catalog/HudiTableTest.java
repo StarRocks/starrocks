@@ -102,8 +102,13 @@ public class HudiTableTest {
                 .setHudiProperties(properties);
         HudiTable oTable = tableBuilder.build();
 
+<<<<<<< HEAD
         Assert.assertEquals("db0", oTable.getDbName());
         Assert.assertEquals("table0", oTable.getTableName());
+=======
+        Assert.assertEquals("db0", oTable.getCatalogDBName());
+        Assert.assertEquals("table0", oTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(new Column("col1", Type.INT, true), oTable.getColumn("col1"));
         Assert.assertEquals("table0:" + createTime, oTable.getTableIdentifier());
         Assert.assertTrue(oTable.toString().contains("HudiTable{resourceName='catalog', catalogName='catalog', " +

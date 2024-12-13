@@ -157,8 +157,13 @@ public class TabletSchedulerTest {
         Database goodDB = new Database(2, "bueno");
         Table badTable = new Table(3, "mal", Table.TableType.OLAP, new ArrayList<>());
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
+<<<<<<< HEAD
         Partition badPartition = new Partition(5, "mal", null, null);
         Partition goodPartition = new Partition(6, "bueno", null, null);
+=======
+        Partition badPartition = new Partition(5, 55, "mal", null, null);
+        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
@@ -180,7 +185,11 @@ public class TabletSchedulerTest {
                     TabletSchedCtx.Type.REPAIR,
                     triple.getLeft().getId(),
                     triple.getMiddle().getId(),
+<<<<<<< HEAD
                     triple.getRight().getId(),
+=======
+                    triple.getRight().getDefaultPhysicalPartition().getId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     1,
                     1,
                     System.currentTimeMillis(),
@@ -209,7 +218,11 @@ public class TabletSchedulerTest {
         TabletScheduler tabletScheduler = new TabletScheduler(tabletSchedulerStat);
         Database goodDB = new Database(2, "bueno");
         Table goodTable = new Table(4, "bueno", Table.TableType.OLAP, new ArrayList<>());
+<<<<<<< HEAD
         Partition goodPartition = new Partition(6, "bueno", null, null);
+=======
+        Partition goodPartition = new Partition(6, 66, "bueno", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 
         List<TabletSchedCtx> tabletSchedCtxList = new ArrayList<>();
@@ -231,10 +244,17 @@ public class TabletSchedulerTest {
                 Locker locker = new Locker();
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
+<<<<<<< HEAD
                     locker.lockDatabase(goodDB, LockType.READ);
                     tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
                 } finally {
                     locker.unLockDatabase(goodDB, LockType.READ);
+=======
+                    locker.lockDatabase(goodDB.getId(), LockType.READ);
+                    tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
+                } finally {
+                    locker.unLockDatabase(goodDB.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }, "testAddCtx").start();

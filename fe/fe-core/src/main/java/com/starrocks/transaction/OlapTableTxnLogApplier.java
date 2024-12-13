@@ -45,7 +45,11 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyCommitLog(TransactionState txnState, TableCommitInfo commitInfo) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);
@@ -90,7 +94,11 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
     public void applyVisibleLog(TransactionState txnState, TableCommitInfo commitInfo, Database db) {
         Set<Long> errorReplicaIds = txnState.getErrorReplicas();
         long tableId = table.getId();
+<<<<<<< HEAD
         OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             LOG.warn("table {} is dropped, ignore", tableId);
             return;
@@ -101,7 +109,11 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
         long maxPartitionVersionTime = -1;
 
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.warn("partition {} is dropped, ignore", partitionId);

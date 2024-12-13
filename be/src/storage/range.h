@@ -21,6 +21,10 @@
 #include <vector>
 
 #include "column/datum.h"
+<<<<<<< HEAD
+=======
+#include "column/vectorized_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/common.h"
 #include "util/logging.h"
 
@@ -54,6 +58,11 @@ public:
     // return a new range that represent the intersection of |this| and |r|.
     Range intersection(const Range& r) const;
 
+<<<<<<< HEAD
+=======
+    Range filter(const Filter* const filter) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool has_intersection(const Range& rhs) const { return !(_end <= rhs.begin() || rhs.end() <= _begin); }
 
     bool contains(T row) const { return row < _end; }
@@ -82,6 +91,21 @@ inline Range<T> Range<T>::intersection(const Range& r) const {
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+inline Range<T> Range<T>::filter(const Filter* const filter) const {
+    DCHECK(span_size() == filter->size());
+    int32_t start = filter->size();
+    int32_t end = -1;
+    for (int32_t i = 0; i < filter->size(); i++) {
+        start = start > i && filter->data()[i] == 1 ? i : start;
+        end = end < i && filter->data()[i] == 1 ? i : end;
+    }
+    return start <= end ? Range<T>(_begin + start, _begin + end + 1) : Range<T>(_begin, _begin);
+}
+
+template <typename T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline std::string Range<T>::to_string() const {
     std::stringstream ss;
     ss << "[" << _begin << "," << _end << ")";
@@ -474,11 +498,26 @@ inline std::ostream& operator<<(std::ostream& os, const SparseRange<T>& range) {
 
 template class Range<>;
 template class Range<ordinal_t>;
+<<<<<<< HEAD
 
 template class SparseRange<>;
 template class SparseRange<ordinal_t>;
 
 template class SparseRangeIterator<>;
 template class SparseRangeIterator<ordinal_t>;
+=======
+using RowIdRange = Range<rowid_t>;
+using OridinalRange = Range<ordinal_t>;
+
+template class SparseRange<>;
+template class SparseRange<ordinal_t>;
+using RowIdSparseRange = SparseRange<rowid_t>;
+using OridinalSparseRange = SparseRange<ordinal_t>;
+
+template class SparseRangeIterator<>;
+template class SparseRangeIterator<ordinal_t>;
+using RowIdSparseRangeIterator = SparseRangeIterator<rowid_t>;
+using OrdinalSparseRangeIterator = SparseRangeIterator<ordinal_t>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

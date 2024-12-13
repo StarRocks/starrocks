@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_generate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 生成一个包含数值元素的数组，数值范围在 `start` 和 `end` 之间，步长为 `step`。
 

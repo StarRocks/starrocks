@@ -54,6 +54,12 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
@@ -61,7 +67,10 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.FunctionSet;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
@@ -83,6 +92,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
+<<<<<<< HEAD
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
@@ -90,6 +100,12 @@ import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
+=======
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
+import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.ArrayExpr;
+import com.starrocks.sql.ast.AstVisitor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -138,6 +154,10 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.UserAuthOption;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -207,6 +227,7 @@ public class AstToStringBuilder {
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
         @Override
+<<<<<<< HEAD
         public String visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, Void context) {
             StringBuilder sb = new StringBuilder();
             if (statement instanceof CreateUserStmt) {
@@ -228,10 +249,54 @@ public class AstToStringBuilder {
                 sb.append(" IDENTIFIED WITH ").append(statement.getAuthPluginName());
                 if (!Strings.isNullOrEmpty(statement.getAuthStringUnResolved())) {
                     if (statement.isPasswordPlain()) {
+=======
+        public String visitCreateUserStatement(CreateUserStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            if (!stmt.getDefaultRoles().isEmpty()) {
+                sb.append(" DEFAULT ROLE ");
+                sb.append(Joiner.on(",").join(
+                        stmt.getDefaultRoles().stream().map(r -> "'" + r + "'").collect(toList())));
+            }
+
+            return sb.toString();
+        }
+
+        @Override
+        public String visitAlterUserStatement(AlterUserStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("ALTER USER ").append(stmt.getUserIdentity());
+            sb.append(buildAuthOptionSql(stmt.getAuthOption()));
+
+            return sb.toString();
+        }
+
+        public StringBuilder buildAuthOptionSql(UserAuthOption authOption) {
+            StringBuilder sb = new StringBuilder();
+            if (authOption == null) {
+                return sb;
+            }
+
+            if (!Strings.isNullOrEmpty(authOption.getPassword())) {
+                if (authOption.isPasswordPlain()) {
+                    sb.append(" IDENTIFIED BY '").append("*XXX").append("'");
+                } else {
+                    sb.append(" IDENTIFIED BY PASSWORD '").append(authOption.getPassword()).append("'");
+                }
+            }
+
+            if (!Strings.isNullOrEmpty(authOption.getAuthPlugin())) {
+                sb.append(" IDENTIFIED WITH ").append(authOption.getAuthPlugin());
+                if (!Strings.isNullOrEmpty(authOption.getAuthString())) {
+                    if (authOption.isPasswordPlain()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         sb.append(" BY '");
                     } else {
                         sb.append(" AS '");
                     }
+<<<<<<< HEAD
                     sb.append(statement.getAuthStringUnResolved()).append("'");
                 }
             }
@@ -243,6 +308,12 @@ public class AstToStringBuilder {
             }
 
             return sb.toString();
+=======
+                    sb.append(authOption.getAuthString()).append("'");
+                }
+            }
+            return sb;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         @Override
@@ -1602,7 +1673,11 @@ public class AstToStringBuilder {
         if (table.getType() == Table.TableType.MYSQL || table.getType() == Table.TableType.ELASTICSEARCH
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
+<<<<<<< HEAD
                 || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == JDBC
+=======
+                || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 || table.getType() == Table.TableType.FILE) {
             sb.append("EXTERNAL ");
         }
@@ -1698,8 +1773,13 @@ public class AstToStringBuilder {
             sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
             sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
             sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
+<<<<<<< HEAD
             sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
             sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
+=======
+            sb.append("\"database\" = \"").append(mysqlTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(mysqlTable.getCatalogTableName()).append("\"\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sb.append(")");
         } else if (table.getType() == Table.TableType.BROKER) {
             BrokerTable brokerTable = (BrokerTable) table;
@@ -1759,8 +1839,13 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
+<<<<<<< HEAD
             sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
+=======
+            sb.append("\"database\" = \"").append(hiveTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getCatalogTableName()).append("\",\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
             if (!hiveTable.getProperties().isEmpty()) {
                 sb.append(",\n");
@@ -1782,8 +1867,13 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
+<<<<<<< HEAD
             sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(hudiTable.getTableName()).append("\",\n");
+=======
+            sb.append("\"database\" = \"").append(hudiTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getCatalogTableName()).append("\",\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == Table.TableType.ICEBERG) {
@@ -1792,18 +1882,30 @@ public class AstToStringBuilder {
 
             // properties
             sb.append("\nPROPERTIES (\n");
+<<<<<<< HEAD
             sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
             sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == JDBC) {
+=======
+            sb.append("\"database\" = \"").append(icebergTable.getCatalogDBName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getCatalogTableName()).append("\",\n");
+            sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
+            sb.append("\n)");
+        } else if (table.getType() == Table.TableType.JDBC) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             JDBCTable jdbcTable = (JDBCTable) table;
             addTableComment(sb, table);
 
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
+<<<<<<< HEAD
             sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
+=======
+            sb.append("\"table\" = \"").append(jdbcTable.getCatalogTableName()).append("\"");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             sb.append("\n)");
         }
         sb.append(";");
@@ -1829,7 +1931,11 @@ public class AstToStringBuilder {
                 sb.append(entry.getValue().lowerEndpoint().toSql());
                 sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
                 sb.append("(\"version_info\" = \"");
+<<<<<<< HEAD
                 sb.append(partition.getVisibleVersion()).append("\"");
+=======
+                sb.append(partition.getDefaultPhysicalPartition().getVisibleVersion()).append("\"");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 sb.append(");");
                 addPartitionStmt.add(sb.toString());
             }
@@ -1897,7 +2003,11 @@ public class AstToStringBuilder {
         // Location
         String location = null;
         if (table.isHiveTable() || table.isHudiTable()) {
+<<<<<<< HEAD
             location = ((HiveMetaStoreTable) table).getTableLocation();
+=======
+            location = (table).getTableLocation();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (table.isIcebergTable()) {
             location = table.getTableLocation();
         } else if (table.isDeltalakeTable()) {

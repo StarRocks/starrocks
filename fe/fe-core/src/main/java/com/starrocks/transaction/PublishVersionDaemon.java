@@ -43,8 +43,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -112,7 +117,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // batch publish
                 List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
                         getReadyPublishTransactionsBatch();
+<<<<<<< HEAD
                 if (!readyTransactionStatesBatch.isEmpty()) {
+=======
+                if (readyTransactionStatesBatch.size() != 0) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     publishVersionForLakeTableBatch(readyTransactionStatesBatch);
                 }
                 return;
@@ -126,9 +135,17 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             // TODO: need to refactor after be split into cn + dn
+<<<<<<< HEAD
             List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (RunMode.isSharedDataMode()) {
                 allBackends.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
+=======
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+            if (RunMode.isSharedDataMode()) {
+                allBackends.addAll(
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (allBackends.isEmpty()) {
@@ -266,7 +283,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishingLakeTransactionsBatchTableId;
     }
 
+<<<<<<< HEAD
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
+=======
+    private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         // every backend-transaction identified a single task
@@ -363,7 +384,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
                 }
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.error("errors while publish version to all backends", e);
             }
         }
@@ -419,12 +444,20 @@ public class PublishVersionDaemon extends FrontendDaemon {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
             try {
                 globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
+<<<<<<< HEAD
             } catch (UserException ex) {
+=======
+            } catch (StarRocksException ex) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("Fail to finish txn " + txnId, ex);
             }
             return CompletableFuture.completedFuture(null);
@@ -449,7 +482,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new RuntimeException(e);
                 }
             }
@@ -468,6 +505,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         Map<Long, Set<Tablet>> shadowTabletsMap = new HashMap<>();
         Set<Tablet> normalTablets = null;
+<<<<<<< HEAD
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
         Locker locker = new Locker();
@@ -476,6 +514,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
         // version -> shadowTablets
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        // version -> shadowTablets
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        try {
+            OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 // table has been dropped
                 return true;
@@ -516,7 +564,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         long startVersion = versions.get(0);
@@ -527,9 +579,15 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 int index = versions.indexOf(item.getKey());
                 List<Tablet> publishShadowTablets = new ArrayList<>(item.getValue());
                 Utils.publishLogVersionBatch(publishShadowTablets,
+<<<<<<< HEAD
                         txnInfos.subList(index, txnInfos.size()).stream().map(i -> i.txnId)
                                 .collect(Collectors.toList()),
                         versions.subList(index, versions.size()), warehouseId);
+=======
+                        txnInfos.subList(index, txnInfos.size()),
+                        versions.subList(index, versions.size()),
+                        warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
@@ -539,9 +597,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // used to delete txnLog when publish success
                 Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
                 Utils.publishVersionBatch(publishTablets, txnInfos,
+<<<<<<< HEAD
                         startVersion - 1, endVersion, compactionScores, 
                         warehouseId,
                         nodeToTablets);
+=======
+                        startVersion - 1, endVersion, compactionScores, nodeToTablets,
+                        warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
@@ -556,6 +619,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return true;
     }
 
+<<<<<<< HEAD
     private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch) {
         try {
             // TODO: do not send abortTxn() requests for transactions with combined txn log.
@@ -590,6 +654,73 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                 });
             });
+=======
+    private void deleteTxnLogIgnoreError(ComputeNode node, DeleteTxnLogRequest request) {
+        try {
+            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            // just ignore the response, for we don't care the result of delete txn log
+            // and vacuum will clan the txn log finally if it failed.
+            lakeService.deleteTxnLog(request);
+        } catch (Exception e) {
+            LOG.warn("delete txn log error: " + e.getMessage());
+        }
+    }
+
+    private Runnable getDeleteTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            // For each partition, send a delete request to all the tablets in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
+                for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
+                    ComputeNode node = entryItem.getKey();
+                    DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                    request.tabletIds = new ArrayList<>(entryItem.getValue());
+                    request.txnIds = txnIds;
+                    deleteTxnLogIgnoreError(node, request);
+                }
+            }
+        };
+    }
+
+    private Runnable getDeleteCombinedTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            List<TxnInfoPB> txnInfoPBList = new ArrayList<>();
+            for (Long txnId : txnIds) {
+                TxnInfoPB txnInfoPB = new TxnInfoPB();
+                txnInfoPB.txnId = txnId;
+                txnInfoPB.combinedTxnLog = true;
+                txnInfoPBList.add(txnInfoPB);
+            }
+            // For each partition, send a delete request to any tablet in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map.Entry<ComputeNode, Set<Long>> entryItem = entry.getValue().entrySet().iterator().next();
+                ComputeNode node = entryItem.getKey();
+                DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                request.tabletIds = new ArrayList<>(entryItem.getValue());
+                request.txnInfos = txnInfoPBList;
+                deleteTxnLogIgnoreError(node, request);
+            }
+        };
+    }
+
+    private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch) {
+        try {
+            List<Long> txnIdsWithNormalTxnLog = new ArrayList<>();
+            List<Long> txnIdsWithCombinedTxnLog = new ArrayList<>();
+            for (TransactionState state : txnStateBatch.getTransactionStates()) {
+                if (state.isUseCombinedTxnLog()) {
+                    txnIdsWithCombinedTxnLog.add(state.getTransactionId());
+                } else {
+                    txnIdsWithNormalTxnLog.add(state.getTransactionId());
+                }
+            }
+            if (!txnIdsWithNormalTxnLog.isEmpty()) {
+                getDeleteTxnLogExecutor().submit(getDeleteTxnLogTask(txnStateBatch, txnIdsWithNormalTxnLog));
+            }
+            if (!txnIdsWithCombinedTxnLog.isEmpty()) {
+                getDeleteTxnLogExecutor().submit(getDeleteCombinedTxnLogTask(txnStateBatch, txnIdsWithCombinedTxnLog));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             LOG.warn("delete txn log error: " + e.getMessage());
         }
@@ -618,7 +749,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (db == null) {
             LOG.info("the database of transaction batch {} has been deleted", txnStateBatch);
@@ -627,7 +762,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     globalTransactionMgr.finishTransaction(state.getDbId(), state.getTransactionId(),
                             Sets.newHashSet());
                 }
+<<<<<<< HEAD
             } catch (UserException ex) {
+=======
+            } catch (StarRocksException ex) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("Fail to finish txn Batch " + txnStateBatch, ex);
             }
             return CompletableFuture.completedFuture(null);
@@ -664,7 +803,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new RuntimeException(e);
                 }
             }
@@ -729,15 +872,26 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<Tablet> shadowTablets = null;
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        try {
+            OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
                 return true;
             }
+<<<<<<< HEAD
             long partitionId = partitionCommitInfo.getPartitionId();
+=======
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
@@ -763,13 +917,21 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
         try {
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
+<<<<<<< HEAD
                 Utils.publishLogVersion(shadowTablets, txnId, txnVersion, warehouseId);
+=======
+                Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
@@ -781,7 +943,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
+<<<<<<< HEAD
             LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
+=======
+            // prevent excessive logging
+            if (partitionCommitInfo.getVersionTime() < 0 &&
+                    Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
+                return false;
+            }
+            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     txnId, e.getMessage());
             return false;
         }

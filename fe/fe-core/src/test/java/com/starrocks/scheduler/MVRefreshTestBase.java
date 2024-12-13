@@ -97,8 +97,13 @@ public class MVRefreshTestBase {
     }
 
     protected MaterializedView getMv(String dbName, String mvName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
@@ -106,8 +111,13 @@ public class MVRefreshTestBase {
     }
 
     protected Table getTable(String dbName, String tableName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table);
         return table;
     }
@@ -162,7 +172,10 @@ public class MVRefreshTestBase {
         Map<String, String> infoStrings = profile.getInfoStrings();
         Assert.assertTrue(infoStrings.containsKey("MVQueryCacheStats"));
         String cacheStats = infoStrings.get("MVQueryCacheStats");
+<<<<<<< HEAD
         System.out.println(cacheStats);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return GsonUtils.GSON.fromJson(cacheStats,
                 QueryMaterializationContext.QueryCacheStats.class);
     }

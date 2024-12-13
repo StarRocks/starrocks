@@ -40,7 +40,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -118,7 +122,11 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = editLog;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db;
 
@@ -150,6 +158,17 @@ public class SystemInfoServiceTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getDb(anyLong);
+                minTimes = 0;
+                result = db;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(nodeMgr) {
             {
                 systemInfoService = new SystemInfoService();
@@ -439,7 +458,11 @@ public class SystemInfoServiceTest {
         Assert.assertEquals(1, computeNods.size());
 
         // test seqChooseBackendOrComputeId func
+<<<<<<< HEAD
         Exception exception = Assertions.assertThrows(UserException.class, () -> {
+=======
+        Exception exception = Assertions.assertThrows(StarRocksException.class, () -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend alive."));
@@ -458,7 +481,11 @@ public class SystemInfoServiceTest {
             }
         };
 
+<<<<<<< HEAD
         exception = Assert.assertThrows(UserException.class, () -> {
+=======
+        exception = Assert.assertThrows(StarRocksException.class, () -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));

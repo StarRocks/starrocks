@@ -17,12 +17,22 @@ package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+=======
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlPassword;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -30,11 +40,14 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+<<<<<<< HEAD
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -48,19 +61,28 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+<<<<<<< HEAD
 import java.util.concurrent.ConcurrentHashMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthenticationMgr.class);
+<<<<<<< HEAD
     private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String ROOT_USER = "root";
     public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
 
@@ -120,9 +142,12 @@ public class AuthenticationMgr {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
+<<<<<<< HEAD
     @SerializedName("sim")
     protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AuthenticationMgr() {
         // default plugin
         AuthenticationProviderFactory.installPlugin(
@@ -131,8 +156,11 @@ public class AuthenticationMgr {
                 LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
         AuthenticationProviderFactory.installPlugin(
                 KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
+<<<<<<< HEAD
         AuthenticationProviderFactory.installPlugin(
                 LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
@@ -203,10 +231,13 @@ public class AuthenticationMgr {
         }
     }
 
+<<<<<<< HEAD
     public String getDefaultPlugin() {
         return DEFAULT_PLUGIN;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean match(String remoteUser, String remoteHost, boolean isDomain, UserAuthenticationInfo info) {
         // quickly filter unmatched entries by username
         if (!info.matchUser(remoteUser)) {
@@ -263,6 +294,7 @@ public class AuthenticationMgr {
         return null;
     }
 
+<<<<<<< HEAD
     protected UserIdentity checkPasswordForNonNative(
             String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString, String authMechanism) {
         SecurityIntegration securityIntegration =
@@ -311,6 +343,10 @@ public class AuthenticationMgr {
         }
 
         return authenticatedUser;
+=======
+    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
+        return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
@@ -318,6 +354,7 @@ public class AuthenticationMgr {
                 remotePasswd.getBytes(StandardCharsets.UTF_8), null);
     }
 
+<<<<<<< HEAD
     public void checkPasswordReuse(UserIdentity user, String plainPassword) throws DdlException {
         if (Config.enable_password_reuse) {
             return;
@@ -327,6 +364,8 @@ public class AuthenticationMgr {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void createUser(CreateUserStmt stmt) throws DdlException {
         UserIdentity userIdentity = stmt.getUserIdentity();
         UserAuthenticationInfo info = stmt.getAuthenticationInfo();
@@ -672,7 +711,10 @@ public class AuthenticationMgr {
         // mark data is loaded
         this.isLoaded = true;
         this.userNameToProperty = ret.userNameToProperty;
+<<<<<<< HEAD
         this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
     }
 

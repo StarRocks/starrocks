@@ -28,7 +28,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
@@ -108,19 +112,51 @@ public class ForeignKeyConstraint extends Constraint {
 
     private Table getParentTable() {
         if (parentTableInfo.isInternalCatalog()) {
+<<<<<<< HEAD
             return MetaUtils.getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
         } else {
             return MetaUtils.getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(),
                     parentTableInfo.getTableName());
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", parentTableInfo.getTableId());
+            }
+            return table;
+        } else {
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(), parentTableInfo.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", parentTableInfo.getTableName());
+            }
+            return table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     private Table getChildTable() {
         if (childTableInfo.isInternalCatalog()) {
+<<<<<<< HEAD
             return MetaUtils.getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
         } else {
             return MetaUtils.getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(),
                     childTableInfo.getTableName());
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", childTableInfo.getTableId());
+            }
+            return table;
+        } else {
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(), childTableInfo.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", childTableInfo.getTableName());
+            }
+            return table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -222,11 +258,25 @@ public class ForeignKeyConstraint extends Constraint {
                     "BaseTableInfo table %s should be tableId for internal catalog", table);
             long dbId = Long.parseLong(db);
             long tableId = Long.parseLong(table);
+<<<<<<< HEAD
             Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
             Preconditions.checkArgument(database != null, "BaseInfo's db %s should not null", dbId);
             Table baseTable = database.getTable(tableId);
             Preconditions.checkArgument(baseTable != null,
                     "BaseInfo's baseTable %s should not null", tableId);
+=======
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (database == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo's db %s should not be null in the foreign key " +
+                        "constraint, please drop foreign key constraints and retry", dbId));
+            }
+            Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+            if (baseTable == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo' base table %s should not be null in the foreign kee" +
+                                " constraint, please drop foreign key constraints and retry",
+                        tableId));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             baseTableInfo = new BaseTableInfo(dbId, database.getFullName(), baseTable.getName(), tableId);
         } else {
             baseTableInfo = new BaseTableInfo(catalogName, db, table, tableIdentifier);

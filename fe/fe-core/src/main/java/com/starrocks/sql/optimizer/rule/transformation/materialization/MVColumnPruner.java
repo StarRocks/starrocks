@@ -185,7 +185,11 @@ public class MVColumnPruner {
                 newChildOutputColumns.add(newChildOutputCols);
             }
             LogicalUnionOperator newUnionOperator = new LogicalUnionOperator(newUnionOutputColRefs, newChildOutputColumns,
+<<<<<<< HEAD
                     unionOperator.isUnionAll());
+=======
+                    unionOperator.isUnionAll(), unionOperator.isFromIcebergEqualityDeleteRewrite());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             newUnionOperator.setProjection(optExpression.getOp().getProjection());
             List<OptExpression> children = visitChildren(optExpression);
             return OptExpression.create(newUnionOperator, children);

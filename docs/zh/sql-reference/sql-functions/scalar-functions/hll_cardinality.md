@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_cardinality
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 用于计算 HLL 类型值的基数。
 

@@ -46,7 +46,13 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.encryption.KeyMgr;
+<<<<<<< HEAD
 import com.starrocks.http.rest.BootstrapFinishAction;
+=======
+import com.starrocks.http.rest.ActionStatus;
+import com.starrocks.http.rest.BootstrapFinishAction.BootstrapResult;
+import com.starrocks.monitor.jvm.JvmStats;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.HbPackage;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
@@ -65,7 +71,10 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
 import org.json.JSONObject;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 import java.util.Map;
@@ -135,11 +144,15 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         // send frontend heartbeat
         List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
+<<<<<<< HEAD
         String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
             if (NetUtils.isSameIP(frontend.getHost(), MASTER_INFO.get().getNetwork_address().getHostname())) {
                 masterFeNodeName = frontend.getNodeName();
             }
+=======
+        for (Frontend frontend : frontends) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
                     GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
@@ -179,12 +192,15 @@ public class HeartbeatMgr extends FrontendDaemon {
             }
         } // end for all results
 
+<<<<<<< HEAD
         // we also add a 'mocked' master Frontend heartbeat response to synchronize master info to other Frontends.
         hbPackage.addHbResponse(new FrontendHbResponse(masterFeNodeName, Config.query_port, Config.rpc_port,
                 GlobalStateMgr.getCurrentState().getMaxJournalId(),
                 System.currentTimeMillis(), GlobalStateMgr.getCurrentState().getFeStartTime(),
                 Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH));
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
 
@@ -296,6 +312,10 @@ public class HeartbeatMgr extends FrontendDaemon {
                     TBackendInfo tBackendInfo = result.getBackend_info();
                     int bePort = tBackendInfo.getBe_port();
                     int httpPort = tBackendInfo.getHttp_port();
+<<<<<<< HEAD
+=======
+                    int arrowPort = tBackendInfo.getArrow_flight_port();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     int brpcPort = -1;
                     int starletPort = 0;
                     boolean isSetStoragePath = false;
@@ -321,20 +341,33 @@ public class HeartbeatMgr extends FrontendDaemon {
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
                     BackendHbResponse backendHbResponse = new BackendHbResponse(
                             computeNodeId, bePort, httpPort, brpcPort, starletPort,
+<<<<<<< HEAD
                             System.currentTimeMillis(), version, cpuCores, memLimitBytes, isSetStoragePath);
+=======
+                            System.currentTimeMillis(), version, cpuCores, memLimitBytes, isSetStoragePath,
+                            arrowPort);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (tBackendInfo.isSetReboot_time()) {
                         backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
                     }
                     return backendHbResponse;
                 } else {
+<<<<<<< HEAD
                     return new BackendHbResponse(computeNodeId,
+=======
+                    return new BackendHbResponse(computeNodeId, result.getStatus().getStatus_code(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
                 LOG.warn("backend heartbeat got exception, addr: {}:{}",
                         computeNode.getHost(), computeNode.getHeartbeatPort(), e);
+<<<<<<< HEAD
                 return new BackendHbResponse(computeNodeId,
+=======
+                return new BackendHbResponse(computeNodeId, TStatusCode.UNKNOWN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             }
         }
@@ -358,9 +391,16 @@ public class HeartbeatMgr extends FrontendDaemon {
                 // heartbeat to self
                 if (GlobalStateMgr.getCurrentState().isReady()) {
                     return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
+<<<<<<< HEAD
                             GlobalStateMgr.getCurrentState().getReplayedJournalId(), System.currentTimeMillis(),
                             GlobalStateMgr.getCurrentState().getFeStartTime(),
                             Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
+=======
+                            GlobalStateMgr.getCurrentState().getMaxJournalId(), System.currentTimeMillis(),
+                            GlobalStateMgr.getCurrentState().getFeStartTime(),
+                            Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH,
+                            JvmStats.getJvmHeapUsedPercent());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     return new FrontendHbResponse(fe.getNodeName(), "not ready");
                 }
@@ -370,13 +410,18 @@ public class HeartbeatMgr extends FrontendDaemon {
             String url = "http://" + accessibleHostPort
                     + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
+<<<<<<< HEAD
                 String result = Util.getResultForUrl(url, null,
+=======
+                String resultStr = Util.getResultForUrl(url, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);
                 /*
                  * return:
                  * {"replayedJournalId":191224,"queryPort":9131,"rpcPort":9121,"status":"OK","msg":"Success"}
                  * {"replayedJournalId":0,"queryPort":0,"rpcPort":0,"status":"FAILED","msg":"not ready"}
                  */
+<<<<<<< HEAD
                 JSONObject root = new JSONObject(result);
                 String status = root.getString("status");
                 if (!"OK".equals(status)) {
@@ -389,6 +434,15 @@ public class HeartbeatMgr extends FrontendDaemon {
                     String feVersion = root.getString(BootstrapFinishAction.FE_VERSION);
                     return new FrontendHbResponse(fe.getNodeName(), queryPort, rpcPort, replayedJournalId,
                             System.currentTimeMillis(), feStartTime, feVersion);
+=======
+                BootstrapResult result = BootstrapResult.fromJson(resultStr);
+                if (result.getStatus() != ActionStatus.OK) {
+                    return new FrontendHbResponse(fe.getNodeName(), result.getMessage());
+                } else {
+                    return new FrontendHbResponse(fe.getNodeName(), result.getQueryPort(), result.getRpcPort(),
+                            result.getReplayedJournal(), System.currentTimeMillis(),
+                            result.getFeStartTime(), result.getFeVersion(), result.getHeapUsedPercent());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             } catch (Exception e) {
                 return new FrontendHbResponse(fe.getNodeName(),
@@ -437,6 +491,10 @@ public class HeartbeatMgr extends FrontendDaemon {
             handleHbResponse(hbResult, true);
         }
     }
+<<<<<<< HEAD
 
 }
 
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

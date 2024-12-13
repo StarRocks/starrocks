@@ -37,6 +37,10 @@
 #include <memory>
 
 #include "storage/olap_define.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/base_rowset.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/tablet_meta.h"
 #include "storage/utils.h"
 
@@ -118,6 +122,12 @@ public:
 
     virtual size_t num_rows() const = 0;
 
+<<<<<<< HEAD
+=======
+    virtual StatusOr<bool> has_delete_predicates(const Version& version) = 0;
+
+protected:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual void on_shutdown() {}
 
 protected:

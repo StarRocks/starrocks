@@ -49,8 +49,11 @@ import com.starrocks.common.Status;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+<<<<<<< HEAD
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -74,7 +77,10 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+<<<<<<< HEAD
 import com.starrocks.transaction.GlobalTransactionMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.warehouse.Warehouse;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -86,15 +92,24 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+<<<<<<< HEAD
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJob extends AlterJobV2 {
+=======
+import javax.validation.constraints.NotNull;
+
+public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(LakeTableSchemaChangeJob.class);
 
     // physical partition id -> (shadow index id -> (shadow tablet id -> origin tablet id))
@@ -130,9 +145,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @SerializedName(value = "indexes")
     private List<Index> indexes = null;
 
+<<<<<<< HEAD
     // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "startTime")
     private long startTime;
 
@@ -243,12 +261,15 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
     public static void sendAgentTask(AgentBatchTask batchTask) {
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
     }
 
     @VisibleForTesting
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
                                             AtomicBoolean isCancelling) throws AlterCancelException {
@@ -344,12 +365,22 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
             long baseIndexId = table.getBaseIndexId();
+<<<<<<< HEAD
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null);
                 TStorageMedium storageMedium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
 
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
+=======
+            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                Preconditions.checkState(physicalPartition != null);
+                TStorageMedium storageMedium = table.getPartitionInfo()
+                        .getDataProperty(physicalPartition.getParentId()).getStorageMedium();
+
+                Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
                     long shadowIdxId = entry.getKey();
                     MaterializedIndex shadowIdx = entry.getValue();
@@ -387,7 +418,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 .setNodeId(computeNode.getId())
                                 .setDbId(dbId)
                                 .setTableId(tableId)
+<<<<<<< HEAD
                                 .setPartitionId(partitionId)
+=======
+                                .setPartitionId(physicalPartitionId)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 .setIndexId(shadowIdxId)
                                 .setTabletId(shadowTabletId)
                                 .setVersion(Partition.PARTITION_INIT_VERSION)
@@ -664,7 +699,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             txnInfo.combinedTxnLog = false;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
+<<<<<<< HEAD
             txnInfo.forcePublish = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -698,9 +736,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         if (modifiedColumns.isEmpty()) {
             return;
         }
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         for (MvId mvId : tbl.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;
@@ -736,6 +781,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
+<<<<<<< HEAD
     @NotNull
     OlapTable getTableOrThrow(@Nullable LockedDatabase db, long tableId) throws AlterCancelException {
         if (db == null) {
@@ -748,6 +794,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         return table;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void replay(AlterJobV2 replayedJob) {
         LakeTableSchemaChangeJob other = (LakeTableSchemaChangeJob) replayedJob;
@@ -992,13 +1040,21 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
 
         writeEditLog(this);
+<<<<<<< HEAD
+=======
+        LOG.info("Lake schema change job canceled, jobId: {}, error: {}", jobId, errMsg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return true;
     }
 
     AgentBatchTask getOrCreateSchemaChangeBatchTask() {
+<<<<<<< HEAD
         if (schemaChangeBatchTask ==
                 null) { // This would happen after FE restarted and this object was deserialized from Json.
+=======
+        if (schemaChangeBatchTask == null) { // This would happen after FE restarted and this object was deserialized from Json.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             schemaChangeBatchTask = new AgentBatchTask();
         }
         return schemaChangeBatchTask;
@@ -1042,17 +1098,21 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
+<<<<<<< HEAD
     private boolean tableExists() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             return db != null && db.getTable(tableId) != null;
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this, AlterJobV2.class);
         Text.writeString(out, json);
     }
+<<<<<<< HEAD
 
     @Nullable
     ReadLockedDatabase getReadLockedDatabase(long dbId) {
@@ -1134,4 +1194,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     public Optional<Long> getTransactionId() {
         return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

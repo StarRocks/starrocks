@@ -20,6 +20,11 @@
 #include <utility>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "runtime/memory/column_allocator.h"
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::raw {
 
 // RawAllocator allocates `trailing` more object(not bytes) than caller required,
@@ -148,6 +153,7 @@ using RawStringPad16 = std::string;
 // starrocks::raw::RawVectorPad16<int8_t> a;
 // a.resize(100);
 // std::vector<uint8_t> b = std::move(reinterpret_cast<std::vector<uint8_t>&>(a));
+<<<<<<< HEAD
 template <class T>
 using RawVector = std::vector<T, RawAllocator<T, 0>>;
 
@@ -159,6 +165,22 @@ inline void make_room(std::vector<T>* v, size_t n) {
     RawVector<T> rv;
     rv.resize(n);
     v->swap(reinterpret_cast<std::vector<T>&>(rv));
+=======
+template <class T, class Alloc = std::allocator<T>>
+using RawVector = std::vector<T, RawAllocator<T, 0, Alloc>>;
+
+template <class T, class Alloc = std::allocator<T>>
+using RawVectorPad16 = std::vector<T, RawAllocator<T, 16, Alloc>>;
+
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+make_room(Container* v, size_t n) {
+    RawVector<T, typename Container::allocator_type> rv;
+    rv.resize(n);
+    v->swap(reinterpret_cast<Container&>(rv));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 inline void make_room(std::string* s, size_t n) {
@@ -167,9 +189,18 @@ inline void make_room(std::string* s, size_t n) {
     s->swap(reinterpret_cast<std::string&>(rs));
 }
 
+<<<<<<< HEAD
 template <typename T>
 inline void stl_vector_resize_uninitialized(std::vector<T>* vec, size_t new_size) {
     ((RawVector<T>*)vec)->resize(new_size);
+=======
+template <typename Container, typename T = typename Container::value_type>
+inline typename std::enable_if<
+        std::is_same<Container, std::vector<typename Container::value_type, typename Container::allocator_type>>::value,
+        void>::type
+stl_vector_resize_uninitialized(Container* vec, size_t new_size) {
+    ((RawVector<T, typename Container::allocator_type>*)vec)->resize(new_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {

@@ -19,8 +19,13 @@
 #include "column/vectorized_fwd.h"
 #include "exec/sorting/sort_helper.h"
 #include "gutil/casts.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "storage/decimal12.h"
+=======
+#include "storage/decimal12.h"
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 #include "util/value_generator.h"
@@ -29,11 +34,16 @@ namespace starrocks {
 
 template <typename T>
 StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
+<<<<<<< HEAD
     if (capacity_limit_reached()) {
         return Status::InternalError("Size of FixedLengthColumn exceed the limit");
     } else {
         return nullptr;
     }
+=======
+    RETURN_IF_ERROR(capacity_limit_reached());
+    return nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <typename T>
@@ -65,7 +75,11 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
 
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
+<<<<<<< HEAD
 ColumnPtr FixedLengthColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
+=======
+ColumnPtr FixedLengthColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto dest = this->clone_empty();
     auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
     dest_data._data.resize(offsets.back());
@@ -89,7 +103,11 @@ void FixedLengthColumnBase<T>::fill_default(const Filter& filter) {
 }
 
 template <typename T>
+<<<<<<< HEAD
 Status FixedLengthColumnBase<T>::fill_range(const Buffer<T>& ids, const std::vector<uint8_t>& filter) {
+=======
+Status FixedLengthColumnBase<T>::fill_range(const std::vector<T>& ids, const Filter& filter) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK_EQ(filter.size(), _data.size());
     size_t j = 0;
     for (size_t i = 0; i < _data.size(); ++i) {

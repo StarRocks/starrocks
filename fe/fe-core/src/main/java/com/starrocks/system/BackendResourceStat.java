@@ -198,4 +198,8 @@ public class BackendResourceStat {
     public void setCachedAvgNumHardwareCores(int cores) {
         cachedAvgNumHardwareCores.set(cores);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

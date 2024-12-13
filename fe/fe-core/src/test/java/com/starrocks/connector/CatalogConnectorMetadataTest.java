@@ -18,7 +18,11 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
@@ -40,7 +44,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class CatalogConnectorMetadataTest {
 
     private final InformationSchemaMetadata informationSchemaMetadata = new InformationSchemaMetadata("test_catalog");
+<<<<<<< HEAD
     private final TableMetaMetadata metaMetadata = new TableMetaMetadata("test_catalog");
+=======
+    private final TableMetaMetadata metaMetadata = new TableMetaMetadata("test_catalog", "test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Test
     void testListDbNames(@Mocked ConnectorMetadata connectorMetadata) {
@@ -161,9 +169,17 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
+<<<<<<< HEAD
     void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
         ctx.setThreadLocalInfo();
+=======
+    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws StarRocksException {
+        ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+        ctx.setThreadLocalInfo();
+        GetRemoteFilesParams getRemoteFilesParams =
+                GetRemoteFilesParams.newBuilder().setTableVersionRange(TableVersionRange.empty()).build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -172,7 +188,11 @@ public class CatalogConnectorMetadataTest {
                 times = 1;
 
                 connectorMetadata.clear();
+<<<<<<< HEAD
                 connectorMetadata.listPartitionNames("test_db", "test_tbl", -1);
+=======
+                connectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 connectorMetadata.dropTable(null);
                 connectorMetadata.refreshTable("test_db", null, null, false);
                 connectorMetadata.alterMaterializedView(null);
@@ -189,16 +209,27 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.alterView(null);
                 connectorMetadata.truncateTable(null, null);
                 connectorMetadata.alterTableComment(null, null, null);
+<<<<<<< HEAD
                 connectorMetadata.finishSink("test_db", "test_tbl", null);
+=======
+                connectorMetadata.finishSink("test_db", "test_tbl", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 connectorMetadata.abortSink("test_db", "test_tbl", null);
                 connectorMetadata.createTableLike(null);
                 connectorMetadata.createTable(null);
                 connectorMetadata.createDb("test_db");
                 connectorMetadata.dropDb("test_db", false);
+<<<<<<< HEAD
                 connectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
                 connectorMetadata.getPartitions(null, null);
                 connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
                 connectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+=======
+                connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
+                connectorMetadata.getPartitions(null, null);
+                connectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
+                connectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -209,7 +240,11 @@ public class CatalogConnectorMetadataTest {
         );
 
         catalogConnectorMetadata.clear();
+<<<<<<< HEAD
         catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", -1);
+=======
+        catalogConnectorMetadata.listPartitionNames("test_db", "test_tbl", ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         catalogConnectorMetadata.dropTable(null);
         catalogConnectorMetadata.refreshTable("test_db", null, null, false);
         catalogConnectorMetadata.alterMaterializedView(null);
@@ -226,15 +261,26 @@ public class CatalogConnectorMetadataTest {
         catalogConnectorMetadata.alterView(null);
         catalogConnectorMetadata.truncateTable(null, null);
         catalogConnectorMetadata.alterTableComment(null, null, null);
+<<<<<<< HEAD
         catalogConnectorMetadata.finishSink("test_db", "test_tbl", null);
+=======
+        catalogConnectorMetadata.finishSink("test_db", "test_tbl", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         catalogConnectorMetadata.abortSink("test_db", "test_tbl", null);
         catalogConnectorMetadata.createTableLike(null);
         catalogConnectorMetadata.createTable(null);
         catalogConnectorMetadata.createDb("test_db");
         catalogConnectorMetadata.dropDb("test_db", false);
+<<<<<<< HEAD
         catalogConnectorMetadata.getRemoteFileInfos(null, null, 0, null, null, -1);
         catalogConnectorMetadata.getPartitions(null, null);
         catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
         catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1);
+=======
+        connectorMetadata.getRemoteFiles(null, getRemoteFilesParams);
+        catalogConnectorMetadata.getPartitions(null, null);
+        catalogConnectorMetadata.getMaterializedViewIndex("test_db", "test_tbl");
+        catalogConnectorMetadata.getTableStatistics(null, null, null, null, null, -1, TableVersionRange.empty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

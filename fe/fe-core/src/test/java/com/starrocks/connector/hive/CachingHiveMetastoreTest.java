@@ -103,8 +103,13 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         com.starrocks.catalog.Table table = cachingHiveMetastore.getTable("db1", "tbl1");
         HiveTable hiveTable = (HiveTable) table;
+<<<<<<< HEAD
         Assert.assertEquals("db1", hiveTable.getDbName());
         Assert.assertEquals("tbl1", hiveTable.getTableName());
+=======
+        Assert.assertEquals("db1", hiveTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", hiveTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
@@ -273,7 +278,11 @@ public class CachingHiveMetastoreTest {
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         Partition partition = cachingHiveMetastore.getPartition(
                 "db1", "tbl1", Lists.newArrayList("par1"));
+<<<<<<< HEAD
         Assert.assertEquals(ORC, partition.getInputFormat());
+=======
+        Assert.assertEquals(ORC, partition.getFileFormat());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("100", partition.getParameters().get(TOTAL_SIZE));
 
         partition = metastore.getPartition("db1", "tbl1", Lists.newArrayList());
@@ -289,12 +298,20 @@ public class CachingHiveMetastoreTest {
                 cachingHiveMetastore.getPartitionsByNames("db1", "table1", partitionNames);
 
         Partition partition1 = partitions.get("part1=1/part2=2");
+<<<<<<< HEAD
         Assert.assertEquals(ORC, partition1.getInputFormat());
+=======
+        Assert.assertEquals(ORC, partition1.getFileFormat());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("100", partition1.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=1/part2=2", partition1.getFullPath());
 
         Partition partition2 = partitions.get("part1=3/part2=4");
+<<<<<<< HEAD
         Assert.assertEquals(ORC, partition2.getInputFormat());
+=======
+        Assert.assertEquals(ORC, partition2.getFileFormat());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("100", partition2.getParameters().get(TOTAL_SIZE));
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/part1=3/part2=4", partition2.getFullPath());
     }

@@ -23,8 +23,12 @@ import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.meta.MetaContext;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef;
@@ -299,6 +303,7 @@ public class ExternalOlapTable extends OlapTable {
 
     public void updateMeta(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
             throws DdlException, IOException {
+<<<<<<< HEAD
         MetaContext metaContext = new MetaContext();
         metaContext.setStarRocksMetaVersion(FeConstants.STARROCKS_META_VERSION);
         metaContext.setThreadLocalInfo();
@@ -307,6 +312,9 @@ public class ExternalOlapTable extends OlapTable {
         } finally {
             MetaContext.remove();
         }
+=======
+        updateMetaInternal(dbName, meta, backendMetas);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void updateMetaInternal(String dbName, TTableMeta meta, List<TBackendMeta> backendMetas)
@@ -471,12 +479,28 @@ public class ExternalOlapTable extends OlapTable {
         }
 
         for (TPartitionMeta partitionMeta : meta.getPartitions()) {
+<<<<<<< HEAD
             Partition partition = new Partition(partitionMeta.getPartition_id(),
                     partitionMeta.getPartition_name(),
                     null, // TODO(wulei): fix it
                     defaultDistributionInfo);
             partition.setNextVersion(partitionMeta.getNext_version());
             partition.updateVisibleVersion(partitionMeta.getVisible_version(),
+=======
+            Partition logicalPartition = new Partition(partitionMeta.getPartition_id(),
+                    partitionMeta.getPartition_name(),
+                    defaultDistributionInfo);
+
+            PhysicalPartition physicalPartition = new PhysicalPartition(GlobalStateMgr.getCurrentState().getNextId(),
+                    partitionMeta.getPartition_name(),
+                    partitionMeta.getPartition_id(), // TODO(wulei): fix it
+                    null);
+
+            logicalPartition.addSubPartition(physicalPartition);
+
+            physicalPartition.setNextVersion(partitionMeta.getNext_version());
+            physicalPartition.updateVisibleVersion(partitionMeta.getVisible_version(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     partitionMeta.getVisible_time());
             for (TIndexMeta indexMeta : meta.getIndexes()) {
                 MaterializedIndex index = new MaterializedIndex(indexMeta.getIndex_id(),
@@ -503,18 +527,32 @@ public class ExternalOlapTable extends OlapTable {
                             tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
                     index.addTablet(tablet, tabletMeta, false);
                 }
+<<<<<<< HEAD
                 if (indexMeta.getPartition_id() == partition.getId()) {
                     if (index.getId() != baseIndexId) {
                         partition.createRollupIndex(index);
                     } else {
                         partition.setBaseIndex(index);
+=======
+                if (indexMeta.getPartition_id() == physicalPartition.getId()) {
+                    if (index.getId() != baseIndexId) {
+                        physicalPartition.createRollupIndex(index);
+                    } else {
+                        physicalPartition.setBaseIndex(index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
             if (partitionMeta.isSetIs_temp() && partitionMeta.isIs_temp()) {
+<<<<<<< HEAD
                 addTempPartition(partition);
             } else {
                 addPartition(partition);
+=======
+                addTempPartition(logicalPartition);
+            } else {
+                addPartition(logicalPartition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         long endOfTabletMetaBuild = System.currentTimeMillis();

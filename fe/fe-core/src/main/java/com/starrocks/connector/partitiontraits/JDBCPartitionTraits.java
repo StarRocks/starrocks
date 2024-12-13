@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class JDBCPartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public String getDbName() {
@@ -38,6 +39,11 @@ public class JDBCPartitionTraits extends DefaultTraits {
     @Override
     public String getTableName() {
         return ((JDBCTable) table).getJdbcTable();
+=======
+    @Override
+    public String getTableName() {
+        return table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

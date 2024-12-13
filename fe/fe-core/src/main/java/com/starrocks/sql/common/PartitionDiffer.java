@@ -14,11 +14,22 @@
 
 package com.starrocks.sql.common;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
+=======
+import com.google.common.collect.Range;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionKey;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Set;
 
@@ -27,37 +38,104 @@ import java.util.Set;
  * partition or list partition.
  */
 public abstract class PartitionDiffer {
+<<<<<<< HEAD
+=======
+    protected final MaterializedView mv;
+    // whether it's used for query rewrite or refresh, the difference is that query rewrite will not
+    // consider partition_ttl_number and mv refresh will consider it to avoid creating too much partitions
+    protected final boolean isQueryRewrite;
+
+    public PartitionDiffer(MaterializedView mv, boolean isQueryRewrite) {
+        this.mv = mv;
+        this.isQueryRewrite = isQueryRewrite;
+    }
+
+    /**
+     * Collect the ref base table's partition range map.
+     * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
+     */
+    public abstract Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos();
+
+    /**
+     * Compute the partition difference between materialized view and all ref base tables.
+     * @param rangeToInclude: <partition start, partition end> pair which is use for range differ.
+
+     * @return MvPartitionDiffResult: the result of partition difference
+     */
+    public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude);
+
+    public abstract PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
+                                                             Map<Table, Map<String, PCell>> rBTPartitionMap);
+    /**
+     * Generate the reference map between the base table and the mv.
+     * @param baseRangeMap src partition list map of the base table
+     * @param mvRangeMap mv partition name to its list partition cell
+     * @return base table -> <partition name, mv partition names> mapping
+     */
+    public abstract Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PCell>> baseRangeMap,
+                                                                            Map<String, PCell> mvRangeMap);
+
+    /**
+     * Generate the mapping from materialized view partition to base table partition.
+     * @param mvRangeMap : materialized view partition range map: <partitionName, partitionRange>
+     * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
+     * @return mv partition name -> <base table, base partition names> mapping
+     */
+    public abstract Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvRangeMap,
+                                                                          Map<Table, Map<String, PCell>> baseRangeMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * To solve multi partition columns' problem of external table, record the mv partition name to all the same
      * partition names map here.
      * @param partitionTableAndColumns the partition table and its partition column
      * @param result the result map
      */
+<<<<<<< HEAD
     public static void collectExternalPartitionNameMapping(Map<Table, Column> partitionTableAndColumns,
                                                            Map<Table, Map<String, Set<String>>> result) throws AnalysisException {
         for (Map.Entry<Table, Column> e1 : partitionTableAndColumns.entrySet()) {
             Table refBaseTable = e1.getKey();
             Column refPartitionColumn = e1.getValue();
             collectExternalBaseTablePartitionMapping(refBaseTable, refPartitionColumn, result);
+=======
+    public static void collectExternalPartitionNameMapping(Map<Table, List<Column>> partitionTableAndColumns,
+                                                           Map<Table, Map<String, Set<String>>> result) throws AnalysisException {
+        for (Map.Entry<Table, List<Column>> e : partitionTableAndColumns.entrySet()) {
+            Table refBaseTable = e.getKey();
+            List<Column> refPartitionColumns = e.getValue();
+            collectExternalBaseTablePartitionMapping(refBaseTable, refPartitionColumns, result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     /**
      * Collect the external base table's partition name to its intersected materialized view names.
      * @param refBaseTable the base table
+<<<<<<< HEAD
      * @param refTablePartitionColumn the partition column of the base table
+=======
+     * @param refTablePartitionColumns the partition column of the base table
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param result the result map
      * @throws AnalysisException
      */
     private static void collectExternalBaseTablePartitionMapping(
             Table refBaseTable,
+<<<<<<< HEAD
             Column refTablePartitionColumn,
+=======
+            List<Column> refTablePartitionColumns,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Map<Table, Map<String, Set<String>>> result) throws AnalysisException {
         if (refBaseTable.isNativeTableOrMaterializedView()) {
             return;
         }
         Map<String, Set<String>> mvPartitionNameMap = PartitionUtil.getMVPartitionNameMapOfExternalTable(refBaseTable,
+<<<<<<< HEAD
                 refTablePartitionColumn, PartitionUtil.getPartitionNames(refBaseTable));
+=======
+                refTablePartitionColumns, PartitionUtil.getPartitionNames(refBaseTable));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         result.put(refBaseTable, mvPartitionNameMap);
     }
 }

@@ -21,7 +21,10 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
+<<<<<<< HEAD
 import org.junit.Before;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.io.IOException;
@@ -35,10 +38,15 @@ public class BadHttpRequestTest extends StarRocksHttpTestCase {
 
     private static String STREAM_LOAD_URL_FORMAT;
 
+<<<<<<< HEAD
     @Before
     @Override
     public void setUp() {
         super.setUp();
+=======
+    @Override
+    protected void doSetUp() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         STREAM_LOAD_URL_FORMAT = "http://localhost:" + HTTP_PORT + STREAM_LOAD_URI_FORMAT;
     }
 

@@ -40,6 +40,12 @@ public class SeparateProjectRule implements TreeRewriteRule {
         if (!(operator instanceof LogicalProjectOperator) && operator.getProjection() != null) {
             Projection projection = operator.getProjection();
             operator.setProjection(null);
+<<<<<<< HEAD
+=======
+            // Clear statistics to recompute statistics when calculating statistics later,
+            // because some operators only recompute statistics when statistics is null.
+            root.setStatistics(null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return OptExpression.create(new LogicalProjectOperator(projection.getColumnRefMap()), root);
         } else {
             return root;

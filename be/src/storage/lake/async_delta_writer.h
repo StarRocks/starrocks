@@ -62,7 +62,11 @@ public:
     // same Status as the first call.
     //
     // [thread-safe]
+<<<<<<< HEAD
     [[nodiscard]] Status open();
+=======
+    Status open();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // REQUIRE:
     //  - |chunk| and |indexes| must be kept alive until |cb| been invoked
@@ -108,7 +112,11 @@ public:
 
     [[nodiscard]] bool is_immutable() const;
 
+<<<<<<< HEAD
     [[nodiscard]] Status check_immutable();
+=======
+    Status check_immutable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] int64_t last_write_ts() const;
 

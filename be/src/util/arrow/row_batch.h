@@ -47,6 +47,10 @@ namespace arrow {
 class DataType;
 class RecordBatch;
 class Schema;
+<<<<<<< HEAD
+=======
+class Field;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace arrow
 
@@ -55,6 +59,11 @@ namespace starrocks {
 class RowDescriptor;
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result);
+<<<<<<< HEAD
+=======
+Status convert_to_arrow_field(const TypeDescriptor& desc, const std::string& col_name, bool is_nullable,
+                              std::shared_ptr<arrow::Field>* field);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // Convert StarRocks RowDescriptor to Arrow Schema.
 Status convert_to_arrow_schema(const RowDescriptor& row_desc,
@@ -64,4 +73,8 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
 
 Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::string* result);
 
+<<<<<<< HEAD
+=======
+Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::string* result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

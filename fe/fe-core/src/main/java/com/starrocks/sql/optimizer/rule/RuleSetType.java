@@ -43,5 +43,10 @@ public enum RuleSetType {
     FINE_GRAINED_RANGE_PREDICATE,
 
     ELIMINATE_OP_WITH_CONSTANT,
+<<<<<<< HEAD
     NUM_RULE_SET
+=======
+    NUM_RULE_SET,
+    VECTOR_REWRITE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

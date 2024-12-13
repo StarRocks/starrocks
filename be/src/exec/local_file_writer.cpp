@@ -17,10 +17,16 @@
 
 #include "exec/local_file_writer.h"
 
+<<<<<<< HEAD
 #include <utility>
 
 #include "util/error_util.h"
 
+=======
+#include <cstring>
+#include <utility>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 LocalFileWriter::LocalFileWriter(std::string path, int64_t start_offset)
@@ -34,7 +40,11 @@ Status LocalFileWriter::open() {
     _fp = fopen(_path.c_str(), "w+");
     if (_fp == nullptr) {
         std::stringstream ss;
+<<<<<<< HEAD
         ss << "Open file failed. path=" << _path << ", errno= " << errno << ", description=" << get_str_err_msg();
+=======
+        ss << "Open file failed. path=" << _path << ", errno= " << errno << ", description=" << std::strerror(errno);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::InternalError(ss.str());
     }
 
@@ -43,7 +53,11 @@ Status LocalFileWriter::open() {
         if (success != 0) {
             std::stringstream ss;
             ss << "Seek to start_offset failed. offset=" << _start_offset << ", errno= " << errno
+<<<<<<< HEAD
                << ", description=" << get_str_err_msg();
+=======
+               << ", description=" << std::strerror(errno);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Status::InternalError(ss.str());
         }
     }
@@ -57,7 +71,11 @@ Status LocalFileWriter::write(const uint8_t* buf, size_t buf_len, size_t* writte
         std::stringstream error_msg;
         error_msg << "fail to write to file. "
                   << " len=" << buf_len << ", path=" << _path << ", failed with errno=" << errno
+<<<<<<< HEAD
                   << ", description=" << get_str_err_msg();
+=======
+                  << ", description=" << std::strerror(errno);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::InternalError(error_msg.str());
     }
 

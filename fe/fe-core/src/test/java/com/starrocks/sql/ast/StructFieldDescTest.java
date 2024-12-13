@@ -23,6 +23,10 @@ import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import org.junit.Assert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
@@ -33,6 +37,15 @@ public class StructFieldDescTest {
         StructField field2 = new StructField("v2", Type.VARCHAR);
         StructField field3 = new StructField("v3", Type.INT);
 
+<<<<<<< HEAD
+=======
+        Assert.assertEquals("StructField[name='v3', type=INT, position=0, fieldId=-1, fieldPhysicalName='']",
+                field3.toString());
+        StructField unnamedField = new StructField(null, Type.VARCHAR);
+        Assert.assertEquals("StructField[name='', type=VARCHAR, position=0, fieldId=-1, fieldPhysicalName='']",
+                unnamedField.toString());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StructType subStructType = new StructType(Lists.newArrayList(field2, field3));
         StructField field4 = new StructField("v4", subStructType);
         StructType type = new StructType(Lists.newArrayList(field1, field4));

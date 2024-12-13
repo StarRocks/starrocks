@@ -23,7 +23,13 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.connector.PartitionInfo;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.PartitionField;
@@ -36,12 +42,15 @@ import java.util.List;
 import java.util.Optional;
 
 public class IcebergPartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public String getDbName() {
         return ((IcebergTable) table).getRemoteDbName();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
@@ -49,7 +58,11 @@ public class IcebergPartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
+<<<<<<< HEAD
         return ((IcebergTable) table).getRemoteTableName();
+=======
+        return table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -67,7 +80,11 @@ public class IcebergPartitionTraits extends DefaultTraits {
     @Override
     public Optional<Long> maxPartitionRefreshTs() {
         IcebergTable icebergTable = (IcebergTable) table;
+<<<<<<< HEAD
         return icebergTable.getSnapshot().map(Snapshot::timestampMillis);
+=======
+        return Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot()).map(Snapshot::timestampMillis);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -77,9 +94,19 @@ public class IcebergPartitionTraits extends DefaultTraits {
         }
 
         IcebergTable icebergTable = (IcebergTable) table;
+<<<<<<< HEAD
         long snapshotId = icebergTable.getSnapshot().isPresent() ? icebergTable.getSnapshot().get().snapshotId() : -1;
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getDbName(), getTableName(), snapshotId);
+=======
+        Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
+                .map(Snapshot::snapshotId);
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setQueryMVRewrite(isQueryMVRewrite());
+        requestContext.setTableVersionRange(TableVersionRange.withEnd(snapshotId));
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -122,9 +149,15 @@ public class IcebergPartitionTraits extends DefaultTraits {
                 if (field.transform().dedupName().equalsIgnoreCase("time")) {
                     rawValue = IcebergPartitionUtils.normalizeTimePartitionName(rawValue, field,
                             icebergTable.getNativeTable().schema(), column.getType());
+<<<<<<< HEAD
                     exprValue = LiteralExpr.create(rawValue,  column.getType());
                 } else {
                     exprValue = LiteralExpr.create(rawValue,  column.getType());
+=======
+                    exprValue = LiteralExpr.create(rawValue, column.getType());
+                } else {
+                    exprValue = LiteralExpr.create(rawValue, column.getType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             partitionKey.pushColumn(exprValue, column.getType().getPrimitiveType());

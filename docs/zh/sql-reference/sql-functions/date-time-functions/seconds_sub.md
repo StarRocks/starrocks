@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # seconds_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 给指定的日期时间或日期减去指定的秒数。
 

@@ -116,9 +116,13 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+=======
+import java.io.DataOutput;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -179,12 +183,20 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String dbName = stmt.getTableName().getDb();
         String tableName = stmt.getTableName().getTbl();
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
 
+<<<<<<< HEAD
         Table table = db.getTable(tableName);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new DdlException("Table does not exist. name: " + tableName);
         }
@@ -193,7 +205,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         try {
             List<Partition> partitions = Lists.newArrayList();
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
@@ -215,7 +231,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             deleteJob.run(stmt, db, table, partitions);
@@ -628,7 +648,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         // check materialized index.
         // only need check the first partition because each partition has same materialized view
         Map<Long, List<Column>> indexIdToSchema = table.getIndexIdToSchema();
+<<<<<<< HEAD
         Partition partition = partitions.get(0);
+=======
+        PhysicalPartition partition = partitions.get(0).getDefaultPhysicalPartition();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             if (table.getBaseIndexId() == index.getId()) {
                 continue;
@@ -725,7 +749,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // show delete stmt
     public List<List<Comparable>> getDeleteInfosByDb(long dbId) {
         LinkedList<List<Comparable>> infos = new LinkedList<List<Comparable>>();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return infos;
         }
@@ -819,11 +847,19 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void updateTableDeleteInfo(GlobalStateMgr globalStateMgr, long dbId, long tableId) {
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             return;
         }
         Table table = db.getTable(tableId);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return;
         }
@@ -837,6 +873,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
+<<<<<<< HEAD
     public static DeleteMgr read(DataInput in) throws IOException {
         String json;
         try {
@@ -860,6 +897,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {
         return (currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second;
     }

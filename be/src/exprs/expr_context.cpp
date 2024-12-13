@@ -219,6 +219,10 @@ Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
     if (_runtime_state == nullptr || !_runtime_state->is_jit_enabled()) {
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool replaced = false;
     auto st = _root->replace_compilable_exprs(&_root, pool, _runtime_state, replaced);
     if (!st.ok()) {
@@ -229,6 +233,11 @@ Status ExprContext::rewrite_jit_expr(ObjectPool* pool) {
     if (replaced) { // only prepare jit_expr
         WARN_IF_ERROR(_root->prepare_jit_expr(_runtime_state, this), "prepare rewritten expr failed");
     }
+<<<<<<< HEAD
+=======
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 

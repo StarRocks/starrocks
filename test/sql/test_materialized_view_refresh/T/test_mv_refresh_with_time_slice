@@ -35,7 +35,11 @@ CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc("month", dt1)
 REFRESH DEFERRED MANUAL 
 PROPERTIES (
       "replication_num" = "1",
+<<<<<<< HEAD
       "session.enable_insert_strict" = "false",
+=======
+      "session.insert_max_filter_ratio" = "1",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
 )
 AS SELECT time_slice(dt, interval 5 day) as dt1, sum(id) FROM t1 GROUP BY dt1;
@@ -44,7 +48,11 @@ CREATE MATERIALIZED VIEW mv2 PARTITION BY date_trunc("month", dt1)
 REFRESH DEFERRED MANUAL 
 PROPERTIES (
       "replication_num" = "1",
+<<<<<<< HEAD
       "session.enable_insert_strict" = "false",
+=======
+      "session.insert_max_filter_ratio" = "1",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       "session.query_debug_options" = "{'mvRefreshTraceMode':'LOGS', 'mvRefreshTraceModule':'OPTIMIZER'}"
 )
 AS SELECT dt as dt1, sum(id) FROM t1 GROUP BY dt1;
@@ -60,4 +68,8 @@ select * from mv1 order by 1 limit 5;
 select * from mv2 order by 1 limit 5;
 
 drop materialized view mv1;
+<<<<<<< HEAD
 drop materialized view mv2;
+=======
+drop materialized view mv2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -67,6 +67,10 @@ from lib.mysql_lib import MysqlLib
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
+<<<<<<< HEAD
+=======
+from lib.arrow_sql_lib import ArrowSqlLib
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lib import *
 
 lib_path = os.path.dirname(os.path.abspath(__file__))
@@ -167,6 +171,11 @@ class StarrocksSQLApiLib(object):
         self.cluster_path = ""
         self.data_insert_lib = data_insert_lib.DataInsertLib()
         self.data_delete_lib = data_delete_lib.DataDeleteLib()
+<<<<<<< HEAD
+=======
+        self.arrow_sql_lib = ArrowSqlLib()
+        self.arrow_port = ""
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         # connection pool
         self.connection_pool = None
@@ -533,6 +542,10 @@ class StarrocksSQLApiLib(object):
         self.host_user = _get_value(cluster_conf, "host_user")
         self.host_password = _get_value(cluster_conf, "host_password")
         self.cluster_path = _get_value(cluster_conf, "cluster_path")
+<<<<<<< HEAD
+=======
+        self.arrow_port = _get_value(cluster_conf, "arrow_port")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         # client
         client_conf = _get_value(config_parser, "client")
@@ -567,6 +580,18 @@ class StarrocksSQLApiLib(object):
 
         StarrocksSQLApiLib._instance = True
 
+<<<<<<< HEAD
+=======
+    def connect_starrocks_arrow(self):
+        args_dict = {
+            "host": self.mysql_host,
+            "arrow_port": self.arrow_port if self.arrow_port else 9408,
+            "user": self.mysql_user,
+            "password": self.mysql_password,
+        }
+        self.arrow_sql_lib.connect(args_dict)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     def connect_starrocks(self):
         mysql_dict = {
             "host": self.mysql_host,
@@ -623,6 +648,12 @@ class StarrocksSQLApiLib(object):
     def close_hive(self):
         self.hive_lib.close()
 
+<<<<<<< HEAD
+=======
+    def close_starrocks_arrow(self):
+        self.arrow_sql_lib.close()
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     def create_database(self, database_name, tolerate_exist=False):
         """
         create starrocks database if tolerate exist
@@ -820,6 +851,14 @@ class StarrocksSQLApiLib(object):
             print("unknown error", e)
             raise
 
+<<<<<<< HEAD
+=======
+    def arrow_execute_sql(self, sql):
+        """arrow execute query"""
+        self.connect_starrocks_arrow()
+        return self.conn_execute_sql(self.arrow_sql_lib.connector, sql)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     def trino_execute_sql(self, sql):
         """trino execute query"""
         self.connect_trino()
@@ -1136,7 +1175,10 @@ class StarrocksSQLApiLib(object):
         """
         execute single statement and return result
         """
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         order = False
         res_container = res_container if res_container is not None else self.res_log
 
@@ -1220,6 +1262,27 @@ class StarrocksSQLApiLib(object):
                 self.record_function_res(sql, actual_res, res_container)
 
             actual_res_log = ""
+<<<<<<< HEAD
+=======
+        elif statement.startswith(ARROW_FLAG):
+            statement = statement[len(ARROW_FLAG):]
+
+            # analyse var set
+            var, statement = self.analyse_var(statement, thread_key=var_key)
+
+            self_print("[ARROW]: %s" % statement)
+            log.info("[%s] ARROW: %s" % (sql_id, statement))
+
+            actual_res = self.arrow_execute_sql(statement)
+
+            if record_mode:
+                self.treatment_record_res(statement, actual_res, res_container)
+
+            actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
+
+            # pretreatment actual res
+            actual_res, actual_res_log = self.pretreatment_res(actual_res)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         else:
             # sql
             log.info("[%s] SQL: %s" % (sql_id, statement))
@@ -1944,7 +2007,12 @@ class StarrocksSQLApiLib(object):
         """
         assert mv_name is hit in query
         """
+<<<<<<< HEAD
         tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % mv_name)
+=======
+        plan = str(res)
+        tools.assert_true(plan.find(mv_name) > 0, "assert mv %s is not found in plan: %s" % (mv_name, plan))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     def check_hit_materialized_view(self, query, *expects):
         """
@@ -1958,7 +2026,11 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(res["status"])
         plan = str(res["result"])
         for expect in expects:
+<<<<<<< HEAD
             tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+=======
+            tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     def print_hit_materialized_view(self, query, *expects) -> bool:
         """
@@ -2039,8 +2111,14 @@ class StarrocksSQLApiLib(object):
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
+<<<<<<< HEAD
         for expect in expects:
             tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
+=======
+        plan = str(res["result"])
+        for expect in expects:
+            tools.assert_false(plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
@@ -2619,6 +2697,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             plan_string = "\n".join(item[0] for item in res["result"])
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan:\n %s" % (expect, plan_string))
 
+<<<<<<< HEAD
+=======
+    def assert_show_stats_meta_contains(self, predicate, *expects):
+        """
+        assert show stats meta with predicate contains expect string
+        """
+        sql = "show stats meta %s" % predicate
+        res = self.execute_sql(sql, True)
+        for expect in expects:
+            meta_string = "\n".join(item[0] for item in res["result"])
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in show stats meta:\n %s" % (expect, meta_string))
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     def assert_trace_values_contains(self, query, *expects):
         """
         assert trace values result contains expect string
@@ -2675,6 +2766,15 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         else:
             tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
 
+<<<<<<< HEAD
+=======
+    def print_table_partitions_num(self, table_name) -> str:
+        res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
+        tools.assert_true(res["status"], "show schema change task error")
+        ans = res["result"]
+        return str(len(ans))
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     def assert_table_partitions_num(self, table_name, expect_num):
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
         tools.assert_true(res["status"], "show schema change task error")

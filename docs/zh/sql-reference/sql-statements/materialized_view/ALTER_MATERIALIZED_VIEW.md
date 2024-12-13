@@ -41,7 +41,11 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
     { RENAME [db_name.]<new_mv_name> 
     | REFRESH <new_refresh_scheme_desc> 
     | ACTIVE | INACTIVE 
+<<<<<<< HEAD
     | SWAP WITH [db_name.]<mv2_name>
+=======
+    | SWAP WITH <mv2_name>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     | SET ( "<key>" = "<value>"[,...]) }
 ```
 

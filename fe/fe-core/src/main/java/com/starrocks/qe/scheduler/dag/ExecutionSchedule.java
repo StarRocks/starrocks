@@ -14,15 +14,29 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.scheduler.Coordinator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TUniqueId;
 
 public interface ExecutionSchedule {
+<<<<<<< HEAD
     void prepareSchedule(Deployer deployer, ExecutionDAG dag);
 
     void schedule() throws RpcException, UserException;
 
     void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException;
+=======
+    void prepareSchedule(Coordinator coordinator, Deployer deployer, ExecutionDAG dag);
+
+    void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException;
+
+    void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException;
+    void cancel();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

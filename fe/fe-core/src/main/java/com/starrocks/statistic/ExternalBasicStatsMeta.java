@@ -121,10 +121,24 @@ public class ExternalBasicStatsMeta implements Writable {
         this.type = analyzeType;
     }
 
+<<<<<<< HEAD
+=======
+    public void setColumns(List<String> columns) {
+        this.columns = columns;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
     }
 
+<<<<<<< HEAD
+=======
+    public ColumnStatsMeta getColumnStatsMeta(String columnName) {
+        return columnStatsMetaMap.get(columnName);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, ColumnStatsMeta> getColumnStatsMetaMap() {
         return columnStatsMetaMap;
     }

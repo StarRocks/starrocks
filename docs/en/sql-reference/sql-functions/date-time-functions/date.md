@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Extracts the date part of a date or datetime expression.
 

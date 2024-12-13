@@ -18,7 +18,10 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
@@ -61,8 +64,14 @@ public class ShortCircuitExecutor {
     protected final WorkerProvider workerProvider;
 
     protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
+<<<<<<< HEAD
             List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable, boolean isBinaryRow,
             boolean enableProfile, String protocol, WorkerProvider workerProvider) {
+=======
+                                   List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
+                                   boolean isBinaryRow,
+                                   boolean enableProfile, String protocol, WorkerProvider workerProvider) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.context = context;
         this.planFragment = planFragment;
         this.scanRangeLocations = scanRangeLocations;
@@ -79,15 +88,27 @@ public class ShortCircuitExecutor {
     }
 
     public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
+<<<<<<< HEAD
             TDescriptorTable tDescriptorTable, boolean isBinaryRow, boolean enableProfile, String protocol,
             WorkerProvider workerProvider) {
         boolean isEmpty = scanNodes.isEmpty();
         List<TScanRangeLocations> scanRangeLocations = isEmpty ? ImmutableList.of() : scanNodes.get(0).getScanRangeLocations(0);
+=======
+                                              TDescriptorTable tDescriptorTable, boolean isBinaryRow, boolean enableProfile,
+                                              String protocol,
+                                              WorkerProvider workerProvider) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (fragments.size() != 1 || !fragments.get(0).isShortCircuit()) {
             return null;
         }
 
+<<<<<<< HEAD
         if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
+=======
+        boolean isEmpty = scanNodes.isEmpty();
+        if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
+            List<TScanRangeLocations> scanRangeLocations = scanNodes.get(0).getScanRangeLocations(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new ShortCircuitHybridExecutor(context, fragments.get(0), scanRangeLocations, tDescriptorTable, isBinaryRow,
                     enableProfile, protocol, workerProvider);
         }

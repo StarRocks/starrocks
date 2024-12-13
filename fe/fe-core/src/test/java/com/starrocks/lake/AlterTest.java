@@ -22,6 +22,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.DdlException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -63,6 +67,7 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.test_lake_partition (\n" +
+<<<<<<< HEAD
                 "      k1 DATE,\n" +
                 "      k2 INT,\n" +
                 "      k3 SMALLINT,\n" +
@@ -92,6 +97,37 @@ public class AlterTest {
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_lake_partition");
+=======
+                    "      k1 DATE,\n" +
+                    "      k2 INT,\n" +
+                    "      k3 SMALLINT,\n" +
+                    "      v1 VARCHAR(2048),\n" +
+                    "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(k1, k2, k3)\n" +
+                    "PARTITION BY RANGE (k1, k2, k3) (\n" +
+                    "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                    "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                    "PROPERTIES (\n" +
+                    "   \"datacache.enable\" = \"true\"\n" +
+                    ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        String alterSQL = "ALTER TABLE test_lake_partition ADD\n" +
+                    "    PARTITION p3 VALUES LESS THAN (\"2014-01-01\")";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .addPartitions(Util.getOrCreateConnectContext(), db, "test_lake_partition", addPartitionClause);
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+                    .getTable("test_lake_partition");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertNotNull(table.getPartition("p1"));
         Assert.assertNotNull(table.getPartition("p2"));
@@ -109,6 +145,7 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE site_access (\n" +
+<<<<<<< HEAD
                 "    datekey INT,\n" +
                 "    site_id INT,\n" +
                 "    city_code SMALLINT,\n" +
@@ -130,14 +167,44 @@ public class AlterTest {
 
         String alterSQL = "ALTER TABLE site_access \n" +
                 "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
+=======
+                    "    datekey INT,\n" +
+                    "    site_id INT,\n" +
+                    "    city_code SMALLINT,\n" +
+                    "    user_name VARCHAR(32),\n" +
+                    "    pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE (datekey) (\n" +
+                    "    START (\"1\") END (\"5\") EVERY (1)\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(site_id) BUCKETS 3\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\"\n" +
+                    ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        String alterSQL = "ALTER TABLE site_access \n" +
+                    "   ADD PARTITIONS START (\"7\") END (\"9\") EVERY (1)";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSQL, ctx);
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getAlterClauseList().get(0);
         GlobalStateMgr.getCurrentState().getLocalMetastore()
+<<<<<<< HEAD
                 .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("site_access");
+=======
+                    .addPartitions(Util.getOrCreateConnectContext(), db, "site_access", addPartitionClause);
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+                    .getTable("site_access");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertNotNull(table.getPartition("p1"));
         Assert.assertNotNull(table.getPartition("p2"));
@@ -155,6 +222,7 @@ public class AlterTest {
     public void testSingleRangePartitionPersistInfo() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE test.new_table (\n" +
+<<<<<<< HEAD
                 "      k1 DATE,\n" +
                 "      k2 INT,\n" +
                 "      k3 SMALLINT,\n" +
@@ -175,6 +243,29 @@ public class AlterTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("new_table");
+=======
+                    "      k1 DATE,\n" +
+                    "      k2 INT,\n" +
+                    "      k3 SMALLINT,\n" +
+                    "      v1 VARCHAR(2048),\n" +
+                    "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(k1, k2, k3)\n" +
+                    "PARTITION BY RANGE (k1, k2, k3) (\n" +
+                    "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                    "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                    "PROPERTIES (\n" +
+                    "   \"datacache.enable\" = \"true\"\n" +
+                    ")";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "new_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
 
         long dbId = db.getId();
@@ -188,7 +279,11 @@ public class AlterTest {
         Range<PartitionKey> range = partitionInfo.getRange(partitionId);
         DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partitionId);
         RangePartitionPersistInfo partitionPersistInfoOut = new RangePartitionPersistInfo(dbId, tableId, partition,
+<<<<<<< HEAD
                 dataProperty, replicationNum, isInMemory, isTempPartition, range, dataCacheInfo);
+=======
+                    dataProperty, replicationNum, isInMemory, isTempPartition, range, dataCacheInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // write log
         File file = new File("./test_serial.log");
@@ -229,6 +324,7 @@ public class AlterTest {
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         String createSQL = "CREATE TABLE test.t1 (\n" +
+<<<<<<< HEAD
                 "      k1 DATE,\n" +
                 "      k2 INT,\n" +
                 "      k3 SMALLINT,\n" +
@@ -244,6 +340,23 @@ public class AlterTest {
                 "PROPERTIES (\n" +
                 "   \"datacache.enable\" = \"true\"\n" +
                 ")";
+=======
+                    "      k1 DATE,\n" +
+                    "      k2 INT,\n" +
+                    "      k3 SMALLINT,\n" +
+                    "      v1 VARCHAR(2048),\n" +
+                    "      v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(k1, k2, k3)\n" +
+                    "PARTITION BY RANGE (k1, k2, k3) (\n" +
+                    "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                    "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                    "PROPERTIES (\n" +
+                    "   \"datacache.enable\" = \"true\"\n" +
+                    ")";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
@@ -257,4 +370,15 @@ public class AlterTest {
             Assert.fail();
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAlterWarehouse() throws Exception {
+        Exception e = Assert.assertThrows(DdlException.class, () ->
+                starRocksAssert.ddl("alter warehouse default_warehouse set ('compute_replica'='2')")
+        );
+        Assert.assertEquals("Multi-Warehouse is not implemented", e.getMessage());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

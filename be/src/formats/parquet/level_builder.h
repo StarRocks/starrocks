@@ -21,11 +21,16 @@
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 #include <gen_cpp/DataSinks_types.h>
+<<<<<<< HEAD
+=======
+#include <glog/logging.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
 
 #include <functional>
 #include <utility>
@@ -35,6 +40,27 @@
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
+=======
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <functional>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "column/chunk.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "formats/parquet/chunk_writer.h"
+#include "fs/fs.h"
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "types/logical_type.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::parquet {

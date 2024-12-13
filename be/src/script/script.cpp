@@ -21,6 +21,10 @@
 #include "common/greplog.h"
 #include "common/logging.h"
 #include "common/prof/heap_prof.h"
+<<<<<<< HEAD
+=======
+#include "common/vlog_cntl.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -226,7 +230,10 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, metadata_mem_tracker);
         REG_METHOD(GlobalEnv, compaction_mem_tracker);
         REG_METHOD(GlobalEnv, schema_change_mem_tracker);
+<<<<<<< HEAD
         REG_METHOD(GlobalEnv, column_pool_mem_tracker);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         REG_METHOD(GlobalEnv, page_cache_mem_tracker);
         REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
         REG_METHOD(GlobalEnv, update_mem_tracker);
@@ -262,6 +269,16 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(HeapProf, to_dot_format);
         REG_METHOD(HeapProf, dump_dot_snapshot);
     }
+<<<<<<< HEAD
+=======
+    {
+        auto& cls = m.klass<VLogCntl>("VLogCntl");
+        REG_STATIC_METHOD(VLogCntl, getInstance);
+        REG_METHOD(VLogCntl, enable);
+        REG_METHOD(VLogCntl, disable);
+        REG_METHOD(VLogCntl, setLogLevel);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 class StorageEngineRef {
@@ -517,6 +534,10 @@ public:
             REG_VAR(EditVersionInfo, creation_time);
             REG_VAR(EditVersionInfo, rowsets);
             REG_VAR(EditVersionInfo, deltas);
+<<<<<<< HEAD
+=======
+            REG_VAR(EditVersionInfo, gtid);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             REG_METHOD(EditVersionInfo, get_compaction);
         }
         {
@@ -602,7 +623,11 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
+<<<<<<< HEAD
     vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine)");
+=======
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

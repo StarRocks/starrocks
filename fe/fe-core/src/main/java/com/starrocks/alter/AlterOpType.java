@@ -66,7 +66,13 @@ public enum AlterOpType {
 
     // Optimize table
     OPTIMIZE,
+<<<<<<< HEAD
 
+=======
+    ALTER_BRANCH,
+    ALTER_TAG,
+    ALTER_TABLE_OPERATION,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.

@@ -109,17 +109,29 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
+<<<<<<< HEAD
         LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+=======
+        LocalMetastore metastore = (LocalMetastore) globalStateMgr.getLocalMetastore();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         metastore.unprotectCreateDb(db);
         return globalStateMgr;
     }
 
     public static boolean compareState(GlobalStateMgr masterGlobalStateMgr, GlobalStateMgr slaveGlobalStateMgr) {
+<<<<<<< HEAD
         Database masterDb = masterGlobalStateMgr.getDb(testDb1);
         Database slaveDb = slaveGlobalStateMgr.getDb(testDb1);
         List<Table> tables = masterDb.getTables();
         for (Table table : tables) {
             Table slaveTable = slaveDb.getTable(table.getId());
+=======
+        Database masterDb = masterGlobalStateMgr.getLocalMetastore().getDb(testDb1);
+        Database slaveDb = slaveGlobalStateMgr.getLocalMetastore().getDb(testDb1);
+        List<Table> tables = masterDb.getTables();
+        for (Table table : tables) {
+            Table slaveTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(slaveDb.getId(), table.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (slaveTable == null) {
                 return false;
             }
@@ -131,6 +143,7 @@ public class GlobalStateMgrTestUtil {
             if (masterPartition.getId() != slavePartition.getId()) {
                 return false;
             }
+<<<<<<< HEAD
             if (masterPartition.getVisibleVersion() != slavePartition.getVisibleVersion()
                     || masterPartition.getNextVersion() != slavePartition.getNextVersion()) {
                 return false;
@@ -138,6 +151,18 @@ public class GlobalStateMgrTestUtil {
             List<MaterializedIndex> allMaterializedIndices = masterPartition.getMaterializedIndices(IndexExtState.ALL);
             for (MaterializedIndex masterIndex : allMaterializedIndices) {
                 MaterializedIndex slaveIndex = slavePartition.getIndex(masterIndex.getId());
+=======
+            if (masterPartition.getDefaultPhysicalPartition().getVisibleVersion()
+                    != slavePartition.getDefaultPhysicalPartition().getVisibleVersion()
+                    || masterPartition.getDefaultPhysicalPartition().getNextVersion()
+                    != slavePartition.getDefaultPhysicalPartition().getNextVersion()) {
+                return false;
+            }
+            List<MaterializedIndex> allMaterializedIndices = masterPartition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.ALL);
+            for (MaterializedIndex masterIndex : allMaterializedIndices) {
+                MaterializedIndex slaveIndex = slavePartition.getDefaultPhysicalPartition().getIndex(masterIndex.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (slaveIndex == null) {
                     return false;
                 }
@@ -181,7 +206,11 @@ public class GlobalStateMgrTestUtil {
 
         // index
         MaterializedIndex index = new MaterializedIndex(indexId, IndexState.NORMAL);
+<<<<<<< HEAD
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD);
+=======
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId + 100, indexId, 0, TStorageMedium.HDD);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         index.addTablet(tablet, tabletMeta);
 
         tablet.addReplica(replica1);
@@ -190,9 +219,15 @@ public class GlobalStateMgrTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, testPartition1, index, distributionInfo);
         partition.updateVisibleVersion(testStartVersion);
         partition.setNextVersion(testStartVersion + 1);
+=======
+        Partition partition = new Partition(partitionId, partitionId + 100, testPartition1, index, distributionInfo);
+        partition.getDefaultPhysicalPartition().updateVisibleVersion(testStartVersion);
+        partition.getDefaultPhysicalPartition().setNextVersion(testStartVersion + 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // columns
         List<Column> columns = new ArrayList<Column>();

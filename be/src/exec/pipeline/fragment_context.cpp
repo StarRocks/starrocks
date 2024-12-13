@@ -21,6 +21,10 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
+<<<<<<< HEAD
+=======
+#include "runtime/batch_write/batch_write_mgr.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -35,6 +39,10 @@ namespace starrocks::pipeline {
 FragmentContext::FragmentContext() : _data_sink(nullptr) {}
 
 FragmentContext::~FragmentContext() {
+<<<<<<< HEAD
+=======
+    _close_stream_load_contexts();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _data_sink.reset();
     _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
     close_all_execution_groups();
@@ -181,6 +189,7 @@ void FragmentContext::set_final_status(const Status& status) {
 
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
+<<<<<<< HEAD
             std::stringstream ss;
             ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
                << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
@@ -188,6 +197,16 @@ void FragmentContext::set_final_status(const Status& status) {
                 LOG(INFO) << ss.str();
             } else {
                 LOG(WARNING) << ss.str();
+=======
+            std::string cancel_msg =
+                    fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
+                                print_id(_fragment_instance_id), detailed_message);
+            if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
+                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << cancel_msg;
+            } else {
+                LOG(WARNING) << cancel_msg;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             const auto* executors = _workgroup != nullptr
@@ -196,6 +215,15 @@ void FragmentContext::set_final_status(const Status& status) {
             auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
+<<<<<<< HEAD
+=======
+
+        for (const auto& stream_load_context : _stream_load_contexts) {
+            if (stream_load_context->body_sink) {
+                stream_load_context->body_sink->cancel(_s_status);
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -217,7 +245,10 @@ Status FragmentContext::prepare_all_pipelines() {
 
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
     _stream_load_contexts = std::move(contexts);
+<<<<<<< HEAD
     _channel_stream_load = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void FragmentContext::cancel(const Status& status) {
@@ -234,6 +265,7 @@ void FragmentContext::cancel(const Status& status) {
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
         ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
+<<<<<<< HEAD
 
     if (_stream_load_contexts.size() > 0) {
         for (const auto& stream_load_context : _stream_load_contexts) {
@@ -247,6 +279,8 @@ void FragmentContext::cancel(const Status& status) {
         }
         _stream_load_contexts.resize(0);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
@@ -311,6 +345,7 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
             ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
                                                                                       fragment_id);
         }
+<<<<<<< HEAD
         const auto& stream_load_contexts = it->second->_stream_load_contexts;
 
         if (stream_load_contexts.size() > 0) {
@@ -326,6 +361,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
             }
             it->second->_stream_load_contexts.resize(0);
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _fragment_contexts.erase(it);
     }
 }
@@ -409,4 +446,22 @@ Status FragmentContext::submit_active_drivers(DriverExecutor* executor) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void FragmentContext::acquire_runtime_filters() {
+    iterate_pipeline([this](Pipeline* pipeline) { pipeline->acquire_runtime_filter(this->runtime_state()); });
+}
+
+void FragmentContext::_close_stream_load_contexts() {
+    for (const auto& context : _stream_load_contexts) {
+        context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
+        if (context->enable_batch_write) {
+            _runtime_state->exec_env()->batch_write_mgr()->unregister_stream_load_pipe(context);
+        } else {
+            _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(context);
+        }
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

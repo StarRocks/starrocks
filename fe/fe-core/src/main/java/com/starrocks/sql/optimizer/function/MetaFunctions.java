@@ -20,6 +20,12 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -41,9 +47,12 @@ import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
@@ -101,9 +110,15 @@ public class MetaFunctions {
     }
 
     public static Pair<Database, Table> inspectTable(TableName tableName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
         Table table = db.tryGetTable(tableName.getTbl())
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(tableName.getDb(), tableName.getTbl())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
@@ -149,12 +164,20 @@ public class MetaFunctions {
         }
         Locker locker = new Locker();
         try {
+<<<<<<< HEAD
             locker.lockDatabase(dbTable.getLeft(), LockType.READ);
+=======
+            locker.lockDatabase(dbTable.getLeft().getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MaterializedView mv = (MaterializedView) table;
             String meta = mv.inspectMeta();
             return ConstantOperator.createVarchar(meta);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
+=======
+            locker.unLockDatabase(dbTable.getLeft().getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -167,19 +190,31 @@ public class MetaFunctions {
         Optional<Database> mayDb;
         Table table = inspectExternalTable(tableName);
         if (table.isNativeTableOrMaterializedView()) {
+<<<<<<< HEAD
             mayDb = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb());
+=======
+            mayDb = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(tableName.getDb());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             mayDb = Optional.empty();
         }
 
         Locker locker = new Locker();
         try {
+<<<<<<< HEAD
             mayDb.ifPresent(database -> locker.lockDatabase(database, LockType.READ));
+=======
+            mayDb.ifPresent(database -> locker.lockDatabase(database.getId(), LockType.READ));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
             JsonArray array = new JsonArray();
             for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
+<<<<<<< HEAD
                 String mvName = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
+=======
+                String mvName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(mv.getDbId(), mv.getId())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .map(Table::getName)
                         .orElse(null);
                 JsonObject obj = new JsonObject();
@@ -192,7 +227,11 @@ public class MetaFunctions {
             String json = array.toString();
             return ConstantOperator.createVarchar(json);
         } finally {
+<<<<<<< HEAD
             mayDb.ifPresent(database -> locker.unLockDatabase(database, LockType.READ));
+=======
+            mayDb.ifPresent(database -> locker.unLockDatabase(database.getId(), LockType.READ));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -246,7 +285,11 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         authOperatorPrivilege();
         String currentDb = connectContext.getDatabase();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(connectContext.getDatabase())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
         String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
         return ConstantOperator.createVarchar(json);
@@ -460,4 +503,8 @@ public class MetaFunctions {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

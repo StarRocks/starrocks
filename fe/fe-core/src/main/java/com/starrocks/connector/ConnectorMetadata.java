@@ -17,6 +17,10 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.IcebergTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -25,9 +29,16 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.metadata.MetadataTableType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -53,12 +64,21 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public interface ConnectorMetadata {
     /**
@@ -91,20 +111,35 @@ public interface ConnectorMetadata {
     /**
      * Return all partition names of the table.
      *
+<<<<<<< HEAD
      * @param databaseName the name of the database
      * @param tableName the name of the table
      * @param snapshotId table snapshot id, default value is -1
      * @return a list of partition names
      */
     default List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+=======
+     * @param databaseName   the name of the database
+     * @param tableName      the name of the table
+     * @param requestContext request context
+     * @return a list of partition names
+     */
+    default List<String> listPartitionNames(String databaseName, String tableName,
+                                            ConnectorMetadatRequestContext requestContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList();
     }
 
     /**
      * Return partial partition names of the table using partitionValues to filter.
      *
+<<<<<<< HEAD
      * @param databaseName the name of the database
      * @param tableName the name of the table
+=======
+     * @param databaseName    the name of the database
+     * @param tableName       the name of the table
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param partitionValues the partition value to filter
      * @return a list of partition names
      */
@@ -116,7 +151,11 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
+<<<<<<< HEAD
      * @param dbName - the string represents the database name
+=======
+     * @param dbName  - the string represents the database name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -124,6 +163,15 @@ public interface ConnectorMetadata {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    default TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                   Optional<ConnectorTableVersion> startVersion,
+                                                   Optional<ConnectorTableVersion> endVersion) {
+        return TableVersionRange.empty();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default boolean tableExists(String dbName, String tblName) {
         return listTableNames(dbName).contains(tblName);
     }
@@ -131,7 +179,11 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *
+<<<<<<< HEAD
      * @param dbName - the string represents the database name
+=======
+     * @param dbName  - the string represents the database name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -143,6 +195,7 @@ public interface ConnectorMetadata {
      * It is mainly used to generate ScanRange for scheduling.
      * There are two ways of current connector table.
      * 1. Get the remote files information from hdfs or s3 according to table or partition.
+<<<<<<< HEAD
      * 2. Get file scan tasks for iceberg metadata by query predicate.
      *
      * @param table
@@ -157,15 +210,38 @@ public interface ConnectorMetadata {
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                     long snapshotId, ScalarOperator predicate,
                                                     List<String> fieldNames, long limit) {
+=======
+     * 2. Get file scan tasks for iceberg/deltalake metadata by query predicate.
+     * <p>
+     * There is an implicit contract here:
+     * the order of remote file information in the list, must be identical to order of partition keys in params.
+     *
+     * @return the remote file information of the query to scan.
+     */
+    default List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        return Lists.newArrayList();
+    }
+
+    default RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        return RemoteFileInfoDefaultSource.EMPTY;
+    }
+
+    default List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList();
     }
 
     /**
      * Get table meta serialized specification
+<<<<<<< HEAD
+=======
+     *
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param dbName
      * @param tableName
      * @param snapshotId
      * @param serializedPredicate serialized predicate string of lake format expression
+<<<<<<< HEAD
      * @return table meta serialized specification
      */
     default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
@@ -174,6 +250,16 @@ public interface ConnectorMetadata {
     }
 
 
+=======
+     * @param metadataTableType   metadata table type
+     * @return table meta serialized specification
+     */
+    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId,
+                                                     String serializedPredicate, MetadataTableType metadataTableType) {
+        return null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
     }
@@ -181,6 +267,7 @@ public interface ConnectorMetadata {
     /**
      * Get statistics for the table.
      *
+<<<<<<< HEAD
      * @param session optimizer context
      * @param table
      * @param columns selected columns
@@ -188,6 +275,15 @@ public interface ConnectorMetadata {
      * @param predicate used to filter metadata for iceberg, etc
      * @param limit scan limit if needed, default value is -1
      *
+=======
+     * @param session           optimizer context
+     * @param table
+     * @param columns           selected columns
+     * @param partitionKeys     selected partition keys
+     * @param predicate         used to filter metadata for iceberg, etc
+     * @param limit             scan limit if needed, default value is -1
+     * @param tableVersionRange table version range in the query
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,
@@ -195,7 +291,12 @@ public interface ConnectorMetadata {
                                           Map<ColumnRefOperator, Column> columns,
                                           List<PartitionKey> partitionKeys,
                                           ScalarOperator predicate,
+<<<<<<< HEAD
                                           long limit) {
+=======
+                                          long limit,
+                                          TableVersionRange tableVersionRange) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Statistics.builder().build();
     }
 
@@ -203,10 +304,13 @@ public interface ConnectorMetadata {
         return true;
     }
 
+<<<<<<< HEAD
     default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
         throw new StarRocksConnectorException("This connector doesn't support pruning partitions");
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // return true if the connector has self info schema
     default boolean hasSelfInfoSchema() {
         return false;
@@ -262,14 +366,22 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support dropping temporary tables");
     }
 
+<<<<<<< HEAD
     default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+=======
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
+<<<<<<< HEAD
     default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+=======
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
@@ -286,7 +398,11 @@ public interface ConnectorMetadata {
     }
 
     default void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
+<<<<<<< HEAD
             throws DdlException, AnalysisException {
+=======
+            throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     default void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
@@ -321,11 +437,23 @@ public interface ConnectorMetadata {
     default void createView(CreateViewStmt stmt) throws DdlException {
     }
 
+<<<<<<< HEAD
     default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+=======
+    default void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     default CloudConfiguration getCloudConfiguration() {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
     }
+<<<<<<< HEAD
+=======
+
+    default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
+                                           ScalarOperator predicate, FileContent fileContent) {
+        throw new StarRocksConnectorException("This connector doesn't support getting delete files");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

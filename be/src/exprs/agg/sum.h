@@ -158,8 +158,12 @@ public:
     }
 
     void batch_finalize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+<<<<<<< HEAD
                                        size_t state_offset, Column* to,
                                        const std::vector<uint8_t>& selection) const override {
+=======
+                                       size_t state_offset, Column* to, const Filter& selection) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(to->is_numeric());
         ResultType values[chunk_size];
         size_t selected_lengh = 0;

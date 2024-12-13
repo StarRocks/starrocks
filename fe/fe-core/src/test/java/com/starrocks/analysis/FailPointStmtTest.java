@@ -16,7 +16,10 @@ package com.starrocks.analysis;
 
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

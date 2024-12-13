@@ -92,7 +92,11 @@ public:
     Status create_channel_context(ExecEnv* exec_env, const string& label, int channel_id, const string& db_name,
                                   const string& table_name, TFileFormatType::type format, StreamLoadContext*& ctx,
                                   const TUniqueId& load_id, long txn_id) {
+<<<<<<< HEAD
         auto pipe = std::make_shared<StreamLoadPipe>();
+=======
+        auto pipe = std::make_shared<StreamLoadPipe>(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(exec_env->load_stream_mgr()->put(load_id, pipe));
         ctx = new StreamLoadContext(exec_env, load_id);
         if (ctx == nullptr) {

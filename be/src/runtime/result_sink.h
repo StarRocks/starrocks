@@ -81,8 +81,16 @@ public:
 
     bool isBinaryFormat() const { return _is_binary_format; }
 
+<<<<<<< HEAD
 private:
     Status prepare_exprs(RuntimeState* state);
+=======
+    const RowDescriptor& get_row_desc() const { return _row_desc; }
+
+private:
+    Status prepare_exprs(RuntimeState* state);
+    const RowDescriptor& _row_desc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TResultSinkType::type _sink_type;
     bool _is_binary_format;
     // set format_type when sink type is HTTP

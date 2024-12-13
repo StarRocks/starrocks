@@ -33,7 +33,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.StarOSAgent;
@@ -204,7 +208,11 @@ public class PseudoCluster {
         }
 
         @Override
+<<<<<<< HEAD
         public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
+=======
+        public long createShardGroup(long dbId, long tableId, long partitionId, long indexId) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return partitionId;
         }
 
@@ -245,12 +253,20 @@ public class PseudoCluster {
         }
 
         @Override
+<<<<<<< HEAD
         public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+=======
+        public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
 
         @Override
+<<<<<<< HEAD
         public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+=======
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
     }
@@ -284,14 +300,24 @@ public class PseudoCluster {
     }
 
     public List<Long> listTablets(String dbName, String tableName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return null;
         }
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 return null;
             }
@@ -307,7 +333,11 @@ public class PseudoCluster {
             }
             return ret;
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

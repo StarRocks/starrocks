@@ -16,12 +16,21 @@ package com.starrocks.mv;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.BaseTableInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.PartitionUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.scheduler.mv.MVVersionManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -59,7 +68,12 @@ public class MVMetaVersionRepairer {
                 LOG.warn("mv db {} not found", mvId.getDbId());
                 continue;
             }
+<<<<<<< HEAD
             MaterializedView mv = (MaterializedView) mvDb.getTable(mvId.getId());
+=======
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(mvDb.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (mv == null) {
                 LOG.warn("mv {} not found", mvId.getId());
                 continue;
@@ -73,7 +87,11 @@ public class MVMetaVersionRepairer {
             try {
                 repairBaseTableTableVersionChange(mv, table, partitionRepairInfos);
             } finally {
+<<<<<<< HEAD
                 locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
+=======
+                locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -153,4 +171,77 @@ public class MVMetaVersionRepairer {
         }
         return partitionInfoMap;
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Repair mv's base table info if base table has been dropped and recreated and base table info is changed.
+     * @param mv mv to repair
+     * @param oldBaseTableInfo old base table info
+     * @param newTable new table meta data
+     * @param updatedPartitionNames updated partition names
+     */
+    public static void repairExternalBaseTableInfo(MaterializedView mv, BaseTableInfo oldBaseTableInfo,
+                                                   Table newTable, List<String> updatedPartitionNames) {
+
+        if (oldBaseTableInfo.isInternalCatalog()) {
+            return;
+        }
+
+        Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = mv.getBaseTableRefreshInfo(oldBaseTableInfo);
+        Map<String, MaterializedView.BasePartitionInfo> newPartitionInfoMap = Maps.newHashMap();
+        for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : partitionInfoMap.entrySet()) {
+            if (updatedPartitionNames.contains(entry.getKey())) {
+                newPartitionInfoMap.put(entry.getKey(), entry.getValue());
+            } else {
+                List<String> baseTablePartitionNames = Lists.newArrayList(partitionInfoMap.keySet());
+                Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos =
+                        PartitionUtil.getPartitionNameWithPartitionInfo(newTable, baseTablePartitionNames);
+                if (newPartitionInfos.containsKey(entry.getKey())) {
+                    MaterializedView.BasePartitionInfo oldBasePartitionInfo = entry.getValue();
+                    com.starrocks.connector.PartitionInfo newPartitionInfo = newPartitionInfos.get(entry.getKey());
+                    MaterializedView.BasePartitionInfo newBasePartitionInfo = new MaterializedView.BasePartitionInfo(
+                            entry.getValue().getId(), newPartitionInfo.getModifiedTime(), newPartitionInfo.getModifiedTime());
+                    newBasePartitionInfo.setExtLastFileModifiedTime(oldBasePartitionInfo.getExtLastFileModifiedTime());
+                    newBasePartitionInfo.setFileNumber(oldBasePartitionInfo.getFileNumber());
+                    newPartitionInfoMap.put(entry.getKey(), newBasePartitionInfo);
+                } else {
+                    // if the partition does not exist in new table,
+                    // keep the partition's last modified time as old
+                    // which will be refreshed
+                    newPartitionInfoMap.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> baseTableInfoMapMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
+        // create new base table info with newTable.getTableIdentifier()
+        BaseTableInfo newBaseTableInfo = new BaseTableInfo(
+                oldBaseTableInfo.getCatalogName(),
+                oldBaseTableInfo.getDbName(),
+                oldBaseTableInfo.getTableName(), newTable.getTableIdentifier());
+        baseTableInfoMapMap.remove(oldBaseTableInfo);
+        baseTableInfoMapMap.put(newBaseTableInfo, newPartitionInfoMap);
+
+        List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        baseTableInfos.remove(oldBaseTableInfo);
+        baseTableInfos.add(newBaseTableInfo);
+        // reset mv's state after repair
+        mv.resetMetadataCache();
+
+        ConnectorTableInfo connectorTableInfo = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr()
+                .getConnectorTableInfo(oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
+                        oldBaseTableInfo.getTableIdentifier());
+        ConnectorTableInfo newConnectorTableInfo = ConnectorTableInfo.builder()
+                .setRelatedMaterializedViews(connectorTableInfo.getRelatedMaterializedViews())
+                .build();
+        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().removeConnectorTableInfo(
+                oldBaseTableInfo.getCatalogName(), oldBaseTableInfo.getDbName(),
+                oldBaseTableInfo.getTableIdentifier(), connectorTableInfo);
+        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                newBaseTableInfo.getCatalogName(), newBaseTableInfo.getDbName(),
+                newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
+        // TODO: update edit log for followers' fe
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

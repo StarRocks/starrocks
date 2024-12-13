@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_base64
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a string into a Base64-encoded string. This function is an inverse of [from_base64](from_base64.md).
 

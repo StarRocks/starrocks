@@ -18,6 +18,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -29,8 +34,12 @@ import com.starrocks.common.util.concurrent.lock.LockHolder;
 import com.starrocks.common.util.concurrent.lock.LockInfo;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.Locker;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+=======
+import com.starrocks.consistency.LockChecker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -40,13 +49,21 @@ import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
 import com.starrocks.thrift.TSchemaTableType;
 import org.apache.commons.collections4.CollectionUtils;
+<<<<<<< HEAD
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.ThreadUtils;
+=======
+import org.apache.commons.collections4.SetUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.thrift.TException;
 
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class SysFeLocks {
@@ -132,7 +149,11 @@ public class SysFeLocks {
         lockItem.setLock_object(db.getFullName());
 
         Thread owner = lock.getOwner();
+<<<<<<< HEAD
         List<Long> sharedLockThreadIds = lock.getSharedLockThreadIds();
+=======
+        Set<Thread> sharedLockThreads = lock.getSharedLockThreads();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long currentTime = System.currentTimeMillis();
 
         if (owner != null) {
@@ -144,16 +165,28 @@ public class SysFeLocks {
             lockItem.setThread_info(ownerInfo.toString());
 
             // wait start
+<<<<<<< HEAD
             long lockStartTime = lock.getExclusiveLockTime();
             lockItem.setStart_time(lockStartTime);
             lockItem.setHold_time_ms(currentTime - lockStartTime);
         } else if (CollectionUtils.isNotEmpty(sharedLockThreadIds)) {
+=======
+            long lockStartTime = lock.getExclusiveLockStartTimeMs();
+            lockItem.setStart_time(lockStartTime);
+            lockItem.setHold_time_ms(currentTime - lockStartTime);
+        } else if (CollectionUtils.isNotEmpty(sharedLockThreads)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             lockItem.setLock_mode("SHARED");
             lockItem.setGranted(true);
 
             // lock start
+<<<<<<< HEAD
             long lockStart = ListUtils.emptyIfNull(sharedLockThreadIds).stream()
                     .map(lock::getSharedLockTime)
+=======
+            long lockStart = SetUtils.emptyIfNull(sharedLockThreads).stream()
+                    .map(lock::getSharedLockStartTimeMs)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .filter(x -> x > 0)
                     .min(Comparator.naturalOrder()).orElse(0L);
             lockItem.setStart_time(lockStart);
@@ -161,6 +194,7 @@ public class SysFeLocks {
 
             // thread info
             JsonArray sharedLockInfo = new JsonArray();
+<<<<<<< HEAD
             for (long threadId : ListUtils.emptyIfNull(sharedLockThreadIds)) {
                 JsonObject lockInfo = new JsonObject();
                 lockInfo.addProperty("threadId", threadId);
@@ -168,6 +202,12 @@ public class SysFeLocks {
                 if (thread != null) {
                     lockInfo.addProperty("threadName", thread.getName());
                 }
+=======
+            for (Thread thread : SetUtils.emptyIfNull(sharedLockThreads)) {
+                JsonObject lockInfo = new JsonObject();
+                lockInfo.addProperty("threadId", thread.getId());
+                lockInfo.addProperty("threadName", thread.getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 sharedLockInfo.add(lockInfo);
             }
             lockItem.setThread_info(sharedLockInfo.toString());
@@ -177,6 +217,7 @@ public class SysFeLocks {
         }
 
         // waiters
+<<<<<<< HEAD
         Collection<Thread> waiters = lock.getQueuedThreads();
         JsonArray waiterIds = new JsonArray();
         for (Thread th : CollectionUtils.emptyIfNull(waiters)) {
@@ -188,6 +229,9 @@ public class SysFeLocks {
             }
         }
         lockItem.setWaiter_list(waiterIds.toString());
+=======
+        lockItem.setWaiter_list(LockChecker.getLockWaiterInfoJsonArray(lock.getQueuedThreads()).toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return lockItem;
     }

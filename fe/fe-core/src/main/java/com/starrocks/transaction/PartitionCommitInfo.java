@@ -51,7 +51,11 @@ import javax.annotation.Nullable;
 public class PartitionCommitInfo implements Writable {
 
     @SerializedName(value = "partitionId")
+<<<<<<< HEAD
     private long partitionId;
+=======
+    private long physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "version")
     private long version;
 
@@ -92,19 +96,33 @@ public class PartitionCommitInfo implements Writable {
 
     }
 
+<<<<<<< HEAD
     public PartitionCommitInfo(long partitionId, long version, long visibleTime) {
         super();
         this.partitionId = partitionId;
+=======
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime) {
+        super();
+        this.physicalPartitionId = physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.version = version;
         this.versionTime = visibleTime;
     }
 
+<<<<<<< HEAD
     public PartitionCommitInfo(long partitionId, long version, long visibleTime,
+=======
+    public PartitionCommitInfo(long physicalPartitionId, long version, long visibleTime,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                List<ColumnId> invalidDictCacheColumns,
                                List<ColumnId> validDictCacheColumns,
                                List<Long> dictCollectedVersions) {
         super();
+<<<<<<< HEAD
         this.partitionId = partitionId;
+=======
+        this.physicalPartitionId = physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.version = version;
         this.versionTime = visibleTime;
         this.invalidDictCacheColumns = invalidDictCacheColumns;
@@ -127,8 +145,13 @@ public class PartitionCommitInfo implements Writable {
         this.versionTime = time;
     }
 
+<<<<<<< HEAD
     public long getPartitionId() {
         return partitionId;
+=======
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getVersion() {
@@ -151,6 +174,7 @@ public class PartitionCommitInfo implements Writable {
         this.dataVersion = dataVersion;
     }
 
+<<<<<<< HEAD
     public void setIsDoubleWrite(boolean isDoubleWrite) {
         this.isDoubleWrite = isDoubleWrite;
     }
@@ -159,6 +183,8 @@ public class PartitionCommitInfo implements Writable {
         return isDoubleWrite;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getVersionEpoch() {
         return versionEpoch;
     }
@@ -167,6 +193,17 @@ public class PartitionCommitInfo implements Writable {
         this.versionEpoch = versionEpoch;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIsDoubleWrite(boolean isDoubleWrite) {
+        this.isDoubleWrite = isDoubleWrite;
+    }
+
+    public boolean isDoubleWrite() {
+        return isDoubleWrite;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<ColumnId> getInvalidDictCacheColumns() {
         return invalidDictCacheColumns;
     }
@@ -191,7 +228,11 @@ public class PartitionCommitInfo implements Writable {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("partitionid=");
+<<<<<<< HEAD
         sb.append(partitionId);
+=======
+        sb.append(physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         sb.append(", version=").append(version);
         sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);

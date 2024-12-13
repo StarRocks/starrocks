@@ -23,6 +23,10 @@ class PredicateNodeFactory;
 
 enum class CompoundNodeType : uint8_t { AND, OR };
 
+<<<<<<< HEAD
+=======
+class PredicateBaseNode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class PredicateColumnNode;
 
 template <CompoundNodeType Type>

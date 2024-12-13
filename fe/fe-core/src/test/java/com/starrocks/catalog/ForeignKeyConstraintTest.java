@@ -38,6 +38,13 @@ public class ForeignKeyConstraintTest {
         db.registerTableUnlocked(table1);
         db.registerTableUnlocked(table2);
         db.registerTableUnlocked(table3);
+<<<<<<< HEAD
+=======
+    }
+
+    @Test
+    public void testParseInternal() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations(globalStateMgr) {
             {
@@ -45,6 +52,7 @@ public class ForeignKeyConstraintTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
@@ -54,6 +62,26 @@ public class ForeignKeyConstraintTest {
 
     @Test
     public void testParseInternal() {
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, 1000L);
+                minTimes = 0;
+                result = db.getTable(1000L);
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, 1001L);
+                minTimes = 0;
+                result = db.getTable(1001L);
+
+                globalStateMgr.getLocalMetastore().getTable(anyLong, 1002L);
+                minTimes = 0;
+                result = db.getTable(1002L);
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // internal catalog
         String constraintDescs = "(column1)  REFERENCES  default_catalog.100.1000(newColumn1)";
         List<ForeignKeyConstraint> foreignKeyConstraints1 = ForeignKeyConstraint.parse(constraintDescs);

@@ -52,7 +52,11 @@ void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index,
     append(src, index, size);
 }
 
+<<<<<<< HEAD
 ColumnPtr ConstColumn::replicate(const std::vector<uint32_t>& offsets) {
+=======
+ColumnPtr ConstColumn::replicate(const Buffer<uint32_t>& offsets) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return ConstColumn::create(this->_data->clone_shared(), offsets.back());
 }
 

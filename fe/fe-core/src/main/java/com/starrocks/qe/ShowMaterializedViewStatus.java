@@ -217,6 +217,10 @@ public class ShowMaterializedViewStatus {
             return "RefreshJobStatus{" +
                     "taskId=" + taskId +
                     ", taskName='" + taskName + '\'' +
+<<<<<<< HEAD
+=======
+                    ", taskOwner='" + taskOwner + '\'' +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ", refreshState=" + refreshState +
                     ", mvRefreshStartTime=" + mvRefreshStartTime +
                     ", mvRefreshEndTime=" + mvRefreshEndTime +

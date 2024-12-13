@@ -47,12 +47,32 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES = 1024 * 1024;
+static constexpr size_t DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE = 64 * 1024;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // StreamLoadPipe use to transfer data from producer to consumer
 // Data in pip is stored in chunks.
 class StreamLoadPipe : public MessageBodySink {
 public:
+<<<<<<< HEAD
     StreamLoadPipe(size_t max_buffered_bytes = 1024 * 1024, size_t min_chunk_size = 64 * 1024)
             : _max_buffered_bytes(max_buffered_bytes), _min_chunk_size(min_chunk_size) {}
+=======
+    StreamLoadPipe(size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
+                   size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
+            : StreamLoadPipe(false, -1, max_buffered_bytes, min_chunk_size) {}
+
+    StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_ms, size_t max_buffered_bytes,
+                   size_t min_chunk_size)
+            : _non_blocking_read(non_blocking_read),
+              _non_blocking_wait_ms(non_blocking_wait_ms),
+              _max_buffered_bytes(max_buffered_bytes),
+              _min_chunk_size(min_chunk_size) {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~StreamLoadPipe() override = default;
 
     Status append(ByteBufferPtr&& buf) override;
@@ -68,12 +88,20 @@ public:
 
     StatusOr<ByteBufferPtr> no_block_read();
 
+<<<<<<< HEAD
     Status read(uint8_t* data, size_t* data_size, bool* eof);
+=======
+    virtual Status read(uint8_t* data, size_t* data_size, bool* eof);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status no_block_read(uint8_t* data, size_t* data_size, bool* eof);
 
     // called when consumer finished
+<<<<<<< HEAD
     void close() { cancel(Status::OK()); }
+=======
+    void close() { cancel(Status::Cancelled("Close the pipe")); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // called when producer finished
     Status finish() override;
@@ -81,11 +109,29 @@ public:
     // called when producer/consumer failed
     void cancel(const Status& status) override;
 
+<<<<<<< HEAD
     void set_non_blocking_read() { _non_blocking_read = true; }
+=======
+    int32_t num_waiting_append_buffer() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _num_waiting_append_buffer;
+    }
+
+    int32_t num_append_buffers() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _num_append_buffers;
+    }
+
+    int64_t append_buffer_bytes() {
+        std::unique_lock<std::mutex> l(_lock);
+        return _append_buffer_bytes;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     Status _append(const ByteBufferPtr& buf);
 
+<<<<<<< HEAD
     // Called when `no_block_read(uint8_t* data, size_t* data_size, bool* eof)`
     // timeout in the mid of read, we will push the read data back to the _buf_queue.
     // The lock is already acquired before calling this function
@@ -95,12 +141,25 @@ private:
     // Blocking queue
     std::mutex _lock;
     size_t _buffered_bytes{0};
+=======
+    // Blocking queue
+    std::mutex _lock;
+    size_t _buffered_bytes{0};
+    bool _non_blocking_read{false};
+    int32_t _non_blocking_wait_ms;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t _max_buffered_bytes;
     size_t _min_chunk_size;
     std::deque<ByteBufferPtr> _buf_queue;
     std::condition_variable _put_cond;
     std::condition_variable _get_cond;
+<<<<<<< HEAD
     bool _non_blocking_read{false};
+=======
+    int32_t _num_waiting_append_buffer{0};
+    int32_t _num_append_buffers{0};
+    int64_t _append_buffer_bytes{0};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool _finished{false};
     bool _cancelled{false};
@@ -137,7 +196,11 @@ private:
 // TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.
 class StreamLoadPipeInputStream : public io::InputStream {
 public:
+<<<<<<< HEAD
     explicit StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file, bool non_blocking_read);
+=======
+    explicit StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~StreamLoadPipeInputStream() override;
 
     StatusOr<int64_t> read(void* data, int64_t size) override;

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bit_shift_right
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Shifts the binary representation of a numeric expression to the right by a specified number of bits.
 

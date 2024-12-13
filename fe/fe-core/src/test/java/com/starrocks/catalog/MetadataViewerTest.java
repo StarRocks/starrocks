@@ -96,9 +96,19 @@ public class MetadataViewerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
                 minTimes = 0;
                 result = db;
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

@@ -36,4 +36,9 @@ public interface HAProtocol {
 
     // remove a node from the group
     boolean removeElectableNode(String nodeName);
+<<<<<<< HEAD
+=======
+
+    long getLatestEpoch();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

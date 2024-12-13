@@ -30,7 +30,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -46,6 +50,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -63,6 +71,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     private static final Logger LOG = LogManager.getLogger(RangePartitionDiffer.class);
     private static final String INTERSECTED_PARTITION_PREFIX = "_intersected_";
 
+<<<<<<< HEAD
     private Range<PartitionKey> rangeToInclude;
     private int partitionTTLNumber;
     private PeriodDuration partitionTTL;
@@ -88,23 +97,56 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         PeriodDuration partitionTTL = mv.getTableProperty().getPartitionTTL();
         List<Column> partitionColumns = mv.getPartitionInfo().getPartitionColumns(mv.getIdToColumn());
         return new RangePartitionDiffer(rangeToInclude, partitionTTLNumber, partitionTTL, partitionInfo, partitionColumns);
+=======
+    private final Range<PartitionKey> rangeToInclude;
+    private final int partitionTTLNumber;
+    private final PeriodDuration partitionTTL;
+    private final PartitionInfo partitionInfo;
+    private final List<Column> partitionColumns;
+    private final Map<Table, List<Expr>> refBaseTablePartitionExprs;
+
+    public RangePartitionDiffer(MaterializedView mv,
+                                boolean isQueryRewrite,
+                                Range<PartitionKey> rangeToInclude) {
+        super(mv, isQueryRewrite);
+        this.partitionInfo = mv.getPartitionInfo();
+        this.partitionTTLNumber = mv.getTableProperty().getPartitionTTLNumber();
+        this.partitionTTL = mv.getTableProperty().getPartitionTTL();
+        this.partitionColumns = mv.getPartitionInfo().getPartitionColumns(mv.getIdToColumn());
+        this.refBaseTablePartitionExprs = mv.getRefBaseTablePartitionExprs();
+        this.rangeToInclude = rangeToInclude;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
      * Diff considering refresh range and TTL
      */
+<<<<<<< HEAD
     public RangePartitionDiff diff(Map<String, Range<PartitionKey>> srcRangeMap,
                                    Map<String, Range<PartitionKey>> dstRangeMap) {
         RangePartitionDiff res = new RangePartitionDiff();
         try {
             Map<String, Range<PartitionKey>> prunedAdd = pruneAddedPartitions(srcRangeMap);
             res.setAdds(diffRange(prunedAdd, dstRangeMap));
+=======
+    public PartitionDiff diff(Map<String, Range<PartitionKey>> srcRangeMap,
+                              Map<String, Range<PartitionKey>> dstRangeMap) {
+        Map<String, PCell> adds = null;
+        try {
+            Map<String, Range<PartitionKey>> prunedAdd = pruneAddedPartitions(srcRangeMap);
+            adds = diffRange(prunedAdd, dstRangeMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             LOG.warn("failed to prune partitions when creating");
             throw new RuntimeException(e);
         }
+<<<<<<< HEAD
         res.setDeletes(diffRange(dstRangeMap, srcRangeMap));
         return res;
+=======
+        Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
+        return new PartitionDiff(adds, deletes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -179,6 +221,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         return res;
     }
 
+<<<<<<< HEAD
     public static RangePartitionDiff simpleDiff(Map<String, Range<PartitionKey>> srcRangeMap,
                                                 Map<String, Range<PartitionKey>> dstRangeMap) {
         RangePartitionDiff res = new RangePartitionDiff();
@@ -194,6 +237,23 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             if (!dstRangeMap.containsKey(srcEntry.getKey()) ||
                     !RangeUtils.isRangeEqual(srcEntry.getValue(), dstRangeMap.get(srcEntry.getKey()))) {
                 result.put(srcEntry.getKey(), SyncPartitionUtils.convertToDatePartitionRange(srcEntry.getValue()));
+=======
+    public static PartitionDiff simpleDiff(Map<String, Range<PartitionKey>> srcRangeMap,
+                                           Map<String, Range<PartitionKey>> dstRangeMap) {
+        Map<String, PCell> adds = diffRange(srcRangeMap, dstRangeMap);
+        Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
+        return new PartitionDiff(adds, deletes);
+    }
+
+    public static Map<String, PCell> diffRange(Map<String, Range<PartitionKey>> srcRangeMap,
+                                               Map<String, Range<PartitionKey>> dstRangeMap) {
+        Map<String, PCell> result = Maps.newHashMap();
+        for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
+            if (!dstRangeMap.containsKey(srcEntry.getKey()) ||
+                    !RangeUtils.isRangeEqual(srcEntry.getValue(), dstRangeMap.get(srcEntry.getKey()))) {
+                result.put(srcEntry.getKey(),
+                        new PRangeCell(SyncPartitionUtils.convertToDatePartitionRange(srcEntry.getValue())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return result;
@@ -217,6 +277,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
 
     /**
      * Collect the ref base table's partition range map.
+<<<<<<< HEAD
      * @param mv the materialized view to compute diff
      * @param basePartitionMaps the external base table's partition name map which to be updated
      * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
@@ -224,10 +285,18 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     public static Map<Table, Map<String, Range<PartitionKey>>> syncBaseTablePartitionInfos(MaterializedView mv,
                                                                                            Expr mvPartitionExpr) {
         Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
+=======
+     * @return the ref base table's partition range map: <ref base table, <partition name, partition range>>
+     */
+    @Override
+    public Map<Table, Map<String, PCell>> syncBaseTablePartitionInfos() {
+        Map<Table, List<Column>> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionTableAndColumn.isEmpty()) {
             return Maps.newHashMap();
         }
 
+<<<<<<< HEAD
         Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap = Maps.newHashMap();
         try {
             for (Map.Entry<Table, Column> entry : partitionTableAndColumn.entrySet()) {
@@ -240,6 +309,31 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 refBaseTablePartitionMap.put(refBT, refTablePartitionKeyMap);
             }
         } catch (UserException | SemanticException e) {
+=======
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = Maps.newHashMap();
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return Maps.newHashMap();
+        }
+        try {
+            for (Map.Entry<Table, List<Column>> entry : partitionTableAndColumn.entrySet()) {
+                Table refBT = entry.getKey();
+                List<Column> refBTPartitionColumns = entry.getValue();
+                Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
+                // Collect the ref base table's partition range map.
+                Map<String, Range<PartitionKey>> refTablePartitionKeyMap =
+                        PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
+                                mvPartitionExprOpt.get());
+                if (refTablePartitionKeyMap == null) {
+                    return null;
+                }
+                Map<String, PCell> refTableRangeCellMap = Maps.newHashMap();
+                refTablePartitionKeyMap.entrySet().stream()
+                                .forEach(e -> refTableRangeCellMap.put(e.getKey(), new PRangeCell(e.getValue())));
+                refBaseTablePartitionMap.put(refBT, refTableRangeCellMap);
+            }
+        } catch (StarRocksException | SemanticException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("Partition differ collects ref base table partition failed.", e);
             return null;
         }
@@ -251,6 +345,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
      * @param basePartitionMap all ref base tables' partition range map
      * @return merged partition range map: <partition name, partition range>
      */
+<<<<<<< HEAD
     private static Map<String, Range<PartitionKey>> mergeRBTPartitionKeyMap(
             Expr mvPartitionExpr,
             Map<Table, Map<String, Range<PartitionKey>>> basePartitionMap) {
@@ -266,15 +361,39 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                         addRanges.subRangeMap(add.getValue()).asMapOfRanges();
                 if (intersectedRange.isEmpty()) {
                     addRanges.put(add.getValue(), add.getKey());
+=======
+    private static Map<String, Range<PartitionKey>> mergeRBTPartitionKeyMap(Expr mvPartitionExpr,
+                                                                            Map<Table, Map<String, PCell>> basePartitionMap) {
+        if (basePartitionMap.size() == 1) {
+            Map<String, PCell> first = basePartitionMap.values().iterator().next();
+            return PRangeCell.toRangeMap(first);
+        }
+        RangeMap<PartitionKey, String> addRanges = TreeRangeMap.create();
+        for (Map<String, PCell> tRangMap : basePartitionMap.values()) {
+            for (Map.Entry<String, PCell> add : tRangMap.entrySet()) {
+                // TODO: we may implement a new `merge` method in `TreeRangeMap` to merge intersected partitions later.
+                Range<PartitionKey> range = ((PRangeCell) add.getValue()).getRange();
+                Map<Range<PartitionKey>, String> intersectedRange = addRanges.subRangeMap(range).asMapOfRanges();
+                if (intersectedRange.isEmpty()) {
+                    addRanges.put(range, add.getKey());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     // To be compatible old version, skip to rename partition name if the intersected partition is the same.
                     if (intersectedRange.size() == 1) {
                         Range<PartitionKey> existingRange = intersectedRange.keySet().iterator().next();
+<<<<<<< HEAD
                         if (existingRange.equals(add.getValue())) {
                             continue;
                         }
                     }
                     addRanges.merge(add.getValue(), add.getKey(), (o, n) ->
+=======
+                        if (existingRange.equals(range)) {
+                            continue;
+                        }
+                    }
+                    addRanges.merge(range, add.getKey(), (o, n) ->
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             String.format("%s_%s_%s", INTERSECTED_PARTITION_PREFIX, o, n));
                 }
             }
@@ -316,6 +435,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
 
     /**
      * Compute the partition difference between materialized view and all ref base tables.
+<<<<<<< HEAD
      * @param mv: the materialized view to check
      * @param rangeToInclude: <partition start, partition end> pair
      * @param isQueryRewrite: whether it's used for query rewrite or refresh which the difference is that query rewrite will not
@@ -338,10 +458,34 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         Expr mvPartitionExpr = mv.getPartitionExpr();
         Map<Table, Column> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
         Preconditions.checkArgument(!refBaseTableAndColumns.isEmpty());
+=======
+     * @param rangeToInclude: <partition start, partition end> pair
+     * @return MvPartitionDiffResult: the result of partition difference
+     */
+    @Override
+    public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude) {
+        Map<Table, Map<String, PCell>> rBTPartitionMap = syncBaseTablePartitionInfos();
+        return computePartitionDiff(rangeToInclude, rBTPartitionMap);
+    }
+
+    @Override
+    public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
+                                                    Map<Table, Map<String, PCell>> rBTPartitionMap) {
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        Preconditions.checkArgument(!refBaseTablePartitionColumns.isEmpty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // get the materialized view's partition range map
         Map<String, Range<PartitionKey>> mvRangePartitionMap = mv.getRangePartitionMap();
 
         // merge all ref base tables' partition range map to avoid intersected partitions
+<<<<<<< HEAD
+=======
+        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
+        if (mvPartitionExprOpt.isEmpty()) {
+            return null;
+        }
+        Expr mvPartitionExpr = mvPartitionExprOpt.get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, Range<PartitionKey>> mergedRBTPartitionKeyMap = mergeRBTPartitionKeyMap(mvPartitionExpr, rBTPartitionMap);
         if (mergedRBTPartitionKeyMap == null) {
             LOG.warn("Merge materialized view {} with base tables failed.", mv.getName());
@@ -349,6 +493,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         }
         // only used for checking unaligned partitions in unit test
         if (FeConstants.runningUnitTest) {
+<<<<<<< HEAD
             try {
                 // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
                 List<RangePartitionDiff> rangePartitionDiffList = Lists.newArrayList();
@@ -363,6 +508,20 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 LOG.warn("Materialized view compute partition difference with base table failed.", e);
                 return null;
             }
+=======
+            // Check unaligned partitions, unaligned partitions may cause uncorrected result which is not supported for now.
+            List<PartitionDiff> rangePartitionDiffList = Lists.newArrayList();
+            for (Table refBaseTable : refBaseTablePartitionColumns.keySet()) {
+                Preconditions.checkArgument(rBTPartitionMap.containsKey(refBaseTable));
+                RangePartitionDiffer differ = new RangePartitionDiffer(mv, isQueryRewrite, rangeToInclude);
+                Map<String, PCell> basePartitionToCells = rBTPartitionMap.get(refBaseTable);
+                Map<String, Range<PartitionKey>> basePartitionMap = PRangeCell.toRangeMap(basePartitionToCells);
+                PartitionDiff diff = PartitionUtil.getPartitionDiff(mvPartitionExpr, basePartitionMap, mvRangePartitionMap,
+                        differ);
+                rangePartitionDiffList.add(diff);
+            }
+            PartitionDiff.checkRangePartitionAligned(rangePartitionDiffList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         try {
             // NOTE: Use all refBaseTables' partition range to compute the partition difference between MV and refBaseTables.
@@ -373,8 +532,13 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             //
             // Diff_{deletes} = P_{MV} \setminus P_{\bigcup_{baseTables}^{}} \\
             //                = \bigcap_{baseTables} P_{MV}\setminus P_{baseTable}
+<<<<<<< HEAD
             RangePartitionDiffer differ = isQueryRewrite ? null : RangePartitionDiffer.build(mv, rangeToInclude);
             RangePartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(mvPartitionExpr, mergedRBTPartitionKeyMap,
+=======
+            RangePartitionDiffer differ = isQueryRewrite ? null : new RangePartitionDiffer(mv, false, rangeToInclude);
+            PartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(mvPartitionExpr, mergedRBTPartitionKeyMap,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     mvRangePartitionMap, differ);
             if (rangePartitionDiff == null) {
                 LOG.warn("Materialized view compute partition difference with base table failed: rangePartitionDiff is null.");
@@ -384,10 +548,17 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             if (!isQueryRewrite) {
                 // To solve multi partition columns' problem of external table, record the mv partition name to all the same
                 // partition names map here.
+<<<<<<< HEAD
                 collectExternalPartitionNameMapping(refBaseTableAndColumns, extRBTMVPartitionNameMap);
             }
             return new RangePartitionDiffResult(mvRangePartitionMap, rBTPartitionMap,
                     extRBTMVPartitionNameMap, rangePartitionDiff);
+=======
+                collectExternalPartitionNameMapping(refBaseTablePartitionColumns, extRBTMVPartitionNameMap);
+            }
+            return new PartitionDiffResult(extRBTMVPartitionNameMap, rBTPartitionMap,
+                    PRangeCell.toCellMap(mvRangePartitionMap), rangePartitionDiff);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (AnalysisException e) {
             LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return null;
@@ -437,6 +608,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     /**
      * Generate the reference map between the base table and the mv.
      * @param baseRangeMap src partition list map of the base table
+<<<<<<< HEAD
      * @param basePartitionExprMap base table to its partitino expr map
      * @param mvRangeMap mv partition name to its list partition cell
      * @return base table -> <partition name, mv partition names> mapping
@@ -454,6 +626,24 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             Preconditions.checkState(basePartitionExprMap.containsKey(baseTable));
             Expr partitionExpr = basePartitionExprMap.get(baseTable);
             List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExpr);
+=======
+     * @param mvRangeMap mv partition name to its list partition cell
+     * @return base table -> <partition name, mv partition names> mapping
+     */
+    @Override
+    public Map<Table, Map<String, Set<String>>> generateBaseRefMap(Map<Table, Map<String, PCell>> baseRangeMap,
+                                                                   Map<String, PCell> mvRangeMap) {
+        Map<Table, Map<String, Set<String>>> result = Maps.newHashMap();
+        // for each partition of base, find the corresponding partition of mv
+        List<PRangeCellPlus> mvRanges = toPRangeCellPlus(mvRangeMap);
+        for (Map.Entry<Table, Map<String, PCell>> entry : baseRangeMap.entrySet()) {
+            Table baseTable = entry.getKey();
+            Map<String, PCell> refreshedPartitionsMap = entry.getValue();
+            Preconditions.checkState(refBaseTablePartitionExprs.containsKey(baseTable));
+            List<Expr> partitionExprs = refBaseTablePartitionExprs.get(baseTable);
+            Preconditions.checkArgument(partitionExprs.size() == 1);
+            List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExprs.get(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (PRangeCellPlus baseRange : baseRanges) {
                 int mid = Collections.binarySearch(mvRanges, baseRange);
                 if (mid < 0) {
@@ -482,6 +672,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     /**
      * Generate the mapping from materialized view partition to base table partition.
      * @param mvRangeMap : materialized view partition range map: <partitionName, partitionRange>
+<<<<<<< HEAD
      * @param basePartitionExprMap: base table partition expression map, <baseTable, partitionExpr>
      * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
      * @return mv partition name -> <base table, base partition names> mapping
@@ -493,10 +684,22 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
         // for each partition of mv, find all corresponding partition of base
         List<PRangeCellPlus> mvRanges = toPRangeCellPlus(mvRangeMap, false);
+=======
+     * @param baseRangeMap: base table partition range map, <baseTable, <partitionName, partitionRange>>
+     * @return mv partition name -> <base table, base partition names> mapping
+     */
+    @Override
+    public Map<String, Map<Table, Set<String>>> generateMvRefMap(Map<String, PCell> mvRangeMap,
+                                                                 Map<Table, Map<String, PCell>> baseRangeMap) {
+        Map<String, Map<Table, Set<String>>> result = Maps.newHashMap();
+        // for each partition of mv, find all corresponding partition of base
+        List<PRangeCellPlus> mvRanges = toPRangeCellPlus(mvRangeMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // [min, max) -> [date_trunc(min), date_trunc(max))
         // if [date_trunc(min), date_trunc(max)), overlap with [mvMin, mvMax), then [min, max) is corresponding partition
         Map<Table, List<PRangeCellPlus>> baseRangesMap = new HashMap<>();
+<<<<<<< HEAD
         for (Map.Entry<Table, Map<String, Range<PartitionKey>>> entry : baseRangeMap.entrySet()) {
             Table baseTable = entry.getKey();
             Map<String, Range<PartitionKey>> refreshedPartitionsMap = entry.getValue();
@@ -504,6 +707,16 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             Preconditions.checkState(basePartitionExprMap.containsKey(baseTable));
             Expr partitionExpr = basePartitionExprMap.get(baseTable);
             List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExpr);
+=======
+        for (Map.Entry<Table, Map<String, PCell>> entry : baseRangeMap.entrySet()) {
+            Table baseTable = entry.getKey();
+            Map<String, PCell> refreshedPartitionsMap = entry.getValue();
+
+            Preconditions.checkState(refBaseTablePartitionExprs.containsKey(baseTable));
+            List<Expr> partitionExprs = refBaseTablePartitionExprs.get(baseTable);
+            Preconditions.checkArgument(partitionExprs.size() == 1);
+            List<PRangeCellPlus> baseRanges = toPRangeCellPlus(refreshedPartitionsMap, partitionExprs.get(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             baseRangesMap.put(entry.getKey(), baseRanges);
         }
 

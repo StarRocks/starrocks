@@ -106,9 +106,15 @@ Status IndexedColumnReader::new_iterator(const IndexReadOptions& opts, std::uniq
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+<<<<<<< HEAD
 IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts)
         : _reader(reader),
           _opts(opts),
+=======
+IndexedColumnIterator::IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts)
+        : _reader(reader),
+          _opts(std::move(opts)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _ordinal_iter(&reader->_ordinal_index_reader),
           _value_iter(&reader->_value_index_reader) {}
 

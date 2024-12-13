@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_keys
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the top-level keys from a JSON object as a JSON array, or, if a `path` is specified, the top-level keys from the path.
 

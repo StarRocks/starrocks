@@ -43,8 +43,13 @@ import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TimeoutException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
 import com.starrocks.common.util.Util;
@@ -232,7 +237,11 @@ public class SparkEtlJobHandlerTest {
                                     @Mocked CommandResult commandResult,
                                     @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                     @Mocked SparkLoadAppHandle handle)
+<<<<<<< HEAD
             throws IOException, UserException {
+=======
+            throws IOException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -301,7 +310,11 @@ public class SparkEtlJobHandlerTest {
     public void testGetEtlJobStatusTimeout(@Mocked BrokerUtil brokerUtil, @Mocked Util util,
                                            @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                            @Mocked SparkLoadAppHandle handle)
+<<<<<<< HEAD
             throws IOException, UserException {
+=======
+            throws IOException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -336,7 +349,11 @@ public class SparkEtlJobHandlerTest {
     public void testGetEtlJobStatusFailed(@Mocked Util util, @Mocked CommandResult commandResult,
                                           @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                           @Mocked SparkLoadAppHandle handle)
+<<<<<<< HEAD
             throws IOException, UserException {
+=======
+            throws IOException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -378,7 +395,12 @@ public class SparkEtlJobHandlerTest {
 
     @Test
     public void testKillEtlJob(@Mocked Util util, @Mocked CommandResult commandResult,
+<<<<<<< HEAD
                                @Mocked SparkYarnConfigFiles sparkYarnConfigFiles) throws IOException, UserException {
+=======
+                               @Mocked SparkYarnConfigFiles sparkYarnConfigFiles) throws IOException,
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 sparkYarnConfigFiles.prepare();
@@ -476,7 +498,11 @@ public class SparkEtlJobHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testDeleteEtlOutputPath(@Mocked BrokerUtil brokerUtil) throws UserException {
+=======
+    public void testDeleteEtlOutputPath(@Mocked BrokerUtil brokerUtil) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 BrokerUtil.deletePath(etlOutputPath, (BrokerDesc) any);

@@ -33,6 +33,11 @@ class NullableColumn : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
+<<<<<<< HEAD
+=======
+    using ValueType = void;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     inline static ColumnPtr wrap_if_necessary(ColumnPtr column) {
         if (column->is_nullable()) {
             return column;
@@ -150,11 +155,19 @@ public:
 
     bool has_large_column() const override { return _data_column->has_large_column(); }
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override;
 
     bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
 
     bool append_continuous_strings(const Buffer<Slice>& strs) override;
+=======
+    bool append_strings(const Slice* data, size_t size) override;
+
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
+
+    bool append_continuous_strings(const Slice* data, size_t size) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
@@ -250,7 +263,11 @@ public:
         _has_null = true;
         return true;
     }
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);
@@ -313,8 +330,14 @@ public:
         return ss.str();
     }
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override {
         return _data_column->capacity_limit_reached(msg) || _null_column->capacity_limit_reached(msg);
+=======
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_data_column->capacity_limit_reached());
+        return _null_column->capacity_limit_reached();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void check_or_die() const override;

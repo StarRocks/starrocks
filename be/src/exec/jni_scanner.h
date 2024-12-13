@@ -86,6 +86,13 @@ private:
 
     Status _release_off_heap_table(JNIEnv* env);
 
+<<<<<<< HEAD
+=======
+    std::string _scanner_type() {
+        return _jni_scanner_params.contains("scanner_type") ? _jni_scanner_params["scanner_type"] : "default";
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     jclass _jni_scanner_cls = nullptr;
     jobject _jni_scanner_obj = nullptr;
     jmethodID _jni_scanner_open = nullptr;

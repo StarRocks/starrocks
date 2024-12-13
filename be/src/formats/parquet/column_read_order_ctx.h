@@ -32,7 +32,11 @@ public:
 
     int get_column_cost(int col_idx) const { return _column_cost_map.at(col_idx); }
 
+<<<<<<< HEAD
     void update_ctx(size_t round_cost);
+=======
+    void update_ctx(size_t round_cost, double first_selectivity);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t get_min_round_cost() const { return _min_round_cost; }
 
@@ -43,6 +47,11 @@ private:
     std::vector<int> _trying_column_indices;
     // cost
     size_t _min_round_cost = 0;
+<<<<<<< HEAD
+=======
+    // first selective
+    size_t _first_selectivity = 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // rand round order index, select the min round_cost from 10 random order
     size_t _rand_round_order_index = 10;
     // column cost map index -> cost

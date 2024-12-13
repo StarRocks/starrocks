@@ -36,9 +36,22 @@ package com.starrocks.common;
 
 import java.util.MissingFormatArgumentException;
 
+<<<<<<< HEAD
 // Error code used to indicate what error happened.
 public enum ErrorCode {
     // Try our best to compatible with MySQL's
+=======
+/**
+ * 1、ErrorCode: The most granular error message, recording the error cause at the bottom of the call stack
+ * <p>
+ * 2、SqlState: Coarse-grained error information is also recorded in ErrorCode
+ * Main references: <a href="https://www.postgresql.org/docs/15/errcodes-appendix.html">...</a>
+ * <p>
+ * 3、ErrorType: The most coarse-grained error message, which determines the error category
+ * based on the first two digits of SQLSTATE. For example, Internal Error, Syntax Error
+ */
+public enum ErrorCode {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_CANT_CREATE_TABLE(1005, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create table '%s' (errno: %s)"),
     ERR_DB_CREATE_EXISTS(1007, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create database '%s'; database exists"),
     ERR_DB_DROP_EXISTS(1008, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -144,8 +157,12 @@ public enum ErrorCode {
     ERR_INVALID_VALUE(5018, new byte[] {'H', 'Y', '0', '0', '0'}, "Invalid %s: '%s'. Expected values should be %s"),
     ERR_NO_ALTER_OPERATION(5023, new byte[] {'H', 'Y', '0', '0', '0'},
             "No operation in alter statement"),
+<<<<<<< HEAD
     ERR_QUERY_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'},
             "Query timeout. %s"),
+=======
+    ERR_TIMEOUT(5024, new byte[] {'H', 'Y', '0', '0', '0'}, "%s reached its timeout of %d seconds, %s"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_FAILED_WHEN_INSERT(5025, new byte[] {'H', 'Y', '0', '0', '0'}, "Failed when INSERT execute"),
     ERR_UNSUPPORTED_TYPE_IN_CTAS(5026, new byte[] {'H', 'Y', '0', '0', '0'},
             "Unsupported type '%s' in create table as select statement"),
@@ -293,6 +310,13 @@ public enum ErrorCode {
                     "1. Create a storage volume. 2. Set the storage volume as default"),
     ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED(5507, new byte[] {'0', 'A', '0', '0', '0'},
             "Can not enable replicated storage when the table has GIN"),
+<<<<<<< HEAD
+=======
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_NONRANGEPARTITIONINFO(5507, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch drop partition only support RangePartitionInfo"),
+    ERR_BATCH_DROP_PARTITION_UNSUPPORTED_FOR_MULTIPARTITIONCOLUMNS(5508, new byte[] {'4', '2', '0', '0', '0'},
+            "Batch deletion of partitions only support range partition tables with only a column, current column num is  [%s]"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_BAD_FIELD_ERROR(5509, new byte[] {'4', '2', 'S', '2', '2'}, "Unknown column '%s' in '%s'"),
     ERR_TOO_MANY_BUCKETS(5510, new byte[] {'4', '2', '0', '0', '0'},
             "The number of buckets is too large, the maximum is %d. Please reduce the number of buckets " +
@@ -312,12 +336,21 @@ public enum ErrorCode {
                     "files under the path, and make sure the process has the permission to access the path"),
     ERR_EXPR_REFERENCED_COLUMN_NOT_FOUND(5601, new byte[] {'4', '2', '0', '0', '0'},
             "Referenced column '%s' in expr '%s' can't be found in column list, derived column is '%s'"),
+<<<<<<< HEAD
     ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'}, "Expr '%s' analyze error: %s, derived column is '%s'"),
+=======
+    ERR_MAPPING_EXPR_INVALID(5602, new byte[] {'4', '2', '0', '0', '0'},
+            "Expr '%s' analyze error: %s, derived column is '%s'"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ERR_NO_PARTITIONS_HAVE_DATA_LOAD(5603, new byte[] {'0', '2', '0', '0', '0'},
             "No partitions have data available for loading. If you are sure there may be no data to be loaded, " +
                     "you can use `ADMIN SET FRONTEND CONFIG ('empty_load_as_error' = 'false')` " +
                     "to ensure such load jobs can succeed"),
+<<<<<<< HEAD
     ERR_INSERTED_COLUMN_MISMATCH(5604, new byte[] {'2', '2', '0', '0', '0'},
+=======
+    ERR_INSERT_COLUMN_COUNT_MISMATCH(5604, new byte[] {'4', '2', '6', '0', '1'},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             "Inserted target column count: %d doesn't match select/value column count: %d"),
     ERR_ILLEGAL_BYTES_LENGTH(5605, new byte[] {'4', '2', '0', '0', '0'}, "The valid bytes length for '%s' is [%d, %d]"),
     ERR_TOO_MANY_ERROR_ROWS(5606, new byte[] {'2', '2', '0', '0', '0'},
@@ -325,7 +358,13 @@ public enum ErrorCode {
                     "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
+<<<<<<< HEAD
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+=======
+                    "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'},
+            "%s column: %s has no matching %s column"),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * 5700 - 5799: Partition

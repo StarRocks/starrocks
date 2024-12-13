@@ -45,7 +45,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MysqlTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TMySQLScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -69,7 +73,11 @@ public class MysqlScanNode extends ScanNode {
      */
     public MysqlScanNode(PlanNodeId id, TupleDescriptor desc, MysqlTable tbl) {
         super(id, desc, "SCAN MYSQL");
+<<<<<<< HEAD
         tblName = "`" + tbl.getMysqlTableName() + "`";
+=======
+        tblName = "`" + tbl.getCatalogTableName() + "`";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setTemporalClause(String temporalClause) {
@@ -87,7 +95,11 @@ public class MysqlScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         computeColumnsAndFilters();
     }
 
@@ -175,10 +187,13 @@ public class MysqlScanNode extends ScanNode {
         return null;
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return 1;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Override
     public void computeStats(Analyzer analyzer) {

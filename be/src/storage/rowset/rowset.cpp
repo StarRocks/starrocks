@@ -48,7 +48,11 @@
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
+<<<<<<< HEAD
 #include "storage/inverted/index_descriptor.hpp"
+=======
+#include "storage/index/index_descriptor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/merge_iterator.h"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/metadata_cache.h"
@@ -167,6 +171,26 @@ Status Rowset::init() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<std::shared_ptr<Segment>> Rowset::_load_segment(int32_t idx, const TabletSchemaCSPtr& schema,
+                                                         std::shared_ptr<FileSystem>& fs,
+                                                         const FooterPointerPB* partial_rowset_footer,
+                                                         size_t* footer_size_hint) {
+    std::string seg_path = segment_file_path(_rowset_path, rowset_id(), idx);
+    FileInfo seg_info{.path = seg_path, .encryption_meta = rowset_meta()->get_segment_encryption_meta(idx)};
+    auto res = Segment::open(fs, seg_info, idx, schema, footer_size_hint, partial_rowset_footer);
+    if (!res.ok()) {
+        auto st = res.status().clone_and_prepend(fmt::format(
+                "Load segment failed tablet:{} rowset:{} rssid:{} seg:{} path:{}", _rowset_meta->tablet_id(),
+                rowset_id().to_string(), _rowset_meta->get_rowset_seg_id(), idx, seg_path));
+        LOG(WARNING) << st.message();
+        return st;
+    }
+    return res;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // use partial_rowset_footer to indicate the segment footer position and size
 // if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status Rowset::do_load() {
@@ -174,6 +198,7 @@ Status Rowset::do_load() {
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
+<<<<<<< HEAD
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
         FileInfo seg_info{seg_path};
         auto res = Segment::open(fs, seg_info, seg_id, _schema, &footer_size_hint,
@@ -185,6 +210,12 @@ Status Rowset::do_load() {
             LOG(WARNING) << st.message();
             _segments.clear();
             return st;
+=======
+        auto res = _load_segment(seg_id, _schema, fs, rowset_meta()->partial_rowset_footer(seg_id), &footer_size_hint);
+        if (!res.ok()) {
+            _segments.clear();
+            return res.status();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         _segments.push_back(std::move(res).value());
     }
@@ -215,11 +246,16 @@ Status Rowset::reload() {
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
+<<<<<<< HEAD
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
         FileInfo seg_info{.path = seg_path};
         auto res = Segment::open(fs, seg_info, seg_id, _schema, &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+=======
+        auto res = _load_segment(seg_id, _schema, fs, nullptr, &footer_size_hint);
+        if (!res.ok()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _segments.clear();
             return res.status();
         }
@@ -236,11 +272,16 @@ Status Rowset::reload_segment(int32_t segment_id) {
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     size_t footer_size_hint = 16 * 1024;
+<<<<<<< HEAD
     std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
     FileInfo seg_info{.path = seg_path};
     auto res = Segment::open(fs, seg_info, segment_id, _schema, &footer_size_hint);
     if (!res.ok()) {
         LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+=======
+    auto res = _load_segment(segment_id, _schema, fs, nullptr, &footer_size_hint);
+    if (!res.ok()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return res.status();
     }
     _segments[segment_id] = std::move(res).value();
@@ -255,11 +296,17 @@ Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr&
     }
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
     size_t footer_size_hint = 16 * 1024;
+<<<<<<< HEAD
     std::string seg_path = segment_file_path(_rowset_path, rowset_id(), segment_id);
     FileInfo seg_info{.path = seg_path};
     auto res = Segment::open(fs, seg_info, segment_id, schema, &footer_size_hint);
     if (!res.ok()) {
         LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
+=======
+    auto res = _load_segment(segment_id, schema, fs, nullptr, &footer_size_hint);
+    if (!res.ok()) {
+        _segments.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return res.status();
     }
     _segments[segment_id] = std::move(res).value();
@@ -290,7 +337,11 @@ StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
         if (seg_ptr->num_rows() == 0) {
             continue;
         }
+<<<<<<< HEAD
         // When creating segment iterators for compaction, we don't provide rowid_range_option and predicates_for_zone_map,
+=======
+        // When creating segment iterators for compaction, we don't provide rowid_range_option and pred_tree_for_zone_map,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // So here we don't need to consider the following two situation:
         //
         // if (options.rowid_range_option != nullptr) {
@@ -339,6 +390,15 @@ Status Rowset::remove() {
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
                 LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
+<<<<<<< HEAD
+=======
+            } else if (index.index_type() == IndexType::VECTOR) {
+                std::string vector_index_path = IndexDescriptor::vector_index_file_path(
+                        _rowset_path, rowset_id().to_string(), i, index.index_id());
+                auto vst = fs->delete_file(vector_index_path);
+                LOG_IF(WARNING, !vst.ok()) << "Fail to delete vector_index_path " << vector_index_path << ": " << vst;
+                merge_status(vst);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -446,6 +506,18 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
                                                                             src_absolute_path, dst_absolute_path));
                         }
                     }
+<<<<<<< HEAD
+=======
+                } else if (index.index_type() == VECTOR) {
+                    std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
+                            dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                    std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
+                            _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
+                    if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
+                        PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
+                        return Status::RuntimeError("Fail to link index data file");
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -656,12 +728,20 @@ public:
         _iter.reset();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+=======
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         return _iter->init_encoded_schema(dict_maps);
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+=======
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
         return _iter->init_output_schema(unused_output_column_ids);
     }
@@ -697,7 +777,11 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.pred_tree = options.pred_tree;
+<<<<<<< HEAD
     seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
+=======
+    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;
@@ -707,6 +791,13 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.tablet_schema = options.tablet_schema;
+<<<<<<< HEAD
+=======
+    seg_options.use_vector_index = options.use_vector_index;
+    seg_options.vector_search_option = options.vector_search_option;
+    seg_options.sample_options = options.sample_options;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
@@ -854,7 +945,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
     for (int64_t i = 0; i < num_update_files(); i++) {
         // open update file
         std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), i);
+<<<<<<< HEAD
         FileInfo seg_info{.path = seg_path};
+=======
+        FileInfo seg_info{.path = seg_path, .encryption_meta = rowset_meta()->get_uptfile_encryption_meta(i)};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_info, i, _schema));
         if (seg_ptr->num_rows() == 0) {
             seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
@@ -881,11 +976,19 @@ StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+<<<<<<< HEAD
+=======
+    seg_options.rowset_path = _rowset_path;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // open update file
     DCHECK(update_file_id < num_update_files());
     std::string seg_path = segment_upt_file_path(_rowset_path, rowset_id(), update_file_id);
+<<<<<<< HEAD
     FileInfo seg_info{.path = seg_path};
+=======
+    FileInfo seg_info{.path = seg_path, .encryption_meta = rowset_meta()->get_uptfile_encryption_meta(update_file_id)};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(seg_options.fs, seg_info, update_file_id, _schema));
     if (seg_ptr->num_rows() == 0) {
         return new_empty_iterator(schema, config::vector_chunk_size);

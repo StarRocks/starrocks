@@ -40,7 +40,10 @@ import org.apache.hadoop.conf.Configuration;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class FileTable extends Table {
@@ -100,6 +103,10 @@ public class FileTable extends Table {
         fileProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getTableLocation() {
         return fileProperties.get(JSON_KEY_FILE_PATH);
     }
@@ -122,7 +129,11 @@ public class FileTable extends Table {
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
+<<<<<<< HEAD
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
+=======
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         boolean enableWildCards = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_ENABLE_WILDCARDS, "false"));
 
         try {

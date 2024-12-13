@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # fmod
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the floating point remainder of the division ( `dividend`/`divisor` ). It is a modulo function.
 

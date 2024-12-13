@@ -115,6 +115,19 @@ public class PlanTestNoneDBBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void assertContainsAny(String text, String... pattern) {
+        boolean contains = false;
+        for (String s : pattern) {
+            contains |= text.contains(s);
+        }
+        if (!contains) {
+            Assert.fail(text);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String NORMAL_PLAN_PREDICATE_PREFIX = "PREDICATES:";
     private static final String LOWER_NORMAL_PLAN_PREDICATE_PREFIX = "predicates:";
     private static final String LOGICAL_PLAN_SCAN_PREFIX = "SCAN ";
@@ -245,14 +258,22 @@ public class PlanTestNoneDBBase {
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
+<<<<<<< HEAD
             partition.getBaseIndex().setRowCount(rowCount);
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     public static void setPartitionStatistics(OlapTable table, String partitionName, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             if (partition.getName().equals(partitionName)) {
+<<<<<<< HEAD
                 partition.getBaseIndex().setRowCount(rowCount);
+=======
+                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -806,7 +827,11 @@ public class PlanTestNoneDBBase {
 
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
+<<<<<<< HEAD
         return globalStateMgr.getDb("test").getTable(t);
+=======
+        return globalStateMgr.getLocalMetastore().getDb("test").getTable(t);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public OlapTable getOlapTable(String t) {

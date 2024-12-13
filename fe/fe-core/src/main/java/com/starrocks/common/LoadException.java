@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Exception for load
  */
+<<<<<<< HEAD
 public class LoadException extends UserException {
+=======
+public class LoadException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private static final long serialVersionUID = 1L;
 

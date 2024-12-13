@@ -562,7 +562,11 @@ TEST_F(SegmentReaderWriterTest, TestTypeConversion) {
         seg_options.stats = &stats;
         seg_options.tablet_schema = tablet_schema_for_read;
         seg_options.pred_tree = PredicateTree::create(std::move(pred_root));
+<<<<<<< HEAD
         seg_options.predicates_for_zone_map.emplace(1, PredicateList{predicate});
+=======
+        seg_options.pred_tree_for_zone_map = seg_options.pred_tree;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(read_schema, seg_options));
         ASSERT_OK(seg_iter->get_next(read_chunk.get()));
         EXPECT_EQ(1, read_chunk->num_rows());

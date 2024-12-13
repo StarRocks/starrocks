@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # degrees
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将参数 `x` 转成角度，`x` 是弧度。
 

@@ -23,7 +23,11 @@
 namespace starrocks::pipeline {
 MetaScanOperatorFactory::MetaScanOperatorFactory(int32_t id, ScanNode* meta_scan_node, size_t dop,
                                                  std::shared_ptr<MetaScanContextFactory> ctx_factory)
+<<<<<<< HEAD
         : ScanOperatorFactory(id, meta_scan_node), _ctx_factory(std::move(std::move(ctx_factory))) {}
+=======
+        : ScanOperatorFactory(id, meta_scan_node), _ctx_factory(std::move(ctx_factory)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Status MetaScanOperatorFactory::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -38,7 +42,11 @@ OperatorPtr MetaScanOperatorFactory::do_create(int32_t dop, int32_t driver_seque
 
 MetaScanOperator::MetaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                                    ScanNode* meta_scan_node, MetaScanContextPtr ctx)
+<<<<<<< HEAD
         : ScanOperator(factory, id, driver_sequence, dop, meta_scan_node), _ctx(std::move(std::move(ctx))) {}
+=======
+        : ScanOperator(factory, id, driver_sequence, dop, meta_scan_node), _ctx(std::move(ctx)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 bool MetaScanOperator::has_output() const {
     if (!_ctx->is_prepare_finished()) {
@@ -64,6 +72,7 @@ ChunkSourcePtr MetaScanOperator::create_chunk_source(MorselPtr morsel, int32_t c
     return std::make_shared<MetaChunkSource>(this, _runtime_profile.get(), std::move(morsel), _ctx);
 }
 
+<<<<<<< HEAD
 ChunkPtr MetaScanOperator::get_chunk_from_buffer() {
     ChunkPtr chunk = nullptr;
     if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
@@ -104,4 +113,6 @@ void MetaScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

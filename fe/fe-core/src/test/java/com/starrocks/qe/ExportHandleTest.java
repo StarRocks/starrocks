@@ -18,7 +18,11 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportJob;
@@ -89,7 +93,12 @@ public class ExportHandleTest {
         };
         new MockUp<HdfsUtil>() {
             @Mock
+<<<<<<< HEAD
             public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws UserException {
+=======
+            public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
         // let ExportChecker never run this job

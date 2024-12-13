@@ -21,6 +21,10 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -76,7 +80,11 @@ public class PruneHDFSScanColumnRuleTest {
                         scanColumnMap, Maps.newHashMap(), -1,
                         new BinaryPredicateOperator(BinaryType.EQ,
                                 new ColumnRefOperator(1, Type.INT, "id", true),
+<<<<<<< HEAD
                                 ConstantOperator.createInt(1))));
+=======
+                                ConstantOperator.createInt(1)), TableVersionRange.empty()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -93,7 +101,11 @@ public class PruneHDFSScanColumnRuleTest {
                                                  @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
+<<<<<<< HEAD
                         scanColumnMap, Maps.newHashMap(), -1, null));
+=======
+                        scanColumnMap, Maps.newHashMap(), -1, null, TableVersionRange.empty()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);
@@ -214,7 +226,11 @@ public class PruneHDFSScanColumnRuleTest {
                                                         @Mocked TaskContext taskContext) {
         OptExpression scan = new OptExpression(
                 new LogicalIcebergScanOperator(table,
+<<<<<<< HEAD
                         scanColumnMap, Maps.newHashMap(), -1, null));
+=======
+                        scanColumnMap, Maps.newHashMap(), -1, null, TableVersionRange.empty()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<TaskContext> taskContextList = new ArrayList<>();
         taskContextList.add(taskContext);

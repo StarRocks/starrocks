@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_query
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Queries the value of an element that can be located by the `json_path` expression in a JSON object and returns a JSON value.
 

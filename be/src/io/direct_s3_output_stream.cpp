@@ -24,6 +24,10 @@
 
 #include "common/logging.h"
 #include "io/io_profiler.h"
+<<<<<<< HEAD
+=======
+#include "util/failpoint/fail_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/stopwatch.hpp"
 
 namespace starrocks::io {
@@ -62,6 +66,10 @@ Status DirectS3OutputStream::write(const void* data, int64_t size) {
     req.SetUploadId(_upload_id);
     req.SetContentLength(size);
     req.SetBody(std::make_shared<StringViewStream>(data, size));
+<<<<<<< HEAD
+=======
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto outcome = _client->UploadPart(req);
     if (!outcome.IsSuccess()) {
         return Status::IOError(
@@ -78,7 +86,11 @@ Status DirectS3OutputStream::close() {
         return Status::OK();
     }
 
+<<<<<<< HEAD
     if (!_upload_id.empty()) {
+=======
+    if (!_upload_id.empty() && !_etags.empty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(complete_multipart_upload());
     }
 
@@ -90,6 +102,10 @@ Status DirectS3OutputStream::create_multipart_upload() {
     Aws::S3::Model::CreateMultipartUploadRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
+<<<<<<< HEAD
+=======
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
     if (outcome.IsSuccess()) {
         _upload_id = outcome.GetResult().GetUploadId();
@@ -116,6 +132,10 @@ Status DirectS3OutputStream::complete_multipart_upload() {
         multipart_upload.AddParts(part.WithETag(_etags[i]).WithPartNumber(i + 1));
     }
     req.SetMultipartUpload(multipart_upload);
+<<<<<<< HEAD
+=======
+    FAIL_POINT_TRIGGER_RETURN(output_stream_io_error, Status::IOError("injected output_stream_io_error"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto outcome = _client->CompleteMultipartUpload(req);
     if (outcome.IsSuccess()) {
         return Status::OK();

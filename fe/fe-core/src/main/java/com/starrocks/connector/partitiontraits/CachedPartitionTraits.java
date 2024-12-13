@@ -29,7 +29,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ThrowingSupplier;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 
 import java.util.List;
@@ -113,8 +117,13 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public String getDbName() {
         return delegate.getDbName();
+=======
+    public String getCatalogDBName() {
+        return delegate.getCatalogDBName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -156,9 +165,15 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
         return getCacheWithException("getPartitionList",
                 () -> delegate.getPartitionList(partitionColumn), () -> Maps.newHashMap());
+=======
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return getCacheWithException("getPartitionList",
+                () -> delegate.getPartitionCells(partitionColumns), () -> Maps.newHashMap());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -168,6 +183,15 @@ public class CachedPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+        // no cache since partition names are not stable.
+        return delegate.getPartitionNameWithPartitionInfo(partitionNames);
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<PartitionInfo> getPartitions(List<String> names) {
         // no cache since partition names are not stable.
         return delegate.getPartitions(names);

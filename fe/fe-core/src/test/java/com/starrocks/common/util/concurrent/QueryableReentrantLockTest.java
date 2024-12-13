@@ -17,8 +17,12 @@
 
 package com.starrocks.common.util.concurrent;
 
+<<<<<<< HEAD
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+=======
+import com.starrocks.common.util.LogUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -61,7 +65,11 @@ public class QueryableReentrantLockTest {
                         Thread owner = lock.getOwner();
                         Assert.assertEquals("thread1", owner.getName());
 
+<<<<<<< HEAD
                         System.out.println(Util.dumpThread(owner, 10));
+=======
+                        System.out.println(LogUtil.dumpThread(owner, 10));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     }
                 } catch (InterruptedException e) {

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str_to_map
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Splits a given string into key-value pairs using two delimiters and returns a map of the split pairs.
 

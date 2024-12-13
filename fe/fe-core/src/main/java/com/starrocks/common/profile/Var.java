@@ -42,7 +42,11 @@ public class Var<T> {
         value = var;
     }
 
+<<<<<<< HEAD
     public void add(int var) {
+=======
+    public void add(long var) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String toString() {

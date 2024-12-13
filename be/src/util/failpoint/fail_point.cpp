@@ -191,5 +191,9 @@ FailPointRegisterer::FailPointRegisterer(FailPoint* fp) {
 }
 
 DEFINE_FAIL_POINT(random_error);
+<<<<<<< HEAD
+=======
+DEFINE_FAIL_POINT(output_stream_io_error);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks::failpoint

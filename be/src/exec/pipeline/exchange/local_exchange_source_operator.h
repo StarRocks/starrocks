@@ -71,7 +71,11 @@ public:
     bool is_finished() const override;
 
     Status set_finished(RuntimeState* state) override;
+<<<<<<< HEAD
     [[nodiscard]] Status set_finishing(RuntimeState* state) override {
+=======
+    Status set_finishing(RuntimeState* state) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_finished = true;
         return Status::OK();
@@ -81,7 +85,11 @@ public:
         std::lock_guard<std::mutex> l(_chunk_lock);
         return _is_epoch_finished && _full_chunk_queue.empty() && !_partition_rows_num;
     }
+<<<<<<< HEAD
     [[nodiscard]] Status set_epoch_finishing(RuntimeState* state) override {
+=======
+    Status set_epoch_finishing(RuntimeState* state) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::lock_guard<std::mutex> l(_chunk_lock);
         _is_epoch_finished = true;
         return Status::OK();
@@ -97,6 +105,10 @@ public:
 
     void enter_release_memory_mode() override;
     void set_execute_mode(int performance_level) override;
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     ChunkPtr _pull_passthrough_chunk(RuntimeState* state);

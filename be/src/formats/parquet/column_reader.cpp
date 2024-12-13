@@ -14,6 +14,7 @@
 
 #include "formats/parquet/column_reader.h"
 
+<<<<<<< HEAD
 #include <boost/algorithm/string.hpp>
 
 #include "column/array_column.h"
@@ -389,6 +390,30 @@ void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range,
     _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get(), has_dict_page);
 }
 
+=======
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <ostream>
+#include <unordered_map>
+#include <utility>
+
+#include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "common/compiler_util.h"
+#include "exec/exec_node.h"
+#include "exec/hdfs_scanner.h"
+#include "formats/parquet/scalar_column_reader.h"
+#include "formats/utils.h"
+#include "gen_cpp/parquet_types.h"
+#include "simd/batch_run_counter.h"
+#include "storage/column_or_predicate.h"
+#include "storage/column_predicate.h"
+
+namespace starrocks::parquet {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
                                                                    bool* is_group_filtered) {
     // create dict value chunk for evaluation.
@@ -457,12 +482,17 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
         predicate = obj_pool.add(
                 new_column_eq_predicate(get_type_info(kDictCodeFieldType), slot_id, std::to_string(dict_codes[0])));
     } else {
+<<<<<<< HEAD
         std::vector<std::string> str_codes;
         str_codes.reserve(dict_codes.size());
         for (int code : dict_codes) {
             str_codes.emplace_back(std::to_string(code));
         }
         predicate = obj_pool.add(new_column_in_predicate(get_type_info(kDictCodeFieldType), slot_id, str_codes));
+=======
+        predicate = obj_pool.add(new_dictionary_code_in_predicate(get_type_info(kDictCodeFieldType), slot_id,
+                                                                  dict_codes, dict_value_column->size()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // deal with if NULL works or not.
@@ -486,6 +516,7 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     return Status::OK();
 }
 
+<<<<<<< HEAD
 class ListColumnReader : public ColumnReader {
 public:
     explicit ListColumnReader(const ColumnReaderOptions& opts) {}
@@ -1228,4 +1259,6 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::parquet

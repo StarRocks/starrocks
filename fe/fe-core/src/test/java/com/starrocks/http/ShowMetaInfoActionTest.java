@@ -14,37 +14,56 @@
 
 package com.starrocks.http;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import mockit.Expectations;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import okhttp3.Request;
 import okhttp3.Response;
 import org.junit.After;
 import org.junit.Assert;
+<<<<<<< HEAD
 import org.junit.Before;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.ConcurrentHashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static org.junit.Assert.assertTrue;
 
 public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
 
+<<<<<<< HEAD
+=======
+    private static final long DB_ID = 1000 + testDbId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String DB_NAME = "TEST_DB";
     private static final String TABLE_NAME = "TEST_TABLE";
     private static final long EXPECTED_SINGLE_REPLICA_SIZE = 1024L;
     private static final int HTTP_SLOW_REQUEST_THRESHOLD_MS = Config.http_slow_request_threshold_ms;
 
+<<<<<<< HEAD
     @Before
     public void setUp() {
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
@@ -78,6 +97,21 @@ public class ShowMetaInfoActionTest extends StarRocksHttpTestCase {
         };
 
         setUpWithGlobalStateMgr(globalStateMgr);
+=======
+    @Override
+    public void doSetUp() {
+        Database db = new Database(DB_ID, DB_NAME);
+        OlapTable table = newTable(TABLE_NAME, EXPECTED_SINGLE_REPLICA_SIZE);
+        db.registerTableUnlocked(table);
+
+        // inject our test db
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getFullNameToDb();
+        fullNameToDb.put(DB_NAME, db);
+
+        ConcurrentHashMap<Long, Database> idToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb();
+        idToDb.put(DB_ID, db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @After

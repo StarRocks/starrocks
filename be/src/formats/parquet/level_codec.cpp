@@ -14,8 +14,15 @@
 
 #include "formats/parquet/level_codec.h"
 
+<<<<<<< HEAD
 #include "util/bit_util.h"
 #include "util/coding.h"
+=======
+#include "util/bit_stream_utils.inline.h"
+#include "util/bit_util.h"
+#include "util/coding.h"
+#include "util/slice.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 

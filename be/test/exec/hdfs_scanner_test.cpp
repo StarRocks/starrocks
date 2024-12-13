@@ -24,6 +24,10 @@
 #include "exec/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/fragment_context.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -80,6 +84,12 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     }
     _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
     _runtime_state->init_instance_mem_tracker();
+<<<<<<< HEAD
+=======
+    pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
+    fragment_context->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_ctx(fragment_context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
@@ -116,6 +126,10 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->file_size = range->file_length;
     param->scan_range = range;
     param->tuple_desc = tuple_desc;
+<<<<<<< HEAD
+=======
+    param->runtime_filter_collector = _pool.add(new RuntimeFilterProbeCollector());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
     std::vector<SlotDescriptor*> mat_slots;
@@ -2049,10 +2063,13 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
         ASSERT_TRUE(status.ok()) << status.message();
         param->datacache_options.enable_datacache = true;
+<<<<<<< HEAD
 #elif defined(WITH_CACHELIB)
         status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
         ASSERT_TRUE(status.ok()) << status.message();
         param->datacache_options.enable_datacache = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
@@ -2719,6 +2736,10 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
         param->scanner_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
+=======
+        param->all_conjunct_ctxs.push_back(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         std::vector<TExprNode> nodes;
@@ -2728,6 +2749,10 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
         param->scanner_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
+=======
+        param->all_conjunct_ctxs.push_back(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));

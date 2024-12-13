@@ -171,10 +171,17 @@ enum TSchemaTableType {
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
     SYS_FE_LOCKS,
+<<<<<<< HEAD
     SYS_FE_MEMORY_USAGE,
     SCH_PARTITIONS_META,
     SCH_BE_DATACACHE_METRICS,
     SCH_TEMP_TABLES
+=======
+    SCH_BE_DATACACHE_METRICS,
+    SCH_PARTITIONS_META,
+    SYS_FE_MEMORY_USAGE,
+    SCH_TEMP_TABLES,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum THdfsCompression {
@@ -190,7 +197,12 @@ enum THdfsCompression {
 enum TIndexType {
   BITMAP,
   GIN,
+<<<<<<< HEAD
   NGRAMBF
+=======
+  NGRAMBF,
+  VECTOR,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Mapping from names defined by Avro to the enum.
@@ -218,6 +230,10 @@ struct TColumn {
     9: optional bool is_auto_increment
     10: optional i32 col_unique_id  = -1
     11: optional bool has_bitmap_index = false
+<<<<<<< HEAD
+=======
+    12: optional Types.TAggStateDesc agg_state_desc
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                                                                       
     // How many bytes used for short key index encoding.
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
@@ -286,6 +302,10 @@ struct TOlapTableIndexSchema {
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
     7: optional map<string, string> column_to_expr_value
+<<<<<<< HEAD
+=======
+    8: optional bool is_shadow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TOlapTableSchemaParam {
@@ -306,8 +326,13 @@ struct TOlapTableIndex {
   4: optional string comment
   5: optional i64 index_id
 
+<<<<<<< HEAD
   // for GIN
   // critical common properties shared for all type of GIN
+=======
+  // for standalone index
+  // critical common properties
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   6: optional map<string, string> common_properties
 
   // properties to affect index building
@@ -471,10 +496,13 @@ struct TTableFunctionTable {
     10: optional bool parquet_use_legacy_encoding
 }
 
+<<<<<<< HEAD
 struct TIcebergSchema {
     1: optional list<TIcebergSchemaField> fields
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TIcebergSchemaField {
     // Refer to field id in iceberg schema
     1: optional i32 field_id
@@ -489,6 +517,13 @@ struct TIcebergSchemaField {
     100: optional list<TIcebergSchemaField> children
 }
 
+<<<<<<< HEAD
+=======
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TPartitionMap {
     1: optional map<i64, THdfsPartition> partitions
 }

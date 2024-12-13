@@ -37,8 +37,13 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+<<<<<<< HEAD
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
+=======
+import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.authorization.AuthorizationMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -46,7 +51,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
 import com.starrocks.privilege.AuthorizationMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -103,6 +111,10 @@ import static com.starrocks.catalog.PrimitiveType.SMALLINT;
 import static com.starrocks.catalog.PrimitiveType.TIME;
 import static com.starrocks.catalog.PrimitiveType.TINYINT;
 import static com.starrocks.catalog.PrimitiveType.VARCHAR;
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.analyzer.FunctionAnalyzer.HAS_TIME_PART;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Constant Functions List
@@ -111,8 +123,11 @@ public class ScalarOperatorFunctions {
     public static final Set<String> SUPPORT_JAVA_STYLE_DATETIME_FORMATTER =
             ImmutableSet.<String>builder().add("yyyy-MM-dd").add("yyyy-MM-dd HH:mm:ss").add("yyyyMMdd").build();
 
+<<<<<<< HEAD
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final int CONSTANT_128 = 128;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
     private static final BigInteger[] INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
@@ -634,8 +649,13 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+<<<<<<< HEAD
             @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT),
             @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT)
+=======
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT, isMonotonic = true),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT, isMonotonic = true)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
@@ -648,8 +668,13 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+<<<<<<< HEAD
             @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
             @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
+=======
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
         long value = 0;
@@ -668,7 +693,11 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+<<<<<<< HEAD
             @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+=======
+            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR, isMonotonic = true),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     })
     public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
         long millisecond = unixTime.getBigint();
@@ -684,8 +713,13 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+<<<<<<< HEAD
             @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
             @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+=======
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR, isMonotonic = true)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {

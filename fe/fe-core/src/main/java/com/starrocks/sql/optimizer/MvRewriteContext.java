@@ -148,6 +148,13 @@ public class MvRewriteContext {
         this.mvTableScanDescs = mvTableScanDescs;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isInAggregatePushDown() {
+        return aggregatePushDownContext != null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AggregatePushDownContext getAggregatePushDownContext() {
         return aggregatePushDownContext;
     }

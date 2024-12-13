@@ -706,6 +706,7 @@ public class SetTest extends PlanTestBase {
                 "         3 | 4\n" +
                 "         5 | 6\n");
     }
+<<<<<<< HEAD
 
     @Test
     public void testEliminateAgg() throws Exception {
@@ -810,4 +811,6 @@ public class SetTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(5: varchar_value AS DOUBLE) > 0.0, 1: id > 3");
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

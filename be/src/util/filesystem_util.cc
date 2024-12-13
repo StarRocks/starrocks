@@ -39,11 +39,18 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+<<<<<<< HEAD
 #include <filesystem>
 #include <system_error>
 
 #include "util/error_util.h"
 
+=======
+#include <cstring>
+#include <filesystem>
+#include <system_error>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 using std::exception;
 using std::string;
 using std::vector;
@@ -101,7 +108,11 @@ Status FileSystemUtil::create_file(const string& file_path) {
     if (fd < 0) {
         std::stringstream error_msg;
         error_msg << "Create file " << file_path.c_str() << " failed with errno=" << errno
+<<<<<<< HEAD
                   << "description=" << get_str_err_msg();
+=======
+                  << "description=" << std::strerror(errno);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::InternalError(error_msg.str());
     }
 
@@ -109,7 +120,11 @@ Status FileSystemUtil::create_file(const string& file_path) {
     if (success < 0) {
         std::stringstream error_msg;
         error_msg << "Close file " << file_path.c_str() << " failed with errno=" << errno
+<<<<<<< HEAD
                   << " description=" << get_str_err_msg();
+=======
+                  << " description=" << std::strerror(errno);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::InternalError(error_msg.str());
     }
 
@@ -121,7 +136,11 @@ Status FileSystemUtil::resize_file(const string& file_path, int64_t trunc_len) {
     if (success != 0) {
         std::stringstream error_msg;
         error_msg << "Truncate file " << file_path << " to length " << trunc_len << " failed with " << errno << " ("
+<<<<<<< HEAD
                   << get_str_err_msg() << ")";
+=======
+                  << std::strerror(errno) << ")";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::InternalError(error_msg.str());
     }
 

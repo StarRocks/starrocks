@@ -57,7 +57,11 @@ public:
     }
 
     // When the output operator is finished, the context can be finished regardless of other running operators.
+<<<<<<< HEAD
     [[nodiscard]] Status set_finished() {
+=======
+    Status set_finished() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _is_finished.store(true, std::memory_order_release);
         return Status::OK();
     }

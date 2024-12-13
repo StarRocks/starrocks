@@ -16,7 +16,14 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.analysis.LiteralExpr;
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SlotRef;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -52,6 +59,22 @@ public class ListPartitionDesc extends PartitionDesc {
     // for automatic partition table is ture. otherwise is false
     protected boolean isAutoPartitionTable = false;
 
+<<<<<<< HEAD
+=======
+    private final List<ParseNode> multiDescList;
+
+    private List<Expr> partitionExprs = null;
+
+    // for multi expr partition
+    public ListPartitionDesc(List<ParseNode> multiDescList, NodePosition pos) {
+        super(pos);
+        this.multiDescList = multiDescList;
+        this.singleListPartitionDescs = Lists.newArrayList();
+        this.multiListPartitionDescs = Lists.newArrayList();
+        this.partitionColNames = Lists.newArrayList();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ListPartitionDesc(List<String> partitionColNames,
                              List<PartitionDesc> partitionDescs) {
         this(partitionColNames, partitionDescs, NodePosition.ZERO);
@@ -64,6 +87,10 @@ public class ListPartitionDesc extends PartitionDesc {
         this.partitionColNames = partitionColNames;
         this.singleListPartitionDescs = Lists.newArrayList();
         this.multiListPartitionDescs = Lists.newArrayList();
+<<<<<<< HEAD
+=======
+        this.multiDescList = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitionDescs != null) {
             for (PartitionDesc partitionDesc : partitionDescs) {
                 if (partitionDesc instanceof SingleItemListPartitionDesc) {
@@ -75,6 +102,13 @@ public class ListPartitionDesc extends PartitionDesc {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public List<ParseNode> getMultiDescList() {
+        return multiDescList;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<PartitionDesc> getPartitionDescs() {
         List<PartitionDesc> partitionDescs = Lists.newArrayList();
         if (singleListPartitionDescs != null) {
@@ -101,6 +135,11 @@ public class ListPartitionDesc extends PartitionDesc {
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> tableProperties) throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = this.analyzePartitionColumns(columnDefs);
+<<<<<<< HEAD
+=======
+        // analyze partition expr
+        this.analyzePartitionExprs(columnDefs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // analyze single list property
         this.analyzeSingleListPartition(tableProperties, columnDefList);
         // analyze multi list partition
@@ -109,6 +148,25 @@ public class ListPartitionDesc extends PartitionDesc {
         this.postAnalyzePartitionColumns(columnDefList);
     }
 
+<<<<<<< HEAD
+=======
+    public void analyzePartitionExprs(List<ColumnDef> columnDefs) throws AnalysisException {
+        if (partitionExprs == null) {
+            return;
+        }
+        List<String> slotRefs = partitionExprs.stream()
+                .flatMap(e -> e.collectAllSlotRefs().stream())
+                .map(SlotRef::getColumnName)
+                .collect(Collectors.toList());
+        for (ColumnDef columnDef : columnDefs) {
+            if (slotRefs.contains(columnDef.getName()) && !columnDef.isKey()
+                    && columnDef.getAggregateType() != AggregateType.NONE) {
+                throw new AnalysisException("The partition expr should base on key column");
+            }
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<ColumnDef> analyzePartitionColumns(List<ColumnDef> columnDefs) throws AnalysisException {
         if (this.partitionColNames == null || this.partitionColNames.isEmpty()) {
             throw new AnalysisException("No partition columns.");
@@ -127,11 +185,20 @@ public class ListPartitionDesc extends PartitionDesc {
                         throw new AnalysisException(String.format("Invalid partition column '%s': %s",
                                 columnDef.getName(), "invalid data type " + columnDef.getType()));
                     }
+<<<<<<< HEAD
                     if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
+=======
+                    if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE
+                            && !columnDef.isGeneratedColumn()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         throw new AnalysisException("The partition column could not be aggregated column"
                                 + " and unique table's partition column must be key column");
                     }
                     found = true;
+<<<<<<< HEAD
+=======
+                    columnDef.setIsPartitionColumn(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     partitionColumns.add(columnDef);
                     break;
                 }
@@ -363,7 +430,17 @@ public class ListPartitionDesc extends PartitionDesc {
         return partitionColumns;
     }
 
+<<<<<<< HEAD
 
+=======
+    public List<Expr> getPartitionExprs() {
+        return partitionExprs;
+    }
+
+    public void setPartitionExprs(List<Expr> partitionExprs) {
+        this.partitionExprs = partitionExprs;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public boolean isAutoPartitionTable() {
         return isAutoPartitionTable;

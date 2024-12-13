@@ -27,9 +27,14 @@ namespace starrocks {
 MetadataResultWriter::MetadataResultWriter(BufferControlBlock* sinker,
                                            const std::vector<ExprContext*>& output_expr_ctxs,
                                            RuntimeProfile* parent_profile, TResultSinkType::type sink_type)
+<<<<<<< HEAD
         : _sinker(sinker),
           _output_expr_ctxs(output_expr_ctxs),
           _parent_profile(parent_profile),
+=======
+        : BufferControlResultWriter(sinker, parent_profile),
+          _output_expr_ctxs(output_expr_ctxs),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _sink_type(sink_type) {}
 
 MetadataResultWriter::~MetadataResultWriter() = default;
@@ -42,6 +47,7 @@ Status MetadataResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void MetadataResultWriter::_init_profile() {
     _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
     _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
@@ -50,6 +56,10 @@ void MetadataResultWriter::_init_profile() {
 
 Status MetadataResultWriter::append_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
+=======
+Status MetadataResultWriter::append_chunk(Chunk* chunk) {
+    SCOPED_TIMER(_append_chunk_timer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
         return process_status.status();
@@ -69,7 +79,11 @@ Status MetadataResultWriter::append_chunk(Chunk* chunk) {
 }
 
 StatusOr<TFetchDataResultPtrs> MetadataResultWriter::process_chunk(Chunk* chunk) {
+<<<<<<< HEAD
     SCOPED_TIMER(_total_timer);
+=======
+    SCOPED_TIMER(_append_chunk_timer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok()) {
@@ -81,6 +95,7 @@ StatusOr<TFetchDataResultPtrs> MetadataResultWriter::process_chunk(Chunk* chunk)
     return results;
 }
 
+<<<<<<< HEAD
 StatusOr<bool> MetadataResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     size_t num_rows = 0;
     for (const auto& result : results) {
@@ -101,6 +116,8 @@ StatusOr<bool> MetadataResultWriter::try_add_batch(TFetchDataResultPtrs& results
     return status;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StatusOr<TFetchDataResultPtr> MetadataResultWriter::_process_chunk(Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return nullptr;
@@ -148,7 +165,11 @@ StatusOr<TFetchDataResultPtr> MetadataResultWriter::_process_chunk(Chunk* chunk)
 // 13 -> "key_metadata"
 Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, const Chunk* chunk,
                                                     TFetchDataResult* result) const {
+<<<<<<< HEAD
     SCOPED_TIMER(_serialize_timer);
+=======
+    SCOPED_TIMER(_convert_tuple_timer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto content = down_cast<Int32Column*>(ColumnHelper::get_data_column(columns[0].get()));
     auto file_path = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[1].get()));
@@ -228,10 +249,13 @@ Status MetadataResultWriter::_fill_iceberg_metadata(const Columns& columns, cons
 
     return Status::OK();
 }
+<<<<<<< HEAD
 
 Status MetadataResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

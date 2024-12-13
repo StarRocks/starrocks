@@ -116,6 +116,10 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
         boolean isRollup = shuttleContext.isRollup();
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (aggFuncName.equals(APPROX_COUNT_DISTINCT) || aggFuncName.equals(NDV)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
@@ -160,7 +164,10 @@ public class HLLRewriteEquivalent extends IAggregateRewriteEquivalent {
         return null;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private CallOperator makeHllUnionAggFunc(ScalarOperator arg0) {
         Function fn = Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL}, IS_IDENTICAL);
         Preconditions.checkState(fn != null);

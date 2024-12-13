@@ -14,6 +14,7 @@
 
 package com.starrocks.common.io;
 
+<<<<<<< HEAD
 public interface ParamsKey {
     String defaultValue();
 
@@ -23,4 +24,18 @@ public interface ParamsKey {
 
     // auto implemented by Enum.name()
     String name();
+=======
+import com.starrocks.catalog.IndexParams;
+import com.starrocks.catalog.IndexParams.IndexParamItem;
+
+public interface ParamsKey {
+    String name();
+
+    default void check(String value) {
+    }
+
+    default IndexParamItem getIndexParamItem() {
+        return IndexParams.getInstance().getParam(name());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

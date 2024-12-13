@@ -48,7 +48,13 @@ public class TopNImplementationRule extends ImplementationRule {
                         logicalTopN.isSplit(),
                         false,
                         logicalTopN.getPredicate(),
+<<<<<<< HEAD
                         logicalTopN.getProjection());
+=======
+                        logicalTopN.getProjection(),
+                        logicalTopN.getPartitionPreAggCall());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList(OptExpression.create(physicalTopN, input.getInputs()));
     }
 }

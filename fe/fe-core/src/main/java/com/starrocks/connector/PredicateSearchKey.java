@@ -44,6 +44,13 @@ public class PredicateSearchKey {
         return tableName;
     }
 
+<<<<<<< HEAD
+=======
+    public long getSnapshotId() {
+        return snapshotId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean equals(Object o) {
         if (this == o) {

@@ -16,10 +16,18 @@ package com.starrocks.qe;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.DefaultAuthorizationProvider;
@@ -27,6 +35,12 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -245,15 +259,26 @@ public class RBACExecutorTest {
 
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
+<<<<<<< HEAD
         new MockUp<CreateFunctionStmt>() {
+=======
+        new MockUp<AuthorizationAnalyzer>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }
         };
 
+<<<<<<< HEAD
         new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
+=======
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

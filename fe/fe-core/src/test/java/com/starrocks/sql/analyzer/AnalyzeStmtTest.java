@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
@@ -160,7 +163,11 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAnalyzeHiveTable()  {
+=======
+    public void testAnalyzeHiveTable() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String sql = "analyze table hive0.tpch.customer";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
 
@@ -203,14 +210,26 @@ public class AnalyzeStmtTest {
         sql = "analyze full table db.tbl with async mode";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertTrue(analyzeStmt.isAsync());
+<<<<<<< HEAD
+=======
+
+        sql = "analyze full table db.tbl partition(`tbl`) with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testShow() throws MetaNotFoundException {
         String sql = "show analyze";
         ShowAnalyzeJobStmt showAnalyzeJobStmt = (ShowAnalyzeJobStmt) analyzeSuccess(sql);
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = testDb.getTable("t0");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(testDb.getId(), table.getId(), Lists.newArrayList(),
                 Lists.newArrayList(),
@@ -237,7 +256,11 @@ public class AnalyzeStmtTest {
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
+<<<<<<< HEAD
                         2020, 1, 1, 1, 1));
+=======
+                2020, 1, 1, 1, 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         analyzeStatus.setReason("Test Failed");
@@ -264,7 +287,11 @@ public class AnalyzeStmtTest {
         ShowHistogramStatsMetaStmt showHistogramStatsMetaStmt = (ShowHistogramStatsMetaStmt) analyzeSuccess(sql);
         HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(testDb.getId(), table.getId(), "v1",
                 StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.of(
+<<<<<<< HEAD
                         2020, 1, 1, 1, 1),
+=======
+                2020, 1, 1, 1, 1),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Maps.newHashMap());
         Assert.assertEquals("[test, t0, v1, HISTOGRAM, 2020-01-01 01:01:00, {}]",
                 ShowHistogramStatsMetaStmt.showHistogramStatsMeta(getConnectContext(), histogramStatsMeta).toString());
@@ -272,8 +299,13 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testStatisticsSqlBuilder() throws Exception {
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) database.getTable("t0");
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(table.getPartitions());
         Partition partition = (new ArrayList<>(table.getPartitions())).get(0);
 
@@ -292,9 +324,15 @@ public class AnalyzeStmtTest {
                         Lists.newArrayList("v1", "v2"), Lists.newArrayList(v1.getType(), v2.getType())));
 
         Assert.assertEquals(String.format(
+<<<<<<< HEAD
                 "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
                         "FROM table_statistic_v1 WHERE db_id = %d and table_id = %d and column_name in ('v1', 'v2')",
+=======
+                        "SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
+                                "data_size, distinct_count, null_count, max, min " +
+                                "FROM table_statistic_v1 WHERE db_id = %d and table_id = %d and column_name in ('v1', 'v2')",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         database.getId(), table.getId()),
                 StatisticSQLBuilder.buildQuerySampleStatisticsSQL(database.getId(),
                         table.getId(), Lists.newArrayList("v1", "v2")));
@@ -322,9 +360,15 @@ public class AnalyzeStmtTest {
     @Test
     public void testHistogramSampleRatio() {
         OlapTable t0 = (OlapTable) starRocksAssert.getCtx().getGlobalStateMgr()
+<<<<<<< HEAD
                 .getDb("db").getTable("tbl");
         for (Partition partition : t0.getAllPartitions()) {
             partition.getBaseIndex().setRowCount(10000);
+=======
+                .getLocalMetastore().getDb("db").getTable("tbl");
+        for (Partition partition : t0.getAllPartitions()) {
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(10000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         String sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -333,7 +377,11 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("1", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
+<<<<<<< HEAD
             partition.getBaseIndex().setRowCount(400000);
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(400000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
@@ -342,7 +390,11 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("0.5", analyzeStmt.getProperties().get(StatsConstants.HISTOGRAM_SAMPLE_RATIO));
 
         for (Partition partition : t0.getAllPartitions()) {
+<<<<<<< HEAD
             partition.getBaseIndex().setRowCount(20000000);
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(20000000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         sql = "analyze table db.tbl update histogram on kk1 with 256 buckets " +
                 "properties(\"histogram_sample_ratio\"=\"0.9\")";
@@ -388,38 +440,69 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testAnalyzeStatus() throws MetaNotFoundException {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = testDb.getTable("t0");
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
                         2020, 1, 1, 1, 1));
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "t0");
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
+                2020, 1, 1, 1, 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
         Assert.assertEquals(
                 "[-1, default_catalog.test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+<<<<<<< HEAD
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+=======
+                        " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeStatus.setProgress(50);
         Assert.assertEquals(
                 "[-1, default_catalog.test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+<<<<<<< HEAD
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+=======
+                        " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         Assert.assertEquals(
                 "[-1, default_catalog.test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+<<<<<<< HEAD
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+=======
+                        " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         Assert.assertEquals(
                 "[-1, default_catalog.test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+<<<<<<< HEAD
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+=======
+                        " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testObjectColumns() {
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb("db");
         OlapTable table = (OlapTable) database.getTable("tb2");
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "tb2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Column kk1 = table.getColumn("kk1");
         Column kk2 = table.getColumn("kk2");
@@ -447,7 +530,11 @@ public class AnalyzeStmtTest {
         String tblName = "insert";
         String sql = "select cast(" + 1 + " as Int), " +
                 "cast(" + 2 + " as bigint), " +
+<<<<<<< HEAD
                 "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+=======
+                "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 " from " + StatisticUtils.quoting(catalogName, dbName, tblName) + " [_META_]";
         QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, getConnectContext());
         Assert.assertEquals("select.insert",

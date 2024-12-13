@@ -18,7 +18,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TpchSQL;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TScanRangeParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.StarRocksAssert;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -28,6 +35,13 @@ import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class PlanTestBase extends PlanTestNoneDBBase {
 
     private static final Logger LOG = LogManager.getLogger(PlanTestBase.class);
@@ -992,7 +1006,11 @@ public class PlanTestBase extends PlanTestNoneDBBase {
     public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {
+<<<<<<< HEAD
             Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
+=======
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
                 if (startTime > 0 && mv.getCreateTime() > startTime) {
                     starRocksAssert.dropMaterializedView(mv.getName());
@@ -1005,4 +1023,18 @@ public class PlanTestBase extends PlanTestNoneDBBase {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static List<TScanRangeParams> collectAllScanRangeParams(DefaultCoordinator coordinator) {
+        List<TScanRangeParams> scanRangeParams = new ArrayList<>();
+        for (FragmentInstance instance : coordinator.getExecutionDAG().getInstances()) {
+            for (List<TScanRangeParams> x : instance.getNode2ScanRanges().values()) {
+                scanRangeParams.addAll(x);
+            }
+        }
+        // remove empty scan range introduced in incremental scan ranges feature.
+        return scanRangeParams.stream().filter(x -> !(x.isSetEmpty() && x.isEmpty())).collect(Collectors.toList());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

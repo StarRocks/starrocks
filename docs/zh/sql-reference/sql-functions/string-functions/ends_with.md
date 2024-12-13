@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ends_with
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 如果字符串以指定后缀结尾，返回 true，否则返回 false。任意参数为 NULL 则返回 NULL。
 

@@ -26,6 +26,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -46,6 +50,10 @@ import org.junit.Test;
 
 import java.util.Set;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.convertToDateRange;
 
 public class MvUtilsTest {
@@ -100,14 +108,23 @@ public class MvUtilsTest {
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, columnRef1, columnRef2);
 
+<<<<<<< HEAD
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         Table table1 = db.getTable("t0");
+=======
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LogicalScanOperator scanOperator1 = new LogicalOlapScanOperator(table1);
         BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
         scanOperator1.setPredicate(binaryPredicate2);
         OptExpression scanExpr = OptExpression.create(scanOperator1);
+<<<<<<< HEAD
         Table table2 = db.getTable("t1");
+=======
+        Table table2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LogicalScanOperator scanOperator2 = new LogicalOlapScanOperator(table2);
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
                 BinaryType.GE, columnRef2, ConstantOperator.createInt(1));
@@ -211,6 +228,7 @@ public class MvUtilsTest {
     public void testResetOpAppliedRule() {
         LogicalScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         Operator op = builder.build();
+<<<<<<< HEAD
         Assert.assertFalse(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
         // set
         Utils.setOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT);
@@ -218,5 +236,14 @@ public class MvUtilsTest {
         // reset
         Utils.resetOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT);
         Assert.assertFalse(Utils.isOpAppliedRule(op, Operator.OP_PARTITION_PRUNE_BIT));
+=======
+        Assert.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+        // set
+        op.setOpRuleBit(OP_PARTITION_PRUNED);
+        Assert.assertTrue(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+        // reset
+        op.resetOpRuleBit(OP_PARTITION_PRUNED);
+        Assert.assertFalse(op.isOpRuleBitSet(OP_PARTITION_PRUNED));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

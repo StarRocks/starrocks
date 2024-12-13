@@ -26,6 +26,7 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
 
 #include <utility>
 
@@ -35,6 +36,38 @@
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
+=======
+#include <stddef.h>
+#include <stdint.h>
+
+#include <functional>
+#include <memory>
+#include <utility>
+#include <vector>
+
+#include "column/chunk.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "fs/fs.h"
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "util/priority_thread_pool.hpp"
+
+namespace parquet {
+class RowGroupWriter;
+
+namespace schema {
+class GroupNode;
+} // namespace schema
+} // namespace parquet
+namespace starrocks {
+class Chunk;
+template <typename T>
+class StatusOr;
+} // namespace starrocks
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::parquet {
 
 // Wraps parquet::RowGroupWriter.

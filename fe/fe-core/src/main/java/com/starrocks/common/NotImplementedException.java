@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Thrown for SQL statements that require as yet unimplemented functionality.
  */
+<<<<<<< HEAD
 public class NotImplementedException extends UserException {
+=======
+public class NotImplementedException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public NotImplementedException(String msg) {
         super(msg);
     }

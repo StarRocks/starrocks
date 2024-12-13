@@ -15,7 +15,18 @@
 package com.starrocks.connector.metadata;
 
 public enum MetadataTableType {
+<<<<<<< HEAD
     LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata");
+=======
+    LOGICAL_ICEBERG_METADATA("logical_iceberg_metadata"),
+    REFS("refs"),
+    HISTORY("history"),
+    METADATA_LOG_ENTRIES("metadata_log_entries"),
+    SNAPSHOTS("snapshots"),
+    MANIFESTS("manifests"),
+    FILES("files"),
+    PARTITIONS("partitions");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public final String typeString;
 

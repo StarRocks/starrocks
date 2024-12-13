@@ -157,6 +157,15 @@ public class ReorderJoinRule extends Rule {
             if (copyIntoMemo) {
                 context.getMemo().copyIn(innerJoinRoot.getGroupExpression().getGroup(), joinExpr);
             } else {
+<<<<<<< HEAD
+=======
+                joinExpr.deriveLogicalPropertyItself();
+                ExpressionContext expressionContext = new ExpressionContext(joinExpr);
+                StatisticsCalculator statisticsCalculator =
+                        new StatisticsCalculator(expressionContext, context.getColumnRefFactory(), context);
+                statisticsCalculator.estimatorStats();
+                joinExpr.setStatistics(expressionContext.getStatistics());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Optional.of(joinExpr);
             }
         }
@@ -184,8 +193,21 @@ public class ReorderJoinRule extends Rule {
                 if (!multiJoinNode.checkDependsPredicate()) {
                     continue;
                 }
+<<<<<<< HEAD
                 Optional<OptExpression> newChild =
                         enumerate(joinReorderFactory.create(context), context, child, multiJoinNode, false);
+=======
+
+                List<JoinOrder> orderAlgorithms = joinReorderFactory.create(context, multiJoinNode);
+                Optional<OptExpression> newChild = Optional.empty();
+                for (JoinOrder orderAlgorithm : orderAlgorithms) {
+                    newChild = enumerate(orderAlgorithm, context, child, multiJoinNode, false);
+                    if (newChild.isEmpty()) {
+                        break;
+                    }
+                }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (newChild.isPresent()) {
                     int prevNumCrossJoins =
                             Utils.countJoinNodeSize(child, Sets.newHashSet(JoinOperator.CROSS_JOIN));

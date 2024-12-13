@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_count
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 统计 bitmap 中不重复值的个数。
 

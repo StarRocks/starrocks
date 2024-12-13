@@ -17,7 +17,11 @@
 
 package com.starrocks.plugin;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.IOException;
 
@@ -30,13 +34,21 @@ public class BuiltinPluginLoader extends PluginLoader {
     }
 
     @Override
+<<<<<<< HEAD
     public void install() throws UserException, IOException {
+=======
+    public void install() throws StarRocksException, IOException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pluginInstallValid();
         plugin.init(pluginInfo, pluginContext);
     }
 
     @Override
+<<<<<<< HEAD
     public void uninstall() throws IOException, UserException {
+=======
+    public void uninstall() throws IOException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (plugin != null) {
             pluginUninstallValid();
             plugin.close();

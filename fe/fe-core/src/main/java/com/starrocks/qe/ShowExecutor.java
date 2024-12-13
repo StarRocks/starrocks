@@ -47,6 +47,20 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ActionSet;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeEntry;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.TablePEntryObject;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -119,6 +133,7 @@ import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -130,6 +145,8 @@ import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -307,13 +324,21 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
             String dbName = statement.getDb();
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MetaUtils.checkDbNullAndReport(db, dbName);
 
             List<MaterializedView> materializedViews = Lists.newArrayList();
             List<Pair<OlapTable, MaterializedIndexMeta>> singleTableMVs = Lists.newArrayList();
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 PatternMatcher matcher = null;
                 if (statement.getPattern() != null) {
@@ -321,7 +346,11 @@ public class ShowExecutor {
                             CaseSensibility.TABLE.getCaseSensibility());
                 }
 
+<<<<<<< HEAD
                 for (Table table : db.getTables()) {
+=======
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (table.isMaterializedView()) {
                         MaterializedView mvTable = (MaterializedView) table;
                         if (matcher != null && !matcher.match(mvTable.getName())) {
@@ -385,7 +414,11 @@ public class ShowExecutor {
                 LOG.warn("listMaterializedViews failed:", e);
                 throw e;
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -481,7 +514,11 @@ public class ShowExecutor {
             MetaUtils.checkDbNullAndReport(db, statement.getDb());
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 List<String> tableNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listTableNames(catalogName, dbName);
 
@@ -515,7 +552,11 @@ public class ShowExecutor {
                     tableMap.put(tableName, table.getMysqlType());
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -553,7 +594,11 @@ public class ShowExecutor {
             MetaUtils.checkDbNullAndReport(db, showTemporaryTableStmt.getDb());
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
                 List<String> tableNames = temporaryTableMgr.listTemporaryTables(sessionId, db.getId());
@@ -564,7 +609,11 @@ public class ShowExecutor {
                     rows.add(Lists.newArrayList(tableName));
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -576,25 +625,42 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
+<<<<<<< HEAD
             Database db = context.getGlobalStateMgr().getDb(statement.getDb());
             ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDb());
+            ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 try {
                     PatternMatcher matcher = null;
                     if (statement.getPattern() != null) {
                         matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
                                 CaseSensibility.TABLE.getCaseSensibility());
                     }
+<<<<<<< HEAD
                     for (Table table : db.getTables()) {
+=======
+                    for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (matcher != null && !matcher.match(table.getName())) {
                             continue;
                         }
 
                         try {
+<<<<<<< HEAD
                             Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
                                     context.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+=======
+                            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), db.getFullName(), table);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -647,7 +713,11 @@ public class ShowExecutor {
                         rows.add(row);
                     }
                 } finally {
+<<<<<<< HEAD
                     locker.unLockDatabase(db, LockType.READ);
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             return new ShowResultSet(statement.getMetaData(), rows);
@@ -670,7 +740,11 @@ public class ShowExecutor {
 
             Database db;
             if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
+<<<<<<< HEAD
                 db = context.getGlobalStateMgr().getDb(dbName);
+=======
+                db = context.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             }
@@ -703,11 +777,19 @@ public class ShowExecutor {
         }
 
         private ShowResultSet showCreateInternalCatalogTable(ShowCreateTableStmt showStmt, ConnectContext connectContext) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(showStmt.getDb());
             MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
             List<List<String>> rows = Lists.newArrayList();
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.READ);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(showStmt.getDb());
+            MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
+            List<List<String>> rows = Lists.newArrayList();
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 Table table = MetaUtils.getSessionAwareTable(connectContext, db, showStmt.getTbl());
                 if (table == null) {
@@ -716,7 +798,11 @@ public class ShowExecutor {
                     } else {
                         // For Sync Materialized View, it is a mv index inside OLAP table,
                         // so we can not get it from database.
+<<<<<<< HEAD
                         for (Table tbl : db.getTables()) {
+=======
+                        for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             if (tbl.getType() == Table.TableType.OLAP) {
                                 OlapTable olapTable = (OlapTable) tbl;
                                 List<MaterializedIndexMeta> visibleMaterializedViews =
@@ -774,7 +860,11 @@ public class ShowExecutor {
                     return new ShowResultSet(showStmt.getMetaData(), rows);
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -905,7 +995,11 @@ public class ShowExecutor {
             } else if (statement.getIsGlobal()) {
                 functions = context.getGlobalStateMgr().getGlobalFunctionMgr().getFunctions();
             } else {
+<<<<<<< HEAD
                 Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+=======
+                Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
                 functions = db.getFunctions();
             }
@@ -923,7 +1017,11 @@ public class ShowExecutor {
                             continue;
                         }
                     } else if (!statement.getIsBuiltin()) {
+<<<<<<< HEAD
                         Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+=======
+                        Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         try {
                             Authorizer.checkAnyActionOnFunction(context.getCurrentUserIdentity(),
                                     context.getCurrentRoleIds(), db.getFullName(), function);
@@ -995,7 +1093,11 @@ public class ShowExecutor {
             }
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 PatternMatcher matcher = null;
                 if (statement.getPattern() != null) {
@@ -1040,7 +1142,11 @@ public class ShowExecutor {
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return new ShowResultSet(statement.getMetaData(), rows);
         }
@@ -1053,7 +1159,11 @@ public class ShowExecutor {
             if (statement.isAll()) {
                 dbId = -1;
             } else {
+<<<<<<< HEAD
                 Database db = globalStateMgr.getDb(statement.getDbName());
+=======
+                Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
                 dbId = db.getId();
             }
@@ -1307,7 +1417,11 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowDeleteStatement(ShowDeleteStmt statement, ConnectContext context) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(statement.getDbName());
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             long dbId = db.getId();
 
@@ -1361,7 +1475,11 @@ public class ShowExecutor {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 String tableName = statement.getTableName();
                 List<List<String>> totalRows = statement.getResultRows();
@@ -1370,7 +1488,11 @@ public class ShowExecutor {
                     long totalReplicaCount = 0;
 
                     // sort by table name
+<<<<<<< HEAD
                     List<Table> tables = db.getTables();
+=======
+                    List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     SortedSet<Table> sortedTables = new TreeSet<>(Comparator.comparing(Table::getName));
 
                     for (Table table : tables) {
@@ -1501,7 +1623,11 @@ public class ShowExecutor {
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return new ShowResultSet(statement.getMetaData(), statement.getResultRows());
         }
@@ -1573,7 +1699,11 @@ public class ShowExecutor {
 
                 // check real meta
                 do {
+<<<<<<< HEAD
                     Database db = globalStateMgr.getDb(dbId);
+=======
+                    Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (db == null) {
                         isSync = false;
                         break;
@@ -1581,9 +1711,15 @@ public class ShowExecutor {
                     dbName = db.getFullName();
 
                     Locker locker = new Locker();
+<<<<<<< HEAD
                     locker.lockDatabase(db, LockType.READ);
                     try {
                         Table table = db.getTable(tableId);
+=======
+                    locker.lockDatabase(db.getId(), LockType.READ);
+                    try {
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (!(table instanceof OlapTable)) {
                             isSync = false;
                             break;
@@ -1642,7 +1778,11 @@ public class ShowExecutor {
                         }
 
                     } finally {
+<<<<<<< HEAD
                         locker.unLockDatabase(db, LockType.READ);
+=======
+                        locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 } while (false);
 
@@ -1653,11 +1793,19 @@ public class ShowExecutor {
                         partitionId.toString(), indexId.toString(),
                         isSync.toString(), detailCmd));
             } else {
+<<<<<<< HEAD
                 Database db = globalStateMgr.getDb(statement.getDbName());
                 MetaUtils.checkDbNullAndReport(db, statement.getDbName());
 
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
+=======
+                Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+                MetaUtils.checkDbNullAndReport(db, statement.getDbName());
+
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 try {
                     Table table = MetaUtils.getSessionAwareTable(
                             context, db, new TableName(statement.getDbName(), statement.getTableName()));
@@ -1762,7 +1910,11 @@ public class ShowExecutor {
                         rows.add(oneTablet);
                     }
                 } finally {
+<<<<<<< HEAD
                     locker.unLockDatabase(db, LockType.READ);
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -1771,7 +1923,11 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBackupStatement(ShowBackupStmt statement, ConnectContext context) {
+<<<<<<< HEAD
             Database filterDb = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
+=======
+            Database filterDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<List<String>> infos = Lists.newArrayList();
             List<Database> dbs = Lists.newArrayList();
 
@@ -1812,12 +1968,28 @@ public class ShowExecutor {
                 List<String> info = backupJob.getInfo();
                 infos.add(info);
             }
+<<<<<<< HEAD
+=======
+
+            // backup info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof BackupJob) {
+                BackupJob backupJob = (BackupJob) jobI;
+                List<String> info = backupJob.getInfo();
+                infos.add(info);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 
         @Override
         public ShowResultSet visitShowRestoreStatement(ShowRestoreStmt statement, ConnectContext context) {
+<<<<<<< HEAD
             Database filterDb = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
+=======
+            Database filterDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<List<String>> infos = Lists.newArrayList();
             List<Database> dbs = Lists.newArrayList();
 
@@ -1841,6 +2013,18 @@ public class ShowExecutor {
                 List<String> info = restoreJob.getInfo();
                 infos.add(info);
             }
+<<<<<<< HEAD
+=======
+
+            // restore info for external catalog
+            AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(-1L);
+            if (jobI != null && jobI instanceof RestoreJob) {
+                RestoreJob restoreJob = (RestoreJob) jobI;
+                List<String> info = restoreJob.getInfo();
+                infos.add(info);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 
@@ -1863,7 +2047,11 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowExportStatement(ShowExportStmt statement, ConnectContext context) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
             Database db = globalStateMgr.getDb(statement.getDbName());
+=======
+            Database db = globalStateMgr.getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
             long dbId = db.getId();
 
@@ -2093,12 +2281,21 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowDynamicPartitionStatement(ShowDynamicPartitionStmt statement, ConnectContext context) {
             List<List<String>> rows = Lists.newArrayList();
+<<<<<<< HEAD
             Database db = context.getGlobalStateMgr().getDb(statement.getDb());
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
                     for (Table tbl : db.getTables()) {
+=======
+            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDb());
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    for (Table tbl : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (!(tbl instanceof OlapTable)) {
                             continue;
                         }
@@ -2148,7 +2345,11 @@ public class ShowExecutor {
                                 String.valueOf(dynamicPartitionScheduler.isInScheduler(db.getId(), olapTable.getId()))));
                     }
                 } finally {
+<<<<<<< HEAD
                     locker.unLockDatabase(db, LockType.READ);
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 return new ShowResultSet(statement.getMetaData(), rows);
             }
@@ -2172,7 +2373,11 @@ public class ShowExecutor {
             }
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 if (table instanceof OlapTable) {
                     List<Index> indexes = ((OlapTable) table).getIndexes();
@@ -2188,14 +2393,22 @@ public class ShowExecutor {
                     // do nothing
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return new ShowResultSet(statement.getMetaData(), rows);
         }
 
         @Override
         public ShowResultSet visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
+<<<<<<< HEAD
             Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+=======
+            Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MetaUtils.checkDbNullAndReport(db, statement.getDbName());
 
             long txnId = statement.getTxnId();
@@ -2517,7 +2730,11 @@ public class ShowExecutor {
         public ShowResultSet visitShowPipeStatement(ShowPipeStmt statement, ConnectContext context) {
             List<List<Comparable>> rows = Lists.newArrayList();
             String dbName = statement.getDbName();
+<<<<<<< HEAD
             long dbId = GlobalStateMgr.getCurrentState().mayGetDb(dbName)
+=======
+            long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbName)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .map(Database::getId)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName));
             PipeManager pipeManager = GlobalStateMgr.getCurrentState().getPipeManager();
@@ -2853,7 +3070,11 @@ public class ShowExecutor {
             // rows
             if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
                 Partition partition = olapTable.getPartitions().iterator().next();
+<<<<<<< HEAD
                 MaterializedIndex index = partition.getIndex(mvId);
+=======
+                MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 mvStatus.setRows(index.getRowCount());
             } else {
                 mvStatus.setRows(0L);

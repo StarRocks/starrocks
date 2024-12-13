@@ -151,6 +151,11 @@ public:
 
     static Status CapacityLimitExceed(std::string_view msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
 
+<<<<<<< HEAD
+=======
+    static Status Shutdown(std::string_view msg) { return Status(TStatusCode::SHUTDOWN, msg); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static Status BigQueryCpuSecondLimitExceeded(std::string_view msg) {
         return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
     }
@@ -210,6 +215,11 @@ public:
 
     bool is_yield() const { return code() == TStatusCode::YIELD; }
 
+<<<<<<< HEAD
+=======
+    bool is_shutdown() const { return code() == TStatusCode::SHUTDOWN; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
     template <typename T>

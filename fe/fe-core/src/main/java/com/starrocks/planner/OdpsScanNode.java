@@ -23,7 +23,11 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.connector.CatalogConnector;
+<<<<<<< HEAD
 import com.starrocks.connector.RemoteFileDesc;
+=======
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.odps.OdpsRemoteFileDesc;
@@ -88,13 +92,23 @@ public class OdpsScanNode extends ScanNode {
                                         List<PartitionKey> partitionKeys) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+<<<<<<< HEAD
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 table.getCatalogName(), table, partitionKeys, -1, predicate, fieldNames, -1);
+=======
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys).setPredicate(predicate)
+                .setFieldNames(fieldNames).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OdpsRemoteFileDesc remoteFileDesc = (OdpsRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         OdpsSplitsInfo splitsInfo = remoteFileDesc.getOdpsSplitsInfo();
         if (splitsInfo.isEmpty()) {
             LOG.warn("There is no odps splits on {}.{} and predicate: [{}]",
+<<<<<<< HEAD
                     table.getDbName(), table.getTableName(), predicate);
+=======
+                    table.getCatalogDBName(), table.getCatalogTableName(), predicate);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
         Map<String, String> commonSplitInfo = new HashMap<>();
@@ -151,11 +165,18 @@ public class OdpsScanNode extends ScanNode {
         return helper.toString();
     }
 
+<<<<<<< HEAD
 
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
         output.append(prefix).append("TABLE: ").append(table.getDbName()).append(".").append(table.getTableName())
+=======
+    @Override
+    protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
+        StringBuilder output = new StringBuilder();
+        output.append(prefix).append("TABLE: ").append(table.getCatalogDBName()).append(".").append(table.getCatalogTableName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .append("\n");
         return output.toString();
     }
@@ -177,7 +198,11 @@ public class OdpsScanNode extends ScanNode {
         tHdfsScanNode.setSql_predicates(explainString);
 
         if (table != null) {
+<<<<<<< HEAD
             tHdfsScanNode.setTable_name(table.getTableName());
+=======
+            tHdfsScanNode.setTable_name(table.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
@@ -186,10 +211,13 @@ public class OdpsScanNode extends ScanNode {
         tHdfsScanNode.setCloud_configuration(tCloudConfiguration);
         msg.hdfs_scan_node = tHdfsScanNode;
     }
+<<<<<<< HEAD
 
     @Override
     public int getNumInstances() {
         return scanRangeLocationsList.size();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

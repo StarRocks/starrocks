@@ -48,6 +48,7 @@ public:
     ~SmallFileMgr();
 
     // call init() when BE start up. load all local files
+<<<<<<< HEAD
     [[nodiscard]] Status init();
 
     // get file by specified file_id, return 'file_path'
@@ -63,6 +64,23 @@ private:
     [[nodiscard]] Status _check_file(const CacheEntry& entry, const std::string& md5);
 
     [[nodiscard]] Status _download_file(int64_t file_id, const std::string& md5, std::string* file_path);
+=======
+    Status init();
+
+    // get file by specified file_id, return 'file_path'
+    // if file does not exist, it will be downloaded from FE
+    Status get_file(int64_t file_id, const std::string& md5, std::string* file_path);
+
+private:
+    Status _load_local_files();
+
+    // load one single local file
+    Status _load_single_file(const std::string& path, const std::string& file_name);
+
+    Status _check_file(const CacheEntry& entry, const std::string& md5);
+
+    Status _download_file(int64_t file_id, const std::string& md5, std::string* file_path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     std::mutex _lock;

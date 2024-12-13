@@ -42,7 +42,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
@@ -78,7 +82,11 @@ public class RoutineLoadJobTest {
     public void testAfterAbortedReasonOffsetOutOfRange(@Mocked GlobalStateMgr globalStateMgr,
                                                        @Injectable TransactionState transactionState,
                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -112,7 +120,11 @@ public class RoutineLoadJobTest {
     @Test
     public void testAfterAborted(@Mocked RoutineLoadMgr routineLoadMgr,
                                  @Injectable TransactionState transactionState,
+<<<<<<< HEAD
                                  @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+=======
+                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -181,7 +193,11 @@ public class RoutineLoadJobTest {
     @Test
     public void testAfterCommitted(@Mocked RoutineLoadMgr routineLoadMgr,
                                  @Injectable TransactionState transactionState,
+<<<<<<< HEAD
                                  @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+=======
+                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -271,7 +287,11 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testKafkaGetShowInfo() throws UserException {
+=======
+    public void testKafkaGetShowInfo() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             // PAUSE state
             KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
@@ -346,7 +366,11 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                                           @Mocked WarehouseManager warehouseManager) throws UserException {
+=======
+                                          @Mocked WarehouseManager warehouseManager) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -377,10 +401,17 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
+=======
+    public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = null;
             }
@@ -394,6 +425,7 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testUpdateWhileTableDeleted(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                                             @Injectable Database database) throws UserException {
         new Expectations() {
             {
@@ -401,6 +433,15 @@ public class RoutineLoadJobTest {
                 minTimes = 0;
                 result = database;
                 database.getTable(anyLong);
+=======
+                                            @Injectable Database database) throws StarRocksException {
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = null;
             }
@@ -415,6 +456,7 @@ public class RoutineLoadJobTest {
     public void testUpdateWhilePartitionChanged(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table,
+<<<<<<< HEAD
                                                 @Injectable KafkaProgress kafkaProgress) throws UserException {
 
         new Expectations() {
@@ -423,6 +465,16 @@ public class RoutineLoadJobTest {
                 minTimes = 0;
                 result = database;
                 database.getTable(anyLong);
+=======
+                                                @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+
+        new Expectations() {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = table;
             }
@@ -432,7 +484,11 @@ public class RoutineLoadJobTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
+<<<<<<< HEAD
                                                        long warehouseId) throws UserException {
+=======
+                                                       long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Lists.newArrayList(1, 2, 3);
             }
         };

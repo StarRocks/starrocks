@@ -106,7 +106,11 @@ public class StarMgrMetaSyncerTest {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
+<<<<<<< HEAD
 
+=======
+        long physicalPartitionId = 4L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 
         new Expectations() {
@@ -201,8 +205,15 @@ public class StarMgrMetaSyncerTest {
             @Mock
             public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable tbl) {
                 MaterializedIndex baseIndex = new MaterializedIndex();
+<<<<<<< HEAD
                 DistributionInfo distributionInfo = new HashDistributionInfo();
                 return Lists.newArrayList(new Partition(partitionId, "p1", baseIndex, distributionInfo, shardGroupId));
+=======
+                baseIndex.setShardGroupId(shardGroupId);
+                DistributionInfo distributionInfo = new HashDistributionInfo();
+                return Lists.newArrayList(new Partition(partitionId, physicalPartitionId,
+                        "p1", baseIndex, distributionInfo));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

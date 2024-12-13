@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # degrees
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts the angle in radians `x` to degrees.
 

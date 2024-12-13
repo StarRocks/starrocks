@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+<<<<<<< HEAD
 #include <filesystem>
 
 #ifdef WITH_CACHELIB
@@ -26,6 +27,11 @@
 #endif
 #include "common/config.h"
 #include "common/logging.h"
+=======
+#ifdef WITH_STARCACHE
+#include "block_cache/starcache_wrapper.h"
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 
@@ -33,8 +39,11 @@ namespace starrocks {
 
 namespace fs = std::filesystem;
 
+<<<<<<< HEAD
 // The cachelib doesn't support a item (key+valueu+attribute) larger than 4 MB without chain.
 // So, we check and limit the block_size configured by users to avoid unexpected errors.
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // For starcache, in theory we doesn't have a hard limitation for block size, but a very large
 // block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
@@ -51,12 +60,15 @@ BlockCache::~BlockCache() {
 Status BlockCache::init(const CacheOptions& options) {
     _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
     auto cache_options = options;
+<<<<<<< HEAD
 #ifdef WITH_CACHELIB
     if (cache_options.engine == "cachelib") {
         _kv_cache = std::make_unique<CacheLibWrapper>();
         LOG(INFO) << "init cachelib engine, block_size: " << _block_size;
     }
 #endif
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef WITH_STARCACHE
     if (cache_options.engine == "starcache") {
         _kv_cache = std::make_unique<StarCacheWrapper>();
@@ -208,6 +220,17 @@ Status BlockCache::shutdown() {
     return st;
 }
 
+<<<<<<< HEAD
+=======
+void BlockCache::disk_spaces(std::vector<DirSpace>* spaces) {
+    spaces->clear();
+    auto metrics = _kv_cache->cache_metrics(0);
+    for (auto& dir : metrics.disk_dir_spaces) {
+        spaces->push_back({.path = dir.path, .size = dir.quota_bytes});
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 DataCacheEngineType BlockCache::engine_type() {
     return _kv_cache->engine_type();
 }

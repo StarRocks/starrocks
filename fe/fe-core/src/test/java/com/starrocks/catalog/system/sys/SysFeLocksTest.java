@@ -18,9 +18,19 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+<<<<<<< HEAD
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TFeLocksItem;
+import com.starrocks.thrift.TFeLocksReq;
+import mockit.Expectations;
+import mockit.Mocked;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
@@ -45,7 +55,12 @@ public class SysFeLocksTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testResolveLockItem() throws InterruptedException {
+=======
+    public void testResolveLockItem(@Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr)
+            throws InterruptedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.lock_manager_enabled = false;
 
         Database db = new Database(1, "test_lock");
@@ -57,10 +72,28 @@ public class SysFeLocksTest {
                     item.toString());
         }
 
+<<<<<<< HEAD
         // exclusive owner
         {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.WRITE);
+=======
+        new Expectations(metadataMgr) {
+            {
+                globalStateMgr.getMetadataMgr();
+                minTimes = 0;
+                result = metadataMgr;
+
+                metadataMgr.getDb(anyLong);
+                result = db;
+            }
+        };
+
+        // exclusive owner
+        {
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TFeLocksItem item = SysFeLocks.resolveLockInfo(db);
 
             assertEquals("EXCLUSIVE", item.getLock_mode());
@@ -71,8 +104,13 @@ public class SysFeLocksTest {
 
             // add a waiter
             Thread waiter = new Thread(() -> {
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.WRITE);
                 locker.unLockDatabase(db, LockType.WRITE);
+=======
+                locker.lockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }, "waiter");
             waiter.start();
 
@@ -84,13 +122,21 @@ public class SysFeLocksTest {
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());
 
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.WRITE);
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // shared lock
         {
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TFeLocksItem item = SysFeLocks.resolveLockInfo(db);
 
             assertEquals("SHARED", item.getLock_mode());
@@ -101,8 +147,13 @@ public class SysFeLocksTest {
 
             // add a waiter
             Thread waiter = new Thread(() -> {
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.WRITE);
                 locker.unLockDatabase(db, LockType.WRITE);
+=======
+                locker.lockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }, "waiter");
             waiter.start();
 
@@ -118,7 +169,11 @@ public class SysFeLocksTest {
             item = SysFeLocks.resolveLockInfo(db);
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         Config.lock_manager_enabled = true;

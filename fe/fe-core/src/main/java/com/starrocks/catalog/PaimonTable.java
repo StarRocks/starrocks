@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.DescriptorTable;
@@ -33,7 +36,10 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class PaimonTable extends Table {
     private String catalogName;
     private String databaseName;
@@ -66,11 +72,21 @@ public class PaimonTable extends Table {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
         return databaseName;
     }
 
     public String getTableName() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return databaseName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return tableName;
     }
 

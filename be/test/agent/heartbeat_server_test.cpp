@@ -19,6 +19,25 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+// defined in common/process_exit.cpp
+extern std::atomic<bool> k_starrocks_exit;
+
+TEST(HeartbeatServerTest, test_shutdown_heartbeat) {
+    HeartbeatServer server;
+    THeartbeatResult result;
+    TMasterInfo info;
+
+    k_starrocks_exit = true;
+    server.heartbeat(result, info);
+    EXPECT_EQ(TStatusCode::SHUTDOWN, result.status.status_code);
+    Status status(result.status);
+    EXPECT_TRUE(status.is_shutdown());
+    k_starrocks_exit = false;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST(HeartbeatServerTest, test_print_master_info_with_token_null) {
     HeartbeatServer server;
     TMasterInfo master_info;

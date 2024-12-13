@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
@@ -47,10 +50,15 @@ public class DeltaLakeTable extends Table {
     private String tableLocation;
     private Engine deltaEngine;
 
+<<<<<<< HEAD
 
     public static final String PARTITION_NULL_VALUE = "null";
 
 
+=======
+    public static final String PARTITION_NULL_VALUE = "null";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public DeltaLakeTable() {
         super(TableType.DELTALAKE);
     }
@@ -74,6 +82,10 @@ public class DeltaLakeTable extends Table {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getTableLocation() {
         return tableLocation;
     }
@@ -95,11 +107,21 @@ public class DeltaLakeTable extends Table {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
         return dbName;
     }
 
     public String getTableName() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return dbName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return tableName;
     }
 
@@ -126,10 +148,32 @@ public class DeltaLakeTable extends Table {
         return partColumnNames.isEmpty();
     }
 
+<<<<<<< HEAD
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
         Metadata deltaMetadata = getDeltaMetadata();
+=======
+    public THdfsPartition toHdfsPartition(DescriptorTable.ReferencedPartitionInfo info) {
+        Metadata deltaMetadata = getDeltaMetadata();
+        PartitionKey key = info.getKey();
+        THdfsPartition tPartition = new THdfsPartition();
+        tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(deltaMetadata.getFormat().getProvider()).toThrift());
+
+        List<LiteralExpr> keys = key.getKeys();
+        tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
+
+        THdfsPartitionLocation tPartitionLocation = new THdfsPartitionLocation();
+        tPartitionLocation.setPrefix_index(-1);
+        tPartitionLocation.setSuffix(info.getPath());
+        tPartition.setLocation(tPartitionLocation);
+        return tPartition;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
+        Preconditions.checkNotNull(partitions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TDeltaLakeTable tDeltaLakeTable = new TDeltaLakeTable();
         tDeltaLakeTable.setLocation(getTableLocation());
@@ -155,6 +199,7 @@ public class DeltaLakeTable extends Table {
         }
 
         for (DescriptorTable.ReferencedPartitionInfo info : partitions) {
+<<<<<<< HEAD
             PartitionKey key = info.getKey();
             long partitionId = info.getId();
 
@@ -168,6 +213,10 @@ public class DeltaLakeTable extends Table {
             tPartitionLocation.setPrefix_index(-1);
             tPartitionLocation.setSuffix(info.getPath());
             tPartition.setLocation(tPartitionLocation);
+=======
+            long partitionId = info.getId();
+            THdfsPartition tPartition = toHdfsPartition(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             tDeltaLakeTable.putToPartitions(partitionId, tPartition);
         }
 

@@ -1099,6 +1099,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+<<<<<<< HEAD
 #### lock_manager_enabled
 
 - Default: true
@@ -1117,6 +1118,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which improves load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
 - Introduced in: v3.3.0
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### black_host_history_sec
 
 - Default: 2 * 60
@@ -1135,6 +1138,27 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The threshold of connection failures allowed for a blacklisted BE node. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
 - Introduced in: v3.3.0
 
+<<<<<<< HEAD
+=======
+#### lock_manager_enabled
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the lock manager. The lock manager performs central management for locks. For example, it can control whether to refine the granularity of metadata locks from the database level to the table level.
+- Introduced in: v3.3.0
+
+##### lock_manager_enable_using_fine_granularity_lock
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which improves load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
+- Introduced in: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### enable_legacy_compatibility_for_replication
 
 - Default: false
@@ -2775,6 +2799,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### max_automatic_partition_number
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of automatically created partitions.
+- Introduced in: v3.1
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### auto_partition_max_creation_number_per_load
 
 - Default: 4096
@@ -3714,9 +3750,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
 ##### max_automatic_partition_number
 
 - Default: 4096
+=======
+##### max_partition_number_per_table
+
+- Default: 100000
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Type: Long
 - Unit: -
 - Is mutable: Yes

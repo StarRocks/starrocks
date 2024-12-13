@@ -151,10 +151,13 @@ public class RestoreJobPrimaryKeyTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = id.getAndIncrement();
@@ -242,7 +245,12 @@ public class RestoreJobPrimaryKeyTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
+<<<<<<< HEAD
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = expectedRestoreTbl.getIndexNameById(index.getId());

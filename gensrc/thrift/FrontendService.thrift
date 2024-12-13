@@ -117,12 +117,15 @@ struct TShowVariableRequest {
     2: required Types.TVarType varType
 }
 
+<<<<<<< HEAD
 // Results of a call to describeTable()
 struct TShowVariableResult {
     1: required map<string, string> variables
     2: optional list<TVerboseVariableRecord> verbose_variables
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TVerboseVariableRecord {
     1: optional string variable_name
     2: optional string value
@@ -130,6 +133,15 @@ struct TVerboseVariableRecord {
     4: optional bool is_changed
 }
 
+<<<<<<< HEAD
+=======
+// Results of a call to describeTable()
+struct TShowVariableResult {
+    1: required map<string, string> variables
+    2: optional list<TVerboseVariableRecord> verbose_variables
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Valid table file formats
 enum TFileFormat {
   PARQUETFILE,
@@ -536,6 +548,7 @@ struct TGetLoadsParams {
     5: optional string load_type
 }
 
+<<<<<<< HEAD
 struct TGetLoadsResult {
     1: optional list<TLoadInfo> loads
 }
@@ -544,6 +557,8 @@ struct TGetTrackingLoadsResult {
     1: optional list<TTrackingLoadInfo> trackingLoads;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TTrackingLoadInfo {
     1: optional i64 job_id
     2: optional string label
@@ -552,6 +567,13 @@ struct TTrackingLoadInfo {
     5: optional string load_type
 }
 
+<<<<<<< HEAD
+=======
+struct TGetTrackingLoadsResult {
+    1: optional list<TTrackingLoadInfo> trackingLoads;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TLoadInfo {
     1: optional i64 job_id
     2: optional string label
@@ -588,8 +610,13 @@ struct TLoadInfo {
     33: optional i64 num_scan_bytes
 }
 
+<<<<<<< HEAD
 struct TGetRoutineLoadJobsResult {
     1: optional list<TRoutineLoadJobInfo> loads
+=======
+struct TGetLoadsResult {
+    1: optional list<TLoadInfo> loads
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TRoutineLoadJobInfo {
@@ -614,8 +641,13 @@ struct TRoutineLoadJobInfo {
     19: optional string other_msg
 }
 
+<<<<<<< HEAD
 struct TGetStreamLoadsResult {
     1: optional list<TStreamLoadInfo> loads
+=======
+struct TGetRoutineLoadJobsResult {
+    1: optional list<TRoutineLoadJobInfo> loads
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TStreamLoadInfo {
@@ -647,6 +679,13 @@ struct TStreamLoadInfo {
 
 }
 
+<<<<<<< HEAD
+=======
+struct TGetStreamLoadsResult {
+    1: optional list<TStreamLoadInfo> loads
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // getTableNames returns a list of unqualified table names
 struct TGetTablesResult {
   1: list<string> tables
@@ -672,10 +711,13 @@ enum FrontendServiceVersion {
   V1
 }
 
+<<<<<<< HEAD
 struct TBatchReportExecStatusParams {
   1: required list<TReportExecStatusParams> params_list
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // The results of an INSERT query, sent to the coordinator as part of
 // TReportExecStatusParams
 struct TReportExecStatusParams {
@@ -705,7 +747,11 @@ struct TReportExecStatusParams {
 
   // New errors that have not been reported to the coordinator
   // optional in V1
+<<<<<<< HEAD
   9: optional list<string> error_log
+=======
+  9: optional list<string> error_log // Decrepated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   // URL of files need to load
   // optional
@@ -747,6 +793,13 @@ struct TReportExecStatusParams {
   29: optional DataCache.TLoadDataCacheMetrics load_datacache_metrics
 }
 
+<<<<<<< HEAD
+=======
+struct TBatchReportExecStatusParams {
+  1: required list<TReportExecStatusParams> params_list
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TReportFragmentFinishParams {
     1: optional Types.TUniqueId query_id
     2: optional Types.TUniqueId fragment_instance_id
@@ -757,6 +810,15 @@ struct TReportFragmentFinishResponse {
     1: optional Status.TStatus status
 }
 
+<<<<<<< HEAD
+=======
+struct TAuditStatisticsItem {
+    1: optional i64 scan_rows
+    2: optional i64 scan_bytes
+    3: optional i64 table_id
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TAuditStatistics {
     3: optional i64 scan_rows
     4: optional i64 scan_bytes
@@ -773,12 +835,15 @@ struct TReportAuditStatisticsParams {
     3: optional TAuditStatistics audit_statistics
 }
 
+<<<<<<< HEAD
 struct TAuditStatisticsItem {
     1: optional i64 scan_rows
     2: optional i64 scan_bytes
     3: optional i64 table_id
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TFeResult {
     1: required FrontendServiceVersion protocolVersion
     2: required Status.TStatus status
@@ -963,6 +1028,26 @@ struct TStreamLoadPutResult {
     2: optional InternalService.TExecPlanFragmentParams params
 }
 
+<<<<<<< HEAD
+=======
+struct TMergeCommitRequest {
+    1: optional string db
+    2: optional string tbl
+    3: optional string user
+    4: optional string passwd
+    5: optional string user_ip
+    6: optional i64 backend_id
+    7: optional string backend_host;
+    8: optional map<string, string> params;
+}
+
+struct TMergeCommitResult {
+    1: optional Status.TStatus status;
+    // only valid for success
+    2: optional string label;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
     2: optional map<i32,i64> partitionCmtOffsetTimestamp
@@ -1382,6 +1467,10 @@ struct TCreatePartitionRequest {
     3: optional i64 table_id
     // for each partition column's partition values
     4: optional list<list<string>> partition_values
+<<<<<<< HEAD
+=======
+    5: optional bool is_temp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TCreatePartitionResult {
@@ -1423,10 +1512,13 @@ struct TGetTablesConfigRequest {
     1: optional TAuthInfo auth_info
 }
 
+<<<<<<< HEAD
 struct TGetTablesConfigResponse {
     1: optional list<TTableConfigInfo> tables_config_infos
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TTableConfigInfo {
     1: optional string table_schema
     2: optional string table_name
@@ -1442,12 +1534,21 @@ struct TTableConfigInfo {
     12: optional i64 table_id
 }
 
+<<<<<<< HEAD
 struct TGetPartitionsMetaRequest {
     1: optional TAuthInfo auth_info
 }
 
 struct TGetPartitionsMetaResponse {
     1: optional list<TPartitionMetaInfo> partitions_meta_infos
+=======
+struct TGetTablesConfigResponse {
+    1: optional list<TTableConfigInfo> tables_config_infos
+}
+
+struct TGetPartitionsMetaRequest {
+    1: optional TAuthInfo auth_info
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TPartitionMetaInfo {
@@ -1481,11 +1582,47 @@ struct TPartitionMetaInfo {
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
 }
 
+<<<<<<< HEAD
+=======
+struct TGetPartitionsMetaResponse {
+    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
     2: optional string table_name;
 }
 
+<<<<<<< HEAD
+=======
+struct TTableInfo {
+    1: optional string table_catalog
+    2: optional string table_schema
+    3: optional string table_name
+    4: optional string table_type
+    5: optional string engine
+    6: optional i64 version
+    7: optional string row_format
+    8: optional i64 table_rows
+    9: optional i64 avg_row_length
+    10: optional i64 data_length
+    11: optional i64 max_data_length
+    12: optional i64 index_length
+    13: optional i64 data_free
+    14: optional i64 auto_increment
+    15: optional i64 create_time
+    16: optional i64 update_time
+    17: optional i64 check_time
+    18: optional string table_collation
+    19: optional i64 checksum
+    20: optional string create_options
+    21: optional string table_comment
+    22: optional string session_id
+    23: optional i64 table_id
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
@@ -1625,6 +1762,7 @@ struct TGetWarehousesResponse {
     2: optional list<TWarehouseInfo> warehouse_infos;
 }
 
+<<<<<<< HEAD
 struct TTableInfo {
     1: optional string table_catalog
     2: optional string table_schema
@@ -1651,6 +1789,8 @@ struct TTableInfo {
     23: optional i64 table_id
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TAllocateAutoIncrementIdParam {
     1: optional i64 table_id
     2: optional i64 rows
@@ -1848,6 +1988,31 @@ struct TGetKeysResponse {
     1: optional list<binary> key_metas;
 }
 
+<<<<<<< HEAD
+=======
+struct TStartCheckpointRequest {
+    1: optional i64 epoch;
+    2: optional i64 journal_id;
+    3: optional bool is_global_state_mgr;
+}
+
+struct TStartCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+struct TFinishCheckpointRequest {
+    1: optional i64 journal_id;
+    2: optional string node_name;
+    3: optional bool is_success;
+    4: optional string message;
+    5: optional bool is_global_state_mgr;
+}
+
+struct TFinishCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1904,6 +2069,11 @@ service FrontendService {
 
     TStreamLoadPutResult streamLoadPut(1: TStreamLoadPutRequest request)
 
+<<<<<<< HEAD
+=======
+    TMergeCommitResult requestMergeCommit(1: TMergeCommitRequest request)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status.TStatus snapshotLoaderReport(1: TSnapshotLoaderReportRequest request)
 
     TRefreshTableResponse refreshTable(1:TRefreshTableRequest request)
@@ -1961,5 +2131,12 @@ service FrontendService {
     TGetTemporaryTablesInfoResponse getTemporaryTablesInfo(1: TGetTemporaryTablesInfoRequest request)
 
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams request)
+<<<<<<< HEAD
+=======
+
+    TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
+
+    TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

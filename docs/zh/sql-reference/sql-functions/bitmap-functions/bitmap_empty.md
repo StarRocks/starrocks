@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_empty
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回一个空 bitmap，主要用于 insert 或 stream load 时填充默认值，如下例:
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_int
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function analyzes and gets the integer value from a specified path in json string.
 

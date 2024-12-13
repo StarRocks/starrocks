@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -22,6 +26,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -38,11 +46,17 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+<<<<<<< HEAD
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+=======
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // When a column used in a SQL query's Group By statement has a unique attribute, aggregation can be eliminated,
 // and the LogicalAggregationOperator can be replaced with a LogicalProjectOperator.
@@ -78,6 +92,14 @@ public class EliminateAggRule extends TransformationRule {
 
     private static final EliminateAggRule INSTANCE = new EliminateAggRule();
 
+<<<<<<< HEAD
+=======
+    private static final Set<String> SUPPORTED_AGG_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.SUM, FunctionSet.COUNT, FunctionSet.AVG, FunctionSet.FIRST_VALUE,
+            FunctionSet.MAX, FunctionSet.MIN, FunctionSet.GROUP_CONCAT
+    );
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         if (!context.getSessionVariable().isEnableEliminateAgg()) {
@@ -85,6 +107,7 @@ public class EliminateAggRule extends TransformationRule {
         }
 
         LogicalAggregationOperator aggOp = input.getOp().cast();
+<<<<<<< HEAD
         List<ColumnRefOperator> groupKeys = aggOp.getGroupingKeys();
 
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
@@ -125,20 +148,53 @@ public class EliminateAggRule extends TransformationRule {
         }
 
         return true;
+=======
+        OptExpression childOpt = input.inputAt(0);
+
+        List<ColumnRefOperator> groupBys = aggOp.getGroupingKeys();
+        if (groupBys.isEmpty()) {
+            return false;
+        }
+
+        boolean supportedAllAggFunctions = aggOp.getAggregations().values().stream()
+                .allMatch(call -> !call.isDistinct() && SUPPORTED_AGG_FUNCTIONS.contains(call.getFnName()));
+        if (!supportedAllAggFunctions) {
+            return false;
+        }
+
+        UKFKConstraintsCollector.collectColumnConstraintsForce(input);
+
+        List<UKFKConstraints.UniqueConstraintWrapper> uniqueKeys = childOpt.getConstraints().getAggUniqueKeys();
+        if (uniqueKeys.isEmpty()) {
+            return false;
+        }
+
+        ColumnRefSet groupByIds = new ColumnRefSet();
+        groupBys.stream().map(ColumnRefOperator::getId).forEach(groupByIds::union);
+        return uniqueKeys.stream().anyMatch(constraint -> groupByIds.containsAll(constraint.ukColumnRefs));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
+<<<<<<< HEAD
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
 
+=======
+
+        Map<ColumnRefOperator, ScalarOperator> newProjectMap = new HashMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
             ColumnRefOperator aggColumnRef = entry.getKey();
             CallOperator callOperator = entry.getValue();
             ScalarOperator newOperator = handleAggregationFunction(callOperator.getFnName(), callOperator);
             newProjectMap.put(aggColumnRef, newOperator);
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         aggOp.getGroupingKeys().forEach(ref -> newProjectMap.put(ref, ref));
         LogicalProjectOperator newProjectOp = LogicalProjectOperator.builder().setColumnRefMap(newProjectMap).build();
 

@@ -24,12 +24,15 @@ import java.util.Map;
 import java.util.Optional;
 
 public class PaimonPartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public String getDbName() {
         return ((PaimonTable) table).getDbName();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean isSupportPCTRefresh() {
         return true;

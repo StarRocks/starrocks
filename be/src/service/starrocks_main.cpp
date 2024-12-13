@@ -55,9 +55,17 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+<<<<<<< HEAD
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
+=======
+#include "fs/s3/poco_http_client_factory.h"
+#include "runtime/exec_env.h"
+#include "runtime/heartbeat_flags.h"
+#include "runtime/jdbc_driver_manager.h"
+#include "runtime/memory/roaring_hook.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "service/backend_options.h"
 #include "service/service.h"
 #include "service/staros_worker.h"
@@ -179,6 +187,11 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+<<<<<<< HEAD
+=======
+    starrocks::init_roaring_hook();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef FIU_ENABLE
     if (!starrocks::failpoint::init_failpoint_from_conf(std::string(getenv("STARROCKS_HOME")) +
                                                         "/conf/failpoint.json")) {
@@ -210,6 +223,12 @@ int main(int argc, char** argv) {
         aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
     }
     Aws::InitAPI(aws_sdk_options);
+<<<<<<< HEAD
+=======
+    if (starrocks::config::enable_poco_client_for_aws_sdk) {
+        Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);

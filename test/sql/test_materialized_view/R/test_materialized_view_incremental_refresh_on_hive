@@ -1,0 +1,105 @@
+-- name: test_mv_increment_refresh_on_hive
+create external catalog mv_hive_${uuid0}
+properties
+(
+    "type" = "hive",
+    "hive.catalog.type" = "hive",
+    "hive.metastore.uris" = "${hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_hive_${uuid0};
+-- result:
+-- !result
+create database mv_hive_db_${uuid0};
+-- result:
+-- !result
+use mv_hive_db_${uuid0};
+-- result:
+-- !result
+shell: hadoop fs -test -d ${hdfs_path}/tbl_for_refresh && hadoop fs -rm -r ${hdfs_path}/tbl_for_refresh >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+CREATE EXTERNAL TABLE tbl_for_refresh (
+  num int,
+  dt date
+)
+PARTITION BY (dt);
+-- result:
+-- !result
+set enable_write_hive_external_table = true;
+-- result:
+-- !result
+INSERT OVERWRITE tbl_for_refresh VALUES
+  (2,"2020-07-01"),(3,"2020-07-02"),(4,"2020-07-03"),(5,"2020-07-04");
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL AS 
+  SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.tbl_for_refresh;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+set catalog mv_hive_${uuid0};
+-- result:
+-- !result
+use mv_hive_db_${uuid0};
+-- result:
+-- !result
+drop table tbl_for_refresh;
+-- result:
+-- !result
+CREATE EXTERNAL TABLE tbl_for_refresh (
+  num int,
+  dt date
+)
+PARTITION BY (dt);
+-- result:
+-- !result
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200701 VALUES in ('2020-07-01');
+-- result:
+-- !result
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200702 VALUES in ('2020-07-02');
+-- result:
+-- !result
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200703 VALUES in ('2020-07-03');
+-- result:
+-- !result
+ALTER TABLE tbl_for_refresh ADD PARTITION p20200704 VALUES in ('2020-07-04');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+select * from test_mv1 order by dt;
+-- result:
+2	2020-07-01
+3	2020-07-02
+4	2020-07-03
+5	2020-07-04
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.tbl_for_refresh;
+-- result:
+-- !result
+drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
+-- result:
+-- !result

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # crc32
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回字符串的 32 位循环冗余校验值（Cyclic Redundancy Check）。如果输入参数为 NULL，则返回 NULL。
 

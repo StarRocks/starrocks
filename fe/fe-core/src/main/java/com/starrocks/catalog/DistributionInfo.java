@@ -67,6 +67,13 @@ public abstract class DistributionInfo implements Writable {
         this.typeStr = this.type.name();
     }
 
+<<<<<<< HEAD
+=======
+    public String getTypeStr() {
+        return typeStr;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public DistributionInfoType getType() {
         return type;
     }

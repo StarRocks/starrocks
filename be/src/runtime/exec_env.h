@@ -61,6 +61,10 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
+<<<<<<< HEAD
+=======
+class BatchWriteMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class MemTracker;
 class MetricRegistry;
 class StorageEngine;
@@ -139,7 +143,10 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+<<<<<<< HEAD
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
@@ -149,6 +156,10 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
+<<<<<<< HEAD
+=======
+    MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
     MemTracker* jemalloc_fragmentation_traker() { return _jemalloc_fragmentation_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
@@ -206,9 +217,12 @@ private:
     // The memory used for schema change
     std::shared_ptr<MemTracker> _schema_change_mem_tracker;
 
+<<<<<<< HEAD
     // The memory used for column pool
     std::shared_ptr<MemTracker> _column_pool_mem_tracker;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
 
@@ -231,6 +245,12 @@ private:
     // The memory used for datacache
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
+<<<<<<< HEAD
+=======
+    // The memory used for poco connection pool
+    std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 };
 
@@ -298,6 +318,10 @@ public:
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
+<<<<<<< HEAD
+=======
+    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
 
@@ -327,7 +351,11 @@ public:
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
+<<<<<<< HEAD
     lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
+=======
+    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
@@ -387,6 +415,10 @@ private:
     BrpcStubCache* _brpc_stub_cache = nullptr;
     StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
+<<<<<<< HEAD
+=======
+    BatchWriteMgr* _batch_write_mgr = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
@@ -403,7 +435,11 @@ private:
     ProfileReportWorker* _profile_report_worker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
+<<<<<<< HEAD
     lake::LocationProvider* _lake_location_provider = nullptr;
+=======
+    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
 

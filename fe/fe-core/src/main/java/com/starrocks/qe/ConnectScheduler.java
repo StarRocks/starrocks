@@ -37,6 +37,11 @@ package com.starrocks.qe;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
@@ -45,8 +50,12 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.NegotiateState;
 import com.starrocks.mysql.nio.NConnectContext;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
+=======
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -71,6 +80,11 @@ public class ConnectScheduler {
     private final AtomicInteger nextConnectionId;
 
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
+<<<<<<< HEAD
+=======
+    private final Map<String, ArrowFlightSqlConnectContext> arrowFlightSqlConnectContextMap = Maps.newConcurrentMap();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
     private final ReentrantLock connStatsLock = new ReentrantLock();
     private final ExecutorService executor = ThreadPoolManager
@@ -104,6 +118,17 @@ public class ConnectScheduler {
                         ConnectContext connectContext = connectionMap.get(connectId);
                         connectContext.checkTimeout(now);
                     }
+<<<<<<< HEAD
+=======
+
+                    // remove arrow flight sql timeout connect
+                    ArrayList<String> arrowFlightSqlConnections =
+                            new ArrayList<>(arrowFlightSqlConnectContextMap.keySet());
+                    for (String token : arrowFlightSqlConnections) {
+                        ConnectContext connectContext = arrowFlightSqlConnectContextMap.get(token);
+                        connectContext.checkTimeout(now);
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             } catch (Throwable e) {
                 //Catch Exception to avoid thread exit
@@ -151,7 +176,12 @@ public class ConnectScheduler {
             connCountByUser.computeIfAbsent(ctx.getQualifiedUser(), k -> new AtomicInteger(0));
             AtomicInteger currentConnAtomic = connCountByUser.get(ctx.getQualifiedUser());
             int currentConn = currentConnAtomic.get();
+<<<<<<< HEAD
             long currentUserMaxConn = ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+=======
+            long currentUserMaxConn =
+                    ctx.getGlobalStateMgr().getAuthenticationMgr().getMaxConn(ctx.getCurrentUserIdentity());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (currentConn >= currentUserMaxConn) {
                 String userErrMsg = "Reach user-level(qualifiedUser: " + ctx.getQualifiedUser() +
                         ", currUserIdentity: " + ctx.getCurrentUserIdentity() + ") connection limit, " +
@@ -166,6 +196,15 @@ public class ConnectScheduler {
             numberConnection.incrementAndGet();
             currentConnAtomic.incrementAndGet();
             connectionMap.put((long) ctx.getConnectionId(), ctx);
+<<<<<<< HEAD
+=======
+
+            if (ctx instanceof ArrowFlightSqlConnectContext) {
+                ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
+                arrowFlightSqlConnectContextMap.put(context.getToken(), context);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new Pair<>(true, null);
         } finally {
             connStatsLock.unlock();
@@ -187,6 +226,14 @@ public class ConnectScheduler {
                         ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId(),
                         ctx.getQualifiedUser(), conns != null ? Integer.toString(conns.get()) : "nil");
             }
+<<<<<<< HEAD
+=======
+
+            if (ctx instanceof ArrowFlightSqlConnectContext) {
+                ArrowFlightSqlConnectContext context = (ArrowFlightSqlConnectContext) ctx;
+                arrowFlightSqlConnectContextMap.remove(context.getToken());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             connStatsLock.unlock();
         }
@@ -200,12 +247,29 @@ public class ConnectScheduler {
         return connectionMap.get(connectionId);
     }
 
+<<<<<<< HEAD
     public ConnectContext findContextByQueryId(String queryId) {
         return connectionMap.values().stream().filter(
                         (Predicate<ConnectContext>) c ->
                                 c.getQueryId() != null
                                 && queryId.equals(c.getQueryId().toString())
                 )
+=======
+    public ConnectContext getContext(String token) {
+        return connectionMap.get(token);
+    }
+
+    public ArrowFlightSqlConnectContext getArrowFlightSqlConnectContext(String token) {
+        return arrowFlightSqlConnectContextMap.get(token);
+    }
+
+    public ConnectContext findContextByQueryId(String queryId) {
+        return connectionMap.values().stream().filter(
+                (Predicate<ConnectContext>) c ->
+                        c.getQueryId() != null
+                                && queryId.equals(c.getQueryId().toString())
+        )
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .findFirst().orElse(null);
     }
 
@@ -259,9 +323,13 @@ public class ConnectScheduler {
 
     public Set<UUID> listAllSessionsId() {
         Set<UUID> sessionIds = new HashSet<>();
+<<<<<<< HEAD
         connectionMap.values().forEach(ctx -> {
             sessionIds.add(ctx.getSessionId());
         });
+=======
+        connectionMap.values().forEach(ctx -> sessionIds.add(ctx.getSessionId()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return sessionIds;
     }
 

@@ -147,8 +147,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeTable() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -160,8 +166,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeTableFinish() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
@@ -201,8 +213,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeTableFailed() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -239,15 +257,25 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
 
         OptimizeJobV2 replayOptimizeJob = new OptimizeJobV2(
+<<<<<<< HEAD
                 optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+=======
+                    optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         replayOptimizeJob.replay(optimizeJob);
     }
 
     @Test
     public void testSchemaChangeWhileTabletNotStable() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Partition testPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
@@ -255,7 +283,11 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assert.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
+<<<<<<< HEAD
         MaterializedIndex baseIndex = testPartition.getBaseIndex();
+=======
+        MaterializedIndex baseIndex = testPartition.getDefaultPhysicalPartition().getBaseIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LocalTablet baseTablet = (LocalTablet) baseIndex.getTablets().get(0);
         List<Replica> replicas = baseTablet.getImmutableReplicas();
         Replica replica1 = replicas.get(0);
@@ -296,8 +328,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeReplay() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable(GlobalStateMgrTestUtil.testTable7);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
@@ -305,7 +343,11 @@ public class OptimizeJobV2Test extends DDLTestBase {
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
         OptimizeJobV2 replayOptimizeJob = new OptimizeJobV2(
+<<<<<<< HEAD
                 optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+=======
+                    optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         replayOptimizeJob.replay(optimizeJob);
         Assert.assertEquals(JobState.PENDING, replayOptimizeJob.getJobState());
@@ -342,8 +384,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeReplayPartialSuccess() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable("testTable2");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "testTable2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String stmt = "alter table testTable2 distributed by hash(v1)";
         AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
@@ -352,9 +400,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assert.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
 
+<<<<<<< HEAD
 
         OptimizeJobV2 replayOptimizeJob = new OptimizeJobV2(
                 optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+=======
+        OptimizeJobV2 replayOptimizeJob = new OptimizeJobV2(
+                    optimizeJob.getJobId(), db.getId(), olapTable.getId(), olapTable.getName(), 1000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         replayOptimizeJob.replay(optimizeJob);
         Assert.assertEquals(JobState.PENDING, replayOptimizeJob.getJobState());
@@ -387,8 +440,14 @@ public class OptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testOptimizeFailedByVersion() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) db.getTable("testTable2");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "testTable2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String stmt = "alter table testTable2 distributed by hash(v1)";
         AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
@@ -414,7 +473,12 @@ public class OptimizeJobV2Test extends DDLTestBase {
         optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
 
         for (Partition p : olapTable.getPartitions()) {
+<<<<<<< HEAD
             p.setVisibleVersion(p.getVisibleVersion() + 1, 0);
+=======
+            p.getDefaultPhysicalPartition().setVisibleVersion(
+                    p.getDefaultPhysicalPartition().getVisibleVersion() + 1, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         try {

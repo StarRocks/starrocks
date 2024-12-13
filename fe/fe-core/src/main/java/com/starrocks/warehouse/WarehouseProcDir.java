@@ -39,6 +39,10 @@ public class WarehouseProcDir implements ProcDirInterface {
             .add("CreatedOn")
             .add("ResumedOn")
             .add("UpdatedOn")
+<<<<<<< HEAD
+=======
+            .add("Property")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             .add("Comment")
             .build();
 

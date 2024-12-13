@@ -312,6 +312,7 @@ bool ConnectorScanOperator::has_shared_chunk_source() const {
     return !active_inputs.empty();
 }
 
+<<<<<<< HEAD
 size_t ConnectorScanOperator::num_buffered_chunks() const {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& buffer = factory->get_chunk_buffer();
@@ -370,6 +371,8 @@ void ConnectorScanOperator::set_buffer_finished() {
     buffer.set_finished(_driver_sequence);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 connector::ConnectorType ConnectorScanOperator::connector_type() {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     return scan_node->connector_type();
@@ -585,7 +588,11 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     return io_tasks;
 }
 
+<<<<<<< HEAD
 void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
+=======
+Status ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
     if (ticket_checker != nullptr) {
         int64_t cached_owner_id = -1;
@@ -598,7 +605,12 @@ void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
             }
         }
     }
+<<<<<<< HEAD
     _morsel_queue->append_morsels(std::move(morsels));
+=======
+    RETURN_IF_ERROR(_morsel_queue->append_morsels(std::move(morsels)));
+    return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // ==================== ConnectorChunkSource ====================
@@ -617,9 +629,12 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     TScanRange* scan_range = scan_morsel->get_scan_range();
     ScanSplitContext* split_context = scan_morsel->get_split_context();
 
+<<<<<<< HEAD
     if (scan_range->__isset.broker_scan_range) {
         scan_range->broker_scan_range.params.__set_non_blocking_read(true);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
     _data_source->set_driver_sequence(op->get_driver_sequence());
     _data_source->set_split_context(split_context);
@@ -713,10 +728,17 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
     if (scan_op->enable_adaptive_io_tasks()) {
+<<<<<<< HEAD
+=======
+        ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         [[maybe_unused]] auto build_debug_string = [&](const std::string& action) {
             std::stringstream ss;
             ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
                << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", "
+<<<<<<< HEAD
                << action << ". this = " << (void*)this << ", value = " << _request_mem_tracker_bytes;
             return ss.str();
         };
@@ -724,6 +746,13 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
         MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
 
+=======
+               << action << ". this = " << (void*)this << ", value = " << _request_mem_tracker_bytes
+               << ", running = " << limiter->update_running_chunk_source_count(0);
+            return ss.str();
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int retry = 3;
         while (retry > 0) {
             retry--;
@@ -862,7 +891,11 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                 split_morsels.emplace_back(std::move(m));
             }
 
+<<<<<<< HEAD
             scan_op->append_morsels(std::move(split_morsels));
+=======
+            RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     return Status::EndOfFile("");

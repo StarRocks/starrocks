@@ -97,7 +97,11 @@ public class JDBCTableTest {
         };
         JDBCTable table = new JDBCTable(1000, "jdbc_table", columns, properties);
         Assert.assertEquals(this.resourceName, table.getResourceName());
+<<<<<<< HEAD
         Assert.assertEquals(this.table, table.getJdbcTable());
+=======
+        Assert.assertEquals(this.table, table.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

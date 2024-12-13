@@ -116,7 +116,11 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void createDb(String dbName, Map<String, String> properties) {
+=======
+    public void createDB(String dbName, Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -140,7 +144,11 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void dropDb(String dbName) throws MetaNotFoundException {
+=======
+    public void dropDB(String dbName) throws MetaNotFoundException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database database;
         try {
             database = getDB(dbName);

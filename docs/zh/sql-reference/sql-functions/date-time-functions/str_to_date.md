@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # str_to_date
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 按照 `format` 指定的格式将 `str` 转换为 DATETIME 类型的值。如果转换结果有误，则返回 NULL。该函数与 [date_format](./date_format.md) 函数功能相反。
 

@@ -24,6 +24,10 @@
 #include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "util/network_util.h"
+<<<<<<< HEAD
+=======
+#include "util/thrift_rpc_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::pipeline {
 std::string to_load_error_http_path(const std::string& file_name) {
@@ -137,10 +141,13 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
                 params.sink_commit_infos.push_back(info);
             }
         }
+<<<<<<< HEAD
 
         // Send new errors to coordinator
         runtime_state->get_unreported_errors(&(params.error_log));
         params.__isset.error_log = (params.error_log.size() > 0);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     auto backend_id = get_backend_id();
@@ -150,6 +157,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
     return res;
 }
 
+<<<<<<< HEAD
 using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
@@ -200,6 +208,22 @@ Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& para
         rpc_status = Status::InternalError(msg.str());
         return rpc_status;
     }
+=======
+// including the final status when execution finishes.
+Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
+                                             const TNetworkAddress& fe_addr) {
+    TReportExecStatusResult res;
+    Status rpc_status;
+
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->reportExecStatus(res, params); },
+            config::thrift_rpc_timeout_ms);
+
+    if (rpc_status.ok()) {
+        rpc_status = Status(res.status);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return rpc_status;
 }
 
@@ -273,6 +297,7 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
 Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
                                        const TNetworkAddress& fe_addr) {
     Status fe_status;
+<<<<<<< HEAD
     FrontendServiceConnection coord(exec_env->frontend_client_cache(), fe_addr, config::thrift_rpc_timeout_ms,
                                     &fe_status);
     if (!fe_status.ok()) {
@@ -313,6 +338,15 @@ Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEn
         LOG(WARNING) << msg.str();
         rpc_status = Status::InternalError(msg.str());
     }
+=======
+    TMVReportEpochResponse res;
+    Status rpc_status;
+
+    rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            fe_addr, [&res, &params](FrontendServiceConnection& client) { client->mvReport(res, params); },
+            config::thrift_rpc_timeout_ms);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return rpc_status;
 }
 

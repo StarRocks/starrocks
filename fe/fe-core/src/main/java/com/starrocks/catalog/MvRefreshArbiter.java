@@ -14,6 +14,10 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
@@ -23,7 +27,11 @@ import com.starrocks.catalog.mv.MVTimelinessNonPartitionArbiter;
 import com.starrocks.catalog.mv.MVTimelinessRangePartitionArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DebugUtil;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.UnsupportedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,8 +41,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+<<<<<<< HEAD
 import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithList;
 import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithRange;
+=======
+import static com.starrocks.connector.PartitionUtil.getMVPartitionNameWithRange;
+import static com.starrocks.connector.PartitionUtil.getMVPartitionToCells;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
@@ -186,14 +199,20 @@ public class MvRefreshArbiter {
             if (baseUpdatedPartitionNames == null) {
                 return null;
             }
+<<<<<<< HEAD
             Map<Table, Column> partitionTableAndColumns = mv.getRefBaseTablePartitionColumns();
             if (!partitionTableAndColumns.containsKey(baseTable)) {
+=======
+            Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+            if (!refBaseTablePartitionColumns.containsKey(baseTable)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 baseTableUpdateInfo.addToRefreshPartitionNames(baseUpdatedPartitionNames);
                 return baseTableUpdateInfo;
             }
 
             try {
                 List<String> updatedPartitionNamesList = Lists.newArrayList(baseUpdatedPartitionNames);
+<<<<<<< HEAD
                 Column partitionColumn = partitionTableAndColumns.get(baseTable);
                 PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
                 if (mvPartitionInfo.isListPartition()) {
@@ -205,6 +224,24 @@ public class MvRefreshArbiter {
                     Expr partitionExpr = MaterializedView.getPartitionExpr(mv);
                     Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
                             partitionColumn, updatedPartitionNamesList, partitionExpr);
+=======
+                List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
+                PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
+                if (mvPartitionInfo.isListPartition()) {
+                    Map<String, PCell> mvPartitionNameWithList = getMVPartitionToCells(baseTable,
+                            refPartitionColumns, updatedPartitionNamesList);
+                    baseTableUpdateInfo.addPartitionCells(mvPartitionNameWithList);
+                    baseTableUpdateInfo.addToRefreshPartitionNames(mvPartitionNameWithList.keySet());
+                } else if (mvPartitionInfo.isRangePartition()) {
+                    Preconditions.checkArgument(refPartitionColumns.size() == 1,
+                            "Range partition column size must be 1");
+                    Column partitionColumn = refPartitionColumns.get(0);
+                    Optional<Expr> partitionExprOpt = mv.getRangePartitionFirstExpr();
+                    Preconditions.checkArgument(partitionExprOpt.isPresent(),
+                            "Range partition expr must be present");
+                    Map<String, Range<PartitionKey>> partitionNameWithRange = getMVPartitionNameWithRange(baseTable,
+                            partitionColumn, updatedPartitionNamesList, partitionExprOpt.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (Map.Entry<String, Range<PartitionKey>> e : partitionNameWithRange.entrySet()) {
                         baseTableUpdateInfo.addRangePartitionKeys(e.getKey(), e.getValue());
                     }

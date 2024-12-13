@@ -36,7 +36,11 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -84,6 +88,10 @@ public class DeleteTest {
     private final long tableId = 2L;
     private final long partitionId = 3L;
     private final long indexId = 4L;
+<<<<<<< HEAD
+=======
+    private final long physicalPartitionId = 6L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final long tablet1Id = 10L;
     private final long tablet2Id = 11L;
     private final long backendId = 20L;
@@ -130,7 +138,11 @@ public class DeleteTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, partitionName, index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, partitionName, index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Lake table
         LakeTable table = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
@@ -151,9 +163,18 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
                 result = db;
 
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
 
@@ -175,7 +196,11 @@ public class DeleteTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException, RpcException {
+=======
+    public void testNormal() throws StarRocksException, RpcException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
@@ -255,7 +280,11 @@ public class DeleteTest {
     }
 
     @Test(expected = DdlException.class)
+<<<<<<< HEAD
     public void testBeDeleteFail() throws UserException {
+=======
+    public void testBeDeleteFail() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectation();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -327,9 +356,18 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
                 result = db;
 
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
             }
@@ -337,7 +375,11 @@ public class DeleteTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBeDeleteArrayType() throws UserException {
+=======
+    public void testBeDeleteArrayType() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectationWithoutExec();
         new MockUp<BrpcProxy>() {
             @Mock

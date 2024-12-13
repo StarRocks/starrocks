@@ -14,6 +14,11 @@
 
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 
+<<<<<<< HEAD
+=======
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
@@ -58,7 +63,11 @@ bool HashJoinProbeOperator::need_input() const {
         return true;
     }
 
+<<<<<<< HEAD
     if (_join_prober != _join_builder && is_ready()) {
+=======
+    if (is_ready()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // If hasn't referenced hash table, return true to reference hash table in push_chunk.
         return !_join_prober->has_referenced_hash_table();
     }
@@ -80,10 +89,18 @@ Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 }
 
 StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
+<<<<<<< HEAD
+=======
+    RETURN_IF_ERROR(_reference_builder_hash_table_once());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return _join_prober->pull_chunk(state);
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
+<<<<<<< HEAD
+=======
+    RETURN_IF_ERROR(_join_prober->probe_input_finished(state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _join_prober->enter_post_probe_phase();
     return Status::OK();
 }
@@ -95,12 +112,15 @@ Status HashJoinProbeOperator::set_finished(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
+<<<<<<< HEAD
     // non-broadcast join directly return as _join_prober == _join_builder,
     // but broadcast should refer to the shared join builder
     if (_join_prober == _join_builder) {
         return Status::OK();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!is_ready()) {
         return Status::OK();
     }
@@ -124,6 +144,25 @@ Status HashJoinProbeOperator::reset_state(RuntimeState* state, const vector<Chun
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void HashJoinProbeOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 HashJoinProbeOperatorFactory::HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id,
                                                            HashJoinerFactoryPtr hash_joiner_factory)
         : OperatorFactory(id, "hash_join_probe", plan_node_id), _hash_joiner_factory(std::move(hash_joiner_factory)) {}

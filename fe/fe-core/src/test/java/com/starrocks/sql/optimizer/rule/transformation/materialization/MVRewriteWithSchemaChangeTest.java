@@ -71,7 +71,10 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan, "sync_mv1");
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testMVCacheInvalidAndReValid() throws Exception {
         starRocksAssert.withTable("\n" +
@@ -126,8 +129,14 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             waitForSchemaChangeAlterJobFinish();
 
             // check mv invalid
+<<<<<<< HEAD
             Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
             MaterializedView mv1 = ((MaterializedView) testDb.getTable("test_cache_mv1"));
+=======
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv1 = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_cache_mv1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertFalse(mv1.isActive());
             try {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
@@ -395,7 +404,10 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             dropMv("test", "join_mv_1");
         }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             starRocksAssert.withMTableNames(cluster, List.of("depts", "emps_par"),
                     () -> {

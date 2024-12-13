@@ -219,7 +219,11 @@ public class Tracers {
         tracers.tracer(module, Mode.VARS).record(name, value);
     }
 
+<<<<<<< HEAD
     public static void count(Module module, String name, int count) {
+=======
+    public static void count(Module module, String name, long count) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(module, Mode.VARS).count(name, count);
     }

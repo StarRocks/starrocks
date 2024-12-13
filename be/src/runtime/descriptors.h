@@ -38,6 +38,10 @@
 #include <google/protobuf/stubs/common.h>
 
 #include <ostream>
+<<<<<<< HEAD
+=======
+#include <shared_mutex>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <unordered_map>
 #include <vector>
 
@@ -164,11 +168,15 @@ private:
 
 class HdfsPartitionDescriptor {
 public:
+<<<<<<< HEAD
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const TIcebergTable& thrift_table, const THdfsPartition& thrift_partition);
 
+=======
+    HdfsPartitionDescriptor(const THdfsPartition& thrift_partition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
     std::string& location() { return _location; }
@@ -208,10 +216,20 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
+<<<<<<< HEAD
+=======
+    Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
+                               const THdfsPartition& thrift_partition);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     std::string _hdfs_base_path;
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
+<<<<<<< HEAD
+=======
+    mutable std::shared_mutex _map_mutex;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
 };
@@ -243,7 +261,10 @@ public:
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
     const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
+<<<<<<< HEAD
     const TIcebergSchema* get_iceberg_equal_delete_schema() const { return &_t_iceberg_equal_delete_schema; }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_unpartitioned_table() { return _partition_column_names.empty(); }
     const std::vector<std::string>& partition_column_names() { return _partition_column_names; }
     const std::vector<std::string> full_column_names();
@@ -254,7 +275,10 @@ public:
 
 private:
     TIcebergSchema _t_iceberg_schema;
+<<<<<<< HEAD
     TIcebergSchema _t_iceberg_equal_delete_schema;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<std::string> _partition_column_names;
 };
 
@@ -340,11 +364,19 @@ public:
     ~IcebergMetadataTableDescriptor() override = default;
     const std::string& get_hive_column_names() const;
     const std::string& get_hive_column_types() const;
+<<<<<<< HEAD
+=======
+    const std::string& get_time_zone() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool has_partition() const override { return false; }
 
 private:
     std::string _hive_column_names;
     std::string _hive_column_types;
+<<<<<<< HEAD
+=======
+    std::string _time_zone;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class KuduTableDescriptor : public HiveTableDescriptor {
@@ -488,6 +520,10 @@ public:
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
     SlotDescriptor* get_slot_descriptor(SlotId id) const;
+<<<<<<< HEAD
+=======
+    SlotDescriptor* get_slot_descriptor_with_column(SlotId id) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // return all registered tuple descriptors
     void get_tuple_descs(std::vector<TupleDescriptor*>* descs) const;
@@ -502,6 +538,10 @@ private:
     TableDescriptorMap _tbl_desc_map;
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
+<<<<<<< HEAD
+=======
+    SlotDescriptorMap _slot_with_column_name_map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     DescriptorTbl() = default;
 };

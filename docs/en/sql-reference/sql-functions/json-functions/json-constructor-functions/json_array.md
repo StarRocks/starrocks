@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_array
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts each element of an SQL array to a JSON value and returns a JSON array that consists of the JSON values.
 

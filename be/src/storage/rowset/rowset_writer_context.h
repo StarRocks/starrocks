@@ -91,6 +91,11 @@ public:
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
 
+<<<<<<< HEAD
+=======
+    // gtid
+    int64_t gtid = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Is pk compaction output writer
     bool is_pk_compaction = false;
     // is compaction job

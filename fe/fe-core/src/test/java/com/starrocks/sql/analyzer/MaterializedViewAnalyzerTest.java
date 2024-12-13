@@ -22,6 +22,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PaimonTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PartitionInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -32,6 +36,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -179,7 +187,11 @@ public class MaterializedViewAnalyzerTest {
                 {
                     table.getCatalogName();
                     result = "test_catalog";
+<<<<<<< HEAD
                     table.getDbName();
+=======
+                    table.getCatalogDBName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     result = "test_db";
                     table.getTableIdentifier();
                     result = "test_tbl:7920f06f-df49-472f-9662-97ac5c32da96(test_tbl) REFERENCES";
@@ -202,7 +214,11 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateIcebergTable() throws Exception {
+=======
+    public void testCreateIcebergTable1() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             String mvName = "iceberg_parttbl_mv1";
             starRocksAssert.useDatabase("test")
@@ -236,16 +252,60 @@ public class MaterializedViewAnalyzerTest {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().
+<<<<<<< HEAD
                     contains("Do not support create materialized view when base iceberg table partition transform " +
                             "has bucket or truncate."));
+=======
+                    contains("Do not support create materialized view when base iceberg table partition transform "));
+        }
+    }
+
+    @Test
+    public void testCreateIcebergTable2() throws Exception {
+        String mvName = "iceberg_parttbl_mv1";
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                        "PARTITION BY date \n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+        Table mv = starRocksAssert.getTable("test", mvName);
+        Assert.assertTrue(mv != null);
+        Assert.assertTrue(mv instanceof MaterializedView);
+        PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+        Assert.assertTrue(partitionInfo.isListPartition());
+        starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testCreateIcebergTable3() {
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_bucket_mv1`\n" +
+                            "PARTITION BY (id, data, date_trunc('year', ts))\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_year` as a;");
+            Table mv = starRocksAssert.getTable("test", "iceberg_bucket_mv1");
+            Assert.assertTrue(mv != null);
+            Assert.assertTrue(mv instanceof MaterializedView);
+            PartitionInfo partitionInfo = ((MaterializedView) mv).getPartitionInfo();
+            Assert.assertTrue(partitionInfo.isListPartition());
+        } catch (Exception e) {
+            Assert.fail();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     @Test
     public void testRefreshMaterializedView() throws Exception {
         analyzeSuccess("refresh materialized view mv");
+<<<<<<< HEAD
         Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         Table table = testDb.getTable("mv");
+=======
+        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "mv");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;

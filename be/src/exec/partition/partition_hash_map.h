@@ -94,6 +94,11 @@ struct PartitionHashMapBase {
     bool init_null_key_partition = false;
     static constexpr size_t kNullKeyPartitionIdx = 0;
 
+<<<<<<< HEAD
+=======
+    bool enable_pre_agg = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     PartitionHashMapBase(int32_t chunk_size) : chunk_size(chunk_size) {}
 
 protected:
@@ -148,7 +153,13 @@ protected:
             return;
         }
         auto partition_num = hash_map.size();
+<<<<<<< HEAD
         if (partition_num > 512 && total_num_rows < 10000 * partition_num) {
+=======
+        size_t partition_num_hwm = enable_pre_agg ? 32768 : 512;
+
+        if (partition_num > partition_num_hwm && total_num_rows < 10000 * partition_num) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             is_passthrough = true;
         }
     }

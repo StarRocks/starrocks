@@ -83,6 +83,14 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
+<<<<<<< HEAD
+=======
+
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         };
 
         long snapshotId = mockedNativeTableC.currentSnapshot().snapshotId();
@@ -116,6 +124,14 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
+<<<<<<< HEAD
+=======
+
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         };
 
         String sql = "explain select file_path from iceberg_catalog.db.tc$logical_iceberg_metadata " +
@@ -140,6 +156,14 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
+<<<<<<< HEAD
+=======
+
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         };
 
         String sql = "explain scheduler select file_path from iceberg_catalog.db.tc$logical_iceberg_metadata";
@@ -166,6 +190,14 @@ public class IcebergMetadataScanNodeTest extends TableTestBase {
             org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
                 return mockedNativeTableC;
             }
+<<<<<<< HEAD
+=======
+
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         };
 
         new MockUp<DefaultCoordinator>() {

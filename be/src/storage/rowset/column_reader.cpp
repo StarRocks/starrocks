@@ -52,8 +52,13 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/types.h"
 #include "storage/column_predicate.h"
+<<<<<<< HEAD
 #include "storage/inverted/index_descriptor.hpp"
 #include "storage/inverted/inverted_plugin_factory.h"
+=======
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_plugin_factory.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -63,6 +68,10 @@
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/json_column_iterator.h"
 #include "storage/rowset/map_column_iterator.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/options.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/page_pointer.h"
@@ -405,6 +414,7 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
     for (const auto& pid : page_ids) {
         std::unique_ptr<BloomFilter> bf;
         RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
+<<<<<<< HEAD
         for (const auto* pred : predicates) {
             if constexpr (is_original_bf) {
                 if (pred->support_original_bloom_filter() && pred->original_bloom_filter(bf.get())) {
@@ -418,6 +428,20 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                             Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
                 }
             }
+=======
+
+        const bool satisfy = std::ranges::any_of(predicates, [&](const ColumnPredicate* pred) {
+            if constexpr (is_original_bf) {
+                return pred->support_original_bloom_filter() && pred->original_bloom_filter(bf.get());
+            } else {
+                return pred->support_ngram_bloom_filter() &&
+                       pred->ngram_bloom_filter(bf.get(), _get_reader_options_for_ngram());
+            }
+        });
+        if (satisfy) {
+            bf_row_ranges.add(
+                    Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     *row_ranges = row_ranges->intersection(bf_row_ranges);
@@ -560,6 +584,7 @@ Status ColumnReader::seek_by_page_index(int page_index, OrdinalPageIndexIterator
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                      const ColumnPredicate* del_predicate,
                                      std::unordered_set<uint32_t>* del_partial_filtered_pages,
@@ -567,10 +592,55 @@ Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& 
     RETURN_IF_ERROR(_load_zonemap_index(opts));
     std::vector<uint32_t> page_indexes;
     RETURN_IF_ERROR(_zone_map_filter(predicates, del_predicate, del_partial_filtered_pages, &page_indexes));
+=======
+std::pair<ordinal_t, ordinal_t> ColumnReader::get_page_range(size_t page_index) {
+    DCHECK(_ordinal_index);
+    return std::make_pair(_ordinal_index->get_first_ordinal(page_index), _ordinal_index->get_last_ordinal(page_index));
+}
+
+Status ColumnReader::zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                     const ColumnPredicate* del_predicate,
+                                     std::unordered_set<uint32_t>* del_partial_filtered_pages,
+                                     SparseRange<>* row_ranges, const IndexReadOptions& opts,
+                                     CompoundNodeType pred_relation) {
+    RETURN_IF_ERROR(_load_zonemap_index(opts));
+
+    std::vector<uint32_t> page_indexes;
+    if (pred_relation == CompoundNodeType::AND) {
+        RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::AND>(predicates, del_predicate, del_partial_filtered_pages,
+                                                                &page_indexes));
+    } else {
+        RETURN_IF_ERROR(_zone_map_filter<CompoundNodeType::OR>(predicates, del_predicate, del_partial_filtered_pages,
+                                                               &page_indexes));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(_calculate_row_ranges(page_indexes, row_ranges));
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<std::vector<ZoneMapDetail>> ColumnReader::get_raw_zone_map(const IndexReadOptions& opts) {
+    RETURN_IF_ERROR(_load_zonemap_index(opts));
+    DCHECK(_zonemap_index);
+    DCHECK(_zonemap_index->loaded());
+
+    LogicalType type = _encoding_info->type();
+    int32_t num_pages = _zonemap_index->num_pages();
+    std::vector<ZoneMapDetail> result(num_pages);
+
+    for (auto& zm : _zonemap_index->page_zone_maps()) {
+        ZoneMapDetail detail;
+        RETURN_IF_ERROR(_parse_zone_map(type, zm, &detail));
+        result.emplace_back(detail);
+    }
+
+    return result;
+}
+
+template <CompoundNodeType PredRelation>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate,
                                       std::unordered_set<uint32_t>* del_partial_filtered_pages,
@@ -586,12 +656,26 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     } else {
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+
+    auto page_satisfies_zone_map_filter = [&](const ZoneMapDetail& detail) {
+        if constexpr (PredRelation == CompoundNodeType::AND) {
+            return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        } else {
+            return predicates.empty() ||
+                   std::ranges::any_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
+        }
+    };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::vector<ZoneMapPB>& zone_maps = _zonemap_index->page_zone_maps();
     int32_t page_size = _zonemap_index->num_pages();
     for (int32_t i = 0; i < page_size; ++i) {
         const ZoneMapPB& zm = zone_maps[i];
         ZoneMapDetail detail;
         RETURN_IF_ERROR(_parse_zone_map(lt, zm, &detail));
+<<<<<<< HEAD
         bool matched = true;
         for (const auto* predicate : predicates) {
             if (!predicate->zone_map_filter(detail)) {
@@ -600,6 +684,10 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
             }
         }
         if (!matched) {
+=======
+
+        if (!page_satisfies_zone_map_filter(detail)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             continue;
         }
         pages->emplace_back(i);

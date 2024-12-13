@@ -129,13 +129,21 @@ public class CheckConsistencyJob {
             return false;
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.debug("db[{}] does not exist", tabletMeta.getDbId());
             return false;
         }
 
+<<<<<<< HEAD
         Table table = db.getTable(tabletMeta.getTableId());
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             LOG.debug("table[{}] does not exist", tabletMeta.getTableId());
             return false;
@@ -144,11 +152,19 @@ public class CheckConsistencyJob {
         LocalTablet tablet = null;
 
         AgentBatchTask batchTask = new AgentBatchTask();
+<<<<<<< HEAD
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
                     LockType.READ)) {
             OlapTable olapTable = (OlapTable) table;
 
             PhysicalPartition physicalPartition = olapTable.getPartition(tabletMeta.getPhysicalPartitionId());
+=======
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+                    LockType.READ)) {
+            OlapTable olapTable = (OlapTable) table;
+
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (physicalPartition == null) {
                 LOG.debug("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return false;
@@ -219,7 +235,11 @@ public class CheckConsistencyJob {
 
         if (state != JobState.RUNNING) {
             // failed to send task. set tablet's checked version to avoid choosing it again
+<<<<<<< HEAD
             try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+=======
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         LockType.WRITE)) {
                 tablet.setCheckedVersion(checkedVersion);
             }
@@ -255,13 +275,21 @@ public class CheckConsistencyJob {
             return -1;
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.warn("db[{}] does not exist", tabletMeta.getDbId());
             return -1;
         }
 
+<<<<<<< HEAD
         Table table = db.getTable(tabletMeta.getTableId());
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
             return -1;
@@ -270,10 +298,17 @@ public class CheckConsistencyJob {
         boolean isConsistent = true;
         JournalTask journalTask;
         try (AutoCloseableLock ignore =
+<<<<<<< HEAD
                     new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.WRITE)) {
             OlapTable olapTable = (OlapTable) table;
 
             PhysicalPartition physicalPartition = olapTable.getPartition(tabletMeta.getPhysicalPartitionId());
+=======
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
+            OlapTable olapTable = (OlapTable) table;
+
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (physicalPartition == null) {
                 LOG.warn("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return -1;

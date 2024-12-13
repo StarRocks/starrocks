@@ -30,11 +30,19 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang.NotImplementedException;
 
 import java.time.Clock;
@@ -46,7 +54,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 public abstract class DefaultTraits extends ConnectorPartitionTraits  {
+=======
+public abstract class DefaultTraits extends ConnectorPartitionTraits {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
@@ -88,8 +100,15 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             return Lists.newArrayList(table.getName());
         }
 
+<<<<<<< HEAD
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getDbName(), getTableName());
+=======
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setQueryMVRewrite(this.isQueryMVRewrite());
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -105,8 +124,13 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException {
         return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
+=======
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -122,6 +146,20 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+        Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
+        List<PartitionInfo> partitions = getPartitions(partitionNames);
+        Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
+        for (int index = 0; index < partitionNames.size(); ++index) {
+            partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
+        }
+        return partitionNameWithPartition;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Optional<Long> maxPartitionRefreshTs() {
         throw new NotImplementedException("Not support maxPartitionRefreshTs");
     }

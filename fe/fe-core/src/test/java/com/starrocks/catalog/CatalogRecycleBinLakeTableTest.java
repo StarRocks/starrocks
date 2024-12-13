@@ -52,13 +52,22 @@ public class CatalogRecycleBinLakeTableTest {
     @BeforeClass
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+<<<<<<< HEAD
+=======
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
         return db.getTable(createTableStmt.getTableName());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), createTableStmt.getTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static void dropTable(ConnectContext connectContext, String sql) throws Exception {
@@ -97,7 +106,12 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void checkPartitionTablet(Partition partition, boolean expectExist) {
         TabletInvertedIndex tabletIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+<<<<<<< HEAD
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+=======
+        for (MaterializedIndex index :
+                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Tablet tablet : index.getTablets()) {
                 TabletMeta meta = tabletIndex.getTabletMeta(tablet.getId());
                 if (expectExist) {
@@ -162,8 +176,13 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = "create database recycle_bin_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb("recycle_bin_test");
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("recycle_bin_test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Table table1 = createTable(connectContext, "create table recycle_bin_test.t0" +
                 "(key1 int," +
@@ -260,7 +279,11 @@ public class CatalogRecycleBinLakeTableTest {
 
         // Recover table2
         Assert.assertTrue(recycleBin.recoverTable(db, "t0"));
+<<<<<<< HEAD
         Assert.assertSame(table2, db.getTable("t0"));
+=======
+        Assert.assertSame(table2, GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
         checkTableTablet(table2, true);
 
@@ -280,8 +303,13 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Table table1 = createTable(connectContext, String.format("create table %s.t0" +
                 "(key1 int," +
@@ -305,8 +333,13 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Table table1 = createTable(connectContext, String.format("create table %s.t1" +
                 "(key1 int," +
@@ -369,8 +402,13 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -391,9 +429,18 @@ public class CatalogRecycleBinLakeTableTest {
         Partition p2 = table1.getPartition("p2");
         Partition p3 = table1.getPartition("p3");
         Assert.assertNotNull(p1);
+<<<<<<< HEAD
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2, WarehouseManager.DEFAULT_WAREHOUSE_ID));
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+=======
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1", dbName));
@@ -499,7 +546,12 @@ public class CatalogRecycleBinLakeTableTest {
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         p1 = table2.getPartition("p1");
+<<<<<<< HEAD
         Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+=======
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t2 DROP PARTITION p1", dbName));
         Assert.assertNull(table2.getPartition("p1"));
@@ -532,8 +584,13 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
         Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -566,7 +623,11 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public boolean isSharedDirectory(String path, long partitionId) {
                 Assert.assertTrue(path.endsWith("/" + partitionId));
+<<<<<<< HEAD
                 return partitionId == p1.getId();
+=======
+                return partitionId == p1.getDefaultPhysicalPartition().getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
         new MockUp<BrpcProxy>() {

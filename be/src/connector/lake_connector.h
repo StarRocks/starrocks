@@ -80,8 +80,12 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     PredicateTree _non_pushdown_pred_tree;
+<<<<<<< HEAD
     ConjunctivePredicates _not_push_down_predicates;
     std::vector<uint8_t> _selection;
+=======
+    Filter _selection;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ObjectPool _obj_pool;
 
@@ -89,7 +93,11 @@ private:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
+<<<<<<< HEAD
     OlapScanConjunctsManager _conjuncts_manager;
+=======
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     lake::VersionedTablet _tablet;
     TabletSchemaCSPtr _tablet_schema;
@@ -151,6 +159,10 @@ private:
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
@@ -204,7 +216,11 @@ public:
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+<<<<<<< HEAD
             size_t num_total_scan_ranges, size_t scan_dop = 0) override;
+=======
+            size_t num_total_scan_ranges, size_t scan_parallelism = 0) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
@@ -229,6 +245,15 @@ public:
         return std::nullopt;
     }
 
+<<<<<<< HEAD
+=======
+    bool could_split() const { return _could_split; }
+
+    bool could_split_physically() const { return _could_split_physically; }
+
+    int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
@@ -236,6 +261,13 @@ protected:
     // for ut
     lake::TabletManager* _tablet_manager;
 
+<<<<<<< HEAD
+=======
+    bool _could_split = false;
+    bool _could_split_physically = false;
+    int64_t splitted_scan_rows = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,

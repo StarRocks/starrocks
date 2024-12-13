@@ -70,6 +70,10 @@ public enum RuleType {
     TF_PUSH_DOWN_PREDICATE_REPEAT,
     TF_PUSH_DOWN_AGG_TO_META_SCAN,
     TF_PUSH_DOWN_FLAT_JSON_TO_META_SCAN,
+<<<<<<< HEAD
+=======
+    TF_PULL_UP_PREDICATE_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TF_MERGE_PREDICATE_SCAN,
     TF_MERGE_TWO_FILTERS,
     TF_PUSH_DOWN_PREDICATE_CTE_CONSUME,
@@ -97,6 +101,10 @@ public enum RuleType {
     TF_PRUNE_GROUP_BY_KEYS,
     TF_PRUNE_SUBFIELD,
     TF_PRUNE_UKFK_JOIN,
+<<<<<<< HEAD
+=======
+    TF_PRUNE_UKFK_GROUP_BY_KEYS,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TF_SUBFILED_NOCOPY,
     TF_PARTITION_COLUMN_MINMAX,
 
@@ -144,6 +152,11 @@ public enum RuleType {
     TF_REWRITE_PARTITION_COLUMN_ONLY_AGG,
     TF_REWRITE_SUM_BY_ASSOCIATIVE_RULE,
     TF_REWRITE_COUNT_IF_RULE,
+<<<<<<< HEAD
+=======
+    TF_ICEBERG_PARTITIONS_TABLE_REWRITE_RULE,
+    TF_ICEBERG_EQUALITY_REWRITE_RULE,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TF_REWRITE_UNNEST_BITMAP_RULE,
 
     TF_INTERSECT_REORDER,
@@ -171,6 +184,10 @@ public enum RuleType {
     TF_MV_CBO_SINGLE_TABLE_REWRITE_RULE,
     TF_MV_TRANSPARENT_REWRITE_RULE,
     TF_MV_AGGREGATE_JOIN_PUSH_DOWN_RULE,
+<<<<<<< HEAD
+=======
+    TF_MV_AGGREGATE_TIME_SERIES_SCAN_RULE,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     TF_GROUP_BY_COUNT_DISTINCT_DATA_SKEW_ELIMINATE_RULE,
 
@@ -201,11 +218,22 @@ public enum RuleType {
 
     TF_CTE_ADD_PROJECTION,
 
+<<<<<<< HEAD
+=======
+    TF_PREDICATE_PROPAGATE,
+
+    TF_VECTOR_REWRITE_RULE,
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
     IMP_FILE_LSCAN_TO_PSCAN,
     IMP_ICEBERG_LSCAN_TO_PSCAN,
+<<<<<<< HEAD
+=======
+    IMP_ICEBERG_EQUALITY_DELETE_LSCAN_TO_PSCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     IMP_HUDI_LSCAN_TO_PSCAN,
     IMP_DELTALAKE_LSCAN_TO_PSCAN,
     IMP_PAIMON_LSCAN_TO_PSCAN,

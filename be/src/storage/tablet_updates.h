@@ -80,6 +80,10 @@ struct ExtraFileSize {
 struct EditVersionInfo {
     EditVersion version;
     int64_t creation_time;
+<<<<<<< HEAD
+=======
+    int64_t gtid = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<uint32_t> rowsets;
     // used for rowset commit
     std::vector<uint32_t> deltas;
@@ -96,6 +100,10 @@ struct EditVersionInfo {
             compaction = std::make_unique<CompactionInfo>();
             *compaction = *rhs.compaction;
         }
+<<<<<<< HEAD
+=======
+        gtid = rhs.gtid;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // add method to better expose to scripting engine
     CompactionInfo* get_compaction() { return compaction.get(); }
@@ -227,6 +235,12 @@ public:
     Status get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets,
                                EditVersion* full_version = nullptr);
 
+<<<<<<< HEAD
+=======
+    Status get_applied_rowsets_by_gtid(int64_t gtid, std::vector<RowsetSharedPtr>* rowsets,
+                                       EditVersion* full_version = nullptr);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void to_updates_pb(TabletUpdatesPB* updates_pb) const;
 
     // Used for schema change, migrate another tablet's version&rowsets to this tablet
@@ -461,6 +475,12 @@ private:
 
     void _set_error(const string& msg);
 
+<<<<<<< HEAD
+=======
+    Status _get_applied_rowsets(int64_t version, std::vector<RowsetSharedPtr>* rowsets, EditVersion* full_edit_version,
+                                std::unique_lock<std::mutex>& ul, int64_t begin_ms);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status _load_meta_and_log(const TabletUpdatesPB& tablet_updates_pb);
 
     Status _load_pending_rowsets();
@@ -535,6 +555,12 @@ private:
     mutable std::mutex _rowsets_lock;
     std::unordered_map<uint32_t, RowsetSharedPtr> _rowsets;
 
+<<<<<<< HEAD
+=======
+    // gtid -> version
+    std::map<int64_t, int64_t> _gtid_to_version_map;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index

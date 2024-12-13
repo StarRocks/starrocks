@@ -285,8 +285,12 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testJoinMvRewrite() throws Exception {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+=======
+    public void testJoinMvRewrite1() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createAndRefreshMv("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -340,7 +344,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertNotContains(plan6, "join_mv_1");
 
         dropMv("test", "join_mv_1");
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testJoinMvRewrite2() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createAndRefreshMv("create materialized view join_mv_2" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -377,7 +388,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan10, "join_mv_2");
 
         dropMv("test", "join_mv_2");
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testJoinMvRewrite3() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createAndRefreshMv("create materialized view join_mv_3" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -440,7 +458,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
         // query delta depends on join reorder
         String query16 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
                 " join emps on (emps.deptno = depts.deptno)";
+<<<<<<< HEAD
         String plan16 = getFragmentPlan(query16);
+=======
+        String plan16 = getFragmentPlan(query16, "MV");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PlanTestBase.assertContains(plan16, "join_mv_3");
         OptExpression optExpression16 = getOptimizedPlan(query16, connectContext);
         List<PhysicalScanOperator> scanOperators16 = getScanOperators(optExpression16, "join_mv_3");
@@ -460,7 +482,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan17, "join_mv_3");
 
         dropMv("test", "join_mv_3");
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testJoinMvRewrite4() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createAndRefreshMv("create materialized view join_mv_4" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -475,7 +504,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan18 = getFragmentPlan(query18);
         PlanTestBase.assertContains(plan18, "join_mv_4");
         dropMv("test", "join_mv_4");
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testJoinMvRewrite5() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createAndRefreshMv("create materialized view join_mv_5" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -495,7 +531,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         dropMv("test", "join_mv_5");
         dropMv("test", "join_mv_6");
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testJoinMvRewrite6() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createAndRefreshMv("create materialized view join_mv_7" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -506,7 +549,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan20 = getFragmentPlan(query20);
         PlanTestBase.assertContains(plan20, "join_mv_7");
         dropMv("test", "join_mv_7");
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testJoinMvRewrite7() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // multi relations test
         createAndRefreshMv("create materialized view join_mv_8" +
                 " distributed by hash(empid)" +
@@ -517,7 +567,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
         String plan21 = getFragmentPlan(query21);
         PlanTestBase.assertContains(plan21, "join_mv_8");
         dropMv("test", "join_mv_8");
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testJoinMvRewrite8() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         createAndRefreshMv("create materialized view join_mv_9" +
                 " distributed by hash(empid)" +
                 " as" +
@@ -2088,7 +2145,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
             MaterializedView mv = starRocksAssert.getMv("test", name);
 
             int mockRows = i + 1;
+<<<<<<< HEAD
             mv.getPartitions().forEach(p -> p.getBaseIndex().setRowCount(mockRows));
+=======
+            mv.getPartitions().forEach(p -> p.getDefaultPhysicalPartition().getBaseIndex().setRowCount(mockRows));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         for (int i = 0; i < dimensions.size(); i++) {

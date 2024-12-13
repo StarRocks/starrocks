@@ -35,7 +35,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class QueryDumpActionTest extends StarRocksHttpTestCase {
     @Before
     @Override
+<<<<<<< HEAD
     public void setUp() {
+=======
+    public void setUp() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpWithCatalog();
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME) != null);

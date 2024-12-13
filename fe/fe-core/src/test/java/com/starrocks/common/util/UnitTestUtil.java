@@ -131,7 +131,11 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, partitionId + 100,  PARTITION_NAME, index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // columns
         List<Column> columns = new ArrayList<Column>();
@@ -208,7 +212,11 @@ public class UnitTestUtil {
 
         // partition
         RandomDistributionInfo distributionInfo = new RandomDistributionInfo(10);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, PARTITION_NAME, index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, partitionId + 100, PARTITION_NAME, index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // columns
         List<Column> columns = new ArrayList<Column>();

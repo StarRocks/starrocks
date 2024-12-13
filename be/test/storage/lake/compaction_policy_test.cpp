@@ -17,7 +17,13 @@
 #include <gtest/gtest.h>
 
 #include "fs/fs_util.h"
+<<<<<<< HEAD
 #include "storage/lake/join_path.h"
+=======
+#include "runtime/exec_env.h"
+#include "storage/lake/join_path.h"
+#include "storage/lake/tablet.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/tablet_manager.h"
 #include "test_util.h"
 #include "testutil/assert.h"

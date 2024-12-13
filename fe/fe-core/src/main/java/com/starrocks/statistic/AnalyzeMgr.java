@@ -43,7 +43,10 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -52,8 +55,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
+<<<<<<< HEAD
 import java.io.DataOutputStream;
 import java.io.EOFException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -283,6 +289,7 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+<<<<<<< HEAD
         Table table;
         try {
             table = MetaUtils.getTable(dbId, tableId);
@@ -297,11 +304,25 @@ public class AnalyzeMgr implements Writable {
         } else {
             GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatisticSync(table);
             GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatisticsSync(table, columns);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            return;
+        }
+
+        if (async) {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, false);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, false);
+        } else {
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table, true);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshColumnStatistics(table, columns, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     public void refreshConnectorTableBasicStatisticsCache(String catalogName, String dbName, String tableName,
                                                           List<String> columns, boolean async) {
+<<<<<<< HEAD
         Table table;
         try {
             table = MetaUtils.getTable(catalogName, dbName, tableName);
@@ -315,6 +336,14 @@ public class AnalyzeMgr implements Writable {
         } else {
             GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columns);
         }
+=======
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            return;
+        }
+        GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, async);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
@@ -365,11 +394,19 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void refreshHistogramStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (null == db) {
             return;
         }
         Table table = db.getTable(tableId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (null == db) {
+            return;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (null == table) {
             return;
         }
@@ -414,10 +451,15 @@ public class AnalyzeMgr implements Writable {
 
     public void refreshConnectorTableHistogramStatisticsCache(String catalogName, String dbName, String tableName,
                                                               List<String> columns, boolean async) {
+<<<<<<< HEAD
         Table table;
         try {
             table = MetaUtils.getTable(catalogName, dbName, tableName);
         } catch (Exception e) {
+=======
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
 
@@ -438,12 +480,20 @@ public class AnalyzeMgr implements Writable {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                 continue;
             }
 
+<<<<<<< HEAD
             for (Table table : db.getTables()) {
+=======
+            for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 /*
                  * If the meta contains statistical information, but the data is empty,
                  * it means that the table has been truncate or insert overwrite, and it is set to empty,
@@ -545,9 +595,17 @@ public class AnalyzeMgr implements Writable {
                     && analyzeStatus.getStatus() == StatsConstants.ScheduleStatus.FINISH
                     && Duration.between(endTime, lastCleanTime).toMinutes() < 30) {
                 NativeAnalyzeStatus nativeAnalyzeStatus = (NativeAnalyzeStatus) analyzeStatus;
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(nativeAnalyzeStatus.getDbId());
                 if (db != null && db.getTable(nativeAnalyzeStatus.getTableId()) != null) {
                     tables.add(db.getTable(nativeAnalyzeStatus.getTableId()));
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(nativeAnalyzeStatus.getDbId());
+                if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), nativeAnalyzeStatus.getTableId()) != null) {
+                    tables.add(GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), nativeAnalyzeStatus.getTableId()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -595,12 +653,20 @@ public class AnalyzeMgr implements Writable {
             checkTableIds.clear();
             List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
             for (Long dbId : dbIds) {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
                     continue;
                 }
 
+<<<<<<< HEAD
                 for (Table table : db.getTables()) {
+=======
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
                         continue;
                     }
@@ -617,12 +683,20 @@ public class AnalyzeMgr implements Writable {
 
         int exprLimit = Config.expr_children_limit / 2;
         for (Pair<Long, Long> dbTableId : checkTableIds) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbTableId.first);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbTableId.first);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (null == db) {
                 continue;
             }
 
+<<<<<<< HEAD
             Table table = db.getTable(dbTableId.second);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), dbTableId.second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 continue;
             }
@@ -764,7 +838,11 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void updateLoadRows(TransactionState transactionState) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(transactionState.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
             return;
         }
@@ -791,7 +869,12 @@ public class AnalyzeMgr implements Writable {
                 long tableId = transactionState.getTableIdList().get(0);
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 if (loadRows == 0) {
+<<<<<<< HEAD
                     OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     loadRows = table != null ? table.getRowCount() : 0;
                 }
                 updateBasicStatsMeta(db.getId(), tableId, loadRows);
@@ -846,6 +929,7 @@ public class AnalyzeMgr implements Writable {
         Text.writeString(out, s);
     }
 
+<<<<<<< HEAD
     public long loadAnalyze(DataInputStream dis, long checksum) throws IOException {
         try {
             readFields(dis);
@@ -861,6 +945,8 @@ public class AnalyzeMgr implements Writable {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<AnalyzeStatus> analyzeStatuses = getAnalyzeStatusMap().values().stream()
                 .distinct().collect(Collectors.toList());

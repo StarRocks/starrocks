@@ -166,6 +166,7 @@ public class EditLogTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testOpUpdateFrontend() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
         List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
@@ -183,6 +184,8 @@ public class EditLogTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testOpAddKeyJournalEntity() throws Exception {
         EncryptionKeyPB pb = new EncryptionKeyPB();
         pb.setId(KeyMgr.DEFAULT_MASTER_KYE_ID);

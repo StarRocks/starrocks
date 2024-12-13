@@ -62,7 +62,13 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+<<<<<<< HEAD
 import com.starrocks.catalog.AggregateFunction;
+=======
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -79,17 +85,25 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.TableFunction;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -104,11 +118,14 @@ import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -129,7 +146,10 @@ import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpressi
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ExpressionAnalyzer {
+<<<<<<< HEAD
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
@@ -1018,12 +1038,16 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
+<<<<<<< HEAD
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (node.isNondeterministicBuiltinFnName()) {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);
             }
+<<<<<<< HEAD
 
             Function fn = null;
             String fnName = node.getFnName().getFunction();
@@ -1228,6 +1252,14 @@ public class ExpressionAnalyzer {
                 fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
             }
 
+=======
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            String fnName = node.getFnName().getFunction();
+            // check fn & throw exception direct if analyze failed
+            checkFunction(fnName, node, argumentTypes);
+            // get function by function expression and argument types
+            Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (fn == null) {
                 String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
@@ -1235,6 +1267,7 @@ public class ExpressionAnalyzer {
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 throw new SemanticException(msg, node.getPos());
             }
+<<<<<<< HEAD
 
             if (fn instanceof TableFunction) {
                 throw new SemanticException("Table function cannot be used in expression", node.getPos());
@@ -1263,6 +1296,8 @@ public class ExpressionAnalyzer {
                 }
             }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
@@ -1527,6 +1562,7 @@ public class ExpressionAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
             /*
              * @TODO: Determine the return type of this function
@@ -1597,15 +1633,20 @@ public class ExpressionAnalyzer {
             return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes,
                     Function.CompareMode.IS_SUPERTYPE_OF);
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters", node.getPos());
             }
+<<<<<<< HEAD
             if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
                 throw new SemanticException("grouping functions only support column", node.getPos());
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;
@@ -1830,11 +1871,19 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
             }
 
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
             if (db == null) {
                 throw new SemanticException("Database %s is not found", tableName.getDb());
             }
             Table table = db.getTable(tableName.getTbl());
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getDb());
+            }
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", tableName.getTbl());
             }
@@ -1959,7 +2008,11 @@ public class ExpressionAnalyzer {
             dictQueryExpr.setTbl_name(tableName.getTbl());
 
             Map<Long, Long> partitionVersion = new HashMap<>();
+<<<<<<< HEAD
             dictTable.getPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+=======
+            dictTable.getAllPhysicalPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             dictQueryExpr.setPartition_version(partitionVersion);
 
             List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());
@@ -2112,10 +2165,17 @@ public class ExpressionAnalyzer {
 
     static class ResolveSlotVisitor extends Visitor {
 
+<<<<<<< HEAD
         private Consumer<SlotRef> resolver;
 
         public ResolveSlotVisitor(AnalyzeState state, ConnectContext session,
                                   Consumer<SlotRef> slotResolver) {
+=======
+        private java.util.function.Consumer<SlotRef> resolver;
+
+        public ResolveSlotVisitor(AnalyzeState state, ConnectContext session,
+                                  java.util.function.Consumer<SlotRef> slotResolver) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             super(state, session);
             resolver = slotResolver;
         }

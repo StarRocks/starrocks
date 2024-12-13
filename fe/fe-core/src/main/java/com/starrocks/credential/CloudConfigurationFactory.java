@@ -83,17 +83,35 @@ public class CloudConfigurationFactory {
         return null;
     }
 
+<<<<<<< HEAD
     public static CloudConfiguration buildCloudConfigurationForTabular(Map<String, String> properties) {
+=======
+    public static CloudConfiguration buildCloudConfigurationForVendedCredentials(Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> copiedProperties = new HashMap<>();
         String sessionAk = properties.getOrDefault(S3FileIOProperties.ACCESS_KEY_ID, null);
         String sessionSk = properties.getOrDefault(S3FileIOProperties.SECRET_ACCESS_KEY, null);
         String sessionToken = properties.getOrDefault(S3FileIOProperties.SESSION_TOKEN, null);
         String region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION, null);
+<<<<<<< HEAD
         if (sessionAk != null && sessionSk != null && sessionToken != null && region != null) {
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
+=======
+        String enablePathStyle = properties.getOrDefault(S3FileIOProperties.PATH_STYLE_ACCESS, null);
+        if (sessionAk != null && sessionSk != null && sessionToken != null) {
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);
+            copiedProperties.put(CloudConfigurationConstants.AWS_S3_SESSION_TOKEN, sessionToken);
+            if (region != null) {
+                copiedProperties.put(CloudConfigurationConstants.AWS_S3_REGION, region);
+            }
+            if (enablePathStyle != null) {
+                copiedProperties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS, enablePathStyle);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return buildCloudConfigurationForStorage(copiedProperties);
     }

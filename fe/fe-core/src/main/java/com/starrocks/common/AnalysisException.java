@@ -22,7 +22,11 @@ package com.starrocks.common;
  * Use SemanticException instead
  */
 @Deprecated
+<<<<<<< HEAD
 public class AnalysisException extends UserException {
+=======
+public class AnalysisException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AnalysisException(String msg, Throwable cause) {
         super(msg, cause);
     }

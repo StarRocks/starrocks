@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_contains
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates whether the input value is in the bitmap column, and returns a Boolean value.
 

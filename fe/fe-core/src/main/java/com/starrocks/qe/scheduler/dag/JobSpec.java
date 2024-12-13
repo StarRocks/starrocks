@@ -93,6 +93,11 @@ public class JobSpec {
     private boolean needQueued = false;
     private boolean enableGroupLevelQueue = false;
 
+<<<<<<< HEAD
+=======
+    private boolean incrementalScanRanges = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class Factory {
         private Factory() {
         }
@@ -104,6 +109,10 @@ public class JobSpec {
                                             TQueryType queryType) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             queryOptions.setQuery_type(queryType);
+<<<<<<< HEAD
+=======
+            queryOptions.setQuery_timeout(context.getExecTimeout());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
@@ -490,6 +499,17 @@ public class JobSpec {
         return planProtocol;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isIncrementalScanRanges() {
+        return incrementalScanRanges;
+    }
+
+    public void setIncrementalScanRanges(boolean v) {
+        incrementalScanRanges = v;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void reset() {
         fragments.forEach(PlanFragment::reset);
     }
@@ -501,6 +521,10 @@ public class JobSpec {
             return GlobalStateMgr.getCurrentState().getGlobalSlotProvider();
         }
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean hasOlapTableSink() {
         for (PlanFragment fragment : fragments) {
             if (fragment.hasOlapTableSink()) {
@@ -509,6 +533,10 @@ public class JobSpec {
         }
         return false;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 

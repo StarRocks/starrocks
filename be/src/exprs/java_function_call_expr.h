@@ -29,10 +29,16 @@ public:
     ~JavaFunctionCallExpr() override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new JavaFunctionCallExpr(*this)); }
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
     [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
                               FunctionContext::FunctionStateScope scope) override;
+=======
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     bool is_constant() const override;
 

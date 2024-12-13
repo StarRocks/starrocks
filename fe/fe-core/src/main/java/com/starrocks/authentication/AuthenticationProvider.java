@@ -15,7 +15,11 @@
 
 package com.starrocks.authentication;
 
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Password;
+=======
+import com.starrocks.sql.ast.UserAuthOption;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 
 public interface AuthenticationProvider {
@@ -24,10 +28,15 @@ public interface AuthenticationProvider {
      * valid authentication info, and initialize the UserAuthenticationInfo structure
      * used when creating a user or modifying user's authentication information
      */
+<<<<<<< HEAD
     UserAuthenticationInfo validAuthenticationInfo(
             UserIdentity userIdentity,
             String password,
             String textForAuthPlugin) throws AuthenticationException;
+=======
+    UserAuthenticationInfo analyzeAuthOption(
+            UserIdentity userIdentity, UserAuthOption userAuthOption) throws AuthenticationException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * login authentication
@@ -38,10 +47,13 @@ public interface AuthenticationProvider {
             byte[] password,
             byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+<<<<<<< HEAD
 
     /**
      * upgraded from 2.x
      **/
     UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
             throws AuthenticationException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

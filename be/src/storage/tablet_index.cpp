@@ -103,6 +103,11 @@ StatusOr<IndexType> TabletIndex::_convert_index_type_from_thrift(TIndexType::typ
         return IndexType::BITMAP;
     case TIndexType::GIN:
         return IndexType::GIN;
+<<<<<<< HEAD
+=======
+    case TIndexType::VECTOR:
+        return IndexType::VECTOR;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default:
         // Handle other potential TIndexTypes or set a default value and/or log an error
         std::string type_str;

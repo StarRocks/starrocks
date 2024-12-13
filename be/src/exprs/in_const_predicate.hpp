@@ -85,7 +85,11 @@ public:
                Type == TYPE_BIGINT;
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare([[maybe_unused]] RuntimeState* state) {
+=======
+    Status prepare([[maybe_unused]] RuntimeState* state) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_is_prepare) {
             return Status::OK();
         }
@@ -95,7 +99,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status merge(Predicate* predicate) override {
+=======
+    Status merge(Predicate* predicate) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (auto* that = dynamic_cast<typeof(this)>(predicate)) {
             const auto& hash_set = that->hash_set();
             _hash_set.insert(hash_set.begin(), hash_set.end());
@@ -107,7 +115,11 @@ public:
         }
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override {
+=======
+    Status prepare(RuntimeState* state, ExprContext* context) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(Expr::prepare(state, context));
 
         if (_is_prepare) {
@@ -128,8 +140,12 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
                               FunctionContext::FunctionStateScope scope) override {
+=======
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(Expr::open(state, context, scope));
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             if (Type != _children[0]->type().type) {
@@ -436,8 +452,12 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedInConstPredicateGeneric(*this)); }
 
+<<<<<<< HEAD
     [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
                               FunctionContext::FunctionStateScope scope) override {
+=======
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(Expr::open(state, context, scope));
         if (scope == FunctionContext::FRAGMENT_LOCAL) {
             _const_input.resize(_children.size());
@@ -548,7 +568,11 @@ public:
     VectorizedInConstPredicateBuilder(RuntimeState* state, ObjectPool* pool, Expr* expr)
             : _state(state), _pool(pool), _expr(expr) {}
 
+<<<<<<< HEAD
     [[nodiscard]] Status create();
+=======
+    Status create();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void add_values(const ColumnPtr& column, size_t column_offset);
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }

@@ -14,7 +14,10 @@
 
 #include "exec/aggregate/aggregate_base_node.h"
 
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

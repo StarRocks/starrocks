@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timestampdiff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 `datetime_expr2` 和 `datetime_expr1` 的差值，其中 `datetime_expr1` 和`datetime_expr2` 是日期或日期时间表达式。
 

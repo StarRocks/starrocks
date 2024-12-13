@@ -80,7 +80,11 @@ public class DropMaterializedViewStmtTest {
                 baseSchema, KeysType.AGG_KEYS, singlePartitionInfo, null);
         table.setBaseIndexId(100);
         db.registerTableUnlocked(table);
+<<<<<<< HEAD
         table.addPartition(new Partition(100, "p",
+=======
+        table.addPartition(new Partition(100, 101, "p",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 new MaterializedIndex(200, MaterializedIndex.IndexState.NORMAL), null));
         table.setIndexMeta(200, "mvname", baseSchema, 0, 0, (short) 0,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);

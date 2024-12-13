@@ -97,6 +97,7 @@ public class LeaderOpExecutor {
         this.originStmt = originStmt;
         this.ctx = ctx;
         if (status.isNeedToWaitJournalSync()) {
+<<<<<<< HEAD
             this.waitTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
         } else {
             this.waitTimeoutMs = 0;
@@ -106,6 +107,17 @@ public class LeaderOpExecutor {
         this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000 + Config.thrift_rpc_timeout_ms;
         if (this.thriftTimeoutMs < 0) {
             this.thriftTimeoutMs = ctx.getSessionVariable().getQueryTimeoutS() * 1000;
+=======
+            this.waitTimeoutMs = ctx.getExecTimeout() * 1000;
+        } else {
+            this.waitTimeoutMs = 0;
+        }
+        // set thriftTimeoutMs to exec timeout + thrift_rpc_timeout_ms
+        // so that we can return an execution timeout instead of a network timeout
+        this.thriftTimeoutMs = ctx.getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+        if (this.thriftTimeoutMs < 0) {
+            this.thriftTimeoutMs = ctx.getExecTimeout() * 1000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         this.parsedStmt = parsedStmt;
     }

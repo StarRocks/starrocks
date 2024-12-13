@@ -36,6 +36,7 @@ public:
 
     ColumnId column_id() const { return _cid; }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(size_t* n, Column* dst) override;
 
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
@@ -45,6 +46,17 @@ public:
     [[nodiscard]] Status seek_to_first() override;
 
     [[nodiscard]] Status seek_to_ordinal(ordinal_t ord) override;
+=======
+    Status next_batch(size_t* n, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    Status seek_to_first() override;
+
+    Status seek_to_ordinal(ordinal_t ord) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ordinal_t get_current_ordinal() const override;
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ceil, dceil
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns values from the input `arg` rounded to the nearest equal or larger integer.
 

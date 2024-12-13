@@ -40,10 +40,16 @@ public class PhysicalPartitionImplTest {
 
     @Test
     public void testPhysicalPartition() throws Exception {
+<<<<<<< HEAD
         PhysicalPartitionImpl p = new PhysicalPartitionImpl(1, "", 1, 0, new MaterializedIndex());
         Assert.assertEquals(1, p.getId());
         Assert.assertEquals(1, p.getParentId());
         Assert.assertEquals(0, p.getShardGroupId());
+=======
+        PhysicalPartition p = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        Assert.assertEquals(1, p.getId());
+        Assert.assertEquals(1, p.getParentId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(p.isImmutable());
         p.setImmutable(true);
         Assert.assertTrue(p.isImmutable());
@@ -105,9 +111,15 @@ public class PhysicalPartitionImplTest {
         Assert.assertTrue(p.visualiseShadowIndex(3, true));
 
         Assert.assertTrue(p.equals(p));
+<<<<<<< HEAD
         Assert.assertFalse(p.equals(new Partition(0, "", null, null)));
 
         PhysicalPartitionImpl p2 = new PhysicalPartitionImpl(1, "", 1, 0, new MaterializedIndex());
+=======
+        Assert.assertFalse(p.equals(new Partition(0, 11, "", null, null)));
+
+        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(p.equals(p2));
         p2.setBaseIndex(new MaterializedIndex(1));
 
@@ -144,8 +156,13 @@ public class PhysicalPartitionImplTest {
 
     @Test
     public void testPhysicalPartitionEqual() throws Exception {
+<<<<<<< HEAD
         PhysicalPartitionImpl p1 = new PhysicalPartitionImpl(1, "", 1, 0, new MaterializedIndex());
         PhysicalPartitionImpl p2 = new PhysicalPartitionImpl(1, "", 1, 0, new MaterializedIndex());
+=======
+        PhysicalPartition p1 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(p1.equals(p2));
 
         p1.createRollupIndex(new MaterializedIndex());

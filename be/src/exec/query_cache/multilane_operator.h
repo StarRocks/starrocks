@@ -21,6 +21,10 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/pipeline/operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/pipeline_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/query_cache/lane_arbiter.h"
 #include "runtime/runtime_state.h"
 
@@ -56,22 +60,40 @@ public:
                       pipeline::Operators&& processors, bool can_passthrough);
 
     ~MultilaneOperator() override = default;
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
     [[nodiscard]] Status set_finishing(RuntimeState* state) override;
     [[nodiscard]] Status set_finished(RuntimeState* state) override;
     [[nodiscard]] Status set_cancelled(RuntimeState* state) override;
+=======
+    Status prepare(RuntimeState* state) override;
+    void close(RuntimeState* state) override;
+
+    Status set_finishing(RuntimeState* state) override;
+    Status set_finished(RuntimeState* state) override;
+    Status set_cancelled(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool has_output() const override;
     bool need_input() const override;
     bool is_finished() const override;
 
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
     [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
 
     [[nodiscard]] Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<ChunkPtr>& chunks);
+=======
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+
+    void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
+
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<ChunkPtr>& chunks);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     pipeline::OperatorPtr get_internal_op(size_t i);
 
@@ -85,9 +107,15 @@ public:
     bool ignore_empty_eos() const override { return false; }
 
 private:
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);
     using FinishCallback = std::function<Status(pipeline::OperatorPtr&, RuntimeState*)>;
     [[nodiscard]] Status _finish(RuntimeState* state, const FinishCallback& finish_cb);
+=======
+    StatusOr<ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);
+    using FinishCallback = std::function<Status(pipeline::OperatorPtr&, RuntimeState*)>;
+    Status _finish(RuntimeState* state, const FinishCallback& finish_cb);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const size_t _num_lanes;
     LaneArbiterPtr _lane_arbiter = nullptr;
     std::vector<Lane> _lanes;
@@ -102,7 +130,11 @@ class MultilaneOperatorFactory final : public pipeline::OperatorFactory {
 public:
     MultilaneOperatorFactory(int32_t id, const OperatorFactoryPtr& factory, size_t num_lanes);
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state) override;
+=======
+    Status prepare(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void close(RuntimeState* state) override;
     // can_passthrough should be true for the operator that precedes cache_operator immediately.
     // because only this operator is computation-intensive, so its input chunks must be pass through

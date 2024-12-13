@@ -323,7 +323,11 @@ public class SystemInfoServiceTest {
 
         Assert.assertEquals(10L, version.get());
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testGetHostAndPort() {
         String ipv4 = "192.168.1.2:9050";

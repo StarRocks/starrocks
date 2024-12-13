@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # FILES
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 定义远程存储中的数据文件，可用于：
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_role
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取当前用户激活的角色。该函数从 3.0 版本开始支持。
 

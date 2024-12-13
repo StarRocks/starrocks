@@ -163,7 +163,11 @@ public class HiveMetastoreApiConverterTest {
                 properties.put(HIVE_METASTORE_URIS, "thrift://127.0.0.1:9083");
                 Connector connector = new HudiConnector(new ConnectorContext(catalogName, "hive", properties));
                 result = new CatalogConnector(connector, new InformationSchemaConnector(catalogName),
+<<<<<<< HEAD
                         new TableMetaConnector(catalogName));
+=======
+                        new TableMetaConnector(catalogName, "hive"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
         HudiTable hudiTable = HiveMetastoreApiConverter.toHudiTable(table, "hudi_catalog");
@@ -221,4 +225,25 @@ public class HiveMetastoreApiConverterTest {
         Assert.assertEquals("my_comment", table.getParameters().get("comment"));
         Assert.assertEquals("0", table.getParameters().get("numRows"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testToApiTableProperties() {
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE)
+                .build();
+        Map<String, String> properties = HiveMetastoreApiConverter.toApiTableProperties(hiveTable);
+        Assert.assertTrue(properties.containsKey("EXTERNAL"));
+        Assert.assertEquals("TRUE", properties.get("EXTERNAL"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

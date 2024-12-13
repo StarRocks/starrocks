@@ -37,7 +37,10 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
+<<<<<<< HEAD
 import com.starrocks.analysis.DateLiteral;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -111,7 +114,11 @@ public class SparkLoadPendingTaskTest {
         long partitionId = 2L;
         DistributionInfo distributionInfo = new HashDistributionInfo(2, Lists.newArrayList(columns.get(0)));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", null, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, 21,  "p1", null, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Partition> partitions = Lists.newArrayList(partition);
 
         // file group
@@ -126,11 +133,19 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
                 result = database;
                 sparkLoadJob.getHandle();
                 result = handle;
                 database.getTable(tableId);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = database;
+                sparkLoadJob.getHandle();
+                result = handle;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = table;
                 table.getPartitions();
                 result = partitions;
@@ -182,7 +197,11 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = null;
             }
         };
@@ -211,9 +230,15 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
                 result = database;
                 database.getTable(tableId);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = null;
             }
         };
@@ -259,11 +284,19 @@ public class SparkLoadPendingTaskTest {
         int distributionColumnIndex = 1;
         DistributionInfo distributionInfo =
                 new HashDistributionInfo(3, Lists.newArrayList(columns.get(distributionColumnIndex)));
+<<<<<<< HEAD
         Partition partition1 = new Partition(partition1Id, "p1", null,
                 distributionInfo);
         Partition partition2 = new Partition(partition2Id, "p2", null,
                 new HashDistributionInfo(4, Lists.newArrayList(columns.get(distributionColumnIndex))));
         Partition partition3 = new Partition(partition3Id, "tp3", null,
+=======
+        Partition partition1 = new Partition(partition1Id, 21,  "p1", null,
+                distributionInfo);
+        Partition partition2 = new Partition(partition2Id, 51,  "p2", null,
+                new HashDistributionInfo(4, Lists.newArrayList(columns.get(distributionColumnIndex))));
+        Partition partition3 = new Partition(partition3Id, 61,  "tp3", null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 distributionInfo);
         int partitionColumnIndex = 0;
         List<Partition> partitions = Lists.newArrayList(partition1, partition2);
@@ -287,9 +320,15 @@ public class SparkLoadPendingTaskTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
                 result = database;
                 database.getTable(tableId);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = table;
                 table.getPartitions();
                 result = partitions;
@@ -371,8 +410,13 @@ public class SparkLoadPendingTaskTest {
         Assert.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
         List<EtlPartition> etlPartitions = etlPartitionInfo.partitions;
         Assert.assertEquals(2, etlPartitions.size());
+<<<<<<< HEAD
         Assert.assertEquals(partition1Id, etlPartitions.get(0).partitionId);
         Assert.assertEquals(partition2Id, etlPartitions.get(1).partitionId);
+=======
+        Assert.assertEquals(21, etlPartitions.get(0).physicalPartitionId);
+        Assert.assertEquals(51, etlPartitions.get(1).physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // check file group
         List<EtlFileGroup> etlFileGroups = etlTable.fileGroups;
@@ -410,6 +454,7 @@ public class SparkLoadPendingTaskTest {
         Assert.assertEquals(columns.get(distributionColumnIndex).getName(), distributionColumns.get(0));
         etlPartitions = etlPartitionInfo.partitions;
         Assert.assertEquals(1, etlPartitions.size());
+<<<<<<< HEAD
         Assert.assertEquals(partition3Id, etlPartitions.get(0).partitionId);
     }
 
@@ -423,4 +468,9 @@ public class SparkLoadPendingTaskTest {
                 new DateLiteral("2015-03-01 12:00:00", ScalarType.DATETIME));
         Assert.assertEquals(20150301120000L, result);
     }
+=======
+        Assert.assertEquals(61, etlPartitions.get(0).physicalPartitionId);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

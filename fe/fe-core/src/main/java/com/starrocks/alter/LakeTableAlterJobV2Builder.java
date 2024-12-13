@@ -25,7 +25,11 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +52,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
+<<<<<<< HEAD
     public AlterJobV2 build() throws UserException {
+=======
+    public AlterJobV2 build() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (newIndexSchema.isEmpty() && !hasIndexChanged) {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }
@@ -74,7 +82,12 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getParentId();
                 long physicalPartitionId = partition.getId();
+<<<<<<< HEAD
                 long shardGroupId = partition.getShardGroupId();
+=======
+                long shardGroupId = partition.getIndex(originIndexId).getShardGroupId();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
@@ -84,8 +97,13 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds =
+<<<<<<< HEAD
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
                                 table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+=======
+                        createShards(originTablets.size(), table.getPartitionFilePathInfo(physicalPartitionId),
+                                table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 originTabletIds, properties, warehouseId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
@@ -93,7 +111,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 TabletMeta shadowTabletMeta =
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, 0, medium, true);
                 MaterializedIndex shadowIndex =
+<<<<<<< HEAD
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
+=======
+                        new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));

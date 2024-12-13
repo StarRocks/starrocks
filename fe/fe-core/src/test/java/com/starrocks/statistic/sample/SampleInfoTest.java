@@ -62,8 +62,13 @@ public class SampleInfoTest extends PlanTestBase {
                 "c6 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+<<<<<<< HEAD
         db = GlobalStateMgr.getCurrentState().getMetadata().getDb("test");
         table = GlobalStateMgr.getCurrentState().getMetadata().getTable("test", "t_struct");
+=======
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t_struct");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), table);
     }
 

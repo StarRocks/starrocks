@@ -292,7 +292,11 @@ public class PropertyAnalyzerTest {
     public void testPersistentIndexType() throws AnalysisException {
         // empty property
         Map<String, String> property = new HashMap<>();
+<<<<<<< HEAD
         Assert.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property));
+=======
+        Assert.assertEquals(TPersistentIndexType.CLOUD_NATIVE, PropertyAnalyzer.analyzePersistentIndexType(property));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, String> property2 = new HashMap<>();
         property2.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");

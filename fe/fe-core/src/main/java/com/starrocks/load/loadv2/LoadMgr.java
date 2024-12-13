@@ -47,9 +47,14 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TimeoutException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.EtlJobType;
@@ -80,10 +85,13 @@ import com.starrocks.warehouse.WarehouseLoadStatusInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -109,7 +117,11 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
+<<<<<<< HEAD
 public class LoadMgr implements Writable, MemoryTrackable {
+=======
+public class LoadMgr implements MemoryTrackable {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
     private static final int MEMORY_JOB_SAMPLES = 10;
 
@@ -161,7 +173,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void alterLoadJob(AlterLoadStmt stmt) throws DdlException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -221,7 +237,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void recordFinishedOrCacnelledLoadJob(long jobId, EtlJobType jobType, String failMsg, String trackingUrl)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LoadJob loadJob = getLoadJob(jobId);
         if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
             throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name()
@@ -239,6 +259,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public long registerLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
                                 EtlJobType jobType, long createTimestamp, long estimateScanRows,
                                 int estimateFileNum, long estimateFileSize,
@@ -247,6 +268,14 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
+                                               EtlJobType jobType, long createTimestamp, long estimateScanRows,
+                                               int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
+                                               Coordinator coordinator) throws StarRocksException {
+        // get db id
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
@@ -267,11 +296,19 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+<<<<<<< HEAD
         return loadJob.getId();
     }
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
         Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+=======
+        return loadJob;
+    }
+
+    public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -424,7 +461,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
                     recordFinishedOrCacnelledLoadJob(
                             job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
                     LOG.warn("abort job: {}-{} since transaction status unknown", job.getLabel(), job.getId());
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.warn("failed to abort job: {}", job.getLabel(), e);
                 }
             }
@@ -496,7 +537,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
                     } catch (TimeoutException e) {
                         // timeout, retry next time
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
+<<<<<<< HEAD
                     } catch (UserException e) {
+=======
+                    } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {
@@ -511,7 +556,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
                 .forEach(job -> {
                     try {
                         ((SparkLoadJob) job).updateLoadingStatus();
+<<<<<<< HEAD
                     } catch (UserException e) {
+=======
+                    } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {
@@ -673,7 +722,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     private Database checkDb(String dbName) throws DdlException {
         // get db
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new DdlException("Database[" + dbName + "] does not exist");
@@ -749,6 +802,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
@@ -785,6 +839,8 @@ public class LoadMgr implements Writable, MemoryTrackable {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         long now = System.currentTimeMillis();

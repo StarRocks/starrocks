@@ -18,7 +18,10 @@ package com.starrocks.external.starrocks;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.leader.LeaderImpl;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -127,12 +130,18 @@ public class TableMetaSyncerTest {
         LeaderImpl leader = new LeaderImpl();
         TGetTableMetaResponse response = leader.getTableMeta(request);
 
+<<<<<<< HEAD
         Table table = GlobalStateMgr.getCurrentState().getDb("test_db").getTable("test_ext_table");
         ExternalOlapTable extTable = (ExternalOlapTable) table;
         // remove the thread local meta context
         MetaContext.remove();
         extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
         Assert.assertNull(MetaContext.get());
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_db").getTable("test_ext_table");
+        ExternalOlapTable extTable = (ExternalOlapTable) table;
+        extTable.updateMeta(request.getDb_name(), response.getTable_meta(), response.getBackends());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(4, extTable.getPartitions().size());
     }
 }

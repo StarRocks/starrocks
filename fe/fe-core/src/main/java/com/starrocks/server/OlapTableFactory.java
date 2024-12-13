@@ -470,7 +470,12 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
             }
 
+<<<<<<< HEAD
             boolean hasGin = table.getIndexes().stream().anyMatch(index -> index.getIndexType() == IndexType.GIN);
+=======
+            boolean hasGin = table.getIndexes().stream()
+                    .anyMatch(index -> index.getIndexType() == IndexType.GIN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (hasGin && table.enableReplicatedStorage()) {
                 throw new SemanticException("GIN does not support replicated mode");
             }
@@ -653,16 +658,26 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setCompressionLevel(compressionLevel);
 
             // partition live number
+<<<<<<< HEAD
             int partitionLiveNumber;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
                 partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+=======
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 
             // analyze partition ttl duration
+<<<<<<< HEAD
             Pair<String, PeriodDuration> ttlDuration = null;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                 ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+=======
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (ttlDuration == null) {
                     throw new DdlException("Invalid partition ttl duration");
                 }
@@ -670,6 +685,20 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().setPartitionTTL(ttlDuration.second);
             }
 
+<<<<<<< HEAD
+=======
+            // analyze partition retention condition
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                String ttlCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, table, properties, true);
+                if (ttlCondition == null) {
+                    throw new DdlException("Invalid partition retention condition");
+                }
+                table.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlCondition);
+                table.getTableProperty().setPartitionRetentionCondition(ttlCondition);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 processConstraint(db, table, properties);
             } catch (AnalysisException e) {

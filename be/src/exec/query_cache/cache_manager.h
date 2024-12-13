@@ -65,7 +65,11 @@ public:
     explicit CacheManager(size_t capacity);
     ~CacheManager() = default;
     void populate(const std::string& key, const CacheValue& value);
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<CacheValue> probe(const std::string& key);
+=======
+    StatusOr<CacheValue> probe(const std::string& key);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t memory_usage();
     size_t capacity();
     size_t lookup_count();

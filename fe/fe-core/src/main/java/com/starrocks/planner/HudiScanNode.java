@@ -22,7 +22,11 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
+<<<<<<< HEAD
 import com.starrocks.connector.RemoteScanRangeLocations;
+=======
+import com.starrocks.connector.hudi.HudiConnectorScanRangeSource;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -35,7 +39,11 @@ import com.starrocks.thrift.TScanRangeLocations;
 import java.util.List;
 
 public class HudiScanNode extends ScanNode {
+<<<<<<< HEAD
     private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+=======
+    private HudiConnectorScanRangeSource scanRangeSource = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final HudiTable hudiTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
@@ -67,7 +75,12 @@ public class HudiScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
         this.descTbl = descTbl;
+<<<<<<< HEAD
         scanRangeLocations.setup(descTbl, hudiTable, scanNodePredicates);
+=======
+        this.scanRangeSource = new HudiConnectorScanRangeSource(descTbl, hudiTable, scanNodePredicates);
+        this.scanRangeSource.setup();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void setupCloudCredential() {
@@ -85,7 +98,11 @@ public class HudiScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+<<<<<<< HEAD
         return scanRangeLocations.getScanRangeLocations(descTbl, hudiTable, scanNodePredicates);
+=======
+        return scanRangeSource.getAllOutputs();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -137,11 +154,14 @@ public class HudiScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocations.getScanRangeLocationsSize();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();

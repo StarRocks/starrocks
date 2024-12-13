@@ -67,9 +67,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+=======
+import java.io.DataOutput;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -494,20 +498,35 @@ public class ColocateTableIndex implements Writable {
 
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(groupId.dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int numOfTablets = 0;
         if (db != null && !allTableIds.isEmpty()) {
             Locker locker = new Locker();
             try {
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.READ);
                 for (long tableId : allTableIds) {
                     OlapTable tbl = (OlapTable) db.getTable(tableId);
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+                for (long tableId : allTableIds) {
+                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (tbl != null) {
                         numOfTablets += tbl.getNumberOfPartitions();
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return numOfTablets;
@@ -610,9 +629,15 @@ public class ColocateTableIndex implements Writable {
     }
 
     public void replayAddTableToGroup(ColocatePersistInfo info) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
         Preconditions.checkNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable(info.getTableId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        Preconditions.checkNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), info.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkNotNull(tbl);
 
         writeLock();
@@ -663,11 +688,19 @@ public class ColocateTableIndex implements Writable {
 
     protected Optional<String> getTableName(long dbId, long tableId) {
 
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (database == null) {
             return Optional.empty();
         }
         Table table = database.getTable(tableId);
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (database == null) {
+            return Optional.empty();
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (table == null) {
             return Optional.empty();
@@ -804,6 +837,7 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
         GlobalStateMgr.getCurrentState().getColocateTableIndex().readFields(dis);
         // clean up if dbId or tableId not found, this is actually a bug
@@ -818,6 +852,8 @@ public class ColocateTableIndex implements Writable {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void saveColocateTableIndexV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.COLOCATE_TABLE_INDEX, 1);
         writer.writeJson(this);
@@ -1002,9 +1038,16 @@ public class ColocateTableIndex implements Writable {
         long tableId = info.getTableId();
         Map<String, String> properties = info.getPropertyMap();
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(tableId), LockType.WRITE)) {
             OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(info.getGroupId().dbId);
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tableId), LockType.WRITE)) {
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
                     info.getGroupId());
         } catch (DdlException e) {

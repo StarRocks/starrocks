@@ -73,7 +73,11 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
 
         TransactionState transactionState = new TransactionState();
         TableCommitInfo commitInfo = new TableCommitInfo(table.getId());
+<<<<<<< HEAD
         commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(partition.getId(), 2, 1));
+=======
+        commitInfo.addPartitionCommitInfo(new PartitionCommitInfo(partition.getDefaultPhysicalPartition().getId(), 2, 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         transactionState.putIdToTableCommitInfo(table.getId(), commitInfo);
 
         setPartitionStatistics((OlapTable) table, "p1", 1000);
@@ -129,7 +133,11 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             InsertOverwriteJobStats stats = new InsertOverwriteJobStats(
                     List.of(sourceId), List.of(targetId), 1000, 1001);
             StatisticsCollectionTrigger.triggerOnInsertOverwrite(stats, db, table, true, true);
+<<<<<<< HEAD
             Partition targetPartition = new Partition(targetId, "p1", null, null);
+=======
+            Partition targetPartition = new Partition(targetId, targetId + 100, "p1", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Map<Long, Optional<Long>> tableStats =
                     storage.getTableStatistics(table.getId(), List.of(targetPartition));
             Assert.assertEquals(Map.of(targetId, Optional.of(1000L)), tableStats);

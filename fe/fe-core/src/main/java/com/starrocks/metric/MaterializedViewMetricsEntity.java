@@ -104,10 +104,17 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(mvId.getDbId());
         if (db != null) {
             dbNameOpt = Optional.of(db.getFullName());
             Table table = db.getTable(mvId.getId());
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(mvId.getDbId());
+        if (db != null) {
+            dbNameOpt = Optional.of(db.getFullName());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table != null) {
                 mvNameOpt = Optional.of(table.getName());
                 return true;
@@ -217,17 +224,29 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's row count") {
             @Override
             public Long getValue() {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0L;
                 }
                 Table table = db.getTable(mvId.getId());
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0L;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
 
                 MaterializedView mv = (MaterializedView) table;
+<<<<<<< HEAD
                 try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()),
+=======
+                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             LockType.READ)) {
                     return mv.getRowCount();
                 } catch (Exception e) {
@@ -241,18 +260,30 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's storage size") {
             @Override
             public Long getValue() {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0L;
                 }
                 Table table = db.getTable(mvId.getId());
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0L;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
 
                 MaterializedView mv = (MaterializedView) table;
                 try (AutoCloseableLock ignore =
+<<<<<<< HEAD
                             new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+=======
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return mv.getDataSize();
                 } catch (Exception e) {
                     return 0L;
@@ -265,11 +296,19 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's inactive or not, 0: active, 1: inactive") {
             @Override
             public Integer getValue() {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0;
                 }
                 Table table = db.getTable(mvId.getId());
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isMaterializedView()) {
                     return 0;
                 }
@@ -287,11 +326,19 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     "current materialized view's partition count, 0 if the materialized view is not partitioned") {
             @Override
             public Integer getValue() {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
                 if (db == null) {
                     return 0;
                 }
                 Table table = db.getTable(mvId.getId());
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isMaterializedView()) {
                     return 0;
                 }
@@ -301,7 +348,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
 
                 try (AutoCloseableLock ignore =
+<<<<<<< HEAD
                             new AutoCloseableLock(new Locker(), db, Lists.newArrayList(table.getId()), LockType.READ)) {
+=======
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return mv.getPartitions().size();
                 } catch (Exception e) {
                     return 0;

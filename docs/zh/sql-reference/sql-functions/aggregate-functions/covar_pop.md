@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # covar_pop
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回两个随机变量的总体协方差。该函数从 2.5.10 版本开始支持，也可用作窗口函数。
 

@@ -17,7 +17,10 @@
 #include <string>
 
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "column/datum.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -27,18 +30,29 @@
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/column_predicate.h"
 #include "storage/types.h"
 #include "storage/uint24.h"
 #include "types/date_value.h"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type.h"
 
 namespace starrocks::parquet {
 
+<<<<<<< HEAD
 Status StatisticsHelper::decode_value_into_column(ColumnPtr column, const std::vector<std::string>& values,
+=======
+Status StatisticsHelper::decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                   const TypeDescriptor& type, const ParquetField* field,
                                                   const std::string& timezone) {
     std::unique_ptr<ColumnConverter> converter;
@@ -162,7 +176,11 @@ bool StatisticsHelper::can_be_used_for_statistics_filter(ExprContext* ctx,
     }
 }
 
+<<<<<<< HEAD
 void translate_to_string_value(ColumnPtr col, size_t i, std::string& value) {
+=======
+void translate_to_string_value(const ColumnPtr& col, size_t i, std::string& value) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (col->is_date()) {
         value = col->get(i).get_date().to_string();
         return;
@@ -274,4 +292,51 @@ Status StatisticsHelper::in_filter_on_min_max_stat(const std::vector<std::string
     return Status::OK();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::parquet
+=======
+Status StatisticsHelper::get_min_max_value(const FileMetaData* file_metadata, const TypeDescriptor& type,
+                                           const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
+                                           std::vector<std::string>& min_values, std::vector<std::string>& max_values) {
+    // When statistics is empty, column_meta->__isset.statistics is still true,
+    // but statistics.__isset.xxx may be false, so judgment is required here.
+    bool is_set_min_max = (column_meta->statistics.__isset.max && column_meta->statistics.__isset.min) ||
+                          (column_meta->statistics.__isset.max_value && column_meta->statistics.__isset.min_value);
+    if (!is_set_min_max) {
+        return Status::Aborted("No exist min/max");
+    }
+
+    DCHECK_EQ(field->physical_type, column_meta->type);
+    auto sort_order = sort_order_of_logical_type(type.type);
+
+    if (!has_correct_min_max_stats(file_metadata, *column_meta, sort_order)) {
+        return Status::Aborted("The file has incorrect order");
+    }
+
+    if (column_meta->statistics.__isset.min_value) {
+        min_values.emplace_back(column_meta->statistics.min_value);
+        max_values.emplace_back(column_meta->statistics.max_value);
+    } else {
+        min_values.emplace_back(column_meta->statistics.min);
+        max_values.emplace_back(column_meta->statistics.max);
+    }
+
+    return Status::OK();
+}
+
+Status StatisticsHelper::get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls) {
+    if (!column_meta->statistics.__isset.null_count) {
+        return Status::Aborted("No null_count in column statistics");
+    }
+    has_nulls.emplace_back(column_meta->statistics.null_count > 0);
+    return Status::OK();
+}
+
+bool StatisticsHelper::has_correct_min_max_stats(const FileMetaData* file_metadata,
+                                                 const tparquet::ColumnMetaData& column_meta,
+                                                 const SortOrder& sort_order) {
+    return file_metadata->writer_version().HasCorrectStatistics(column_meta, sort_order);
+}
+
+} // namespace starrocks::parquet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

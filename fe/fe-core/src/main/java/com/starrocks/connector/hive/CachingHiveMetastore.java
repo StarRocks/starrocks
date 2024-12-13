@@ -24,7 +24,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -59,6 +62,10 @@ import static com.google.common.base.Throwables.throwIfUnchecked;
 import static com.google.common.cache.CacheLoader.asyncReloading;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorService;
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.hive.HiveMetadata.useMetadataCache;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class CachingHiveMetastore extends CachingMetastore implements IHiveMetastore {
     private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
@@ -215,7 +222,11 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         HivePartitionValue hivePartitionValue = HivePartitionValue.of(databaseTableName, partitionValues);
         if (metastore instanceof CachingHiveMetastore) {
             Table table = getTable(dbName, tableName);
+<<<<<<< HEAD
             if (table.isHiveTable() && !((HiveTable) table).isUseMetadataCache()) {
+=======
+            if (table.isHiveTable() && !useMetadataCache()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 invalidatePartitionKeys(hivePartitionValue);
             }
         }
@@ -370,8 +381,13 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
 
     @Override
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
+<<<<<<< HEAD
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
+=======
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
@@ -479,10 +495,15 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
         if (enableListNameCache) {
             partitionKeysCache.put(hivePartitionValue, updatedPartitionKeys);
         }
+<<<<<<< HEAD
 
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) updatedTable;
         List<HivePartitionName> refreshPartitionNames = Lists.newArrayList();
         if (hmsTable.isUnPartitioned()) {
+=======
+        List<HivePartitionName> refreshPartitionNames = Lists.newArrayList();
+        if (updatedTable.isUnPartitioned()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             HivePartitionName hivePartitionName = HivePartitionName.of(hiveDbName, hiveTblName, Lists.newArrayList());
             Partition updatedPartition = loadPartition(hivePartitionName);
             partitionCache.put(hivePartitionName, updatedPartition);
@@ -661,8 +682,13 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     }
 
     public synchronized void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {
+<<<<<<< HEAD
         String dbName = updatedHiveTable.getDbName();
         String tableName = updatedHiveTable.getTableName();
+=======
+        String dbName = updatedHiveTable.getCatalogDBName();
+        String tableName = updatedHiveTable.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableCache.put(databaseTableName, updatedHiveTable);
         if (updatedHiveTable.isUnPartitioned()) {

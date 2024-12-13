@@ -255,6 +255,13 @@ under the License.
                     <artifactId>jackson-mapper-asl</artifactId>
                     <groupId>org.codehaus.jackson</groupId>
                 </exclusion>
+<<<<<<< HEAD
+=======
+                <exclusion>
+                    <artifactId>hadoop-mapreduce-client-core</artifactId>
+                    <groupId>org.apache.hadoop</groupId>
+                </exclusion>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </exclusions>
         </dependency>
     </dependencies>

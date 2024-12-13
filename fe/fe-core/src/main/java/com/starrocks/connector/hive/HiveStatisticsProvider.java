@@ -12,21 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
@@ -34,6 +47,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,13 +60,28 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+=======
+import com.starrocks.statistic.StatisticUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.OptionalDouble;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
+<<<<<<< HEAD
 import static com.google.common.collect.Maps.immutableEntry;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
@@ -76,14 +105,23 @@ public class HiveStatisticsProvider {
             List<ColumnRefOperator> columns,
             List<PartitionKey> partitionKeys) {
         Statistics.Builder builder = Statistics.builder();
+<<<<<<< HEAD
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         if (hmsTbl.isUnPartitioned()) {
             HivePartitionStats tableStats = hmsOps.getTableStatistics(hmsTbl.getDbName(), hmsTbl.getTableName());
+=======
+        if (table.isUnPartitioned()) {
+            HivePartitionStats tableStats = hmsOps.getTableStatistics(table.getCatalogDBName(), table.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return createUnpartitionedStats(tableStats, columns, builder, table);
         }
 
         int sampleSize = getSamplePartitionSize(session);
+<<<<<<< HEAD
         List<String> partitionColumnNames = hmsTbl.getPartitionColumnNames();
+=======
+        List<String> partitionColumnNames = table.getPartitionColumnNames();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> partitionNames = partitionKeys.stream()
                 .peek(partitionKey -> checkState(partitionKey.getKeys().size() == partitionColumnNames.size(),
                         "columns size is " + partitionColumnNames.size() +
@@ -91,7 +129,11 @@ public class HiveStatisticsProvider {
                 .map(partitionKey -> toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
 
+<<<<<<< HEAD
         List<String> sampledPartitionNames = getPartitionsSample(partitionNames, sampleSize);
+=======
+        List<String> sampledPartitionNames = StatisticUtils.getRandomPartitionsSample(partitionNames, sampleSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, HivePartitionStats> partitionStatistics = hmsOps.getPartitionStatistics(table, sampledPartitionNames);
 
         double avgRowNumPerPartition = -1;
@@ -143,6 +185,7 @@ public class HiveStatisticsProvider {
     }
 
     public long getEstimatedRowCount(Table table, List<PartitionKey> partitionKeys) {
+<<<<<<< HEAD
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         List<Partition> partitions = hmsTbl.isUnPartitioned() ?
                 Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
@@ -151,6 +194,15 @@ public class HiveStatisticsProvider {
         Optional<String> hudiBasePath = table.isHiveTable() ? Optional.empty() : Optional.of(hmsTbl.getTableLocation());
         List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions, hudiBasePath);
 
+=======
+        List<Partition> partitions = table.isUnPartitioned() ?
+                Lists.newArrayList(
+                        hmsOps.getPartition(table.getCatalogDBName(), table.getCatalogTableName(), Lists.newArrayList())) :
+                Lists.newArrayList(hmsOps.getPartitionByPartitionKeys(table, partitionKeys).values());
+
+        List<RemoteFileInfo> remoteFileInfos =
+                fileOps.getRemoteFileInfoForStats(table, partitions, GetRemoteFilesParams.newBuilder().build());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long totalBytes = 0;
         for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
             for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
@@ -159,7 +211,11 @@ public class HiveStatisticsProvider {
         }
 
         List<Column> dataColumns = table.getColumns().stream()
+<<<<<<< HEAD
                 .filter(column -> hmsTbl.getDataColumnNames().contains(column.getName()))
+=======
+                .filter(column -> table.getDataColumnNames().contains(column.getName()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .collect(Collectors.toList());
 
         if (totalBytes <= 0) {
@@ -326,7 +382,11 @@ public class HiveStatisticsProvider {
                 .mapToDouble(x -> x)
                 .max();
 
+<<<<<<< HEAD
         return  ndv.isPresent() ? ndv.getAsDouble() : 1;
+=======
+        return ndv.isPresent() ? ndv.getAsDouble() : 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private double nullsFraction(Column column, Collection<HivePartitionStats> partitionStatistics) {
@@ -357,7 +417,10 @@ public class HiveStatisticsProvider {
         return (double) totalNullsNums / totalRowNums;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private double averageRowSize(Column column, Collection<HivePartitionStats> partitionStatistics, double totalRowNums) {
         if (!column.getType().isStringType()) {
             return column.getType().getTypeSize();
@@ -384,7 +447,11 @@ public class HiveStatisticsProvider {
     }
 
     private double max(List<HiveColumnStats> columnStatistics) {
+<<<<<<< HEAD
         OptionalDouble max =  columnStatistics.stream()
+=======
+        OptionalDouble max = columnStatistics.stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(HiveColumnStats::getMax)
                 .filter(value -> value != POSITIVE_INFINITY)
                 .mapToDouble(x -> x)
@@ -393,7 +460,11 @@ public class HiveStatisticsProvider {
     }
 
     private double min(List<HiveColumnStats> columnStatistics) {
+<<<<<<< HEAD
         OptionalDouble min =  columnStatistics.stream()
+=======
+        OptionalDouble min = columnStatistics.stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(HiveColumnStats::getMin)
                 .filter(value -> value != NEGATIVE_INFINITY)
                 .mapToDouble(x -> x)
@@ -465,6 +536,7 @@ public class HiveStatisticsProvider {
     public int getSamplePartitionSize(OptimizerContext session) {
         return session.getSessionVariable().getHivePartitionStatsSampleSize();
     }
+<<<<<<< HEAD
 
     // Use murmur3_128 hash function to break up the partitionName as randomly and scattered as possible,
     // and return an ordered list of partitionNames.
@@ -509,4 +581,6 @@ public class HiveStatisticsProvider {
         }
         return Lists.newArrayList(result);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

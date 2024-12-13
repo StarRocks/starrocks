@@ -22,9 +22,16 @@ import static java.util.Objects.requireNonNull;
 public class TableMetaConnector implements Connector {
     private final TableMetaMetadata metaMetadata;
 
+<<<<<<< HEAD
     public TableMetaConnector(String catalogName) {
         requireNonNull(catalogName, "catalogName is null");
         this.metaMetadata = new TableMetaMetadata(catalogName);
+=======
+    public TableMetaConnector(String catalogName, String catalogType) {
+        requireNonNull(catalogName, "catalogName is null");
+        requireNonNull(catalogType, "catalogType is null");
+        this.metaMetadata = new TableMetaMetadata(catalogName, catalogType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

@@ -127,7 +127,10 @@ public class ScalarOperatorToExpr {
             this.colRefToExpr = variableToSlotRef;
             this.projectOperatorMap = projectOperatorMap;
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {

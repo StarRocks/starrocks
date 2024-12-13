@@ -457,4 +457,18 @@ public class ReduceCastRuleTest {
             Assert.assertSame(beforeOptimize, afterOptimize);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testPrecisionLoss() {
+        ReduceCastRule rule = new ReduceCastRule();
+        // cast(96.1) as int = 96, we can't change it into 96.1 = cast(96) as double
+        ScalarOperator castOperator = new CastOperator(Type.INT, ConstantOperator.createDouble(96.1));
+        BinaryPredicateOperator beforeOptimize =
+                BinaryPredicateOperator.eq(castOperator, ConstantOperator.createInt(96));
+        ScalarOperator result = rule.apply(beforeOptimize, null);
+        Assert.assertTrue(result.getChild(0) instanceof CastOperator);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

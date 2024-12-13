@@ -57,8 +57,13 @@ public class IcebergTableTest extends TableTestBase {
                 .setId(1000)
                 .setSrTableName("supplier")
                 .setCatalogName("iceberg_catalog")
+<<<<<<< HEAD
                 .setRemoteDbName("iceberg_oss_tpch_1g_parquet_gzip")
                 .setRemoteTableName("supplier")
+=======
+                .setCatalogDBName("iceberg_oss_tpch_1g_parquet_gzip")
+                .setCatalogTableName("supplier")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .setResourceName(resourceName)
                 .setFullSchema(new ArrayList<>())
                 .setNativeTable(icebergNativeTable)

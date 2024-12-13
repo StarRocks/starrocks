@@ -176,7 +176,12 @@ public class LogicalProperty implements Property {
         @Override
         public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
             if (node instanceof LogicalOlapScanOperator) {
+<<<<<<< HEAD
                 if (((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1) {
+=======
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
+                if (olapScanOperator.getSelectedTabletId() != null && olapScanOperator.getSelectedTabletId().size() <= 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
                     List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
                     for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {

@@ -14,8 +14,15 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public interface BackendSelector {
     void computeScanRangeAssignment() throws UserException;
+=======
+import com.starrocks.common.StarRocksException;
+
+public interface BackendSelector {
+    void computeScanRangeAssignment() throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

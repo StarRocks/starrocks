@@ -1,0 +1,21 @@
+-- name: test_percentile_union
+CREATE TABLE t1 (
+    c1 int,
+    c2 double
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series from table(generate_series(1, 1000));
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+select percentile_approx_raw(percentile_union(percentile_hash(c2)), 0.99) from t1;
+-- result:
+990.5
+-- !result

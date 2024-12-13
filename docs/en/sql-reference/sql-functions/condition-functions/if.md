@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # if
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 If `expr1` evaluates to TRUE, returns `expr2`. Otherwise, returns `expr3`.
 

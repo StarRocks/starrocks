@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_array
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。
 

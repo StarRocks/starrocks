@@ -100,6 +100,10 @@ public class LocalTabletsProcDirTest {
         long tablet1Id = 5L;
         long tablet2Id = 6L;
         long replicaId = 10L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 11L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Columns
         List<Column> columns = new ArrayList<Column>();
@@ -135,7 +139,11 @@ public class LocalTabletsProcDirTest {
         index.addTablet(tablet2, tabletMeta);
 
         // Partition
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);

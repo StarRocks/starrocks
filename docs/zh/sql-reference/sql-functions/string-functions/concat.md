@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # concat
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将多个字符串连接起来。如果参数中任意一个值是 NULL，那么返回的结果为 NULL。
 

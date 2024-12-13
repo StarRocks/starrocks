@@ -15,7 +15,11 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.starrocks.catalog.CatalogUtils;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.collections.CollectionUtils;
@@ -154,7 +158,11 @@ public class FileListTableRepo extends FileListRepo {
      */
     static class SQLBuilder {
 
+<<<<<<< HEAD
         public static String buildCreateTableSql(int replicationNum) throws UserException {
+=======
+        public static String buildCreateTableSql(int replicationNum) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return String.format(FILE_LIST_TABLE_CREATE,
                     CatalogUtils.normalizeTableName(FILE_LIST_DB_NAME, FILE_LIST_TABLE_NAME), replicationNum);
         }

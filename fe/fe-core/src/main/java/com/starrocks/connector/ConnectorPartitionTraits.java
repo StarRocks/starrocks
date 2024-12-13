@@ -38,7 +38,11 @@ import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import org.apache.commons.lang.NotImplementedException;
 import org.slf4j.Logger;
@@ -79,6 +83,11 @@ public abstract class ConnectorPartitionTraits {
 
     protected Table table;
 
+<<<<<<< HEAD
+=======
+    protected boolean queryMVRewrite = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static boolean isSupported(Table.TableType tableType) {
         return TRAITS_TABLE.containsKey(tableType);
     }
@@ -151,8 +160,20 @@ public abstract class ConnectorPartitionTraits {
      */
     public abstract PartitionKey createEmptyKey();
 
+<<<<<<< HEAD
     public abstract String getDbName();
 
+=======
+    public String getCatalogDBName() {
+        return table.getCatalogDBName();
+    }
+
+    /**
+     * `createPartitionKeyWithType` is deprecated, use `createPartitionKey` instead.
+     * partition values should take care time zone for Iceberg table which is handled by `createPartitionKey`.
+     */
+    @Deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
     public abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
@@ -180,10 +201,23 @@ public abstract class ConnectorPartitionTraits {
      *
      * @apiNote it must be a list-partitioned table
      */
+<<<<<<< HEAD
     public abstract Map<String, PListCell> getPartitionList(Column partitionColumn) throws AnalysisException;
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
+=======
+    public abstract Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException;
+
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
+
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames);
+
+    public List<PartitionInfo> getPartitions(List<String> names) {
+        throw new NotImplementedException("getPartitions is not implemented for this table type: " + table.getType());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * The max of refresh ts for all partitions
      */
@@ -195,11 +229,14 @@ public abstract class ConnectorPartitionTraits {
     public abstract Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
                                                          MaterializedView.AsyncRefreshContext context);
 
+<<<<<<< HEAD
 
     public List<PartitionInfo> getPartitions(List<String> names) {
         throw new NotImplementedException("getPartitions is not implemented for this table type: " + table.getType());
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Get updated partitions based on updated time, return partition names if the partition is updated after the checkTime.
      * For external table, we get partition update time from other system, there may be a time
@@ -216,4 +253,15 @@ public abstract class ConnectorPartitionTraits {
      * inconsistency between the two systems, so we add extraSeconds
      */
     public abstract LocalDateTime getTableLastUpdateTime(int extraSeconds);
+<<<<<<< HEAD
+=======
+
+    public void setQueryMVRewrite(boolean value) {
+        queryMVRewrite = value;
+    }
+
+    public boolean isQueryMVRewrite() {
+        return queryMVRewrite;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

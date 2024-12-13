@@ -81,7 +81,11 @@ public class MVVersionManager {
         if (changedTablePartitionInfos.isEmpty()) {
             return;
         }
+<<<<<<< HEAD
         LOG.info("update meta for mv {} with olap tables:{}, refBaseTableIds:{}", mv.getName(),
+=======
+        LOG.info("Update meta for mv {} with olap tables:{}, refBaseTableIds:{}", mv.getName(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 changedTablePartitionInfos, refBaseTableIds);
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
@@ -112,7 +116,11 @@ public class MVVersionManager {
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.get(tableId);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
+<<<<<<< HEAD
             LOG.info("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
+=======
+            LOG.debug("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     mv.getName(), snapshotTable.getName(), partitionInfoMap, currentTablePartitionInfo);
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
@@ -142,7 +150,11 @@ public class MVVersionManager {
         if (changedTablePartitionInfos.isEmpty()) {
             return;
         }
+<<<<<<< HEAD
         LOG.info("update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
+=======
+        LOG.info("Update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 changedTablePartitionInfos, refBaseTableIds);
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableInfoVisibleVersionMap();
@@ -172,7 +184,11 @@ public class MVVersionManager {
             currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(baseTableInfo);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
+<<<<<<< HEAD
             LOG.info("Update materialized view {} meta for external base table {} with partitions info: {}, " +
+=======
+            LOG.debug("Update materialized view {} meta for external base table {} with partitions info: {}, " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "old partition infos:{}", mv.getName(), snapshotTable.getName(),
                     partitionInfoMap, currentTablePartitionInfo);
             // overwrite old partition names
@@ -248,7 +264,11 @@ public class MVVersionManager {
         ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                 new ChangeMaterializedViewRefreshSchemeLog(mv);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
+<<<<<<< HEAD
         LOG.info("update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
+=======
+        LOG.info("Update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 mv.getName(), maxChangedTableRefreshTime);
     }
 }

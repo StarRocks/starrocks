@@ -198,6 +198,7 @@ Examples:
     );
     ```
 
+<<<<<<< HEAD
 #### DROP PARTITION
 
 Syntax:
@@ -211,6 +212,36 @@ ALTER TABLE [<db_name>.]<tbl_name>
 DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 ```
 
+=======
+#### DROP PARTITION(S)
+
+- Drop a single partition:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
+```
+
+- Drop partitions in batch (Supported from v3.3.1):
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
+```
+
+Notes for `multi_range_partitions`:
+
+- It only appiles to Range Partitioning.
+- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+- It only supports partitions with a single Partition Key.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 :::note
 
 - Keep at least one partition for partitioned tables.

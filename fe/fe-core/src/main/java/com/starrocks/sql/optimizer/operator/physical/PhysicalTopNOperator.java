@@ -28,10 +28,18 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Objects;
 import java.util.Set;
 
@@ -44,6 +52,13 @@ public class PhysicalTopNOperator extends PhysicalOperator {
     private boolean isSplit;
     private boolean isEnforced;
 
+<<<<<<< HEAD
+=======
+    // only set when rank <=1 with preAgg optimization is triggered, otherwise it's empty!
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private Map<ColumnRefOperator, CallOperator> preAggCall;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private PhysicalTopNOperator() {
         super(OperatorType.PHYSICAL_TOPN);
     }
@@ -57,7 +72,12 @@ public class PhysicalTopNOperator extends PhysicalOperator {
                                 boolean isSplit,
                                 boolean isEnforced,
                                 ScalarOperator predicate,
+<<<<<<< HEAD
                                 Projection projection) {
+=======
+                                Projection projection,
+                                Map<ColumnRefOperator, CallOperator> analyticCall) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(OperatorType.PHYSICAL_TOPN, spec);
         this.limit = limit;
         this.offset = offset;
@@ -69,6 +89,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         this.isEnforced = isEnforced;
         this.predicate = predicate;
         this.projection = projection;
+<<<<<<< HEAD
+=======
+        this.preAggCall = analyticCall;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -99,6 +123,13 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return isEnforced;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<ColumnRefOperator, CallOperator> getPreAggCall() {
+        return preAggCall;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
@@ -108,6 +139,16 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         for (Ordering ordering : orderSpec.getOrderDescs()) {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
+<<<<<<< HEAD
+=======
+
+        if (preAggCall != null) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : preAggCall.entrySet()) {
+                entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new RowOutputInfo(entryList);
     }
 
@@ -131,6 +172,10 @@ public class PhysicalTopNOperator extends PhysicalOperator {
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderSpec, that.orderSpec) &&
+<<<<<<< HEAD
+=======
+                Objects.equals(preAggCall, that.preAggCall) &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 sortPhase == that.sortPhase && topNType == that.topNType && isEnforced == that.isEnforced;
     }
 

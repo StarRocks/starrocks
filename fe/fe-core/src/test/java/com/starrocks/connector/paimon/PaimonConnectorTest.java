@@ -111,8 +111,13 @@ public class PaimonConnectorTest {
         Assert.assertTrue(metadata instanceof PaimonMetadata);
         com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
+<<<<<<< HEAD
         Assert.assertEquals("db1", paimonTable.getDbName());
         Assert.assertEquals("tbl1", paimonTable.getTableName());
+=======
+        Assert.assertEquals("db1", paimonTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());

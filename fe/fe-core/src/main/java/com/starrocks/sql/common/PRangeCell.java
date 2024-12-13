@@ -17,7 +17,13 @@ package com.starrocks.sql.common;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
 
+<<<<<<< HEAD
 import java.util.Objects;
+=======
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * {@link PRangeCell} contains the range partition's value which contains a `PartitionKey` range.
@@ -90,4 +96,23 @@ public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
                 "range=" + range +
                 '}';
     }
+<<<<<<< HEAD
+=======
+
+    public static Map<String, Range<PartitionKey>> toRangeMap(Map<String, PCell> input) {
+        if (input == null) {
+            return null;
+        }
+        return input.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, v -> ((PRangeCell) v.getValue()).getRange()));
+    }
+
+    public static Map<String, PCell> toCellMap(Map<String, Range<PartitionKey>> input) {
+        if (input == null) {
+            return null;
+        }
+        return input.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, v -> new PRangeCell(v.getValue())));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

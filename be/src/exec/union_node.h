@@ -25,10 +25,17 @@ public:
     UnionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~UnionNode() override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status init(const TPlanNode& tnode, RuntimeState* state) override;
     [[nodiscard]] Status prepare(RuntimeState* state) override;
     [[nodiscard]] Status open(RuntimeState* state) override;
     [[nodiscard]] Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+=======
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
+    Status open(RuntimeState* state) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void close(RuntimeState* state) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
@@ -36,6 +43,7 @@ public:
 private:
     void _convert_pass_through_slot_map(const std::map<SlotId, SlotId>& slot_map);
 
+<<<<<<< HEAD
     [[nodiscard]] Status _get_next_passthrough(RuntimeState* state, ChunkPtr* chunk);
     [[nodiscard]] Status _get_next_materialize(RuntimeState* state, ChunkPtr* chunk);
     [[nodiscard]] Status _get_next_const(RuntimeState* state, ChunkPtr* chunk);
@@ -43,6 +51,15 @@ private:
     void _move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk);
     [[nodiscard]] Status _move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk);
     [[nodiscard]] Status _move_const_chunk(ChunkPtr& dest_chunk);
+=======
+    Status _get_next_passthrough(RuntimeState* state, ChunkPtr* chunk);
+    Status _get_next_materialize(RuntimeState* state, ChunkPtr* chunk);
+    Status _get_next_const(RuntimeState* state, ChunkPtr* chunk);
+
+    void _move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk);
+    Status _move_materialize_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk);
+    Status _move_const_chunk(ChunkPtr& dest_chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static void _clone_column(ChunkPtr& dest_chunk, const ColumnPtr& src_column, const SlotDescriptor* dest_slot,
                               size_t row_count);

@@ -1040,8 +1040,13 @@ TEST_F(ChunksSorterTest, find_zero) {
 }
 
 TEST_F(ChunksSorterTest, test_compare_column) {
+<<<<<<< HEAD
     std::vector<int8_t> cmp_vector;
     std::vector<Datum> rhs_values;
+=======
+    CompareVector cmp_vector;
+    Buffer<Datum> rhs_values;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     rhs_values.emplace_back(int32_t(1));
 
@@ -1059,7 +1064,11 @@ TEST_F(ChunksSorterTest, test_compare_column) {
     desc_null_last.descs.emplace_back(false, false);
     compare_columns(Columns{nullable_column}, cmp_vector, rhs_values, desc_null_last);
 
+<<<<<<< HEAD
     std::vector<int8_t> expected = {0, -1, 1, 1};
+=======
+    CompareVector expected = {0, -1, 1, 1};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXPECT_EQ(cmp_vector, expected);
 
     // test asc null last

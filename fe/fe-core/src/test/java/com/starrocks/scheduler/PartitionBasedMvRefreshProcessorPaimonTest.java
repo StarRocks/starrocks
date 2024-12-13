@@ -74,10 +74,18 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
                         ")\n" +
                         "AS SELECT pk, d  FROM `paimon0`.`pmn_db1`.`unpartitioned_table` as a;",
                 () -> {
+<<<<<<< HEAD
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
                     MaterializedView unpartitionedMaterializedView =
                             ((MaterializedView) testDb.getTable("paimon_parttbl_mv2"));
+=======
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+                    MaterializedView unpartitionedMaterializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "paimon_parttbl_mv2"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     triggerRefreshMv(testDb, unpartitionedMaterializedView);
 
                     Collection<Partition> partitions = unpartitionedMaterializedView.getPartitions();
@@ -104,9 +112,16 @@ public class PartitionBasedMvRefreshProcessorPaimonTest extends MVRefreshTestBas
                         ")\n" +
                         "AS SELECT pk, pt,d  FROM `paimon0`.`pmn_db1`.`partitioned_table` as a;",
                 () -> {
+<<<<<<< HEAD
                     Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
                     MaterializedView partitionedMaterializedView =
                             ((MaterializedView) testDb.getTable("paimon_parttbl_mv1"));
+=======
+                    Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+                    MaterializedView partitionedMaterializedView =
+                            ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTable(testDb.getFullName(), "paimon_parttbl_mv1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     triggerRefreshMv(testDb, partitionedMaterializedView);
 
                     Collection<Partition> partitions = partitionedMaterializedView.getPartitions();

@@ -18,6 +18,10 @@
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/versioned_tablet.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/tablet_reader_params.h"
 #include "types_fwd.h"
 
@@ -58,6 +62,11 @@ public:
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  bool need_split, bool could_split_physically);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+<<<<<<< HEAD
+=======
+                 bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets);
+    TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                  std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
@@ -80,6 +89,11 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
+<<<<<<< HEAD
+=======
+    void set_tablet(std::shared_ptr<VersionedTablet> tablet) { _tablet = tablet; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
 
 protected:
@@ -121,7 +135,10 @@ private:
     std::vector<SegmentSharedPtr> _segments;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
+<<<<<<< HEAD
     PredicateMap _pushdown_predicates;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
@@ -137,6 +154,11 @@ private:
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
 
+<<<<<<< HEAD
+=======
+    std::shared_ptr<VersionedTablet> _tablet;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // used for table internal parallel
     bool _need_split = false;
     bool _could_split_physically = false;

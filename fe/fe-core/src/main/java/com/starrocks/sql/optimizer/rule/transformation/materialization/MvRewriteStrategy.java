@@ -117,6 +117,7 @@ public class MvRewriteStrategy {
             return true;
         }
 
+<<<<<<< HEAD
         private boolean isEnableCBOSingleTableRewrite() {
             if (sessionVariable.isEnableMaterializedViewViewDeltaRewrite() &&
                     optimizerContext.getCandidateMvs().stream().anyMatch(MaterializationContext::hasMultiTables)) {
@@ -125,6 +126,8 @@ public class MvRewriteStrategy {
             return false;
         }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private boolean isEnableCBOMultiTableRewrite(OptExpression queryPlan) {
             if (!sessionVariable.isEnableMaterializedViewSingleTableViewDeltaRewrite() &&
                     MvUtils.getAllTables(queryPlan).size() <= 1) {

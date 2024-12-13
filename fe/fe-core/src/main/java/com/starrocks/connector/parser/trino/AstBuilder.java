@@ -55,6 +55,10 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.VarBinaryLiteral;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.VariableExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -70,6 +74,10 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ExceptRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.InsertStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaArgument;
@@ -91,6 +99,10 @@ import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValueList;
 import com.starrocks.sql.ast.ValuesRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
 import io.trino.sql.tree.AllColumns;
@@ -133,6 +145,10 @@ import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
+<<<<<<< HEAD
+=======
+import io.trino.sql.tree.Insert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import io.trino.sql.tree.Intersect;
 import io.trino.sql.tree.IntervalLiteral;
 import io.trino.sql.tree.IsNotNullPredicate;
@@ -186,13 +202,23 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+<<<<<<< HEAD
+=======
+import java.time.ZoneId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.CURRENT_ROW;
@@ -200,6 +226,11 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+<<<<<<< HEAD
+=======
+import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
+import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -986,10 +1017,24 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
             String value = node.getValue();
+<<<<<<< HEAD
             if (value.length() <= 10) {
                 value += " 00:00:00";
             }
             return new DateLiteral(value, Type.DATETIME);
+=======
+            String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
+            ZoneId zoneId = parseTimeZoneFromString(formattedValue);
+            if (zoneId == null) {
+                return new DateLiteral(formattedValue, Type.DATETIME);
+            } else {
+                return new FunctionCallExpr("convert_tz", List.of(
+                        new DateLiteral(parseDateTimeFromString(formattedValue), Type.DATETIME),
+                        new VariableExpr("time_zone"),
+                        new com.starrocks.analysis.StringLiteral(zoneId.toString())
+                ));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (AnalysisException e) {
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
@@ -1005,9 +1050,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
+<<<<<<< HEAD
         String fieldString = node.getField().toString();
         return new FunctionCallExpr(fieldString,
                 new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context))));
+=======
+        String fieldString = node.getField().toString().toLowerCase();
+        Expr expr = Trino2SRFunctionCallTransformer.convert(fieldString,
+                Lists.newArrayList((Expr) visit(node.getExpression(), context)));
+        return Objects.requireNonNullElseGet(expr, () -> new FunctionCallExpr(fieldString,
+                new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context)))));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -1234,6 +1287,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    protected ParseNode visitInsert(Insert node, ParseTreeContext context) {
+        List<String> parts  = node.getTarget().getParts();
+        String tableName = parts.get(parts.size() - 1);
+        List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
+                map(Identifier::getValue).collect(Collectors.toList()) : null;
+        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+                tableName.concat(UUID.randomUUID().toString()), columnAliases,
+        (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected ParseNode visitCreateTableAsSelect(CreateTableAsSelect node, ParseTreeContext context) {
         Map<String, String> properties = new HashMap<>();
         if (node.getProperties() != null) {

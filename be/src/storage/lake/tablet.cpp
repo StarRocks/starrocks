@@ -20,6 +20,10 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/location_provider.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/metacache.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -108,7 +112,17 @@ const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
+<<<<<<< HEAD
     return _mgr->get_tablet_schema(_id, &_version_hint);
+=======
+    if (_tablet_schema) {
+        return _tablet_schema;
+    } else if (_tablet_metadata) {
+        return std::make_shared<TabletSchema>(_tablet_metadata->schema());
+    } else {
+        return _mgr->get_tablet_schema(_id, &_version_hint);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
@@ -125,6 +139,7 @@ std::vector<RowsetPtr> Tablet::get_rowsets(const TabletMetadataPtr& metadata) {
 }
 
 std::string Tablet::metadata_location(int64_t version) const {
+<<<<<<< HEAD
     return _mgr->tablet_metadata_location(_id, version);
 }
 
@@ -134,6 +149,17 @@ std::string Tablet::metadata_root_location() const {
 
 std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
+=======
+    return _location_provider->tablet_metadata_location(_id, version);
+}
+
+std::string Tablet::metadata_root_location() const {
+    return _location_provider->metadata_root_location(_id);
+}
+
+std::string Tablet::txn_log_location(int64_t txn_id) const {
+    return _location_provider->txn_log_location(_id, txn_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::string Tablet::txn_slog_location(int64_t txn_id) const {
@@ -141,6 +167,7 @@ std::string Tablet::txn_slog_location(int64_t txn_id) const {
 }
 
 std::string Tablet::txn_vlog_location(int64_t version) const {
+<<<<<<< HEAD
     return _mgr->txn_vlog_location(_id, version);
 }
 
@@ -154,6 +181,21 @@ std::string Tablet::del_location(std::string_view del_name) const {
 
 std::string Tablet::delvec_location(std::string_view delvec_name) const {
     return _mgr->delvec_location(_id, delvec_name);
+=======
+    return _location_provider->txn_vlog_location(_id, version);
+}
+
+std::string Tablet::segment_location(std::string_view segment_name) const {
+    return _location_provider->segment_location(_id, segment_name);
+}
+
+std::string Tablet::del_location(std::string_view del_name) const {
+    return _location_provider->del_location(_id, del_name);
+}
+
+std::string Tablet::delvec_location(std::string_view delvec_name) const {
+    return _location_provider->delvec_location(_id, delvec_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::string Tablet::sst_location(std::string_view sst_name) const {
@@ -161,7 +203,11 @@ std::string Tablet::sst_location(std::string_view sst_name) const {
 }
 
 std::string Tablet::root_location() const {
+<<<<<<< HEAD
     return _mgr->tablet_root_location(_id);
+=======
+    return _location_provider->root_location(_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {

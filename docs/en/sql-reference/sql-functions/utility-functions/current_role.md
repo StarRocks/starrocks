@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # current_role
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Queries roles that are activated for the current user.
 

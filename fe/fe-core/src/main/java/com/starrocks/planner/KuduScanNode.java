@@ -21,7 +21,11 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
+<<<<<<< HEAD
 import com.starrocks.connector.RemoteFileDesc;
+=======
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
@@ -29,7 +33,18 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.SystemInfoService;
+<<<<<<< HEAD
 import com.starrocks.thrift.*;
+=======
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsScanNode;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TScanRangeLocation;
+import com.starrocks.thrift.TScanRangeLocations;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -89,13 +104,23 @@ public class KuduScanNode extends ScanNode {
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+<<<<<<< HEAD
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 kuduTable.getCatalogName(), kuduTable, null, -1, predicate, fieldNames, -1);
+=======
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(kuduTable, params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         KuduRemoteFileDesc remoteFileDesc = (KuduRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<KuduScanToken> tokens = remoteFileDesc.getKuduScanTokens();
         if (tokens.isEmpty()) {
             LOG.warn("There is no tokens on {}.{} and predicate: [{}]",
+<<<<<<< HEAD
                     kuduTable.getDbName(), kuduTable.getTableName(), predicate);
+=======
+                    kuduTable.getCatalogDBName(), kuduTable.getCatalogTableName(), predicate);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
         List<Long> nodeIds = getAllAvailableBackendOrComputeIds();
@@ -208,11 +233,14 @@ public class KuduScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocationsList.size();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

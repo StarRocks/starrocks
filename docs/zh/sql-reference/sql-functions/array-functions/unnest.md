@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unnest
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 UNNEST 是一种表函数 (table function)，用于将一个数组展开成多行。
 

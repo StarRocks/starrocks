@@ -38,11 +38,16 @@
 
 #include "agent/master_info.h"
 #include "common/status.h"
+<<<<<<< HEAD
+=======
+#include "util/thrift_rpc_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 using std::map;
 using std::string;
 using std::stringstream;
 using std::vector;
+<<<<<<< HEAD
 using apache::thrift::TException;
 using apache::thrift::transport::TTransportException;
 
@@ -80,6 +85,23 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
         LOG(WARNING) << "Fail to finish_task. "
                      << "host=" << network_address.hostname << ", port=" << network_address.port
                      << ", error=" << e.what();
+=======
+
+namespace starrocks {
+
+AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, TMasterResult* result) {
+    Status client_status;
+    TNetworkAddress network_address = get_master_address();
+
+    client_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            network_address.hostname, network_address.port,
+            [&result, &request](FrontendServiceConnection& client) { client->finishTask(*result, request); });
+
+    if (!client_status.ok()) {
+        LOG(WARNING) << "Fail to finish_task. "
+                     << "host=" << network_address.hostname << ", port=" << network_address.port
+                     << ", error=" << client_status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return STARROCKS_ERROR;
     }
 
@@ -89,6 +111,7 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
 AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterResult* result) {
     Status client_status;
     TNetworkAddress network_address = get_master_address();
+<<<<<<< HEAD
     FrontendServiceConnection client(_client_cache, network_address, config::thrift_rpc_timeout_ms, &client_status);
 
     if (!client_status.ok()) {
@@ -126,6 +149,17 @@ AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterRes
         LOG(WARNING) << "Fail to report to master. "
                      << "host=" << network_address.hostname << ", port=" << network_address.port
                      << ", code=" << client_status.code();
+=======
+
+    client_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            network_address.hostname, network_address.port,
+            [&result, &request](FrontendServiceConnection& client) { client->report(*result, request); });
+
+    if (!client_status.ok()) {
+        LOG(WARNING) << "Fail to report to master. "
+                     << "host=" << network_address.hostname << ", port=" << network_address.port
+                     << ", error=" << client_status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return STARROCKS_ERROR;
     }
 

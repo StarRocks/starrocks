@@ -140,11 +140,16 @@ bool AdaptiveNullableColumn::append_nulls(size_t count) {
     return true;
 }
 
+<<<<<<< HEAD
 bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
+=======
+bool AdaptiveNullableColumn::append_strings(const Slice* data, size_t size) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_data_column->is_binary()) {
         switch (_state) {
         case State::kUninitialized: {
             _state = State::kNotConstant;
+<<<<<<< HEAD
             std::ignore = _data_column->append_strings(strs);
             _size = strs.size();
             break;
@@ -157,21 +162,45 @@ bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
         case State::kMaterialized: {
             std::ignore = _data_column->append_strings(strs);
             null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+            std::ignore = _data_column->append_strings(data, size);
+            _size = size;
+            break;
+        }
+        case State::kNotConstant: {
+            std::ignore = _data_column->append_strings(data, size);
+            _size += size;
+            break;
+        }
+        case State::kMaterialized: {
+            std::ignore = _data_column->append_strings(data, size);
+            null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;
         }
         default: {
             materialized_nullable();
+<<<<<<< HEAD
             std::ignore = _data_column->append_strings(strs);
             null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+            std::ignore = _data_column->append_strings(data, size);
+            null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DCHECK_EQ(_null_column->size(), _data_column->size());
             break;
         }
         }
     } else {
         materialized_nullable();
+<<<<<<< HEAD
         if (_data_column->append_strings(strs)) {
             null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+        if (_data_column->append_strings(data, size)) {
+            null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         }
         DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -180,20 +209,34 @@ bool AdaptiveNullableColumn::append_strings(const Buffer<Slice>& strs) {
     return true;
 }
 
+<<<<<<< HEAD
 bool AdaptiveNullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) {
     materialized_nullable();
     if (_data_column->append_strings_overflow(strs, max_length)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+bool AdaptiveNullableColumn::append_strings_overflow(const Slice* data, size_t size, size_t max_length) {
+    materialized_nullable();
+    if (_data_column->append_strings_overflow(data, size, max_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
     return false;
 }
 
+<<<<<<< HEAD
 bool AdaptiveNullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     materialized_nullable();
     if (_data_column->append_continuous_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+=======
+bool AdaptiveNullableColumn::append_continuous_strings(const Slice* data, size_t size) {
+    materialized_nullable();
+    if (_data_column->append_continuous_strings(data, size)) {
+        null_column_data().resize(_null_column->size() + size, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());

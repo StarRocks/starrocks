@@ -148,7 +148,11 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             }
             array_offsets->append(offset);
 
+<<<<<<< HEAD
             array_binary_column->append_continuous_strings(v);
+=======
+            array_binary_column->append_continuous_strings(v.data(), v.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             //row_nums * 5 is an estimated value, because the true value cannot be obtained for the time being here
             array_binary_column->reserve(row_nums * 5, haystack_columns->get_bytes().size());

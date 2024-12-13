@@ -31,7 +31,11 @@ public class VarTracer {
         allVars.put(name, v);
     }
 
+<<<<<<< HEAD
     public void count(long time, String name, int value) {
+=======
+    public void count(long time, String name, long value) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (allVars.containsKey(name)) {
             allVars.get(name).add(value);
             return;
@@ -56,13 +60,21 @@ public class VarTracer {
         }
     }
 
+<<<<<<< HEAD
     private static class CounterVar extends Var<Integer> {
+=======
+    private static class CounterVar extends Var<Long> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public CounterVar(long timePoints, String name) {
             super(timePoints, name);
         }
 
         @Override
+<<<<<<< HEAD
         public void add(int var) {
+=======
+        public void add(long var) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             value += var;
         }
     }

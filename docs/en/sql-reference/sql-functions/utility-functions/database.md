@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # database
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the name of the current database. If no database is selected, an empty value is returned.
 

@@ -18,19 +18,29 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.RandomDistributionInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.Utils;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
+=======
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -40,6 +50,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.EquivalentShuttleContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.IRewriteEquivalent;
 import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
@@ -55,12 +69,19 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil.findArithmeticFunction;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.TO_REWRITE_ROLLUP_FUNCTION_MAP;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.genRollupProject;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFunctionRollupUtils.getRollupFunctionName;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.addExtraPredicate;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
+=======
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.addExtraPredicate;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.genRollupProject;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils.getRollupAggregateFunc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * SPJG materialized view rewriter, based on
@@ -68,7 +89,11 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
  * <p>
  * This rewriter is for aggregated query rewrite
  */
+<<<<<<< HEAD
 public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter {
+=======
+public final class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(AggregatedMaterializedViewRewriter.class);
 
     public AggregatedMaterializedViewRewriter(MvRewriteContext mvRewriteContext) {
@@ -126,7 +151,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (isRollup) {
             boolean mvHasDistinctAggFunc = mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct()
                             && !callOp.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG));
+<<<<<<< HEAD
             boolean queryHasDistinctAggFunc = 
+=======
+            boolean queryHasDistinctAggFunc =
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     queryAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct());
             if (mvHasDistinctAggFunc && queryHasDistinctAggFunc) {
                 OptimizerTraceUtil.logMVRewriteFailReason(
@@ -203,14 +232,23 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
 
         Map<ColumnRefOperator, ScalarOperator> newQueryProjection = Maps.newHashMap();
+<<<<<<< HEAD
         AggregateFunctionRewriter aggregateFunctionRewriter = new AggregateFunctionRewriter(rewriteContext.getQueryRefFactory(),
                 oldAggregations);
+=======
+        AggregateFunctionRewriter aggregateFunctionRewriter =
+                new AggregateFunctionRewriter(queryExprToMvExprRewriter, rewriteContext.getQueryRefFactory(), oldAggregations);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColumnRefSet originalColumnSet = new ColumnRefSet(rewriteContext.getQueryColumnSet());
 
         // rewrite group by + aggregate functions
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
             ScalarOperator scalarOp = entry.getValue();
+<<<<<<< HEAD
             ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, entry.getValue(),
+=======
+            ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, scalarOp,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
                         originalColumnSet, aggregateFunctionRewriter);
             // for non-rollup rewrite, the rewritten result should not contain aggregate functions.
@@ -289,6 +327,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
         equationRewriter.setAggregateFunctionRewriter(aggregateFunctionRewriter);
         equationRewriter.setOutputMapping(columnMapping);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Pair<ScalarOperator, EquivalentShuttleContext> result =
                 equationRewriter.replaceExprWithEquivalent(rewriteContext, scalarOp);
         ScalarOperator rewritten = result.first;
@@ -296,7 +338,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             return null;
         }
         if (!isAllExprReplaced(rewritten, originalColumnSet)) {
+<<<<<<< HEAD
             // it means there is some column that can not be rewritten by outputs of mv
+=======
+            // it means there is some column that cannot be rewritten by outputs of mv
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return null;
         }
         return rewritten;
@@ -379,6 +425,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
 
+<<<<<<< HEAD
     private Map<ColumnRefOperator, ScalarOperator> rewriteAggregations(RewriteContext rewriteContext,
                                                                        ColumnRewriter columnRewriter,
                                                                        Map<ColumnRefOperator, CallOperator> aggregations,
@@ -391,6 +438,22 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             } else {
                 ScalarOperator rewriteAgg = rewriteContext.getQueryColumnRefRewriter().rewrite(entry.getValue().clone());
                 rewriteAggregations.put(entry.getKey(), columnRewriter.rewriteByQueryEc(rewriteAgg));
+=======
+    private Map<ColumnRefOperator, CallOperator> rewriteAggregations(RewriteContext rewriteContext,
+                                                                       ColumnRewriter columnRewriter,
+                                                                       Map<ColumnRefOperator, CallOperator> aggregations,
+                                                                       boolean rewriteViewToQuery) {
+        Map<ColumnRefOperator, CallOperator> rewriteAggregations = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
+            if (rewriteViewToQuery) {
+                ScalarOperator rewriteAgg = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue().clone());
+                ScalarOperator rewritten = columnRewriter.rewriteViewToQueryWithQueryEc(rewriteAgg);
+                rewriteAggregations.put(entry.getKey(), (CallOperator) rewritten);
+            } else {
+                ScalarOperator rewriteAgg = rewriteContext.getQueryColumnRefRewriter().rewrite(entry.getValue().clone());
+                ScalarOperator rewritten = columnRewriter.rewriteByQueryEc(rewriteAgg);
+                rewriteAggregations.put(entry.getKey(), (CallOperator) rewritten);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return rewriteAggregations;
@@ -410,9 +473,14 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefToScalarMap = Maps.newHashMap();
 
         // rewrite group by keys by using mv
+<<<<<<< HEAD
         List<ScalarOperator> newQueryGroupKeys = rewriteGroupKeys(
                 rewriteContext, queryGroupingKeys, equationRewriter, rewriteContext.getOutputMapping(),
                 new ColumnRefSet(rewriteContext.getQueryColumnSet()));
+=======
+        List<ScalarOperator> newQueryGroupKeys = rewriteGroupKeys(rewriteContext, queryGroupingKeys, equationRewriter,
+                rewriteContext.getOutputMapping(), new ColumnRefSet(rewriteContext.getQueryColumnSet()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (newQueryGroupKeys == null) {
             OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                     "Rewrite rollup aggregate failed, cannot rewrite group by keys: {}",
@@ -425,11 +493,16 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             queryColumnRefToScalarMap.put(queryGroupKeys.get(i), newQueryGroupKeys.get(i));
         }
 
+<<<<<<< HEAD
         // rewrite agg func to be better for rollup.
         LogicalAggregationOperator rewrittenQueryAggOp =
                 rewriteAggregationOperatorByRules(rewriteContext.getQueryRefFactory(), queryAggOp);
         Map<ColumnRefOperator, CallOperator> rewrittenAggregations = rewrittenQueryAggOp.getAggregations();
         Map<ColumnRefOperator, ScalarOperator> queryAggregation = rewriteAggregations(
+=======
+        Map<ColumnRefOperator, CallOperator> rewrittenAggregations = queryAggOp.getAggregations();
+        Map<ColumnRefOperator, CallOperator> queryAggregation = rewriteAggregations(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 rewriteContext, columnRewriter, rewrittenAggregations, false);
 
         // generate new agg exprs(rollup functions)
@@ -444,7 +517,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             return null;
         }
 
+<<<<<<< HEAD
         return createNewAggregate(rewriteContext, rewrittenQueryAggOp, newAggregations,
+=======
+        return createNewAggregate(rewriteContext, queryAggOp, newAggregations,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 queryColumnRefToScalarMap, mvOptExpr, newProjection);
     }
 
@@ -665,11 +742,14 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         "Rewrite group by key failed: {}", key.toString());
                 return null;
             }
+<<<<<<< HEAD
             if (key.isVariable() && key == newGroupByKey) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite group by key failed: {}", key.toString());
                 return null;
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (newGroupByKey == null || !isAllExprReplaced(newGroupByKey, queryColumnSet)) {
                 // it means there is some column that can not be rewritten by outputs of mv
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
@@ -691,9 +771,14 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
      * @param newProjection new projection mapping: col ref -> scalar op which is used for projection of new rewritten aggregate
      * @param hasGroupByKeys whether query has group by keys or not
      * @param context rewrite context
+<<<<<<< HEAD
      * @return
      */
     private Map<ColumnRefOperator, CallOperator> rewriteAggregates(Map<ColumnRefOperator, ScalarOperator> aggregates,
+=======
+     */
+    private Map<ColumnRefOperator, CallOperator> rewriteAggregates(Map<ColumnRefOperator, CallOperator> aggregates,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                                    EquationRewriter equationRewriter,
                                                                    Map<ColumnRefOperator, ColumnRefOperator> mapping,
                                                                    ColumnRefSet queryColumnSet,
@@ -703,6 +788,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                                                                    RewriteContext context) {
         final Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();
         equationRewriter.setOutputMapping(mapping);
+<<<<<<< HEAD
 
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : aggregates.entrySet()) {
             Preconditions.checkState(entry.getValue() instanceof CallOperator);
@@ -711,14 +797,36 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             // Aggregate must be CallOperator
             CallOperator newAggregate = getRollupAggregate(context, equationRewriter, queryColumnSet, aggCall);
             if (newAggregate == null) {
+=======
+        AggregateFunctionRewriter aggregateFunctionRewriter = new AggregateFunctionRewriter(equationRewriter,
+                context.getQueryRefFactory(), aggregates);
+        equationRewriter.setAggregateFunctionRewriter(aggregateFunctionRewriter);
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregates.entrySet()) {
+            CallOperator aggCall = entry.getValue();
+            // Aggregate must be CallOperator
+            Pair<CallOperator, EquivalentShuttleContext> rewritten = getRollupAggregate(context, equationRewriter,
+                    queryColumnSet, aggCall);
+            if (rewritten == null || rewritten.first == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite aggregate function failed, cannot get rollup function: {}",
                         aggCall.toString());
                 return null;
             }
+<<<<<<< HEAD
 
             ColumnRefOperator origColRef = entry.getKey();
             if (!(newAggregate.isAggregate())) {
+=======
+            CallOperator newAggregate = rewritten.first;
+            EquivalentShuttleContext eqContext = rewritten.second;
+
+            ColumnRefOperator origColRef = entry.getKey();
+            if (eqContext.isRewrittenByRewriter()) {
+                newAggregations.putAll(eqContext.getNewColumnRefToAggFuncMap());
+                aggColRefToAggMap.put(origColRef, newAggregate);
+            } else if (!newAggregate.isAggregate()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // If rewritten function is not an aggregation function, it could be like ScalarFunc(AggregateFunc(...))
                 // We need to decompose it into Projection function and Aggregation function
                 // E.g. count(distinct x) => array_length(array_unique_agg(x))
@@ -763,7 +871,12 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 // aggColRefToAggMap:  oldCol1 -> coalesce(newCol1, 0)
                 // It will generate new projections as below:
                 // newProjections: oldCol1 -> coalesce(newCol1, 0)
+<<<<<<< HEAD
                 ScalarOperator newProjectOp = genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
+=======
+                ScalarOperator newProjectOp = mvRewriteContext.isInAggregatePushDown() ?
+                        newAggColRef : genRollupProject(aggCall, newAggColRef, hasGroupByKeys);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 aggColRefToAggMap.put(origColRef, newProjectOp);
             }
         }
@@ -771,10 +884,17 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         return newAggregations;
     }
 
+<<<<<<< HEAD
     private CallOperator getRollupAggregate(RewriteContext rewriteContext,
                                             EquationRewriter equationRewriter,
                                             ColumnRefSet queryColumnSet,
                                             CallOperator aggCall) {
+=======
+    private Pair<CallOperator, EquivalentShuttleContext> getRollupAggregate(RewriteContext rewriteContext,
+                                                                            EquationRewriter equationRewriter,
+                                                                            ColumnRefSet queryColumnSet,
+                                                                            CallOperator aggCall) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Pair<ScalarOperator, EquivalentShuttleContext> result = equationRewriter.replaceExprWithRollup(rewriteContext, aggCall);
         ScalarOperator targetColumn = result.first;
         if (targetColumn == null || !isAllExprReplaced(targetColumn, queryColumnSet)) {
@@ -783,17 +903,30 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                     "Rewrite aggregate rollup {} failed with equivalent", aggCall.toString());
             return null;
         }
+<<<<<<< HEAD
 
         boolean isRewrittenByEquivalent = result.second.isRewrittenByEquivalent();
         if (isRewrittenByEquivalent) {
             Preconditions.checkState(targetColumn instanceof CallOperator);
             return (CallOperator) targetColumn;
+=======
+        EquivalentShuttleContext eqContext = result.second;
+
+        boolean isRewrittenByEquivalent = eqContext.isRewrittenByEquivalent() || eqContext.isRewrittenByRewriter();
+        if (isRewrittenByEquivalent) {
+            Preconditions.checkState(targetColumn instanceof CallOperator);
+            return Pair.create((CallOperator) targetColumn, eqContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             if (!targetColumn.isColumnRef()) {
                 if (targetColumn instanceof CallOperator
                         && AggregateFunctionRollupUtils.isNonCumulativeFunction(aggCall)
                         && equationRewriter.isColWithOnlyGroupByKeys(aggCall)) {
+<<<<<<< HEAD
                     return (CallOperator) targetColumn;
+=======
+                    return Pair.create((CallOperator) targetColumn, eqContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
                         "Rewrite aggregate rollup {} failed: only column-ref is supported after rewrite",
@@ -807,7 +940,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         aggCall.toString());
                 return null;
             }
+<<<<<<< HEAD
             return newAggregate;
+=======
+            return Pair.create(newAggregate, eqContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -849,6 +986,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         return rewrittens;
     }
+<<<<<<< HEAD
 
     /**
      * Return rollup aggregate of the input agg function.
@@ -931,4 +1069,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         return newAggOp;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -15,7 +15,10 @@ package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.KuduPartitionKey;
+<<<<<<< HEAD
 import com.starrocks.catalog.KuduTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 
@@ -23,12 +26,15 @@ import java.util.List;
 import java.util.Set;
 
 public class KuduPartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public String getDbName() {
         return ((KuduTable) table).getDbName();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean isSupportPCTRefresh() {
         return false;

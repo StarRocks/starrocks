@@ -42,7 +42,11 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.BrokerUtil;
@@ -364,7 +368,11 @@ public class BlobStorage implements Writable {
                 byte[] readData;
                 try {
                     readData = reader.read(readLen);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     lastErrMsg = String.format("failed to read. "
                                     + "current read offset: %d, read length: %d,"
                                     + " file size: %d, file: %s. msg: %s",
@@ -440,7 +448,11 @@ public class BlobStorage implements Writable {
         Status status = Status.OK;
         try {
             HdfsUtil.writeFile(content.getBytes(StandardCharsets.UTF_8), remoteFile, brokerDesc);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             status = new Status(ErrCode.BAD_CONNECTION, "write exception: " + e.getMessage());
         }
         return status;
@@ -593,7 +605,11 @@ public class BlobStorage implements Writable {
 
                 try {
                     writer.write(bb, bytesRead);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     lastErrMsg = String.format("failed to write. "
                                     + "current write offset: %d, write length: %d,"
                                     + " file length: %d, file: %s. encounter TException: %s",
@@ -660,7 +676,11 @@ public class BlobStorage implements Writable {
 
         try {
             HdfsUtil.rename(origFilePath, destFilePath, brokerDesc);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to rename " + origFilePath + " to " + destFilePath + ", msg: " + e.getMessage());
         }
@@ -706,7 +726,11 @@ public class BlobStorage implements Writable {
         try {
             HdfsUtil.deletePath(remotePath, this.brokerDesc);
             LOG.info("finished to delete remote path {}.", remotePath);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to delete remote path: " + remotePath + ". msg: " + e.getMessage());
         }
@@ -764,7 +788,11 @@ public class BlobStorage implements Writable {
                 result.add(file);
             }
             LOG.info("finished to list remote path {}. get files: {}", remotePath, result);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to list remote path: " + remotePath + ". msg: " + e.getMessage());
         }
@@ -816,7 +844,11 @@ public class BlobStorage implements Writable {
                 return new Status(ErrCode.NOT_FOUND, "remote path does not exist: " + remotePath);
             }
             return Status.OK;
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new Status(ErrCode.COMMON_ERROR,
                     "failed to check remote path exist: " + remotePath
                             + ". msg: " + e.getMessage());

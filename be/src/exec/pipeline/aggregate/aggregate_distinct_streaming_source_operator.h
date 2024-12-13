@@ -34,6 +34,7 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
@@ -42,6 +43,16 @@ public:
 
 private:
     [[nodiscard]] Status _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
+=======
+    Status set_finished(RuntimeState* state) override;
+
+    void close(RuntimeState* state) override;
+
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+private:
+    Status _output_chunk_from_hash_set(ChunkPtr* chunk, RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // It is used to perform aggregation algorithms shared by
     // AggregateDistinctStreamingSinkOperator. It is

@@ -45,6 +45,7 @@ public class AggregatePushDownTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPushDown() {
         runFileUnitTest("optimized-plan/agg-pushdown");
     }
@@ -54,11 +55,48 @@ public class AggregatePushDownTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregate("local");
         try {
             runFileUnitTest("optimized-plan/preagg-pushdown");
+=======
+    public void testPushDownDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
+        try {
+            runFileUnitTest("optimized-plan/agg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
+    }
+
+    @Test
+    public void testPushDownEnableOnBroadcastJoin() {
+        runFileUnitTest("optimized-plan/agg-pushdown-enable_on_broadcast_join");
+    }
+
+    @Test
+    public void testPushDownPreAggDisableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(false);
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            runFileUnitTest("optimized-plan/preagg-pushdown-disable_on_broadcast_join");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+            connectContext.getSessionVariable().setCboPushDownAggregateOnBroadcastJoin(true);
+        }
+    }
+
+    @Test
+    public void testPushDownPreAggEnableOnBroadcastJoin() {
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            runFileUnitTest("optimized-plan/preagg-pushdown-enable_on_broadcast_join");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             connectContext.getSessionVariable().setCboPushDownAggregate("global");
         }
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testPushDownDistinctAggBelowWindow()
             throws Exception {

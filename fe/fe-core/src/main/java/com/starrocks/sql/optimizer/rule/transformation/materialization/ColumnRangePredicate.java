@@ -65,6 +65,18 @@ public class ColumnRangePredicate extends RangePredicate {
 
     private TreeRangeSet<ConstantOperator> canonicalColumnRanges;
 
+<<<<<<< HEAD
+=======
+    public static ColumnRangePredicate FALSE = new ColumnRangePredicate(TreeRangeSet.create());
+
+    public ColumnRangePredicate(TreeRangeSet<ConstantOperator> columnRanges) {
+        this.columnRanges = columnRanges;
+        this.expression = null;
+        this.columnRef = null;
+        this.canonicalColumnRanges = columnRanges;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ColumnRangePredicate(ScalarOperator expression, TreeRangeSet<ConstantOperator> columnRanges) {
         this.expression = expression;
         List<ColumnRefOperator> columns = Utils.collect(expression, ColumnRefOperator.class);
@@ -94,6 +106,7 @@ public class ColumnRangePredicate extends RangePredicate {
     public static ColumnRangePredicate andRange(
             ColumnRangePredicate rangePredicate, ColumnRangePredicate otherRangePredicate) {
         List<Range<ConstantOperator>> ranges = new ArrayList<>();
+<<<<<<< HEAD
         for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
             if (otherRangePredicate.columnRanges.intersects(range)) {
                 for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
@@ -102,10 +115,30 @@ public class ColumnRangePredicate extends RangePredicate {
                         if (!intersection.isEmpty()) {
                             ranges.add(intersection);
                         }
+=======
+        boolean isConnected = false;
+        for (Range<ConstantOperator> range : rangePredicate.columnRanges.asRanges()) {
+            if (otherRangePredicate.columnRanges.intersects(range)) {
+                for (Range<ConstantOperator> otherRange : otherRangePredicate.columnRanges.asRanges()) {
+                    if (!range.isConnected(otherRange)) {
+                        continue;
+                    }
+                    Range<ConstantOperator> intersection = range.intersection(otherRange);
+                    if (!intersection.isEmpty()) {
+                        isConnected = true;
+                        ranges.add(intersection);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
         }
+<<<<<<< HEAD
+=======
+        // once there is a range that is not connected with the range, the result is null
+        if (!isConnected) {
+            return FALSE;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new ColumnRangePredicate(rangePredicate.getExpression(), TreeRangeSet.create(ranges));
     }
 

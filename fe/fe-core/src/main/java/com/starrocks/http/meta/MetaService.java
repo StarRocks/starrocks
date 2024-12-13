@@ -69,7 +69,11 @@ import java.nio.file.Path;
 public class MetaService {
     private static final Logger LOG = LogManager.getLogger(MetaService.class);
 
+<<<<<<< HEAD
     private static final int TIMEOUT_SECOND = 10;
+=======
+    public static final int DOWNLOAD_TIMEOUT_SECOND = 10;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static class ImageAction extends MetaBaseAction {
         private static final String VERSION = "version";
@@ -283,7 +287,11 @@ public class MetaService {
                 if (Files.exists(Path.of(realDir + "/" + filename))) {
                     LOG.info("image file : {} version: {} already exists, ignore", filename, imageFormatVersion);
                 } else {
+<<<<<<< HEAD
                     MetaHelper.downloadImageFile(url, TIMEOUT_SECOND * 1000, versionStr, dir);
+=======
+                    MetaHelper.downloadImageFile(url, DOWNLOAD_TIMEOUT_SECOND * 1000, versionStr, dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 writeResponse(request, response);
             } catch (FileNotFoundException e) {

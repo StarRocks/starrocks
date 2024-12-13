@@ -58,13 +58,22 @@ public:
         std::vector<starrocks::StorePath> paths;
         CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
         _test_dir = paths[0].path + "/lake";
+<<<<<<< HEAD
         _location_provider = std::make_unique<lake::FixedLocationProvider>(_test_dir);
+=======
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+<<<<<<< HEAD
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 16384);
+=======
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get());
 
         ASSERT_TRUE(_tablet_manager->create_tablet(get_create_tablet_req(_tablet_id, _version, _schema_hash)).ok());
@@ -209,7 +218,11 @@ public:
 protected:
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
+<<<<<<< HEAD
     std::unique_ptr<lake::LocationProvider> _location_provider;
+=======
+    std::shared_ptr<lake::LocationProvider> _location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
@@ -339,7 +352,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     txn_info.set_combined_txn_log(false);
     txn_info.set_txn_type(TXN_REPLICATION);
     txn_info.set_commit_time(0);
+<<<<<<< HEAD
     txn_info.set_force_publish(false);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
     auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span);
     EXPECT_TRUE(!status_or.ok()) << status_or.status();
@@ -392,7 +408,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal) {
     txn_info.set_txn_id(_transaction_id);
     txn_info.set_combined_txn_log(false);
     txn_info.set_commit_time(0);
+<<<<<<< HEAD
     txn_info.set_force_publish(false);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
     auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span);
     EXPECT_TRUE(status_or.ok()) << status_or.status();
@@ -459,7 +478,10 @@ TEST_P(LakeReplicationTxnManagerTest, test_run_normal_encrypted) {
     txn_info.set_txn_id(_transaction_id);
     txn_info.set_combined_txn_log(false);
     txn_info.set_commit_time(0);
+<<<<<<< HEAD
     txn_info.set_force_publish(false);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto txn_info_span = std::span<const TxnInfoPB>(&txn_info, 1);
     auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_info_span);
     EXPECT_TRUE(status_or.ok()) << status_or.status();

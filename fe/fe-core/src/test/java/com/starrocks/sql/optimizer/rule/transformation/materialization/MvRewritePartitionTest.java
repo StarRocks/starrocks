@@ -637,7 +637,10 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                             "start('%s') end('%s') with sync mode;", mvName, param.refreshStart, param.refreshEnd));
                     for (PCompensateExpect expect : param.expectPartitionPredicates) {
                         if (!Strings.isNullOrEmpty(expect.partitionPredicate)) {
+<<<<<<< HEAD
                             System.out.println(String.format("expect=%s", expect));
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             String query = String.format("select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
                                     "from table_with_day_partition a\n" +
                                     " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
@@ -705,7 +708,10 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                 )
         );
         for (PartitionCompensateParam param : params) {
+<<<<<<< HEAD
             System.out.println("start to execute: " + param);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
         connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
@@ -757,7 +763,10 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
                 )
         );
         for (PartitionCompensateParam param : params) {
+<<<<<<< HEAD
             System.out.println("start to execute: " + param);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             testRefreshAndRewriteWithMultiJoinMV(param);
         }
         connectContext.getSessionVariable().setEnableMaterializedViewRewritePartitionCompensate(true);

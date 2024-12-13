@@ -78,4 +78,12 @@ public class CreateTableAsSelectStmt extends StatementBase {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableAsSelectStatement(this, context);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public int getTimeout() {
+        return insertStmt.getTimeout();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

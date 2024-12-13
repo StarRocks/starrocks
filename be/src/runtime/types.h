@@ -363,6 +363,11 @@ private:
     void to_protobuf(PTypeDesc* proto_type) const;
 };
 
+<<<<<<< HEAD
+=======
+static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();
     return os;

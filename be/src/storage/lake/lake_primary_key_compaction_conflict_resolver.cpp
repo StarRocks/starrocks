@@ -17,6 +17,10 @@
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/lake_delvec_loader.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/rowset.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/lake/update_manager.h"
@@ -47,7 +51,14 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     ASSIGN_OR_RETURN(auto segment_iters, _rowset->get_each_segment_iterator(pkey_schema, false, &stats));
     RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset->num_segments());
     // init delvec loader
+<<<<<<< HEAD
     auto delvec_loader = std::make_unique<LakeDelvecLoader>(_update_manager, _builder, false /* fill cache */);
+=======
+    SegmentReadOptions seg_options;
+
+    auto delvec_loader =
+            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, seg_options.lake_io_opts);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();

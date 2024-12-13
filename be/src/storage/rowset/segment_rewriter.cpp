@@ -278,6 +278,7 @@ Status SegmentRewriter::rewrite_auto_increment_lake(
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status SegmentRewriter::rewrite(const std::string& src_path, const FileEncryptionInfo& einfo,
                                 const TabletSchemaCSPtr& tschema, std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
@@ -314,4 +315,6 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const FileEncryptio
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

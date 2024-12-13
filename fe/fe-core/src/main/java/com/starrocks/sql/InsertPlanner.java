@@ -17,6 +17,10 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Maps;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.DescriptorTable;
@@ -45,7 +49,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.planner.BlackHoleTableSink;
@@ -344,6 +352,12 @@ public class InsertPlanner {
                 if (insertStmt.isSystem() && insertStmt.isPartitionNotSpecifiedInOverwrite()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+<<<<<<< HEAD
+=======
+                } else if (insertStmt.isDynamicOverwrite()) {
+                    Preconditions.checkState(CollectionUtils.isEmpty(targetPartitionIds));
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else if (insertStmt.isSpecifyPartitionNames()) {
                     Preconditions.checkState(!CollectionUtils.isEmpty(targetPartitionIds));
                     enableAutomaticPartition = false;
@@ -384,6 +398,12 @@ public class InsertPlanner {
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }
+<<<<<<< HEAD
+=======
+                if (insertStmt.isDynamicOverwrite()) {
+                    ((OlapTableSink) dataSink).setDynamicOverwrite(true);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);
@@ -393,10 +413,16 @@ public class InsertPlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
+<<<<<<< HEAD
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(),
                             ConnectContext.get().getSessionVariable().getQueryTimeoutS());
                     olapTableSink.complete();
                 } catch (UserException e) {
+=======
+                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    olapTableSink.complete();
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new SemanticException(e.getMessage());
                 }
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
@@ -404,7 +430,12 @@ public class InsertPlanner {
             } else if (targetTable instanceof IcebergTable) {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
+<<<<<<< HEAD
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
+=======
+                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable(),
+                        insertStmt.getTargetBranch());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
@@ -591,8 +622,36 @@ public class InsertPlanner {
 
     private OptExprBuilder fillDefaultValue(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                             InsertStmt insertStatement, List<ColumnRefOperator> outputColumns) {
+<<<<<<< HEAD
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
+=======
+        // targetColumnNames is for check whether schema column is in target column list or not
+        Set<String> targetColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        targetColumnNames.addAll(
+                insertStatement.getTargetColumnNames() != null ? insertStatement.getTargetColumnNames() :
+                        outputBaseSchema.stream().map(Column::getName).collect(Collectors.toList()));
+
+        // sourceColumnMappedNames is the mapped name of source columns corresponding to the target columns.
+        // 1. if match by position, source mapped column name can be converted from target column name one by one.
+        // 2. if match by name, source mapped column name is same as the source column name.
+        Map<String, Integer> mappedColumnToSourceIdx = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        List<String> sourceColumnMappedNames = null;
+        if (insertStatement.isColumnMatchByPosition()) {
+            sourceColumnMappedNames = insertStatement.getTargetColumnNames() != null ? insertStatement.getTargetColumnNames() :
+                    outputBaseSchema.stream().map(Column::getName).collect(Collectors.toList());
+        } else {
+            Preconditions.checkState(insertStatement.isColumnMatchByName());
+            sourceColumnMappedNames = insertStatement.getQueryStatement().getQueryRelation().getColumnOutputNames();
+        }
+        Preconditions.checkState(sourceColumnMappedNames != null);
+        for (int columnIdx = 0; columnIdx < sourceColumnMappedNames.size(); ++columnIdx) {
+            mappedColumnToSourceIdx.put(sourceColumnMappedNames.get(columnIdx), columnIdx);
+        }
+
+        // generate columnRefMap (fill default value)
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (int columnIdx = 0; columnIdx < outputBaseSchema.size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
                 continue;
@@ -602,6 +661,7 @@ public class InsertPlanner {
             if (targetColumn.isGeneratedColumn()) {
                 continue;
             }
+<<<<<<< HEAD
             if (insertStatement.getTargetColumnNames() == null) {
                 outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
                 columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
@@ -636,6 +696,37 @@ public class InsertPlanner {
                     outputColumns.add(logicalPlan.getOutputColumn().get(idx));
                     columnRefMap.put(logicalPlan.getOutputColumn().get(idx), logicalPlan.getOutputColumn().get(idx));
                 }
+=======
+
+            String targetColumnName = targetColumn.getName();
+            if (mappedColumnToSourceIdx.containsKey(targetColumnName) && targetColumnNames.contains(targetColumnName)) {
+                ColumnRefOperator col = logicalPlan.getOutputColumn().get(mappedColumnToSourceIdx.get(targetColumnName));
+                outputColumns.add(col);
+                columnRefMap.put(col, col);
+            } else {
+                ScalarOperator scalarOperator;
+                Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+                if (defaultValueType == Column.DefaultValueType.NULL || targetColumn.isAutoIncrement()) {
+                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+                } else if (defaultValueType == Column.DefaultValueType.CONST) {
+                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
+                } else if (defaultValueType == Column.DefaultValueType.VARY) {
+                    if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
+                        scalarOperator = SqlToScalarOperatorTranslator.
+                                translate(targetColumn.getDefaultExpr().obtainExpr());
+                    } else {
+                        throw new SemanticException("Column:" + targetColumnName + " has unsupported default value:"
+                                + targetColumn.getDefaultExpr().getExpr());
+                    }
+                } else {
+                    throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
+                }
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));

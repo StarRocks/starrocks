@@ -33,11 +33,19 @@ const int STATISTIC_PARTITION_VERSION = 11;
 const int STATISTIC_EXTERNAL_VERSION = 5;
 const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 const int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
+<<<<<<< HEAD
+=======
+const int STATISTIC_EXTERNAL_QUERY_VERSION_V2 = 8;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
                                              starrocks::RuntimeProfile* parent_profile)
+<<<<<<< HEAD
         : _sinker(sinker), _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {}
+=======
+        : BufferControlResultWriter(sinker, parent_profile), _output_expr_ctxs(output_expr_ctxs) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 StatisticResultWriter::~StatisticResultWriter() = default;
 
@@ -50,6 +58,7 @@ Status StatisticResultWriter::init(RuntimeState* state) {
 }
 
 void StatisticResultWriter::_init_profile() {
+<<<<<<< HEAD
     _total_timer = ADD_TIMER(_parent_profile, "TotalSendTime");
     _serialize_timer = ADD_CHILD_TIMER(_parent_profile, "SerializeTime", "TotalSendTime");
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
@@ -57,6 +66,14 @@ void StatisticResultWriter::_init_profile() {
 
 Status StatisticResultWriter::append_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
+=======
+    BufferControlResultWriter::_init_profile();
+    _serialize_timer = ADD_TIMER(_parent_profile, "SerializeTime");
+}
+
+Status StatisticResultWriter::append_chunk(Chunk* chunk) {
+    SCOPED_TIMER(_append_chunk_timer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
         return process_status.status();
@@ -76,7 +93,11 @@ Status StatisticResultWriter::append_chunk(Chunk* chunk) {
 }
 
 StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(Chunk* chunk) {
+<<<<<<< HEAD
     SCOPED_TIMER(_total_timer);
+=======
+    SCOPED_TIMER(_append_chunk_timer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok()) {
@@ -88,6 +109,7 @@ StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(Chunk* chunk
     return results;
 }
 
+<<<<<<< HEAD
 StatusOr<bool> StatisticResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     size_t num_rows = 0;
     for (auto& result : results) {
@@ -108,6 +130,8 @@ StatusOr<bool> StatisticResultWriter::try_add_batch(TFetchDataResultPtrs& result
     return status;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return nullptr;
@@ -164,6 +188,12 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_EXTERNAL_HISTOGRAM_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_statistic_histogram_external(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
+<<<<<<< HEAD
+=======
+    } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V2) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v2(version, result_columns, chunk, result.get()),
+                                  "Fill table statistic data failed");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return result;
 }
@@ -517,8 +547,49 @@ Status StatisticResultWriter::_fill_full_statistic_query_external(int version, c
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status StatisticResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);
+=======
+Status StatisticResultWriter::_fill_full_statistic_query_external_v2(int version, const Columns& columns,
+                                                                     const Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 9);
+
+    auto columnName = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[2]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto countDistincts = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[5]);
+    auto maxColumn = ColumnViewer<TYPE_VARCHAR>(columns[6]);
+    auto minColumn = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto updateTime = ColumnViewer<TYPE_DATETIME>(columns[8]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_columnName(columnName.value(i).to_string());
+        data_list[i].__set_rowCount(rowCounts.value(i));
+        data_list[i].__set_dataSize(dataSizes.value(i));
+        data_list[i].__set_countDistinct(countDistincts.value(i));
+        data_list[i].__set_nullCount(nullCounts.value(i));
+        data_list[i].__set_max(maxColumn.value(i).to_string());
+        data_list[i].__set_min(minColumn.value(i).to_string());
+        data_list[i].__set_updateTime(updateTime.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 

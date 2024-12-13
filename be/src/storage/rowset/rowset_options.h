@@ -41,6 +41,11 @@ class DeletePredicates;
 class ChunkPredicate;
 struct RowidRangeOption;
 struct ShortKeyRangesOption;
+<<<<<<< HEAD
+=======
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class RowsetReadOptions {
     using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -54,7 +59,11 @@ public:
     std::vector<SeekRange> ranges;
 
     PredicateTree pred_tree;
+<<<<<<< HEAD
     std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+=======
+    PredicateTree pred_tree_for_zone_map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // whether rowset should return rows in sorted order.
     bool sorted = true;
@@ -88,6 +97,15 @@ public:
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;
     bool has_preaggregation = true;
+<<<<<<< HEAD
+=======
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
+
+    TTableSampleOptions sample_options;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

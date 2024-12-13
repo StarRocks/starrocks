@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ngram_search
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculate the ngram similarity of the two strings.
 

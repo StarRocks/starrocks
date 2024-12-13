@@ -203,6 +203,7 @@ Status PlanFragmentExecutor::open() {
     }
 
     Status status = _open_internal_vectorized();
+<<<<<<< HEAD
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
         LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
                      << ", status=" << status;
@@ -210,6 +211,11 @@ Status PlanFragmentExecutor::open() {
         // fetch results (e.g. insert) may not receive the message directly and can
         // only retrieve the log.
         _runtime_state->log_error(status.message());
+=======
+    if (!status.ok() && !status.is_cancelled()) {
+        LOG(WARNING) << "Fail to open fragment, instance_id=" << print_id(_runtime_state->fragment_instance_id())
+                     << ", status=" << status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     update_status(status);
@@ -515,6 +521,7 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
     if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
         return Status::OK();
     }
+<<<<<<< HEAD
     _channel_stream_load = true;
     for (; iter != scan_range_map.end(); iter++) {
         for (const auto& scan_range : iter->second) {
@@ -539,6 +546,9 @@ Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentPa
         }
     }
     return Status::OK();
+=======
+    return Status::NotSupported("Non-pipeline engine does not support channel stream load");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

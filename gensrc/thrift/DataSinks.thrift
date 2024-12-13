@@ -67,7 +67,12 @@ enum TResultSinkType {
     VARIABLE,
     HTTP_PROTOCAL,
     METADATA_ICEBERG,
+<<<<<<< HEAD
     CUSTOMIZED
+=======
+    CUSTOMIZED,
+    ARROW_FLIGHT_PROTOCAL
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 enum TResultSinkFormatType {
@@ -233,6 +238,10 @@ struct TOlapTableSink {
     29: optional bool write_txn_log
     30: optional bool ignore_out_of_partition
     31: optional binary encryption_meta;
+<<<<<<< HEAD
+=======
+    32: optional bool dynamic_overwrite
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TSchemaTableSink {

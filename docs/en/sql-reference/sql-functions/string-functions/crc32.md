@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # crc32
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the 32-bit cyclic redundancy check (CRC) value of a string. If the input is NULL, NULL is returned.
 

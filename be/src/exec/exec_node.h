@@ -96,7 +96,11 @@ public:
     /// Initializes this object from the thrift tnode desc. The subclass should
     /// do any initialization that can fail in Init() rather than the ctor.
     /// If overridden in subclass, must first call superclass's Init().
+<<<<<<< HEAD
     [[nodiscard]] virtual Status init(const TPlanNode& tnode, RuntimeState* state);
+=======
+    virtual Status init(const TPlanNode& tnode, RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Sets up internal structures, etc., without doing any actual work.
     // Must be called prior to open(). Will only be called once in this
@@ -105,11 +109,16 @@ public:
     // in prepare().  Retrieving the jit compiled function pointer must happen in
     // open().
     // If overridden in subclass, must first call superclass's prepare().
+<<<<<<< HEAD
     [[nodiscard]] virtual Status prepare(RuntimeState* state);
+=======
+    virtual Status prepare(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Performs any preparatory work prior to calling get_next().
     // Can be called repeatedly (after calls to close()).
     // Caller must not be holding any io buffers. This will cause deadlock.
+<<<<<<< HEAD
     [[nodiscard]] virtual Status open(RuntimeState* state);
 
     [[nodiscard]] virtual Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
@@ -119,6 +128,16 @@ public:
     [[nodiscard]] static Status get_next_big_chunk(
             RuntimeState*, ChunkPtr*, bool*, ChunkPtr& pre_output_chunk,
             const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next);
+=======
+    virtual Status open(RuntimeState* state);
+
+    virtual Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+
+    // Used by sub nodes to get big chunk.
+    // specific_get_next is the subclass's implementation to get datas.
+    static Status get_next_big_chunk(RuntimeState*, ChunkPtr*, bool*, ChunkPtr& pre_output_chunk,
+                                     const std::function<Status(RuntimeState*, ChunkPtr*, bool*)>& specific_get_next);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Resets the stream of row batches to be retrieved by subsequent GetNext() calls.
     // Clears all internal state, returning this node to the state it was in after calling
@@ -133,12 +152,20 @@ public:
     // implementation calls Reset() on children.
     // Note that this function may be called many times (proportional to the input data),
     // so should be fast.
+<<<<<<< HEAD
     [[nodiscard]] virtual Status reset(RuntimeState* state);
+=======
+    virtual Status reset(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // This should be called before close() and after get_next(), it is responsible for
     // collecting statistics sent with row batch, it can't be called when prepare() returns
     // error.
+<<<<<<< HEAD
     [[nodiscard]] virtual Status collect_query_statistics(QueryStatistics* statistics);
+=======
+    virtual Status collect_query_statistics(QueryStatistics* statistics);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // close() will get called for every exec node, regardless of what else is called and
     // the status of these calls (i.e. prepare() may never have been called, or
@@ -155,8 +182,13 @@ public:
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.
     // Returns error if 'plan' is corrupted, otherwise success.
+<<<<<<< HEAD
     [[nodiscard]] static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan,
                                             const DescriptorTbl& descs, ExecNode** root);
+=======
+    static Status create_tree(RuntimeState* state, ObjectPool* pool, const TPlan& plan, const DescriptorTbl& descs,
+                              ExecNode** root);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Collect all nodes of given 'node_type' that are part of this subtree, and return in
     // 'nodes'.
@@ -168,6 +200,7 @@ public:
     // evaluate exprs over chunk to get a filter
     // if filter_ptr is not null, save filter to filter_ptr.
     // then running filter on chunk.
+<<<<<<< HEAD
     [[nodiscard]] static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
                                                FilterPtr* filter_ptr = nullptr, bool apply_filter = true);
     [[nodiscard]] static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs,
@@ -176,6 +209,16 @@ public:
     static void eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
 
     [[nodiscard]] Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
+=======
+    static Status eval_conjuncts(const std::vector<ExprContext*>& ctxs, Chunk* chunk, FilterPtr* filter_ptr = nullptr,
+                                 bool apply_filter = true);
+    static StatusOr<size_t> eval_conjuncts_into_filter(const std::vector<ExprContext*>& ctxs, Chunk* chunk,
+                                                       Filter* filter);
+
+    static void eval_filter_null_values(Chunk* chunk, const std::vector<SlotId>& filter_null_value_columns);
+
+    Status init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc);
     void eval_join_runtime_filters(Chunk* chunk);
     void eval_join_runtime_filters(ChunkPtr* chunk);
@@ -249,8 +292,13 @@ public:
 
     const std::vector<ExecNode*>& children() const { return _children; }
 
+<<<<<<< HEAD
     [[nodiscard]] static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
                                                        const DescriptorTbl& descs, ExecNode** node);
+=======
+    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
+                                         const DescriptorTbl& descs, ExecNode** node);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     friend class DataSink;
@@ -302,9 +350,14 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
+<<<<<<< HEAD
     [[nodiscard]] static Status create_tree_helper(RuntimeState* state, ObjectPool* pool,
                                                    const std::vector<TPlanNode>& tnodes, const DescriptorTbl& descs,
                                                    ExecNode* parent, int* node_idx, ExecNode** root);
+=======
+    static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
+                                     const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual bool is_scan_node() const { return false; }
 
@@ -315,7 +368,11 @@ protected:
 
     // Executes _debug_action if phase matches _debug_phase.
     // 'phase' must not be INVALID.
+<<<<<<< HEAD
     [[nodiscard]] Status exec_debug_action(TExecNodePhase::type phase);
+=======
+    Status exec_debug_action(TExecNodePhase::type phase);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     // TODO: delete this function if removed tupleId

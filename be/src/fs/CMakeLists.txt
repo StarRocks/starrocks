@@ -28,10 +28,23 @@ set(EXEC_FILES
     fs_s3.cpp
     hdfs/fs_hdfs.cpp
     hdfs/hdfs_fs_cache.cpp
+<<<<<<< HEAD
     fs_util.cpp
     fs_starlet.cpp
     )
 
+=======
+    s3/poco_http_client_factory.cpp
+    s3/poco_http_client.cpp
+    s3/poco_common.cpp
+    fs_util.cpp
+    )
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND EXEC_FILES fs_starlet.cpp)
+endif()
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 add_library(FileSystem STATIC
     ${EXEC_FILES}
 )

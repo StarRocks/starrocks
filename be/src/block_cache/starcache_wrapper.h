@@ -56,10 +56,20 @@ public:
 
     DataCacheEngineType engine_type() override { return DataCacheEngineType::STARCACHE; }
 
+<<<<<<< HEAD
 private:
     std::unique_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
     bool _enable_tiered_cache = false;
+=======
+    std::shared_ptr<starcache::StarCache> starcache_instance() override { return _cache; }
+
+private:
+    std::shared_ptr<starcache::StarCache> _cache;
+    std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
+    bool _enable_tiered_cache = false;
+    bool _enable_datacache_persistence = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // In order to split the starcache library to a separate registry for other users such as the cloud team,

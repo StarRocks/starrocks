@@ -22,6 +22,10 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -56,11 +60,24 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
+<<<<<<< HEAD
     private PhysicalPropertySet outputProperty;
+=======
+
+    // the actual output property of this expression
+    private PhysicalPropertySet outputProperty;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private UKFKConstraints constraints;
 
     private Boolean isShortCircuit = false;
 
+<<<<<<< HEAD
+=======
+    // the flag if its parent has required data distribution property for this expression
+    private boolean existRequiredDistribution = true;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private OptExpression() {
     }
 
@@ -145,6 +162,13 @@ public class OptExpression {
         return op.getRowOutputInfo(inputs);
     }
 
+<<<<<<< HEAD
+=======
+    public DomainProperty getDomainProperty() {
+        return op.getDomainProperty(inputs);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void clearStatsAndInitOutputInfo() {
         for (OptExpression optExpression : inputs) {
             optExpression.clearStatsAndInitOutputInfo();
@@ -241,6 +265,17 @@ public class OptExpression {
         return debugString("", "", limitLine);
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isExistRequiredDistribution() {
+        return existRequiredDistribution;
+    }
+
+    public void setExistRequiredDistribution(boolean existRequiredDistribution) {
+        this.existRequiredDistribution = existRequiredDistribution;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private String debugString(String headlinePrefix, String detailPrefix, int limitLine) {
         StringBuilder sb = new StringBuilder();
         sb.append(headlinePrefix).append(op.accept(new DebugOperatorTracer(), null));
@@ -248,8 +283,11 @@ public class OptExpression {
         if (limitLine <= 0 || inputs.isEmpty()) {
             return sb.toString();
         }
+<<<<<<< HEAD
 
         sb.append('\n');
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
@@ -276,6 +314,10 @@ public class OptExpression {
             optExpression.groupExpression = other.groupExpression;
             optExpression.requiredProperties = other.requiredProperties;
             optExpression.mvOperatorProperty = other.mvOperatorProperty;
+<<<<<<< HEAD
+=======
+            optExpression.outputProperty = other.outputProperty;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
@@ -304,6 +346,14 @@ public class OptExpression {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder setRequiredProperties(List<PhysicalPropertySet> requiredProperties) {
+            optExpression.requiredProperties = requiredProperties;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public OptExpression build() {
             OptExpression tmp = optExpression;
             optExpression = null;

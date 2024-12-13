@@ -17,6 +17,12 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -27,9 +33,12 @@ import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -63,7 +72,11 @@ public class DropStmtAnalyzer {
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(context, statement.getTableNameObject());
+=======
+            statement.getTableNameObject().normalization(context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // check catalog
             String catalogName = statement.getCatalogName();
@@ -116,7 +129,11 @@ public class DropStmtAnalyzer {
         @Override
         public Void visitDropTemporaryTableStatement(DropTemporaryTableStmt statement, ConnectContext context) {
             statement.setSessionId(context.getSessionId());
+<<<<<<< HEAD
             MetaUtils.normalizationTableName(context, statement.getTableNameObject());
+=======
+            statement.getTableNameObject().normalization(context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // check catalog
             String catalogName = statement.getCatalogName();
@@ -166,7 +183,11 @@ public class DropStmtAnalyzer {
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), dbName);
             } else if (dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(SysDb.DATABASE_NAME.toLowerCase());
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(SysDb.DATABASE_NAME.toLowerCase());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (db.getId() == SystemId.SYS_DB_ID) {
                     AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(),
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -197,7 +218,11 @@ public class DropStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                 }
             } else {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(functionName.getDb());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (db != null) {
                     func = db.getFunction(statement.getFunctionSearchDesc());
                     if (func == null) {

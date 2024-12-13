@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # from_days
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns a date from 0000-01-01.
 

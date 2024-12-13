@@ -62,8 +62,12 @@ public class TablePlus {
         printer.add("CREATE TABLE IF NOT EXISTS").spaces(1).add(table.getName()).add("(").newLine();
         List<Column> columns = table.getFullSchema();
         List<String> columnDefinitions = columns.stream()
+<<<<<<< HEAD
                 .map(column -> column.toSqlWithoutAggregateTypeName(table.getIdToColumn()))
                 .collect(Collectors.toList());
+=======
+                .map(col -> col.toSqlWithoutAggregateTypeName(table.getIdToColumn())).collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         printer.indentEnclose(() -> {
             printer.addItemsWithDelNl(",", columnDefinitions);
         });

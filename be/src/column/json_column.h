@@ -101,7 +101,11 @@ public:
     void swap_column(Column& rhs) override;
     void reset_column() override;
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override;
+=======
+    Status capacity_limit_reached() const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void check_or_die() const override;
 
     // support flat json on storage

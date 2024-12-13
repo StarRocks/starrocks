@@ -88,7 +88,11 @@ public interface MVRepairHandler {
         }
 
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
+<<<<<<< HEAD
             Table table = db.getTable(tableCommitInfo.getTableId());
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null || !(table instanceof OlapTable) || table.getRelatedMaterializedViews().isEmpty()) {
                 continue;
             }
@@ -98,10 +102,17 @@ public interface MVRepairHandler {
             List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(partitionCommitInfos.size());
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.READ);
             try {
                 for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
+=======
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
+                for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Partition partition = olapTable.getPartition(partitionId);
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;
@@ -115,7 +126,11 @@ public interface MVRepairHandler {
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockTableWithIntensiveDbLock(db, table, LockType.READ);
+=======
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (partitionRepairInfos.isEmpty()) {

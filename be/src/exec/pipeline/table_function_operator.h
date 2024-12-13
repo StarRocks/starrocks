@@ -30,7 +30,11 @@ public:
 
     ~TableFunctionOperator() override = default;
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare(RuntimeState* state) override;
+=======
+    Status prepare(RuntimeState* state) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void close(RuntimeState* state) override;
 
@@ -40,6 +44,7 @@ public:
 
     bool is_finished() const override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status set_finishing(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -51,6 +56,19 @@ public:
 private:
     ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
     [[nodiscard]] Status _process_table_function(RuntimeState* state);
+=======
+    Status set_finishing(RuntimeState* state) override;
+
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+
+private:
+    ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
+    Status _process_table_function(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_column_size);
 
     const TPlanNode& _tnode;

@@ -196,12 +196,17 @@ bool FunctionContext::add_warning(const char* warning_msg) {
     std::stringstream ss;
     ss << "UDF WARNING: " << warning_msg;
 
+<<<<<<< HEAD
     if (_state != nullptr) {
         return _state->log_error(ss.str());
     } else {
         std::cerr << ss.str() << std::endl;
         return true;
     }
+=======
+    std::cerr << ss.str() << std::endl;
+    return true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {

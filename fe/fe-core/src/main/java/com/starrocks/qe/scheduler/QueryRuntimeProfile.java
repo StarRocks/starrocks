@@ -35,6 +35,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+<<<<<<< HEAD
+=======
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TLoadDataCacheMetrics;
@@ -258,6 +262,16 @@ public class QueryRuntimeProfile {
     }
 
     public boolean addListener(Consumer<Boolean> task) {
+<<<<<<< HEAD
+=======
+        if (connectContext instanceof ArrowFlightSqlConnectContext) {
+            profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
+                task.accept(true);
+            }));
+            return true;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (EXECUTOR.getQueue().remainingCapacity() <= 0) {
             return false;
         }

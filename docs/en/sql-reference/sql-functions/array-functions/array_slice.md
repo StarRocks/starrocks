@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_slice
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns a slice of an array. This function intercepts `length` elements from `input` from the position specified by `offset`.
 

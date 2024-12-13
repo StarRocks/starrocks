@@ -267,6 +267,11 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
+<<<<<<< HEAD
+=======
+    virtual void update_exec_stats(RuntimeState* state);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -403,6 +408,12 @@ public:
     // Whether it has any runtime filter built by TopN node.
     bool has_topn_filter() const;
 
+<<<<<<< HEAD
+=======
+    // try to get runtime filter from cache
+    void acquire_runtime_filter(RuntimeState* state);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
     void _prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,

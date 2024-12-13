@@ -120,7 +120,17 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     public void testFunctionDerived() throws Exception {
         String sql = "select * from t0 join t1 on v1 = v4 where all_match(x -> x > 1, [v1]) and v1 > 2";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "PREDICATES: all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4])), 4: v4 > 2");
+=======
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 > 2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select * from t0 join t1 on v1 <=> v4 where all_match(x -> x > 1, [v1]) and v1 > 2";
         plan = getFragmentPlan(sql);
@@ -128,6 +138,16 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
 
         sql = "select * from t0 join t1 on v1 = v4 join t2 on v4 = v7 where all_match(x -> x > 1, [v1]) and v7 > 2";
         plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "PREDICATES: 4: v4 > 2, all_match(array_map(<slot 10> -> <slot 10> > 1, [4: v4]))");
+=======
+        assertContains(plan, "  4:SELECT\n" +
+                "  |  predicates: all_match(array_map(<slot 10> -> <slot 10> > 1, [4: v4]))\n" +
+                "  |  \n" +
+                "  3:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 > 2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

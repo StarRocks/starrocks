@@ -103,6 +103,11 @@ struct ResultFileOptions {
 };
 
 // write result to file
+<<<<<<< HEAD
+=======
+// used in no-pipeline or file_sink_operator
+// won't used in result_sink_operator
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class FileResultWriter final : public ResultWriter {
 public:
     FileResultWriter(const ResultFileOptions* file_option, const std::vector<ExprContext*>& output_expr_ctxs,

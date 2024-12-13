@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weeks_diff
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the week difference between two date expressions (*`expr1`* − *`expr2`*), accurate to the week.
 

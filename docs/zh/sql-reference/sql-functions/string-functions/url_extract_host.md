@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # url_extract_host
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从一个 URL 中截取 host 部分。
 

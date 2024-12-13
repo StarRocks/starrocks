@@ -49,6 +49,10 @@ public:
 
     static constexpr bool can_vectorized() { return true; }
 
+<<<<<<< HEAD
+=======
+    static constexpr bool support_bitmap_filter() { return false; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");
     }

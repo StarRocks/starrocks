@@ -61,6 +61,12 @@ under the License.
         <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
+<<<<<<< HEAD
+=======
+        <arrow.version>18.0.0</arrow.version>
+        <protobuf.version>3.25.1</protobuf.version>
+        <grpc.version>1.63.0</grpc.version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     </properties>
 
     <profiles>
@@ -343,6 +349,17 @@ under the License.
                 <version>1.9</version>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->
+            <dependency>
+                <groupId>com.baidu</groupId>
+                <artifactId>jprotobuf-precompile-plugin</artifactId>
+                <version>2.2.12</version>
+                <scope>provided</scope>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
@@ -426,6 +443,17 @@ under the License.
                 <version>4.1.100.Final</version>
             </dependency>
 
+<<<<<<< HEAD
+=======
+            <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-mapreduce/1.8.7 -->
+            <dependency>
+                <groupId>org.apache.orc</groupId>
+                <artifactId>orc-mapreduce</artifactId>
+                <version>1.8.7</version>
+                <scope>provided</scope>
+            </dependency>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
             <dependency>
                 <groupId>com.google.protobuf</groupId>
@@ -543,7 +571,10 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-sql_2.12</artifactId>
                 <version>${spark.version}</version>
+<<<<<<< HEAD
                 <scope>provided</scope>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-catalyst -->
@@ -551,7 +582,10 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-catalyst_2.12</artifactId>
                 <version>${spark.version}</version>
+<<<<<<< HEAD
                 <scope>provided</scope>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/io.trino.hive/hive-apache -->
@@ -856,6 +890,66 @@ under the License.
                 <artifactId>odps-sdk-table-api</artifactId>
                 <version>${odps.version}</version>
             </dependency>
+<<<<<<< HEAD
+=======
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-api</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty-shaded</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-protobuf</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-stub</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-core</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-vector</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-memory-netty</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>flight-sql</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>flight-core</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>flight-sql-jdbc-driver</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.arrow</groupId>
+                <artifactId>arrow-jdbc</artifactId>
+                <version>${arrow.version}</version>
+            </dependency>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->
             <dependency>

@@ -23,7 +23,11 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
+<<<<<<< HEAD
 import com.starrocks.connector.RemoteScanRangeLocations;
+=======
+import com.starrocks.connector.hive.HiveConnectorScanRangeSource;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.GlobalStateMgr;
@@ -55,14 +59,21 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * TODO: Dictionary pruning
  */
 public class HdfsScanNode extends ScanNode {
+<<<<<<< HEAD
     private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+=======
+    private HiveConnectorScanRangeSource scanRangeSource = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
+<<<<<<< HEAD
     private DescriptorTable descTbl;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         hiveTable = (HiveTable) desc.getTable();
@@ -86,8 +97,13 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(DescriptorTable descTbl) {
+<<<<<<< HEAD
         this.descTbl = descTbl;
         scanRangeLocations.setup(descTbl, hiveTable, scanNodePredicates);
+=======
+        this.scanRangeSource = new HiveConnectorScanRangeSource(descTbl, hiveTable, scanNodePredicates);
+        this.scanRangeSource.setup();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void setupCloudCredential() {
@@ -105,7 +121,19 @@ public class HdfsScanNode extends ScanNode {
 
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
+<<<<<<< HEAD
         return scanRangeLocations.getScanRangeLocations(descTbl, hiveTable, scanNodePredicates);
+=======
+        if (maxScanRangeLength == 0) {
+            return scanRangeSource.getAllOutputs();
+        }
+        return scanRangeSource.getOutputs((int) maxScanRangeLength);
+    }
+
+    @Override
+    public boolean hasMoreScanRanges() {
+        return scanRangeSource.hasMoreOutput();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -155,7 +183,12 @@ public class HdfsScanNode extends ScanNode {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
                     output.append(prefix)
+<<<<<<< HEAD
                             .append(String.format("Pruned type: %d [%s] <-> [%s]\n", slotDescriptor.getId().asInt(), slotDescriptor.getColumn().getName(), type));
+=======
+                            .append(String.format("Pruned type: %d [%s] <-> [%s]\n", slotDescriptor.getId().asInt(),
+                                    slotDescriptor.getColumn().getName(), type));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -164,11 +197,14 @@ public class HdfsScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocations.getScanRangeLocationsSize();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
@@ -242,7 +278,11 @@ public class HdfsScanNode extends ScanNode {
     }
 
     public static void setPartitionConjunctsToThrift(THdfsScanNode tHdfsScanNode, ScanNode scanNode,
+<<<<<<< HEAD
                                                             HDFSScanNodePredicates scanNodePredicates) {
+=======
+                                                     HDFSScanNodePredicates scanNodePredicates) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Expr> partitionConjuncts = scanNodePredicates.getPartitionConjuncts();
         String partitionSqlPredicate = scanNode.getExplainString(partitionConjuncts);
         for (Expr expr : partitionConjuncts) {

@@ -65,7 +65,11 @@ public class CTASAnalyzerTest {
         // create statistic
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createDb(dbStmt.getFullDbName());
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (DdlException e) {
             return;
         }
@@ -215,7 +219,11 @@ public class CTASAnalyzerTest {
         String sql = "create table t2 as select k1 as a,k2 as b from duplicate_table_with_null t2;";
 
         StatisticStorage storage = new CachedStatisticStorage();
+<<<<<<< HEAD
         Table table = ctx.getGlobalStateMgr().getDb("ctas")
+=======
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("duplicate_table_with_null");
         ColumnStatistic k1cs = new ColumnStatistic(1.5928416E9, 1.5982848E9,
                 1.5256461111280627E-4, 4.0, 64.0);
@@ -367,7 +375,11 @@ public class CTASAnalyzerTest {
     @Test
     public void testCTASReplicaNum() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+<<<<<<< HEAD
         Table table = ctx.getGlobalStateMgr().getDb("ctas")
+=======
+        Table table = ctx.getGlobalStateMgr().getLocalMetastore().getDb("ctas")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("duplicate_table_with_null");
         OlapTable olapTable = (OlapTable) table;
         olapTable.setReplicationNum((short) 3);

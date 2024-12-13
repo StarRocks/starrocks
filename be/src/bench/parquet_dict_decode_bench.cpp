@@ -41,17 +41,30 @@ static void BM_DictDecoder(benchmark::State& state) {
         for (int i = 0; i < kDictSize; i++) {
             dict_values.emplace_back(Slice(kAlphaNumber.data() + i, kDictLength));
         }
+<<<<<<< HEAD
         encoder.append((const uint8_t*)dict_values.data(), kDictSize);
+=======
+        (void)encoder.append((const uint8_t*)dict_values.data(), kDictSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Slice data = encoder.build();
 
         // create decoder
         PlainDecoder<Slice> decoder;
+<<<<<<< HEAD
         decoder.set_data(data);
         dict_decoder.set_dict(kTestChunkSize, kDictSize, &decoder);
 
         if (debug) {
             ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
             dict_decoder.get_dict_values(column.get());
+=======
+        (void)decoder.set_data(data);
+        (void)dict_decoder.set_dict(kTestChunkSize, kDictSize, &decoder);
+
+        if (debug) {
+            ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+            (void)dict_decoder.get_dict_values(column.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             std::cout << column->debug_string() << "\n";
         }
     }

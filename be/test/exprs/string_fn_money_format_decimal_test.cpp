@@ -17,7 +17,10 @@
 #include <random>
 
 #include "butil/time.h"
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 
@@ -30,8 +33,12 @@ template <LogicalType Type>
 void test_money_format_decimal(TestArray const& test_cases, int precision, int scale) {
     using ColumnType = RunTimeColumnType<Type>;
     using CppType = RunTimeCppType<Type>;
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::create_decimalv3_type(Type, precision, scale))};
+=======
+    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::create_decimalv3_type(Type, precision, scale)};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> ctx(
             FunctionContext::create_test_context(std::move(arg_types), FunctionContext::TypeDesc{}));
     Columns columns;

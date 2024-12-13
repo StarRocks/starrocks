@@ -30,6 +30,10 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     private EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc;
     private final boolean forceRefresh;
     private final boolean isSync;
+<<<<<<< HEAD
+=======
+    private final Integer priority;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -38,12 +42,20 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
 
     public RefreshMaterializedViewStatement(TableName mvName,
                                             EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
+<<<<<<< HEAD
                                             boolean forceRefresh, boolean isSync, NodePosition pos) {
+=======
+                                            boolean forceRefresh, boolean isSync, Integer priority, NodePosition pos) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(pos);
         this.mvName = mvName;
         this.partitionDesc = partitionDesc;
         this.forceRefresh = forceRefresh;
         this.isSync = isSync;
+<<<<<<< HEAD
+=======
+        this.priority = priority;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TableName getMvName() {
@@ -80,4 +92,11 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     public boolean isSync() {
         return isSync;
     }
+<<<<<<< HEAD
+=======
+
+    public Integer getPriority() {
+        return priority;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

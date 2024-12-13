@@ -72,6 +72,7 @@ public:
     ~FragmentMgr() override;
 
     // execute one plan fragment
+<<<<<<< HEAD
     [[nodiscard]] Status exec_plan_fragment(const TExecPlanFragmentParams& params);
 
     [[nodiscard]] Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
@@ -87,6 +88,23 @@ public:
     }
 
     [[nodiscard]] Status cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason);
+=======
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params);
+
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params, const FinishCallback& cb);
+
+    // TODO(zc): report this is over
+    Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
+                              const FinishCallback& cb);
+
+    void close();
+
+    Status cancel(const TUniqueId& fragment_id) {
+        return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
+    }
+
+    Status cancel(const TUniqueId& fragment_id, const PPlanFragmentCancelReason& reason);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
                                 const std::shared_ptr<const JoinRuntimeFilter>& shared_rf);
@@ -95,7 +113,11 @@ public:
 
     void debug(std::stringstream& ss) override;
 
+<<<<<<< HEAD
     [[nodiscard]] Status trigger_profile_report(const PTriggerProfileReportRequest* request);
+=======
+    Status trigger_profile_report(const PTriggerProfileReportRequest* request);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void report_fragments(const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids);
 
@@ -107,10 +129,15 @@ public:
     // input: TScanOpenParams fragment_instance_id
     // output: selected_columns, query_id parsed from params
     // execute external query, all query info are packed in TScanOpenParams
+<<<<<<< HEAD
     [[nodiscard]] Status exec_external_plan_fragment(const TScanOpenParams& params,
                                                      const TUniqueId& fragment_instance_id,
                                                      std::vector<TScanColumnDesc>* selected_columns,
                                                      TUniqueId* query_id);
+=======
+    Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
+                                       std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t running_fragment_count() const {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();

@@ -52,11 +52,20 @@ struct CacheOptions {
     bool enable_checksum = false;
     bool enable_direct_io = false;
     bool enable_tiered_cache = true;
+<<<<<<< HEAD
+=======
+    bool enable_datacache_persistence = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string engine;
     size_t max_concurrent_inserts = 0;
     size_t max_flying_memory_mb = 0;
     double scheduler_threads_per_cpu = 0;
     double skip_read_factor = 0;
+<<<<<<< HEAD
+=======
+    uint32_t inline_item_count_limit = 0;
+    std::string eviction_policy;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 struct WriteCacheOptions {
@@ -76,6 +85,16 @@ struct WriteCacheOptions {
     // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
     int32_t evict_probability = 100;
 
+<<<<<<< HEAD
+=======
+    // The base frequency for target cache.
+    // When using multiple segment lru, a higher frequency may cause the cache is written to warm segment directly.
+    // For the default cache options, that `lru_segment_freq_bits` is 0:
+    // * The default `frequency=0` indicates the cache will be written to cold segment.
+    // * A frequency value greater than 0 indicates writing this cache directly to the warm segment.
+    int8_t frequency = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     struct Stats {
         int64_t write_mem_bytes = 0;
         int64_t write_disk_bytes = 0;

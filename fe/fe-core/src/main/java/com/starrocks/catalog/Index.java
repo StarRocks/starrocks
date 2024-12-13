@@ -35,10 +35,15 @@
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.common.InvertedIndexParams.CommonIndexParamKey;
 import com.starrocks.common.InvertedIndexParams.IndexParamsKey;
 import com.starrocks.common.InvertedIndexParams.SearchParamsKey;
 import com.starrocks.common.NgramBfIndexParamsKey;
+=======
+import com.starrocks.catalog.IndexParams.IndexParamItem;
+import com.starrocks.catalog.IndexParams.IndexParamType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
@@ -53,7 +58,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Arrays;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -61,7 +69,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+<<<<<<< HEAD
 import java.util.Set;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 /**
@@ -263,6 +274,7 @@ public class Index implements Writable {
             Map<String, String> indexProperties = new HashMap<>();
             Map<String, String> searchProperties = new HashMap<>();
             Map<String, String> extraProperties = new HashMap<>();
+<<<<<<< HEAD
             Set<String> commonIndexParamKeySet;
             Set<String> indexIndexParamKeySet;
             Set<String> searchIndexParamKeySet;
@@ -289,21 +301,44 @@ public class Index implements Writable {
             }
 
             // only keep valid properties
+=======
+
+            IndexParams indexParams = IndexParams.getInstance();
+            Map<String, IndexParamItem> commonIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.COMMON);
+            Map<String, IndexParamItem> indexIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.INDEX);
+            Map<String, IndexParamItem> searchIndexParams = indexParams.getKeySetByIndexTypeAndParamType(
+                    indexType, IndexParamType.SEARCH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Entry<String, String> propEntry : properties.entrySet()) {
                 String key = propEntry.getKey();
                 String value = propEntry.getValue();
                 String upperKey = key.toUpperCase(Locale.ROOT);
+<<<<<<< HEAD
                 if (commonIndexParamKeySet.contains(upperKey)) {
                     commonProperties.put(key, value);
                 } else if (indexIndexParamKeySet.contains(upperKey)) {
                     indexProperties.put(key, value);
                 } else if (searchIndexParamKeySet.contains(upperKey)) {
                     searchProperties.put(key, value);
+=======
+                if (commonIndexParams.containsKey(upperKey)) {
+                    commonProperties.put(key, value);
+                    commonIndexParams.remove(upperKey);
+                } else if (indexIndexParams.containsKey(upperKey)) {
+                    indexProperties.put(key, value);
+                    indexIndexParams.remove(upperKey);
+                } else if (searchIndexParams.containsKey(upperKey)) {
+                    searchProperties.put(key, value);
+                    searchIndexParams.remove(upperKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     extraProperties.put(key, value);
                 }
             }
 
+<<<<<<< HEAD
             // Add default values for missing properties
             if (indexType == IndexType.GIN) {
                 Arrays.stream(CommonIndexParamKey.values())
@@ -319,6 +354,8 @@ public class Index implements Writable {
                         .forEach(k -> searchProperties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
             }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             tIndex.setCommon_properties(commonProperties);
             tIndex.setIndex_properties(indexProperties);
             tIndex.setSearch_properties(searchProperties);

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_diff
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算开始时间和结束时间相差几天 （`expr1` - `expr2`），结果精确到天。此函数与 [datediff](./datediff.md) 的区别是：
 

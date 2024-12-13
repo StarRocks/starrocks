@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cast
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 使用 CAST 函数，实现 JSON 类型数据与 SQL 类型间的相互转换。
 

@@ -198,7 +198,11 @@ public class BackendTest {
         back2.updateOnce(1, 1, 1);
         Assert.assertFalse(back1.equals(back2));
 
+<<<<<<< HEAD
         Assert.assertEquals("Backend [id=1, host=a, heartbeatPort=1, alive=true]", back1.toString());
+=======
+        Assert.assertEquals("Backend [id=1, host=a, heartbeatPort=1, alive=true, status=OK]", back1.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // 3. delete files
         dis.close();

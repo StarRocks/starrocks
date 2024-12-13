@@ -51,6 +51,7 @@ public class OperationType {
 
     public static final short OP_SAVE_NEXTID = 0;
 
+<<<<<<< HEAD
     @Deprecated
     //Added OP_CREATE_DB_V2 in version 3.1, can be removed in version 3.2
     public static final short OP_CREATE_DB = 1;
@@ -119,6 +120,22 @@ public class OperationType {
 
     @Deprecated
     public static final short OP_RESTORE_JOB = 117;
+=======
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_DB = 2;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_DB = 4;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_PARTITION = 13;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ERASE_PARTITION = 16;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_FINISH_CONSISTENCY_CHECK = 29;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final short OP_TRUNCATE_TABLE = 118;
 
@@ -130,6 +147,7 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_BATCH_MODIFY_PARTITION = 211;
 
+<<<<<<< HEAD
     // 20~29 120~129 220~229 ...
     @Deprecated
     public static final short OP_START_ROLLUP = 20;
@@ -175,12 +193,17 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_BATCH_ADD_ROLLUP = 123;
 
+=======
+    public static final short OP_ALTER_JOB_V2 = 121;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @IgnorableOnReplayFailed
     public static final short OP_BATCH_DROP_ROLLUP = 124;
 
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ALTER_JOB_V2 = 125;
 
+<<<<<<< HEAD
     // 30~39 130~139 230~239 ...
     // load job for only hadoop load
     @Deprecated
@@ -359,6 +382,22 @@ public class OperationType {
     @Deprecated
     public static final short OP_SAVE_TRANSACTION_ID = 104;
 
+=======
+    @Deprecated
+    public static final short OP_ADD_REPLICA = 42;
+
+    public static final short OP_SET_REPLICA_STATUS = 47;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_GLOBAL_VARIABLE_V2 = 84;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_ALL_BROKER = 87;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_REPOSITORY = 90;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
 
     @IgnorableOnReplayFailed
@@ -367,6 +406,7 @@ public class OperationType {
     // light schema change for add and drop columns
     public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
 
+<<<<<<< HEAD
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_ROUTINE_LOAD_JOB = 111;
@@ -417,6 +457,15 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_SMALL_FILE = 252;
 
+=======
+    @IgnorableOnReplayFailed
+    public static final short OP_ALTER_ROUTINE_LOAD_JOB = 111;
+
+    // update job info, used by spark load
+    @IgnorableOnReplayFailed
+    public static final short OP_UPDATE_LOAD_JOB = 232;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // dynamic partition 261~265
     @IgnorableOnReplayFailed
     public static final short OP_DYNAMIC_PARTITION = 261;
@@ -454,9 +503,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_SWAP_TABLE = 10001;
 
+<<<<<<< HEAD
     @Deprecated
     public static final short OP_ADD_PARTITIONS = 10002;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @IgnorableOnReplayFailed
     public static final short OP_FINISH_MULTI_DELETE = 10003;
 
@@ -523,6 +575,7 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_CATALOG = 10061;
 
+<<<<<<< HEAD
     // grant & revoke impersonate
     @Deprecated
     @IgnorableOnReplayFailed
@@ -540,6 +593,8 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REVOKE_ROLE = 10065;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // task 10071 ~ 10090
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_TASK = 10071;
@@ -553,10 +608,13 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_TASK_RUN = 10082;
 
+<<<<<<< HEAD
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_DROP_TASK_RUNS = 10083;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
 
@@ -576,18 +634,28 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_MATERIALIZED_VIEW_PROPERTIES = 10093;
 
+<<<<<<< HEAD
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
 
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
 
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
+<<<<<<< HEAD
     public static final short OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS = 10098;
 
+=======
+
+    public static final short OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS = 10098;
+
+    // manage system node info 10101 ~ 10120
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // manage compute node 10201 ~ 10220
 
     @IgnorableOnReplayFailed
@@ -596,12 +664,15 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_COMPUTE_NODE = 10202;
 
+<<<<<<< HEAD
     // shard operate 10221 ~ 10240. Deprecated
     @Deprecated
     public static final short OP_ADD_UNUSED_SHARD = 10221;
     @Deprecated
     public static final short OP_DELETE_UNUSED_SHARD = 10222;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // new operator for partition 10241 ~ 10260
     public static final short OP_ADD_PARTITION_V2 = 10241;
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
@@ -610,6 +681,11 @@ public class OperationType {
     public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
     @IgnorableOnReplayFailed
     public static final short OP_RECOVER_PARTITION_VERSION = 10245;
+<<<<<<< HEAD
+=======
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_PARTITIONS = 10246;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // new privilege, all ends with V2
 
@@ -621,9 +697,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_ALTER_USER_V2 = 10263;
 
+<<<<<<< HEAD
     @Deprecated
     public static final short OP_DROP_USER_V2 = 10264;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_ROLE_PRIVILEGE_V2 = 10265;
 
@@ -632,21 +711,27 @@ public class OperationType {
 
     public static final short OP_AUTH_UPGRADE_V2 = 10267;
 
+<<<<<<< HEAD
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_USER_PROP_V2 = 10268;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_SECURITY_INTEGRATION = 10269;
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
 
+<<<<<<< HEAD
     // stream load
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // MaterializedView Maintenance
 
     @IgnorableOnReplayFailed

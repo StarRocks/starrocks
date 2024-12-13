@@ -42,6 +42,7 @@ namespace starrocks {
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
         std::unique_lock<std::mutex> l(_lock);
+<<<<<<< HEAD
         if (_cancelled) {
             return _err_st;
         }
@@ -49,10 +50,29 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         _put_cond.wait(l, [&]() {
             return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
         });
+=======
+
+        _num_waiting_append_buffer += 1;
+        // if _buf_queue is empty, we append this buf without size check
+        _put_cond.wait(l, [&]() {
+            return _cancelled || _finished || _buf_queue.empty() ||
+                   _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
+        });
+        _num_waiting_append_buffer -= 1;
+
+        if (_finished) {
+            return Status::CapacityLimitExceed("Stream load pipe is finished");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (_cancelled) {
             return _err_st;
         }
+<<<<<<< HEAD
+=======
+        _num_append_buffers += 1;
+        _append_buffer_bytes += buf->remaining();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _buffered_bytes += buf->remaining();
         _buf_queue.emplace_back(std::move(buf));
         _get_cond.notify_one();
@@ -110,7 +130,11 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
 StatusOr<ByteBufferPtr> StreamLoadPipe::no_block_read() {
     std::unique_lock<std::mutex> l(_lock);
 
+<<<<<<< HEAD
     _get_cond.wait_for(l, std::chrono::milliseconds(100),
+=======
+    _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                        [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
     // cancelled
@@ -177,13 +201,18 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
         if (_read_buf == nullptr || !_read_buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
 
+<<<<<<< HEAD
             _get_cond.wait_for(l, std::chrono::milliseconds(100),
+=======
+            _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
             // cancelled
             if (_cancelled) {
                 return _err_st;
             }
+<<<<<<< HEAD
             // finished
             if (_buf_queue.empty()) {
                 if (_finished) {
@@ -205,6 +234,13 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
                     }
                     return Status::TimedOut("stream load pipe time out");
                 }
+=======
+            if (_buf_queue.empty()) {
+                *data_size = bytes_read;
+                *eof = _finished && (bytes_read == 0);
+                bool timeout = (bytes_read == 0) && !_finished;
+                return timeout ? Status::TimedOut("stream load pipe time out") : Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             _read_buf = _buf_queue.front();
             _buf_queue.pop_front();
@@ -233,6 +269,10 @@ Status StreamLoadPipe::finish() {
         std::lock_guard<std::mutex> l(_lock);
         _finished = true;
     }
+<<<<<<< HEAD
+=======
+    _put_cond.notify_all();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _get_cond.notify_all();
     return Status::OK();
 }
@@ -242,7 +282,11 @@ void StreamLoadPipe::cancel(const Status& status) {
         std::lock_guard<std::mutex> l(_lock);
         _cancelled = true;
         if (_err_st.ok()) {
+<<<<<<< HEAD
             _err_st = status;
+=======
+            _err_st = status.ok() ? Status::Cancelled("Cancelled with ok status") : status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     _get_cond.notify_all();
@@ -267,6 +311,7 @@ Status StreamLoadPipe::_append(const ByteBufferPtr& buf) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
     DCHECK(buf != nullptr && buf->has_remaining());
     if (_cancelled) {
@@ -278,6 +323,8 @@ Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe,
                                                                TCompressionType::type compression_type)
         : StreamLoadPipeReader(std::move(pipe)), _compression_type(compression_type) {}
@@ -342,12 +389,16 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     return _decompressed_buffer;
 }
 
+<<<<<<< HEAD
 StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file, bool non_blocking_read)
         : _pipe(std::move(file)) {
     if (non_blocking_read) {
         _pipe->set_non_blocking_read();
     }
 }
+=======
+StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file) : _pipe(std::move(file)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 StreamLoadPipeInputStream::~StreamLoadPipeInputStream() {
     _pipe->close();

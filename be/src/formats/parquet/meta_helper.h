@@ -14,7 +14,15 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <string>
+=======
+#include <glog/logging.h>
+
+#include <ostream>
+#include <string>
+#include <unordered_map>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <unordered_set>
 #include <vector>
 
@@ -22,8 +30,25 @@
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/Descriptors_types.h"
+<<<<<<< HEAD
 #include "runtime/descriptors.h"
 
+=======
+#include "gen_cpp/parquet_types.h"
+#include "runtime/descriptors.h"
+
+namespace starrocks {
+class SlotDescriptor;
+class TIcebergSchema;
+class TIcebergSchemaField;
+
+namespace parquet {
+class FileMetaData;
+struct ParquetField;
+} // namespace parquet
+} // namespace starrocks
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::parquet {
 
 class MetaHelper {
@@ -32,13 +57,17 @@ public:
             : _file_metadata(file_metadata), _case_sensitive(case_sensitive) {}
     virtual ~MetaHelper() = default;
 
+<<<<<<< HEAD
     virtual void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
                                                  const std::vector<SlotDescriptor*>& slots) const = 0;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                       std::vector<GroupReaderParam::Column>& read_cols,
                                       std::unordered_set<std::string>& existed_column_names) const = 0;
 
+<<<<<<< HEAD
     virtual const ParquetField* get_parquet_field(const SlotDescriptor* slot_desc) const = 0;
 
     const tparquet::ColumnMetaData* get_column_meta(
@@ -60,6 +89,8 @@ public:
         return &row_group.columns[it->second].meta_data;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     GroupReaderParam::Column _build_column(int32_t idx_in_parquet, const tparquet::Type::type& type_in_parquet,
                                            SlotDescriptor* slot_desc, bool decode_needed,
@@ -82,14 +113,20 @@ public:
     ParquetMetaHelper(FileMetaData* file_metadata, bool case_sensitive) : MetaHelper(file_metadata, case_sensitive) {}
     ~ParquetMetaHelper() override = default;
 
+<<<<<<< HEAD
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
                                          const std::vector<SlotDescriptor*>& slots) const override;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                               std::vector<GroupReaderParam::Column>& read_cols,
                               std::unordered_set<std::string>& existed_column_names) const override;
 
+<<<<<<< HEAD
     const ParquetField* get_parquet_field(const SlotDescriptor* slot_desc) const override;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     bool _is_valid_type(const ParquetField* parquet_field, const TypeDescriptor* type_descriptor) const;
 };
@@ -105,12 +142,18 @@ public:
 
     ~IcebergMetaHelper() override = default;
 
+<<<<<<< HEAD
     void build_column_name_2_pos_in_meta(std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta,
                                          const std::vector<SlotDescriptor*>& slots) const override;
     void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                               std::vector<GroupReaderParam::Column>& read_cols,
                               std::unordered_set<std::string>& existed_column_names) const override;
     const ParquetField* get_parquet_field(const SlotDescriptor* slot_desc) const override;
+=======
+    void prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
+                              std::vector<GroupReaderParam::Column>& read_cols,
+                              std::unordered_set<std::string>& existed_column_names) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     void _init_field_mapping();

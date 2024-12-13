@@ -221,4 +221,16 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::string* result) {
+    auto empty_arrow_record_batch = arrow::RecordBatch::MakeEmpty(*schema);
+    if (!empty_arrow_record_batch.ok()) {
+        return Status::InternalError("serialize_arrow_schema failed");
+    }
+
+    const auto record_batch = empty_arrow_record_batch.ValueOrDie();
+    return serialize_record_batch(*record_batch, result);
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

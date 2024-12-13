@@ -14,6 +14,7 @@
 
 #include "formats/parquet/stored_column_reader.h"
 
+<<<<<<< HEAD
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/status.h"
@@ -22,6 +23,30 @@
 #include "formats/parquet/utils.h"
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
+=======
+#include <fmt/core.h>
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <sstream>
+#include <string>
+#include <utility>
+
+#include "column/column.h"
+#include "column_reader.h"
+#include "common/compiler_util.h"
+#include "common/logging.h"
+#include "common/status.h"
+#include "formats/parquet/level_codec.h"
+#include "formats/parquet/schema.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "simd/simd.h"
+
+namespace tparquet {
+class ColumnChunk;
+} // namespace tparquet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 

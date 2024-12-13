@@ -250,7 +250,11 @@ protected:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnGePredicate : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+=======
+class ColumnGePredicate final : public ColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GeEval<field_type>>;
@@ -263,6 +267,11 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match;
@@ -294,7 +303,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnGtPredicate : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+=======
+class ColumnGtPredicate final : public ColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, GtEval<field_type>>;
@@ -307,6 +320,11 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -338,7 +356,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnLePredicate : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+=======
+class ColumnLePredicate final : public ColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LeEval<field_type>>;
@@ -352,6 +374,11 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -383,7 +410,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnLtPredicate : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+=======
+class ColumnLtPredicate final : public ColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, LtEval<field_type>>;
@@ -397,6 +428,11 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -428,7 +464,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnEqPredicate : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+=======
+class ColumnEqPredicate final : public ColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, EqEval<field_type>>;
@@ -443,6 +483,11 @@ public:
         return type_info->cmp(Datum(this->_value), min) >= 0 && type_info->cmp(Datum(this->_value), max) <= 0;
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         range->clear();
         bool exact_match = false;
@@ -485,7 +530,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class ColumnNePredicate : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+=======
+class ColumnNePredicate final : public ColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     using Base = ColumnPredicateCmpBase<field_type, NeEval<field_type>>;
@@ -495,6 +544,11 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return false; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }
@@ -635,7 +689,11 @@ protected:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnEqPredicate : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+=======
+class BinaryColumnEqPredicate final : public BinaryColumnPredicateCmpBase<field_type, EqEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::equal_to<ValueType>>;
@@ -657,6 +715,11 @@ public:
         return bf->test_bytes(padded.data, padded.size);
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // see the comment in `predicate_parser.cpp`.
         Slice padded_value(Base::_zero_padded_str);
@@ -686,7 +749,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnGePredicate : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+=======
+class BinaryColumnGePredicate final : public BinaryColumnPredicateCmpBase<field_type, GeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater_equal<ValueType>>;
@@ -699,6 +766,11 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) <= 0;
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // Can NOT use `_value` here, see the comment in `predicate_parser.cpp`.
         Slice padded_value(Base::_zero_padded_str);
@@ -728,7 +800,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnGtPredicate : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+=======
+class BinaryColumnGtPredicate final : public BinaryColumnPredicateCmpBase<field_type, GtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::greater<ValueType>>;
@@ -741,6 +817,11 @@ public:
         return this->type_info()->cmp(Datum(this->_value), max) < 0;
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         // Can NOT use `_value` here, see comment in predicate_parser.cpp.
         Slice padded_value(Base::_zero_padded_str);
@@ -769,7 +850,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnLtPredicate : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+=======
+class BinaryColumnLtPredicate final : public BinaryColumnPredicateCmpBase<field_type, LtEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less<ValueType>>;
@@ -784,6 +869,11 @@ public:
         return (type_info->cmp(Datum(this->_value), min) > 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -811,7 +901,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnLePredicate : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+=======
+class BinaryColumnLePredicate final : public BinaryColumnPredicateCmpBase<field_type, LeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::less_equal<ValueType>>;
@@ -825,6 +919,11 @@ public:
         return (this->type_info()->cmp(Datum(this->_value), min) >= 0) & !max.is_null();
     }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return true; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         Slice padded_value(Base::_zero_padded_str);
         range->clear();
@@ -852,7 +951,11 @@ public:
 };
 
 template <LogicalType field_type>
+<<<<<<< HEAD
 class BinaryColumnNePredicate : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+=======
+class BinaryColumnNePredicate final : public BinaryColumnPredicateCmpBase<field_type, NeEval<field_type>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ValueType = Slice;
     using Base = BinaryColumnPredicateCmpBase<field_type, std::not_equal_to<ValueType>>;
@@ -862,6 +965,11 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override { return true; }
 
+<<<<<<< HEAD
+=======
+    bool support_bitmap_filter() const override { return false; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const override {
         return Status::Cancelled("not-equal predicate not support bitmap index");
     }

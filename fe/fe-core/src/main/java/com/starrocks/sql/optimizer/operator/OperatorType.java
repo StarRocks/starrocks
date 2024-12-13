@@ -25,6 +25,10 @@ public enum OperatorType {
     LOGICAL_HIVE_SCAN,
     LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
+<<<<<<< HEAD
+=======
+    LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LOGICAL_HUDI_SCAN,
     LOGICAL_DELTALAKE_SCAN,
     LOGICAL_PAIMON_SCAN,
@@ -70,6 +74,10 @@ public enum OperatorType {
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,
+<<<<<<< HEAD
+=======
+    PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,

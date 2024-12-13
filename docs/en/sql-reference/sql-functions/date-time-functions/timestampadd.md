@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timestampadd
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Adds an integer expression interval to the date or datetime expression `datetime_expr`.
 

@@ -24,7 +24,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.InternalCatalog;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
@@ -91,6 +94,7 @@ public class MetaUtils {
         }
     }
 
+<<<<<<< HEAD
     public static Database getDatabase(long dbId) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -155,6 +159,8 @@ public class MetaUtils {
         return table;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // get table by tableName, unlike getTable, this interface is session aware,
     // which means if there is a temporary table with the same name,
     // use temporary table first, otherwise, treat it as a permanent table
@@ -163,7 +169,17 @@ public class MetaUtils {
             tableName.setCatalog(session.getCurrentCatalog());
         }
         if (database == null) {
+<<<<<<< HEAD
             database = getDatabase(session, tableName);
+=======
+            if (Strings.isNullOrEmpty(tableName.getCatalog())) {
+                tableName.setCatalog(session.getCurrentCatalog());
+            }
+            database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+            if (database == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         Table table = session.getGlobalStateMgr().getMetadataMgr().getTemporaryTable(
@@ -179,6 +195,7 @@ public class MetaUtils {
         return table;
     }
 
+<<<<<<< HEAD
     public static Table getTable(String catalogName, String dbName, String tableName) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
         if (table == null) {
@@ -227,6 +244,8 @@ public class MetaUtils {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static Map<String, Expr> parseColumnNameToDefineExpr(OriginStatement originStmt) {
         CreateMaterializedViewStmt stmt;
 
@@ -267,21 +286,56 @@ public class MetaUtils {
     }
 
     public static boolean isPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+<<<<<<< HEAD
         Database db = stateMgr.getDb(dbId);
+=======
+        Database db = stateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return false;
         }
         // lake table or lake materialized view
+<<<<<<< HEAD
         OlapTable table = (OlapTable) db.getTable(tableId);
+=======
+        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return false;
         }
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
         try {
             return table.getPhysicalPartition(partitionId) != null;
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(table.getId()), LockType.READ);
+=======
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            return table.getPartition(partitionId) != null;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+    }
+
+    public static boolean isPhysicalPartitionExist(GlobalStateMgr stateMgr, long dbId, long tableId, long partitionId) {
+        Database db = stateMgr.getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return false;
+        }
+        // lake table or lake materialized view
+        OlapTable table = (OlapTable) stateMgr.getLocalMetastore().getTable(db.getId(), tableId);
+        if (table == null) {
+            return false;
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            return table.getPhysicalPartition(partitionId) != null;
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -326,7 +380,15 @@ public class MetaUtils {
     }
 
     public static Column getColumnByColumnName(long dbId, long tableId, String columnName) {
+<<<<<<< HEAD
         Table table = getTable(dbId, tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Column column = table.getColumn(columnName);
         if (column == null) {
             throw new SemanticException(String.format("can not find column by name: %s", columnName));
@@ -343,7 +405,14 @@ public class MetaUtils {
     }
 
     public static String getColumnNameByColumnId(long dbId, long tableId, ColumnId columnId) {
+<<<<<<< HEAD
         Table table = getTable(dbId, tableId);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableId);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Column column = table.getColumn(columnId);
         if (column == null) {
             throw new SemanticException(String.format("can not find column by column id: %s", columnId));

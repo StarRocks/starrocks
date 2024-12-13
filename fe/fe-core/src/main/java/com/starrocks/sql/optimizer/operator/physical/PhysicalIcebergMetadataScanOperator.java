@@ -21,11 +21,16 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 
 public class PhysicalIcebergMetadataScanOperator extends PhysicalScanOperator {
+<<<<<<< HEAD
     private String temporalClause;
 
     public PhysicalIcebergMetadataScanOperator(LogicalIcebergMetadataScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ICEBERG_METADATA_SCAN, scanOperator);
         this.temporalClause = scanOperator.getTemporalClause();
+=======
+    public PhysicalIcebergMetadataScanOperator(LogicalIcebergMetadataScanOperator scanOperator) {
+        super(OperatorType.PHYSICAL_ICEBERG_METADATA_SCAN, scanOperator);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 
@@ -38,6 +43,7 @@ public class PhysicalIcebergMetadataScanOperator extends PhysicalScanOperator {
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalIcebergMetadataScan(optExpression, context);
     }
+<<<<<<< HEAD
 
     public String getTemporalClause() {
         return temporalClause;
@@ -46,4 +52,6 @@ public class PhysicalIcebergMetadataScanOperator extends PhysicalScanOperator {
     public void setTemporalClause(String temporalClause) {
         this.temporalClause = temporalClause;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -22,7 +22,10 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 #include "types/logical_type_infra.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
@@ -68,6 +71,10 @@ public:
     void register_approx();
     void register_others();
     void register_retract_functions();
+<<<<<<< HEAD
+=======
+    void register_hypothesis_testing();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::vector<LogicalType>& aggregate_types() const {
         const static std::vector<LogicalType> kTypes{

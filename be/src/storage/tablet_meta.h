@@ -92,10 +92,17 @@ class TabletUpdates;
 // The concurrency control is handled in Tablet Class, not in this class.
 class TabletMeta {
 public:
+<<<<<<< HEAD
     [[nodiscard]] static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
                                        uint32_t next_unique_id,
                                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                                        TabletMetaSharedPtr* tablet_meta);
+=======
+    static Status create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                         uint32_t next_unique_id,
+                         const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
+                         TabletMetaSharedPtr* tablet_meta);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static TabletMetaSharedPtr create();
 
@@ -115,6 +122,7 @@ public:
 
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
+<<<<<<< HEAD
     [[nodiscard]] Status create_from_file(const std::string& file_path);
     // Note that create_from_memory will not use tablet schema map to share the tablet schemas with same schema id,
     // it's the difference from create_from_file
@@ -127,6 +135,20 @@ public:
 
     [[nodiscard]] Status serialize(std::string* meta_binary);
     [[nodiscard]] Status deserialize(std::string_view data);
+=======
+    Status create_from_file(const std::string& file_path);
+    // Note that create_from_memory will not use tablet schema map to share the tablet schemas with same schema id,
+    // it's the difference from create_from_file
+    Status create_from_memory(std::string_view data);
+    Status save(const std::string& file_path);
+    static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
+    static Status reset_tablet_uid(const std::string& file_path);
+    static std::string construct_header_file_path(const std::string& schema_hash_path, int64_t tablet_id);
+    Status save_meta(DataDir* data_dir, bool skip_tablet_schema = false);
+
+    Status serialize(std::string* meta_binary);
+    Status deserialize(std::string_view data);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void init_from_pb(TabletMetaPB* ptablet_meta_pb, bool use_tablet_schema_map = true);
 
     void to_meta_pb(TabletMetaPB* tablet_meta_pb, bool skip_tablet_schema = false);
@@ -366,7 +388,11 @@ inline size_t TabletMeta::num_rows() const {
 inline size_t TabletMeta::tablet_footprint() const {
     size_t total_size = 0;
     for (auto& rs : _rs_metas) {
+<<<<<<< HEAD
         total_size += rs->data_disk_size();
+=======
+        total_size += rs->data_disk_size() + rs->index_disk_size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return total_size;
 }

@@ -24,7 +24,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
@@ -77,7 +81,11 @@ public class WarehouseManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetAliveComputeNodes() throws UserException {
+=======
+    public void testGetAliveComputeNodes() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<GlobalStateMgr>() {
             @Mock
             public NodeMgr getNodeMgr() {
@@ -125,7 +133,11 @@ public class WarehouseManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws UserException {
+=======
+    public void testSelectWorkerGroupByWarehouseId_hasAliveNodes() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(true);
@@ -159,7 +171,11 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
+<<<<<<< HEAD
             public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+=======
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -202,7 +218,11 @@ public class WarehouseManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws UserException {
+=======
+    public void testSelectWorkerGroupByWarehouseId_hasNoAliveNodes() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -236,7 +256,11 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
+<<<<<<< HEAD
             public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+=======
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -276,16 +300,28 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
+<<<<<<< HEAD
         Partition partition = new Partition(123, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
                 () -> scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1));
+=======
+        Partition partition = new Partition(123, 456, "aaa", null, null);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        ErrorReportException ex = Assert.assertThrows(ErrorReportException.class,
+                () -> scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(),
+                        index, Collections.emptyList(), 1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("No alive backend or compute node in warehouse null.", ex.getMessage());
     }
 
     @Test
     public void testSelectWorkerGroupByWarehouseId_checkAliveNodesOnce(@Mocked WarehouseManager mockWarehouseMgr)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
         b1.setBePort(9060);
         b1.setAlive(false);
@@ -307,7 +343,11 @@ public class WarehouseManagerTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
+<<<<<<< HEAD
             public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+=======
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (workerGroupId == StarOSAgent.DEFAULT_WORKER_GROUP_ID) {
                     return Lists.newArrayList(b1.getId());
                 }
@@ -352,12 +392,21 @@ public class WarehouseManagerTest {
         };
 
         OlapScanNode scanNode = newOlapScanNode();
+<<<<<<< HEAD
         Partition partition = new Partition(123, "aaa", null, null);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1);
         // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
         // getAliveComputeNodes.
         scanNode.addScanRangeLocations(partition, partition, index, Collections.emptyList(), 1);
+=======
+        Partition partition = new Partition(123, 456, "aaa", null, null);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
+        // Since this is the second call to  addScanRangeLocations on the same OlapScanNode, we do not expect another call to
+        // getAliveComputeNodes.
+        scanNode.addScanRangeLocations(partition, partition.getDefaultPhysicalPartition(), index, Collections.emptyList(), 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private OlapScanNode newOlapScanNode() {

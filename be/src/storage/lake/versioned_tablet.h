@@ -18,6 +18,10 @@
 #include <vector>
 
 #include "common/statusor.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/base_rowset.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 class TabletSchema;
@@ -78,7 +82,12 @@ public:
 
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
+<<<<<<< HEAD
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically);
+=======
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically,
+                                                       const std::vector<BaseRowsetSharedPtr>& base_rowsets);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 

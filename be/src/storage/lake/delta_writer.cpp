@@ -101,7 +101,13 @@ public:
 
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
+<<<<<<< HEAD
     StatusOr<TxnLogPtr> finish(DeltaWriterFinishMode mode);
+=======
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode);
+
+    Status finish();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void close();
 
@@ -439,11 +445,24 @@ bool DeltaWriterImpl::is_partial_update() {
     return _write_schema->num_columns() < _tablet_schema->num_columns();
 }
 
+<<<<<<< HEAD
 StatusOr<TxnLogPtr> DeltaWriterImpl::finish(DeltaWriterFinishMode mode) {
+=======
+Status DeltaWriterImpl::finish() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
     RETURN_IF_ERROR(build_schema_and_writer());
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
+<<<<<<< HEAD
+=======
+    return Status::OK();
+}
+
+StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mode) {
+    SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(finish());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (UNLIKELY(_txn_id < 0)) {
         return Status::InvalidArgument(fmt::format("negative txn id: {}", _txn_id));
@@ -574,7 +593,11 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
         st = tablet.update_mgr()->get_rowids_from_pkindex(tablet.id(), metadata->version(), upserts, &rss_rowids, true);
     }
 
+<<<<<<< HEAD
     std::vector<uint8_t> filter;
+=======
+    Filter filter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     uint32_t gen_num = 0;
     // There are two cases we should allocate full id for this chunk for simplicity:
     // 1. We can not get the tablet meta from cache.
@@ -667,9 +690,20 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return _impl->write(chunk, indexes, indexes_size);
 }
 
+<<<<<<< HEAD
 StatusOr<TxnLogPtr> DeltaWriter::finish(DeltaWriterFinishMode mode) {
     DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
     return _impl->finish(mode);
+=======
+StatusOr<TxnLogPtr> DeltaWriter::finish_with_txnlog(DeltaWriterFinishMode mode) {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish_with_txnlog() in a bthread";
+    return _impl->finish_with_txnlog(mode);
+}
+
+Status DeltaWriter::finish() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
+    return _impl->finish();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void DeltaWriter::close() {

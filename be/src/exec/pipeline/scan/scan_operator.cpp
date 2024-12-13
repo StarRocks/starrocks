@@ -203,7 +203,11 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
+<<<<<<< HEAD
     if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+=======
+    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 
@@ -228,6 +232,21 @@ void ScanOperator::_detach_chunk_sources() {
     }
 }
 
+<<<<<<< HEAD
+=======
+void ScanOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status ScanOperator::set_finishing(RuntimeState* state) {
     // check when expired, are there running io tasks or submitted tasks
     if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
@@ -373,6 +392,10 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+<<<<<<< HEAD
+=======
+            _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;

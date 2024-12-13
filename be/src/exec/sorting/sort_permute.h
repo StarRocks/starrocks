@@ -141,6 +141,10 @@ private:
 };
 
 // Compare result of column, value must be -1,0,1
+<<<<<<< HEAD
 using CompareVector = std::vector<int8_t>;
+=======
+using CompareVector = Buffer<int8_t>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

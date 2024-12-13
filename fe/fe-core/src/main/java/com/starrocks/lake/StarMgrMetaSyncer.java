@@ -28,7 +28,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -74,7 +78,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             }
 
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
@@ -82,12 +90,21 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
                                 .map(Partition::getSubPartitions)
+<<<<<<< HEAD
                                 .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupId))
                                 .forEach(groupIds::add);
                     }
                 }
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
+                                .forEach(groupIds::addAll);
+                    }
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return groupIds;
@@ -105,7 +122,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
+<<<<<<< HEAD
             } catch (UserException ignored1) {
+=======
+            } catch (StarRocksException ignored1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // ignore error
             }
         }
@@ -262,7 +283,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     public void syncTableMetaAndColocationInfo() {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 continue;
             }
@@ -270,7 +295,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             List<Table> tables = db.getTables();
+=======
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Table table : tables) {
                 if (!table.isCloudNativeTableOrMaterializedView()) {
                     continue;
@@ -291,9 +320,15 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
         try {
             if (db.getTable(table.getId()) == null) {
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return false; // table might be dropped
             }
             GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -303,11 +338,19 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     .forEach(physicalPartitions::addAll);
             table.setShardGroupChanged(false);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
         }
 
         for (PhysicalPartition physicalPartition : physicalPartitions) {
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+
+        for (PhysicalPartition physicalPartition : physicalPartitions) {
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 // schema change might replace the shards in the original shard group
                 if (table.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -321,6 +364,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 if (table.hasShardGroupChanged()) {
                     return false;
                 }
+<<<<<<< HEAD
                 // no need to check db/table/partition again, everything still works
                 long groupId = physicalPartition.getShardGroupId();
                 Set<Long> starmgrShardIdsSet = null;
@@ -340,6 +384,29 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 redundantGroupToShards.put(groupId, starmgrShardIdsSet);
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
+=======
+
+                // no need to check db/table/partition again, everything still works
+                for (MaterializedIndex materializedIndex :
+                        physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    long groupId = materializedIndex.getShardGroupId();
+                    Set<Long> starmgrShardIdsSet = null;
+                    if (redundantGroupToShards.get(groupId) != null) {
+                        starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                    } else {
+                        List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                        starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
+                    }
+
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        starmgrShardIdsSet.remove(tablet.getId());
+                    }
+                    // collect shard in starmgr but not in fe
+                    redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -372,6 +439,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             return;
         }
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.WRITE);
         try {
             // check db and table again
@@ -379,12 +447,25 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 return;
             }
             if (db.getTable(table.getId()) == null) {
+=======
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            // check db and table again
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId()) == null) {
+                return;
+            }
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return;
             }
             GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true /* isJoin */,
                     null /* expectGroupId */);
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.WRITE);
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -407,12 +488,20 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     }
 
     public void syncTableMeta(String dbName, String tableName, boolean forceDeleteData) throws DdlException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException(String.format("db %s does not exist.", dbName));
         }
 
+<<<<<<< HEAD
         Table table = db.getTable(tableName);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new DdlException(String.format("table %s does not exist.", tableName));
         }

@@ -16,6 +16,10 @@
 #include "column/nullable_column.h"
 #include "common/status.h"
 #include "gutil/casts.h"
+<<<<<<< HEAD
+=======
+#include "storage/index/vector/vector_index_writer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/column_writer.h"
 
 namespace starrocks {
@@ -46,6 +50,11 @@ public:
 
     Status write_bloom_filter_index() override { return Status::OK(); }
 
+<<<<<<< HEAD
+=======
+    Status write_vector_index(uint64_t* index_size) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ordinal_t get_next_rowid() const override { return _array_size_writer->get_next_rowid(); }
 
     uint64_t total_mem_footprint() const override;
@@ -56,6 +65,10 @@ private:
     std::unique_ptr<ScalarColumnWriter> _null_writer;
     std::unique_ptr<ScalarColumnWriter> _array_size_writer;
     std::unique_ptr<ColumnWriter> _element_writer;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<VectorIndexWriter> _vector_index_writer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_array_column_writer(const ColumnWriterOptions& opts,
@@ -124,7 +137,18 @@ ArrayColumnWriter::ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPt
           _opts(opts),
           _null_writer(std::move(null_writer)),
           _array_size_writer(std::move(offset_writer)),
+<<<<<<< HEAD
           _element_writer(std::move(element_writer)) {}
+=======
+          _element_writer(std::move(element_writer)) {
+    if (_opts.need_vector_index) {
+        DCHECK(_opts.tablet_index.count(IndexType::VECTOR) > 0);
+        auto tablet_index = std::make_shared<TabletIndex>(_opts.tablet_index.at(IndexType::VECTOR));
+        std::string index_path = _opts.standalone_index_file_paths.at(IndexType::VECTOR);
+        VectorIndexWriter::create(tablet_index, index_path, is_nullable(), &_vector_index_writer);
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Status ArrayColumnWriter::init() {
     if (is_nullable()) {
@@ -132,6 +156,12 @@ Status ArrayColumnWriter::init() {
     }
     RETURN_IF_ERROR(_array_size_writer->init());
     RETURN_IF_ERROR(_element_writer->init());
+<<<<<<< HEAD
+=======
+    if (_opts.need_vector_index) {
+        RETURN_IF_ERROR(_vector_index_writer->init());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }
@@ -158,6 +188,14 @@ Status ArrayColumnWriter::append(const Column& column) {
     // 3. writer elements column recursively
     RETURN_IF_ERROR(_element_writer->append(array_column->elements()));
 
+<<<<<<< HEAD
+=======
+    // 4. write vector index
+    if (_vector_index_writer.get()) {
+        RETURN_IF_ERROR(_vector_index_writer->append(*array_column));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -166,6 +204,12 @@ uint64_t ArrayColumnWriter::estimate_buffer_size() {
     if (is_nullable()) {
         estimate_size += _null_writer->estimate_buffer_size();
     }
+<<<<<<< HEAD
+=======
+    if (_vector_index_writer.get()) {
+        estimate_size += _vector_index_writer->estimate_buffer_size();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return estimate_size;
 }
 
@@ -188,6 +232,12 @@ uint64_t ArrayColumnWriter::total_mem_footprint() const {
     }
     total_mem_footprint += _array_size_writer->total_mem_footprint();
     total_mem_footprint += _element_writer->total_mem_footprint();
+<<<<<<< HEAD
+=======
+    if (_vector_index_writer.get()) {
+        total_mem_footprint += _vector_index_writer->total_mem_footprint();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return total_mem_footprint;
 }
 
@@ -209,6 +259,16 @@ Status ArrayColumnWriter::write_ordinal_index() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status ArrayColumnWriter::write_vector_index(uint64_t* index_size) {
+    if (_vector_index_writer.get()) {
+        RETURN_IF_ERROR(_vector_index_writer->finish(index_size));
+    }
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status ArrayColumnWriter::finish_current_page() {
     if (is_nullable()) {
         RETURN_IF_ERROR(_null_writer->finish_current_page());

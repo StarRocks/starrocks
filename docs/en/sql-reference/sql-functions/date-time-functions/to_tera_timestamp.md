@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_tera_timestamp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Parses a date or time string according to the specified format and converts the string to a DATETIME  value.
 

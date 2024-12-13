@@ -138,6 +138,12 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _load_channel_timeout_s = config::streaming_load_rpc_max_alive_time_sec;
     }
 
+<<<<<<< HEAD
+=======
+    if (table_sink.__isset.dynamic_overwrite) {
+        _dynamic_overwrite = table_sink.dynamic_overwrite;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (table_sink.__isset.ignore_out_of_partition) {
         _ignore_out_of_partition = table_sink.ignore_out_of_partition;
     }
@@ -175,6 +181,10 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
+<<<<<<< HEAD
+=======
+    _profile->add_info_string("DynamicOverwrite", fmt::format("{}", _dynamic_overwrite));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     _ts_profile = state->obj_pool()->add(new TabletSinkProfile());
     _ts_profile->runtime_profile = _profile;
@@ -196,6 +206,10 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _ts_profile->server_rpc_timer = ADD_TIMER(_profile, "RpcServerSideTime");
     _ts_profile->server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
     _ts_profile->alloc_auto_increment_timer = ADD_TIMER(_profile, "AllocAutoIncrementTime");
+<<<<<<< HEAD
+=======
+    _ts_profile->update_load_channel_profile_timer = ADD_TIMER(_profile, "UpdateLoadChannelProfileTime");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void OlapTableSink::set_profile(RuntimeProfile* profile) {
@@ -220,9 +234,12 @@ Status OlapTableSink::prepare(RuntimeState* state) {
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
+<<<<<<< HEAD
     if (UNLIKELY(_write_txn_log && _num_senders > 1)) {
         return Status::NotSupported("This data loading task has multiple senders and does not support merge txn logs");
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
@@ -410,9 +427,18 @@ Status OlapTableSink::_automatic_create_partition() {
     request.__set_db_id(_vectorized_partition->db_id());
     request.__set_table_id(_vectorized_partition->table_id());
     request.__set_partition_values(_partition_not_exist_row_values);
+<<<<<<< HEAD
 
     LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
               << "automatic partition rpc begin request " << request;
+=======
+    if (_dynamic_overwrite) {
+        request.__set_is_temp(true);
+    }
+
+    LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+              << " automatic partition rpc begin request " << request;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TNetworkAddress master_addr = get_master_address();
     auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
     int retry_times = 0;
@@ -432,7 +458,11 @@ Status OlapTableSink::_automatic_create_partition() {
              butil::gettimeofday_s() - start_ts < timeout_ms / 1000);
 
     LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+<<<<<<< HEAD
               << "automatic partition rpc end response " << result;
+=======
+              << " automatic partition rpc end response " << result;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (result.status.status_code == TStatusCode::OK) {
         // add new created partitions
         RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));
@@ -767,9 +797,15 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     }
 
     ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
+<<<<<<< HEAD
     std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
 
     std::vector<uint8_t> init_filter(chunk->num_rows(), 0);
+=======
+    Filter filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
+
+    Filter init_filter(chunk->num_rows(), 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
@@ -1065,7 +1101,11 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMALV2: {
             column = ColumnHelper::get_data_column(column);
             auto* decimal = down_cast<DecimalColumn*>(column);
+<<<<<<< HEAD
             std::vector<DecimalV2Value>& datas = decimal->get_data();
+=======
+            Buffer<DecimalV2Value>& datas = decimal->get_data();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             int scale = desc->type().scale;
             for (size_t j = 0; j < num_rows; ++j) {
                 if (_validate_selection[j] == VALID_SEL_OK) {

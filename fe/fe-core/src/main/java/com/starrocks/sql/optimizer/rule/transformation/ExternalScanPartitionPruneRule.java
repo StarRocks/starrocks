@@ -18,8 +18,11 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -28,8 +31,16 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.List;
 
+=======
+import java.util.Collections;
+import java.util.List;
+
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class ExternalScanPartitionPruneRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(ExternalScanPartitionPruneRule.class);
 
@@ -57,6 +68,7 @@ public class ExternalScanPartitionPruneRule extends TransformationRule {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean check(final OptExpression input, OptimizerContext context) {
         Operator op = input.getOp();
         // if the partition id is already selected, no need to prune again
@@ -71,6 +83,15 @@ public class ExternalScanPartitionPruneRule extends TransformationRule {
         LogicalScanOperator operator = (LogicalScanOperator) input.getOp();
         OptExternalPartitionPruner.prunePartitions(context, operator);
         Utils.setOpAppliedRule(operator, Operator.OP_PARTITION_PRUNE_BIT);
+=======
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalScanOperator operator = (LogicalScanOperator) input.getOp();
+        if (operator.isOpRuleBitSet(OP_PARTITION_PRUNED)) {
+            return Collections.emptyList();
+        }
+        OptExternalPartitionPruner.prunePartitions(context, operator);
+        operator.setOpRuleBit(OP_PARTITION_PRUNED);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList();
     }
 }

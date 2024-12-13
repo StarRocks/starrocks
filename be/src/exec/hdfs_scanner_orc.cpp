@@ -322,6 +322,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_params.deletes.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+<<<<<<< HEAD
     const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path, &_need_skip_rowids,
                                                       _scanner_params.datacache_options);
 
@@ -330,6 +331,22 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
                                                          _scanner_params.mor_params.equality_slots, _runtime_state,
                                                          _mor_processor));
     }
+=======
+    const auto iceberg_delete_builder =
+            std::make_unique<IcebergDeleteBuilder>(&_need_skip_rowids, _runtime_state, _scanner_params);
+
+    for (const auto& delete_file : _scanner_params.deletes) {
+        if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+            RETURN_IF_ERROR(iceberg_delete_builder->build_orc(*delete_file));
+        } else {
+            const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
+                                               delete_file->file_content);
+            LOG(WARNING) << s;
+            return Status::InternalError(s);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
     return Status::OK();
 }
@@ -568,6 +585,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
     }
 
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+<<<<<<< HEAD
+=======
+    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // check after partition/extended column added
     DCHECK_EQ(rows_read, chunk->get()->num_rows());

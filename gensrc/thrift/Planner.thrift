@@ -55,6 +55,10 @@ struct TCacheParam {
    // cached_plan_node_ids is the sets of PlanNodeIds of the PlanNodes from OlapScanNode to cache point
    // AggregationNode along left-deepmost path of the PlanFragment.
    11: optional set<i32> cached_plan_node_ids;
+<<<<<<< HEAD
+=======
+   12: optional bool is_lake;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TExecGroup {

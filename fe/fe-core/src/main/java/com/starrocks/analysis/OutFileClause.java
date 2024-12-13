@@ -45,7 +45,11 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.fs.HdfsUtil;
@@ -428,7 +432,11 @@ public class OutFileClause implements ParseNode {
                 THdfsProperties hdfsProperties = new THdfsProperties();
                 try {
                     HdfsUtil.getTProperties(filePath, brokerDesc, hdfsProperties);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new SemanticException(e.getMessage());
                 }
                 sinkOptions.setHdfs_properties(hdfsProperties);

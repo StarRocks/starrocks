@@ -120,7 +120,10 @@ public class MaterializedViewRewriteWithSSBTest extends MaterializedViewTestBase
                 "   bitmap_union(to_bitmap(lo_tax)), \n" +
                 "   bitmap_union(to_bitmap(lo_shipmode)) \n" +
                 "from lineorder l group by LO_ORDERDATE";
+<<<<<<< HEAD
         setTracLogModule("MV");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withMaterializedView(mv, () -> {
             {
                 String query = "select LO_ORDERDATE, count(distinct LO_REVENUE) as revenue_sum\n" +

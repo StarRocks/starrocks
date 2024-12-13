@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # generate_series
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Generates a series of values within the interval specified by `start` and `end`, and with an optional `step`.
 

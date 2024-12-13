@@ -14,10 +14,20 @@
 
 #include "formats/parquet/schema.h"
 
+<<<<<<< HEAD
 #include <boost/algorithm/string.hpp>
 
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
+=======
+#include <boost/algorithm/string/case_conv.hpp>
+#include <memory>
+#include <sstream>
+#include <utility>
+
+#include "gutil/strings/substitute.h"
+#include "types/logical_type.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/slice.h"
 
 namespace starrocks::parquet {

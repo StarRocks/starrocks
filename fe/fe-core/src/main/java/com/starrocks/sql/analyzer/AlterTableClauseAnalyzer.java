@@ -30,6 +30,10 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Database;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -61,6 +65,10 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AlterTableOperationClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnDef;
@@ -95,12 +103,29 @@ import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.SinglePartitionDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StructFieldDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
+<<<<<<< HEAD
 
 import java.time.format.DateTimeParseException;
+=======
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -204,6 +229,11 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             PropertyAnalyzer.analyzePartitionLiveNumber(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             PropertyAnalyzer.analyzePartitionTTL(properties, false);
+<<<<<<< HEAD
+=======
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            // do nothing
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
             PropertyAnalyzer.analyzeReplicationNum(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -258,6 +288,7 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             }
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
+<<<<<<< HEAD
                 boolean hasGIN = false;
                 for (Index index : olapTable.getIndexes()) {
                     if (index.getIndexType() == IndexDef.IndexType.GIN) {
@@ -266,6 +297,16 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     }
                 }
                 if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasGIN) {
+=======
+                boolean hasNewIndex = false;
+                for (Index index : olapTable.getIndexes()) {
+                    if (IndexType.isCompatibleIndex(index.getIndexType())) {
+                        hasNewIndex = true;
+                        break;
+                    }
+                }
+                if (properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") && hasNewIndex) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ErrorReport.reportSemanticException(ErrorCode.ERR_GIN_REPLICATED_STORAGE_NOT_SUPPORTED);
                 }
             }
@@ -933,6 +974,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             throw new SemanticException("Unknown properties: " + clause.getProperties());
         }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table instanceof OlapTable) {
             List<String> partitionNames = clause.getPartitionNames();
             for (String partitionName : partitionNames) {
@@ -1218,13 +1263,106 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
 
     @Override
     public Void visitDropPartitionClause(DropPartitionClause clause, ConnectContext context) {
+<<<<<<< HEAD
         clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
+=======
+        if (clause.getMultiRangePartitionDesc() != null) {
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't drop partitions with multi-range since it is not olap table");
+            }
+            OlapTable olapTable = (OlapTable) table;
+            MultiRangePartitionDesc multiRangePartitionDesc = clause.getMultiRangePartitionDesc();
+            PartitionDescAnalyzer.analyze(multiRangePartitionDesc);
+            PartitionDescAnalyzer.analyzePartitionDescWithExistsTable(multiRangePartitionDesc, olapTable);
+
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            List<SingleRangePartitionDesc> singleRangePartitionDescs =
+                    convertMultiRangePartitionDescToSingleRangePartitionDescs(
+                            partitionInfo.isAutomaticPartition(),
+                            olapTable.getTableProperty().getProperties(),
+                            clause.isTempPartition(),
+                            multiRangePartitionDesc,
+                            partitionInfo.getPartitionColumns(olapTable.getIdToColumn()),
+                            null);
+
+            clause.setResolvedPartitionNames(singleRangePartitionDescs.stream()
+                    .map(SinglePartitionDesc::getPartitionName).collect(Collectors.toList()));
+        } else if (clause.getPartitionName() != null) {
+            clause.setResolvedPartitionNames(Lists.newArrayList(clause.getPartitionName()));
+        } else if (clause.getPartitionNames() != null) {
+            clause.setResolvedPartitionNames(clause.getPartitionNames());
+        } else if (clause.getDropWhereExpr() != null) {
+            // do check drop partition expression
+            if (!(table instanceof OlapTable)) {
+                throw new SemanticException("Can't drop partitions with where expression since it is not olap table");
+            }
+            OlapTable olapTable = (OlapTable) table;
+            if (!olapTable.getPartitionInfo().isPartitioned()) {
+                throw new SemanticException("Can't drop partitions with where expression since it is not a partition table");
+            }
+            if (clause.isTempPartition()) {
+                throw new SemanticException("Can't drop temp partitions with where expression and `TEMPORARY` keyword");
+            }
+            if (clause.isSetIfExists()) {
+                throw new SemanticException("Can't drop partitions with where expression and `IF EXISTS` keyword");
+            }
+            Expr expr = clause.getDropWhereExpr();
+            Database db = context.getGlobalStateMgr().getMetadataMgr()
+                    .getDb(context.getCurrentCatalog(), context.getDatabase());
+            TableName tableName = new TableName(db.getFullName(), table.getName());
+            List<String> dropPartitionNames = PartitionSelector.getPartitionNamesByExpr(context, tableName,
+                    olapTable, expr, true);
+            clause.setResolvedPartitionNames(dropPartitionNames);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table instanceof OlapTable) {
             if (clause.getPartitionName() != null && clause.getPartitionName().startsWith(
                     ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                 throw new SemanticException("Deletion of shadow partitions is not allowed");
             }
+<<<<<<< HEAD
         }
+=======
+            List<String> partitionNames = clause.getPartitionNames();
+            if (CollectionUtils.isNotEmpty(partitionNames)) {
+                boolean hasShadowPartition = partitionNames.stream().anyMatch(partitionName ->
+                        partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX));
+                if (hasShadowPartition) {
+                    throw new SemanticException("Deletion of shadow partitions is not allowed");
+                }
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public Void visitAlterTableOperationClause(AlterTableOperationClause clause, ConnectContext context) {
+        String tableOperationName = clause.getTableOperationName();
+        if (tableOperationName == null) {
+            throw new SemanticException("Table operation name should be null");
+        }
+
+        List<ConstantOperator> args = new ArrayList<>();
+        for (Expr expr : clause.getExprs()) {
+            ScalarOperator result;
+            try {
+                Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), scope, context);
+                ExpressionMapping expressionMapping = new ExpressionMapping(scope);
+                result = SqlToScalarOperatorTranslator.translate(expr, expressionMapping, new ColumnRefFactory());
+                if (result instanceof ConstantOperator) {
+                    args.add((ConstantOperator) result);
+                } else {
+                    throw new SemanticException("invalid arg " + expr);
+                }
+            } catch (Exception e) {
+                throw new SemanticException("Failed to resolve table operation args %s. msg: %s", expr, e.getMessage());
+            }
+        }
+        clause.setArgs(args);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return null;
     }
 }

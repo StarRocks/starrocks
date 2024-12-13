@@ -14,6 +14,7 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Value.h>
 
@@ -21,10 +22,25 @@
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
+=======
+#include "column/type_traits.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
 #include "util/guard.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Value.h>
+
+#include "exprs/jit/ir_helper.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 struct AddOp {};
 struct SubOp {};
@@ -194,7 +210,11 @@ struct ArithmeticBinaryOperator {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }
     }
+<<<<<<< HEAD
 
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <typename ResultType>
     static StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                            const std::vector<LLVMDatum>& datums) {
@@ -343,6 +363,10 @@ struct ArithmeticBinaryOperator {
 
         return result;
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 TYPE_GUARD(DivModOpGuard, is_divmod_op, DivOp, ModOp)
@@ -365,7 +389,11 @@ struct ArithmeticBinaryOperator<Op, TYPE_DECIMALV2, DivModOpGuard<Op>, guard::Gu
             static_assert(is_divmod_op<Op>, "Invalid float operators");
         }
     }
+<<<<<<< HEAD
 
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <typename ResultType>
     static StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                            const std::vector<LLVMDatum>& datums) {
@@ -378,6 +406,10 @@ struct ArithmeticBinaryOperator<Op, TYPE_DECIMALV2, DivModOpGuard<Op>, guard::Gu
         // JIT compile of DecimalV2 type is not supported.
         return Status::NotSupported("JIT compile of DecimalV2 type is not supported.");
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 TYPE_GUARD(DecimalOpGuard, is_decimal_op, AddOp, SubOp, ReverseSubOp, MulOp, DivOp, ModOp, ReverseModOp)
@@ -581,12 +613,20 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalLTGuard<Typ
             return apply<check_overflow, LType, RType, ResultType>(l, r, result);
         }
     }
+<<<<<<< HEAD
 
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     llvm::Value* generate_ir(llvm::IRBuilder<>& b, const std::vector<llvm::Value*>& args) const {
         // TODO(Yueyang): Support JIT compile of DecimalV3 type.
         LOG(WARNING) << "JIT compile of DecimalV3 type is not supported.";
         return nullptr;
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <typename Op, LogicalType Type>
@@ -613,7 +653,11 @@ struct ArithmeticUnaryOperator {
             static_assert(is_bitnot_op<Op>, "Invalid unary operators");
         }
     }
+<<<<<<< HEAD
 
+=======
+#ifdef STARROCKS_JIT_ENABLE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Value* l) {
         if constexpr (is_bitnot_op<Op>) {
             return b.CreateNot(l);
@@ -621,6 +665,10 @@ struct ArithmeticUnaryOperator {
             static_assert(is_bitnot_op<Op>, "Invalid unary operators");
         }
     }
+<<<<<<< HEAD
+=======
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <LogicalType Type, typename = guard::Guard>

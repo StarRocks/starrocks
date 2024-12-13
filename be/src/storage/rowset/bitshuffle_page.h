@@ -244,7 +244,11 @@ class BitShufflePageDecoder final : public PageDecoder {
 public:
     BitShufflePageDecoder(Slice data) : _data(data) {}
 
+<<<<<<< HEAD
     [[nodiscard]] Status init() override {
+=======
+    Status init() override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK(!_parsed);
         if (_data.size < BITSHUFFLE_PAGE_HEADER_SIZE) {
             std::stringstream ss;
@@ -303,7 +307,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+=======
+    Status seek_to_position_in_page(uint32_t pos) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed) << "Must call init()";
         DCHECK_LE(pos, _num_elements);
         if (pos > _num_elements) {
@@ -314,7 +322,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+=======
+    Status seek_at_or_after_value(const void* value, bool* exact_match) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed) << "Must call init() firstly";
 
         if (_num_elements == 0) {
@@ -354,9 +366,15 @@ public:
         return static_cast<const void*>(&_data[pos + BITSHUFFLE_PAGE_HEADER_SIZE]);
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(size_t* count, Column* dst) override;
 
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+=======
+    Status next_batch(size_t* count, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     uint32_t count() const override { return _num_elements; }
 

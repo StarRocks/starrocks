@@ -25,21 +25,55 @@ PLAN FRAGMENT 0(F02)
   DOP: 16
   INSTANCES
     INSTANCE(0-F02#0)
+<<<<<<< HEAD
       BE: 10002
+=======
+      BE: 10001
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F01)
   DOP: 16
   INSTANCES
     INSTANCE(1-F01#0)
       DESTINATIONS: 0-F02#0
+<<<<<<< HEAD
+=======
+      BE: 10003
+    INSTANCE(2-F01#1)
+      DESTINATIONS: 0-F02#0
+      BE: 10002
+    INSTANCE(3-F01#2)
+      DESTINATIONS: 0-F02#0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       BE: 10001
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
   INSTANCES
+<<<<<<< HEAD
     INSTANCE(2-F00#0)
       DESTINATIONS: 1-F01#0
       BE: 10001
+=======
+    INSTANCE(4-F00#0)
+      DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
+      BE: 10001
+      SCAN RANGES
+        0:HdfsScanNode
+          1. <PLACEHOLDER>
+    INSTANCE(5-F00#1)
+      DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
+      BE: 10002
+      SCAN RANGES
+        0:HdfsScanNode
+          1. <PLACEHOLDER>
+    INSTANCE(6-F00#2)
+      DESTINATIONS: 1-F01#0,2-F01#1,3-F01#2
+      BE: 10003
+      SCAN RANGES
+        0:HdfsScanNode
+          1. <PLACEHOLDER>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 [fragment]
 PLAN FRAGMENT 0

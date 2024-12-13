@@ -82,6 +82,10 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getResourceName() {
         return resourceName;
     }
@@ -91,11 +95,21 @@ public class JDBCTable extends Table {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
         return dbName;
     }
 
     public String getJdbcTable() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return dbName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return jdbcTable;
     }
 

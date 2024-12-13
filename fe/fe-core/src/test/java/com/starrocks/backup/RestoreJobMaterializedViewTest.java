@@ -35,7 +35,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.UnitTestUtil;
@@ -96,7 +100,10 @@ import static com.starrocks.common.util.UnitTestUtil.TABLE_NAME;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class RestoreJobMaterializedViewTest {
 
@@ -185,7 +192,11 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db;
 
@@ -193,15 +204,30 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = sqlParser;
 
+<<<<<<< HEAD
+=======
+                globalStateMgr.getLocalMetastore().getTable(UnitTestUtil.DB_NAME, MATERIALIZED_VIEW_NAME);
+                minTimes = 0;
+                result = db.getTable(MATERIALIZED_VIEW_NAME);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
+<<<<<<< HEAD
                 // GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 // minTimes = 0;
                 // result = systemInfoService;
 
                 globalStateMgr.mayGetDb(anyLong);
+=======
+                //GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                //minTimes = 0;
+                //result = systemInfoService;
+
+                globalStateMgr.getLocalMetastore().mayGetDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = Optional.of(db);
 
@@ -250,6 +276,7 @@ public class RestoreJobMaterializedViewTest {
             }
         };
         new MockUp<MarkedCountDownLatch>() {
+<<<<<<< HEAD
                 @Mock
                 boolean await(long timeout, TimeUnit unit) {
                     return true;
@@ -272,6 +299,31 @@ public class RestoreJobMaterializedViewTest {
         new MockUp<HdfsUtil>() {
             @Mock
             public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws UserException {
+=======
+            @Mock
+            boolean await(long timeout, TimeUnit unit) {
+                return true;
+            }
+        };
+
+        new MockUp<ConnectContext>() {
+            @Mock
+            GlobalStateMgr getGlobalStateMgr() {
+                return globalStateMgr;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            BackupHandler getBackupHandler() {
+                return backupHandler;
+            }
+        };
+
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws
+                    StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -329,7 +381,12 @@ public class RestoreJobMaterializedViewTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
+<<<<<<< HEAD
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = olapTable.getIndexNameById(index.getId());
@@ -531,7 +588,11 @@ public class RestoreJobMaterializedViewTest {
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
+<<<<<<< HEAD
                 return db.getTable(tblName);
+=======
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
         // gen BackupJobInfo
@@ -546,10 +607,18 @@ public class RestoreJobMaterializedViewTest {
     }
 
     private void assertMVActiveEquals(String mvName, boolean expect) {
+<<<<<<< HEAD
         Table mvTable = db.getTable(mvName);
+=======
+        Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(mvTable != null);
         Assert.assertTrue(mvTable.isMaterializedView());
         MaterializedView mv = (MaterializedView) mvTable;
         Assert.assertEquals(mv.isActive(), expect);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

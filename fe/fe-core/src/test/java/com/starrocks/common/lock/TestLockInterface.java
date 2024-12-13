@@ -39,14 +39,20 @@ public class TestLockInterface {
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.lock_manager_enabled = true;
+<<<<<<< HEAD
         Config.lock_manager_enable_using_fine_granularity_lock = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.lock_manager_enable_resolve_deadlock = true;
     }
 
     @After
     public void tearDown() {
         Config.lock_manager_enabled = false;
+<<<<<<< HEAD
         Config.lock_manager_enable_using_fine_granularity_lock = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.lock_manager_enable_resolve_deadlock = false;
     }
 
@@ -56,7 +62,11 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         database.setExist(false);
         Locker locker = new Locker();
+<<<<<<< HEAD
         Assert.assertFalse(locker.lockAndCheckExist(database, LockType.READ));
+=======
+        Assert.assertFalse(locker.lockDatabaseAndCheckExist(database, LockType.READ));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -74,7 +84,11 @@ public class TestLockInterface {
         long rid = 1L;
         Database database = new Database(rid, "db");
         Locker locker = new Locker();
+<<<<<<< HEAD
         Assert.assertTrue(locker.isWriteLockHeldByCurrentThread(database));
+=======
+        Assert.assertTrue(locker.isDbWriteLockHeldByCurrentThread(database));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -87,14 +101,22 @@ public class TestLockInterface {
         long rid3 = 3L;
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.READ);
+=======
+        locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
+<<<<<<< HEAD
         locker.lockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.WRITE);
+=======
+        locker.lockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -107,22 +129,36 @@ public class TestLockInterface {
         long rid3 = 3L;
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database,
                 Lists.newArrayList(rid2, rid3), LockType.READ, 10));
+=======
+        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
+                Lists.newArrayList(rid2, rid3), LockType.READ, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
+<<<<<<< HEAD
         locker.unLockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.READ);
+=======
+        locker.unLockTablesWithIntensiveDbLock(database.getId(), Lists.newArrayList(rid2, rid3), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
+<<<<<<< HEAD
         Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database,
                 Lists.newArrayList(rid2, rid3), LockType.WRITE, 10));
+=======
+        Assert.assertTrue(locker.tryLockTablesWithIntensiveDbLock(database.getId(),
+                Lists.newArrayList(rid2, rid3), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));
@@ -143,7 +179,11 @@ public class TestLockInterface {
             }
         };
 
+<<<<<<< HEAD
         Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10));
+=======
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -152,7 +192,11 @@ public class TestLockInterface {
             }
         };
 
+<<<<<<< HEAD
         Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10));
+=======
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -161,7 +205,11 @@ public class TestLockInterface {
             }
         };
 
+<<<<<<< HEAD
         Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10));
+=======
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
@@ -170,27 +218,55 @@ public class TestLockInterface {
             }
         };
 
+<<<<<<< HEAD
         Assert.assertFalse(locker.tryLockDatabase(database, LockType.READ, 10));
+=======
+        Assert.assertFalse(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
             public boolean tryExclusiveLock(long timeout, TimeUnit unit) throws InterruptedException {
+<<<<<<< HEAD
                 Thread.sleep(100);
+=======
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    // ignore
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
         };
 
+<<<<<<< HEAD
         Assert.assertTrue(locker.tryLockDatabase(database, LockType.WRITE, 10));
+=======
+        Assert.assertTrue(locker.tryLockDatabase(database.getId(), LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new MockUp<QueryableReentrantReadWriteLock>() {
             @Mock
             public boolean trySharedLock(long timeout, TimeUnit unit) throws InterruptedException {
+<<<<<<< HEAD
                 Thread.sleep(100);
+=======
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    // ignore
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
         };
 
+<<<<<<< HEAD
         Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10));
+=======
+        Assert.assertTrue(locker.tryLockDatabase(database.getId(), LockType.READ, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Config.lock_manager_enabled = true;
     }
@@ -214,6 +290,7 @@ public class TestLockInterface {
         {
             new MockUp<Locker>() {
                 @Mock
+<<<<<<< HEAD
                 public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
                     if (database.getFullName().equalsIgnoreCase("db5")) {
                         return false;
@@ -222,6 +299,22 @@ public class TestLockInterface {
                     rwLock.exclusiveLock();
                     return true;
                 }
+=======
+                public boolean tryLockDatabase(Long dbId, LockType lockType, long timeout, TimeUnit unit) {
+                    if (dbId == 5) {
+                        return false;
+                    }
+
+                    QueryableReentrantReadWriteLock rwLock = dbs.get(dbId.intValue()).getRwLock();
+                    rwLock.exclusiveLock();
+                    return true;
+                }
+
+                @Mock
+                public void unLockDatabase(Long dbId, LockType lockType) {
+
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             };
             Assert.assertFalse(locker.tryLockDatabases(dbs, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
         }
@@ -235,17 +328,31 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         long rid2 = 2L;
         Locker locker = new Locker();
+<<<<<<< HEAD
         Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database, rid2, LockType.READ, 10, TimeUnit.MILLISECONDS));
+=======
+        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
+                rid2, LockType.READ, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
 
+<<<<<<< HEAD
         locker.unLockTablesWithIntensiveDbLock(database, ImmutableList.of(rid2), LockType.READ);
+=======
+        locker.unLockTablesWithIntensiveDbLock(database.getId(), ImmutableList.of(rid2), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
 
         locker.lock(rid2, LockType.READ);
+<<<<<<< HEAD
         Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database, rid2, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+=======
+        Assert.assertTrue(locker.tryLockTableWithIntensiveDbLock(database.getId(),
+                rid2, LockType.WRITE, 10, TimeUnit.MILLISECONDS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertTrue(lockManager.isOwner(rid, locker, LockType.INTENTION_EXCLUSIVE));
         Assert.assertTrue(lockManager.isOwner(rid2, locker, LockType.WRITE));

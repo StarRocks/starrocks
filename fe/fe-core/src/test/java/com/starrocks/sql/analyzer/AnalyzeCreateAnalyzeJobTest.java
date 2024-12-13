@@ -33,7 +33,10 @@ import org.junit.Test;
 
 import java.util.List;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
@@ -77,7 +80,11 @@ public class AnalyzeCreateAnalyzeJobTest {
         String sql = "create analyze full database db";
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
+<<<<<<< HEAD
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("db");
+=======
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("db");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
         Assert.assertEquals(StatsConstants.DEFAULT_ALL_ID, analyzeStmt.getTableId());
         Assert.assertTrue(analyzeStmt.getColumnNames().isEmpty());
@@ -88,9 +95,15 @@ public class AnalyzeCreateAnalyzeJobTest {
         String sql = "create analyze table db.tbl(kk1, kk2)";
         CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
 
+<<<<<<< HEAD
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("db");
         Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
         Table table = db.getTable("tbl");
+=======
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb("db");
+        Assert.assertEquals(db.getId(), analyzeStmt.getDbId());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(table.getId(), analyzeStmt.getTableId());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
     }
@@ -104,7 +117,17 @@ public class AnalyzeCreateAnalyzeJobTest {
         Assert.assertEquals(1,
                 starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
         sql = "create analyze sample table hive0.tpch.customer(C_NAME, C_PHONE)";
+<<<<<<< HEAD
         analyzeFail(sql, "External table hive0.tpch.customer don't support SAMPLE analyze.");
+=======
+        analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(sql);
+        Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
+        Assert.assertEquals(StatsConstants.AnalyzeType.SAMPLE, analyzeStmt.getAnalyzeType());
+
+        DDLStmtExecutor.execute(analyzeStmt, starRocksAssert.getCtx());
+        Assert.assertEquals(2,
+                starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

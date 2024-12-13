@@ -60,6 +60,22 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _could_split_physically(could_split_physically) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+<<<<<<< HEAD
+=======
+                           bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets)
+        : ChunkIterator(std::move(schema)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
+          _need_split(need_split),
+          _could_split_physically(could_split_physically) {
+    if (!rowsets.empty()) {
+        _rowsets_inited = true;
+        _rowsets = std::move(rowsets);
+    }
+}
+
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                            std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
@@ -104,7 +120,12 @@ Status TabletReader::prepare() {
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
+<<<<<<< HEAD
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
+=======
+        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
+        read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::NotSupported("reader type not supported now");
     }
     RETURN_IF_ERROR(init_compaction_column_paths(read_params));
@@ -133,7 +154,11 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
             return init_collector(read_params);
         }
 
+<<<<<<< HEAD
         std::vector<std::unique_ptr<pipeline::ScanMorsel>> morsels;
+=======
+        pipeline::Morsels morsels;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         morsels.emplace_back(
                 std::make_unique<pipeline::ScanMorsel>(read_params.plan_node_id, *(read_params.scan_range)));
 
@@ -289,9 +314,15 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
+<<<<<<< HEAD
     auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
                                                                      &rs_opts.predicates_for_zone_map));
+=======
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
@@ -311,6 +342,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.is_primary_keys = true;
         rs_opts.version = _tablet_metadata->version();
     }
+<<<<<<< HEAD
+=======
+    rs_opts.reader_type = params.reader_type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
         rs_opts.asc_hint = _is_asc_hint;
@@ -378,7 +413,11 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("tablet schema is null. forget or fail to call prepare()");
     }
+<<<<<<< HEAD
     PredicateParser pred_parser(_tablet_schema);
+=======
+    OlapPredicateParser pred_parser(_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int index = 0, size = _tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = _tablet_metadata->rowsets(index);

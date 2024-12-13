@@ -110,7 +110,11 @@ public class ShortCircuitTest extends PlanTestBase {
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+<<<<<<< HEAD
         coord.startScheduling();
+=======
+        coord.exec();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
         Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
@@ -150,7 +154,11 @@ public class ShortCircuitTest extends PlanTestBase {
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+<<<<<<< HEAD
         coord.startScheduling();
+=======
+        coord.exec();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(coord.getNext().isEos());
     }
 

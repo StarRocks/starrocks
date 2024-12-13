@@ -45,6 +45,11 @@ public:
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
     // Disable bloom filter in CastColumnIterator
+<<<<<<< HEAD
+=======
+    bool has_original_bloom_filter_index() const override { return false; }
+    bool has_ngram_bloom_filter_index() const override { return false; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                           SparseRange<>* row_ranges) override {
         return Status::OK();

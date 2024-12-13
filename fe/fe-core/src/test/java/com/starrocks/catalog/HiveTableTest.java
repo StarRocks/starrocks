@@ -134,8 +134,13 @@ public class HiveTableTest {
         Assert.assertTrue(table instanceof HiveTable);
         HiveTable hiveTable = (HiveTable) table;
         Assert.assertEquals("hive_tbl", hiveTable.getName());
+<<<<<<< HEAD
         Assert.assertEquals("hive_db", hiveTable.getDbName());
         Assert.assertEquals("hive_table", hiveTable.getTableName());
+=======
+        Assert.assertEquals("hive_db", hiveTable.getCatalogDBName());
+        Assert.assertEquals("hive_table", hiveTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(hdfsPath, hiveTable.getTableLocation());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(new Column("col1", Type.INT, true), hiveTable.getPartitionColumns().get(0));

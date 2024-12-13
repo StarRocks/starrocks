@@ -4,8 +4,11 @@ displayed_sidebar: docs
 
 # rand, random
 
+<<<<<<< HEAD
 ## 功能
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 返回一个 0 (包含) 到 1（不包含）之间的随机浮点数。
 
 ## 语法

@@ -14,6 +14,7 @@
 
 #include "formats/parquet/parquet_file_writer.h"
 
+<<<<<<< HEAD
 #include <arrow/buffer.h>
 #include <arrow/io/file.h>
 #include <parquet/arrow/writer.h>
@@ -29,18 +30,46 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "exprs/expr.h"
+=======
+#include <fmt/core.h>
+#include <glog/logging.h>
+#include <parquet/exception.h>
+#include <parquet/file_writer.h>
+#include <parquet/metadata.h>
+#include <parquet/parquet_version.h>
+#include <parquet/properties.h>
+#include <parquet/statistics.h>
+#include <runtime/current_thread.h>
+
+#include <future>
+#include <ostream>
+#include <utility>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
 #include "formats/parquet/chunk_writer.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/parquet/utils.h"
 #include "formats/utils.h"
+<<<<<<< HEAD
 #include "runtime/exec_env.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
+=======
+#include "fs/fs.h"
+#include "runtime/runtime_state.h"
+#include "types/logical_type.h"
+#include "util/debug_util.h"
+#include "util/priority_thread_pool.hpp"
+
+namespace starrocks {
+class Chunk;
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::formats {
 
@@ -265,7 +294,11 @@ StatusOr<::parquet::Compression::type> ParquetFileWriter::_convert_compression_t
 }
 
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::_make_schema(
+<<<<<<< HEAD
         const vector<std::string>& column_names, const vector<TypeDescriptor>& type_descs,
+=======
+        const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         const std::vector<FileColumnId>& file_column_ids) {
     ::parquet::schema::NodeVector fields;
     for (int i = 0; i < type_descs.size(); i++) {
@@ -358,8 +391,13 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
         }
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+<<<<<<< HEAD
                 ::parquet::Type::FIXED_LEN_BYTE_ARRAY, parquet::decimal_precision_to_byte_count(type_desc.precision),
                 file_column_id.field_id);
+=======
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                parquet::ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());

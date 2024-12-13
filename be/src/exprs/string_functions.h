@@ -29,6 +29,10 @@
 #include "util/url_parser.h"
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+class RegexpSplit;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct PadState {
     bool is_const;
@@ -275,6 +279,16 @@ public:
     DEFINE_VECTORIZED_FN(get_char);
 
     /**
+<<<<<<< HEAD
+=======
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(inet_aton);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Return the index of the first occurrence of substring
      *
      * @param: [string_value, sub_string_value]
@@ -404,6 +418,16 @@ public:
     static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
 
     /**
+<<<<<<< HEAD
+=======
+     * @param: [string_value, pattern, max_split]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_split);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn

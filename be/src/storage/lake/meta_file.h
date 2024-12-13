@@ -93,7 +93,11 @@ private:
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+<<<<<<< HEAD
                    DelVector* delvec);
+=======
+                   const LakeIOOptions& lake_io_opts, DelVector* delvec);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 

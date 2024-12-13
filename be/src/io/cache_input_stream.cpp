@@ -277,7 +277,10 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     char* p = static_cast<char*>(out);
     char* pe = p + count;
 
+<<<<<<< HEAD
     const int64_t _block_size = _cache->block_size();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const int64_t start_block_id = offset / _block_size;
     const int64_t end_block_id = (end_offset - 1) / _block_size;
 
@@ -395,6 +398,10 @@ void CacheInputStream::_populate_to_cache(const char* p, int64_t offset, int64_t
         options.evict_probability = _datacache_evict_probability;
         options.priority = _priority;
         options.ttl_seconds = _ttl_seconds;
+<<<<<<< HEAD
+=======
+        options.frequency = _frequency;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (options.async && sb) {
             auto cb = [sb](int code, const std::string& msg) {
                 // We only need to keep the shared buffer pointer

@@ -58,6 +58,18 @@ import static org.junit.Assert.fail;
 class ParserTest {
 
     @Test
+<<<<<<< HEAD
+=======
+    void test() {
+        String sql = "alter plan advisor add " +
+                "select count(*) from customer join " +
+                "(select * from skew_tbl where c_custkey_skew = 100) t on abs(c_custkey) = c_custkey_skew;";
+        SqlParser.parse(sql, new SessionVariable());
+        System.out.println();
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void tokensExceedLimitTest() {
         String sql = "select 1";
         SessionVariable sessionVariable = new SessionVariable();
@@ -71,6 +83,7 @@ class ParserTest {
     }
 
     @Test
+<<<<<<< HEAD
     void test() {
         String sql = "@`a` = 1";
         SessionVariable sessionVariable = new SessionVariable();
@@ -80,6 +93,8 @@ class ParserTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void sqlParseErrorInfoTest() {
         String sql = "select 1 form tbl";
         SessionVariable sessionVariable = new SessionVariable();
@@ -99,6 +114,7 @@ class ParserTest {
     @Test
     void sqlParseTemporalQueriesTest() {
         String[] temporalQueries = new String[] {
+<<<<<<< HEAD
                 // DoltDB temporal query syntax
                 // https://docs.dolthub.com/sql-reference/version-control/querying-history
                 "SELECT * FROM t AS OF 'kfvpgcf8pkd6blnkvv8e0kle8j6lug7a';",
@@ -110,6 +126,11 @@ class ParserTest {
                 // MariaDB temporal query syntax
                 // https://mariadb.com/kb/en/system-versioned-tables/
                 "SELECT * FROM t FOR SYSTEM_TIME AS OF TIMESTAMP '2016-10-09 08:07:06';",
+=======
+                // MariaDB temporal query syntax
+                // https://mariadb.com/kb/en/system-versioned-tables/
+                "SELECT * FROM t FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06';",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",

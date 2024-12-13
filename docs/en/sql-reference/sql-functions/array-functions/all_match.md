@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # all_match
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns whether all elements of an array match the given predicate.
 

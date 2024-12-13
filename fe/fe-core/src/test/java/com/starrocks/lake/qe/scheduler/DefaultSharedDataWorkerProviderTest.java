@@ -25,7 +25,11 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ColocatedBackendSelector;
@@ -198,7 +202,11 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectWorker() throws UserException {
+=======
+    public void testSelectWorker() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
@@ -242,7 +250,11 @@ public class DefaultSharedDataWorkerProviderTest {
 
     private static void testSelectNextWorkerHelper(WorkerProvider workerProvider,
                                                    Map<Long, ComputeNode> id2Worker)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<Long> selectedWorkers = new HashSet<>(id2Worker.size());
         for (int i = 0; i < id2Worker.size(); i++) {
             long workerId = workerProvider.selectNextWorker();
@@ -253,7 +265,11 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectNextWorker() throws UserException {
+=======
+    public void testSelectNextWorker() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
         blockList.hostBlacklist.clear();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();

@@ -21,6 +21,10 @@ set(EXPR_FILES
   agg/factory/aggregate_factory.cpp
   agg/factory/aggregate_resolver_approx.cpp
   agg/factory/aggregate_resolver_avg.cpp
+<<<<<<< HEAD
+=======
+  agg/factory/aggregate_resolver_hypothesis_testing.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   agg/factory/aggregate_resolver_minmaxany.cpp
   agg/factory/aggregate_resolver_others.cpp
   agg/factory/aggregate_resolver_sumcount.cpp
@@ -28,10 +32,13 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
+<<<<<<< HEAD
   jit/ir_helper.cpp
   jit/jit_engine.cpp
   jit/jit_expr.cpp
   anyval_util.cpp
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   base64.cpp
   binary_functions.cpp
   expr_context.cpp
@@ -44,12 +51,20 @@ set(EXPR_FILES
   array_element_expr.cpp
   array_expr.cpp
   array_functions.cpp
+<<<<<<< HEAD
+=======
+  arrow_function_call.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   binary_predicate.cpp
   bitmap_functions.cpp
   case_expr.cpp
   cast_expr.cpp
   cast_expr_array.cpp
   cast_expr_json.cpp
+<<<<<<< HEAD
+=======
+  cast_expr_struct.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
@@ -66,6 +81,10 @@ set(EXPR_FILES
   hyperloglog_functions.cpp
   in_const_predicate.cpp
   info_func.cpp
+<<<<<<< HEAD
+=======
+  inet_aton.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   in_predicate.cpp
   is_null_predicate.cpp
   json_functions.cpp
@@ -81,6 +100,10 @@ set(EXPR_FILES
   runtime_filter_bank.cpp
   runtime_filter.cpp
   split.cpp
+<<<<<<< HEAD
+=======
+  regexp_split.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   split_part.cpp
   str_to_map.cpp
   string_functions.cpp
@@ -103,4 +126,15 @@ set(EXPR_FILES
   match_expr.cpp
 )
 
+<<<<<<< HEAD
+=======
+if(STARROCKS_JIT_ENABLE)
+  set(EXPR_FILES ${EXPR_FILES} 
+      jit/ir_helper.cpp 
+      jit/jit_engine.cpp
+      jit/jit_expr.cpp)
+
+endif()
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 add_library(Exprs ${EXPR_FILES})

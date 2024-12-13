@@ -16,6 +16,10 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.DateLiteral;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -39,9 +43,18 @@ import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+=======
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -57,13 +70,21 @@ public class PartitionUtils {
                 .createTempPartitionsFromPartitions(db, targetTable, postfix, sourcePartitionIds,
                         tmpPartitionIds, distributionDesc, warehouseId);
         Locker locker = new Locker();
+<<<<<<< HEAD
         if (!locker.lockAndCheckExist(db, LockType.WRITE)) {
+=======
+        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new DdlException("create and add partition failed. database:{}" + db.getFullName() + " not exist");
         }
         boolean success = false;
         try {
             // should check whether targetTable exists
+<<<<<<< HEAD
             Table tmpTable = db.getTable(targetTable.getId());
+=======
+            Table tmpTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), targetTable.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (tmpTable == null) {
                 throw new DdlException("create partition failed because target table does not exist");
             }
@@ -143,7 +164,11 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.WRITE);
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -160,4 +185,100 @@ public class PartitionUtils {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static RangePartitionBoundary calRangePartitionBoundary(Range<PartitionKey> range) {
+        boolean isMaxPartition = range.upperEndpoint().isMaxValue();
+        boolean isMinPartition = range.lowerEndpoint().isMinValue();
+
+        // start keys
+        List<LiteralExpr> rangeKeyExprs;
+        List<Object> startKeys = new ArrayList<>();
+        if (!isMinPartition) {
+            rangeKeyExprs = range.lowerEndpoint().getKeys();
+            for (LiteralExpr literalExpr : rangeKeyExprs) {
+                Object keyValue;
+                if (literalExpr instanceof DateLiteral) {
+                    keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+                } else {
+                    keyValue = literalExpr.getRealObjectValue();
+                }
+
+                startKeys.add(keyValue);
+            }
+        }
+
+        // end keys
+        // is empty list when max partition
+        List<Object> endKeys = new ArrayList<>();
+        if (!isMaxPartition) {
+            rangeKeyExprs = range.upperEndpoint().getKeys();
+            for (LiteralExpr literalExpr : rangeKeyExprs) {
+                Object keyValue;
+                if (literalExpr instanceof DateLiteral) {
+                    keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+                } else {
+                    keyValue = literalExpr.getRealObjectValue();
+                }
+                endKeys.add(keyValue);
+            }
+        }
+
+        return new RangePartitionBoundary(isMinPartition, isMaxPartition, startKeys, endKeys);
+    }
+
+    // This is to be compatible with Spark Load Job formats for Date type.
+    // Because the historical version is serialized and deserialized with a special hash number for DateLiteral,
+    // special processing is also done here for DateLiteral to keep the historical version compatible.
+    // The deserialized code is in "SparkDpp.createPartitionRangeKeys"
+    public static Object convertDateLiteralToNumber(DateLiteral dateLiteral) {
+        if (dateLiteral.getType().isDate()) {
+            return (dateLiteral.getYear() * 16 * 32L
+                    + dateLiteral.getMonth() * 32
+                    + dateLiteral.getDay());
+        } else if (dateLiteral.getType().isDatetime()) {
+            return dateLiteral.getLongValue();
+        } else {
+            throw new StarRocksPlannerException("Invalid date type: " + dateLiteral.getType(), ErrorType.INTERNAL_ERROR);
+        }
+    }
+
+    public static class RangePartitionBoundary {
+
+        private final boolean minPartition;
+
+        private final boolean maxPartition;
+
+        private final List<Object> startKeys;
+
+        private final List<Object> endKeys;
+
+        public RangePartitionBoundary(boolean minPartition,
+                                      boolean maxPartition,
+                                      List<Object> startKeys,
+                                      List<Object> endKeys) {
+            this.minPartition = minPartition;
+            this.maxPartition = maxPartition;
+            this.startKeys = startKeys;
+            this.endKeys = endKeys;
+        }
+
+        public boolean isMinPartition() {
+            return minPartition;
+        }
+
+        public boolean isMaxPartition() {
+            return maxPartition;
+        }
+
+        public List<Object> getStartKeys() {
+            return startKeys;
+        }
+
+        public List<Object> getEndKeys() {
+            return endKeys;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -92,9 +92,15 @@ public class BatchRollupJobTest {
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("db1");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assert.assertNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(tbl);
 
         // 3 rollup jobs may be finished in the loop, so only check the final state at last.
@@ -119,7 +125,11 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
+<<<<<<< HEAD
             Assert.assertEquals(4, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+=======
+            Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -138,9 +148,15 @@ public class BatchRollupJobTest {
         Assert.assertEquals(3, alterJobs.size());
         List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("db1");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl2");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assert.assertNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(tbl);
         Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
 
@@ -154,7 +170,11 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
+<<<<<<< HEAD
             Assert.assertEquals(1, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+=======
+            Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

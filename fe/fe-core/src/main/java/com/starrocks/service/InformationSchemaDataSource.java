@@ -17,6 +17,10 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -43,7 +47,10 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -150,12 +157,21 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.READ);
                 try {
                     List<Table> allTables = db.getTables();
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (Table table : allTables) {
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
@@ -181,7 +197,11 @@ public class InformationSchemaDataSource {
                         tList.add(tableConfigInfo);
                     }
                 } finally {
+<<<<<<< HEAD
                     locker.unLockDatabase(db, LockType.READ);
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -257,11 +277,19 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 continue;
             }
             List<Table> allTables = db.getTables();
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                continue;
+            }
+            List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Table table : allTables) {
                 try {
                     Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
@@ -277,7 +305,11 @@ public class InformationSchemaDataSource {
                 // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
                 // partition does not trigger crash
                 Locker locker = new Locker();
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.READ);
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
@@ -304,7 +336,11 @@ public class InformationSchemaDataSource {
                         }
                     }
                 } finally {
+<<<<<<< HEAD
                     locker.unLockDatabase(db, LockType.READ);
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -404,7 +440,11 @@ public class InformationSchemaDataSource {
             List<BasicTable> tables = new ArrayList<>();
             Locker locker = new Locker();
             try {
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.READ);
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
                 for (String tableName : tableNames) {
                     if (request.isSetTable_name()) {
@@ -432,14 +472,22 @@ public class InformationSchemaDataSource {
                     tables.add(table);
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             for (BasicTable table : tables) {
                 Locker tableLocker = new Locker();
                 try {
                     if (table.isNativeTableOrMaterializedView()) {
+<<<<<<< HEAD
                         tableLocker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
+=======
+                        tableLocker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(((OlapTable) table).getId()),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 LockType.READ);
                     }
 
@@ -485,8 +533,13 @@ public class InformationSchemaDataSource {
                     infos.add(info);
                 } finally {
                     if (table.isNativeTableOrMaterializedView()) {
+<<<<<<< HEAD
                         tableLocker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(((OlapTable) table).getId()),
                                 LockType.READ);
+=======
+                        tableLocker.unLockTablesWithIntensiveDbLock(db.getId(),
+                                Lists.newArrayList(((OlapTable) table).getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
@@ -524,12 +577,20 @@ public class InformationSchemaDataSource {
             if (db != null) {
                 Map<Long, UUID> tableMap = allTables.row(databaseId);
                 Locker locker = new Locker();
+<<<<<<< HEAD
                 locker.lockDatabase(db, LockType.READ);
+=======
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 try {
                     for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
                         UUID sessionId = entry.getValue();
                         Long tableId = entry.getKey();
+<<<<<<< HEAD
                         Table table = db.getTable(tableId);
+=======
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (table != null) {
                             TTableInfo info = new TTableInfo();
 
@@ -566,7 +627,11 @@ public class InformationSchemaDataSource {
                         break;
                     }
                 } finally {
+<<<<<<< HEAD
                     locker.unLockDatabase(db, LockType.READ);
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }

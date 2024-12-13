@@ -158,7 +158,11 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
             try {
                 Optional<Table> registeredTableOpt = MvUtils.getTableWithIdentifier(registeredTableInfo);
                 if (registeredTableOpt.isEmpty()) {
+<<<<<<< HEAD
                     LOG.warn("Table {}.{}.{} not exist",  registeredTableInfo.getCatalogName(),
+=======
+                    LOG.warn("Table {}.{}.{} not exist", registeredTableInfo.getCatalogName(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             registeredTableInfo.getDbName(), registeredTableInfo.getTableName());
                     continue;
                 }
@@ -184,22 +188,38 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MetadataMgr metadataMgr = gsm.getMetadataMgr();
         List<Database> databases = gsm.getLocalMetastore().getDbIds().stream()
+<<<<<<< HEAD
                 .map(gsm::getDb)
+=======
+                .map(dbId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .filter(Objects::nonNull)
                 .filter(db -> !db.isSystemDatabase())
                 .collect(Collectors.toList());
         for (Database db : databases) {
+<<<<<<< HEAD
             List<HiveTable> tables = db.getTables().stream()
+=======
+            List<HiveTable> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .filter(tbl -> tbl.getType() == Table.TableType.HIVE)
                     .map(tbl -> (HiveTable) tbl)
                     .collect(Collectors.toList());
             for (HiveTable table : tables) {
                 try {
                     LOG.info("Start to refresh hive external table metadata on {}.{} of StarRocks and {}.{} of hive " +
+<<<<<<< HEAD
                             "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getTableName());
                     // we didn't use db locks to prevent background tasks from affecting the query.
                     // So we need to check if the table to be refreshed exists.
                     if (db.getTable(table.getId()) != null) {
+=======
+                                    "in the background", db.getFullName(), table.getName(), table.getCatalogDBName(),
+                            table.getCatalogTableName());
+                    // we didn't use db locks to prevent background tasks from affecting the query.
+                    // So we need to check if the table to be refreshed exists.
+                    if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) != null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         metadataMgr.refreshTable(table.getCatalogName(), db.getFullName(),
                                 table, Lists.newArrayList(), false);
                     }

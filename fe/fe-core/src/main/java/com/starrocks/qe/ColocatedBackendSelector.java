@@ -18,7 +18,11 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.WorkerProvider;
@@ -64,7 +68,11 @@ public class ColocatedBackendSelector implements BackendSelector {
     }
 
     @Override
+<<<<<<< HEAD
     public void computeScanRangeAssignment() throws UserException {
+=======
+    public void computeScanRangeAssignment() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         colocatedAssignment.recordAssignedScanNode(scanNode);
 
         Map<Integer, Long> bucketSeqToWorkerId = colocatedAssignment.seqToWorkerId;
@@ -115,7 +123,11 @@ public class ColocatedBackendSelector implements BackendSelector {
 
     // Make sure each host have average bucket to scan
     private void computeExecAddressForBucketSeq(TScanRangeLocations seqLocation, Integer bucketSeq)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<Long, Integer> buckendIdToBucketCountMap = colocatedAssignment.backendIdToBucketCount;
         int minBucketNum = Integer.MAX_VALUE;
         long minBackendId = Long.MAX_VALUE;

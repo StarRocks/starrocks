@@ -46,7 +46,10 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
+<<<<<<< HEAD
 #include "exprs/jit/jit_engine.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "fs/fs_util.h"
 #ifdef USE_STAROS
 #include "fslib/star_cache_handler.h"
@@ -62,6 +65,13 @@
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 // for ut only
@@ -241,6 +251,7 @@ ObjectPool* RuntimeState::global_obj_pool() const {
     return _query_ctx->object_pool();
 }
 
+<<<<<<< HEAD
 std::string RuntimeState::error_log() {
     std::lock_guard<std::mutex> l(_error_log_lock);
     return boost::algorithm::join(_error_log, "\n");
@@ -274,6 +285,8 @@ void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
     }
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool RuntimeState::use_page_cache() {
     if (config::disable_storage_page_cache) {
         return false;
@@ -284,6 +297,7 @@ bool RuntimeState::use_page_cache() {
     return true;
 }
 
+<<<<<<< HEAD
 bool RuntimeState::use_column_pool() const {
     if (config::disable_column_pool) {
         return false;
@@ -295,6 +309,8 @@ bool RuntimeState::use_column_pool() const {
     return true;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size, std::string_view msg) {
     DCHECK_GE(failed_allocation_size, 0);
     {
@@ -319,7 +335,10 @@ Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_
            << PrettyPrinter::print(failed_allocation_size, TUnit::BYTES) << " without exceeding limit." << std::endl;
     }
 
+<<<<<<< HEAD
     log_error(ss.str());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(_process_status.is_mem_limit_exceeded());
     return _process_status;
 }
@@ -523,8 +542,17 @@ Status RuntimeState::reset_epoch() {
 }
 
 bool RuntimeState::is_jit_enabled() const {
+<<<<<<< HEAD
     return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
            _query_options.jit_level != 0;
+=======
+#ifdef STARROCKS_JIT_ENABLE
+    return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
+           _query_options.jit_level != 0;
+#else
+    return false;
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {

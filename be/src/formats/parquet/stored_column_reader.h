@@ -17,18 +17,42 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+<<<<<<< HEAD
 
 #include "column_reader.h"
 #include "common/status.h"
+=======
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+#include "column_reader.h"
+#include "common/status.h"
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
+<<<<<<< HEAD
+=======
+#include "storage/range.h"
+
+namespace tparquet {
+class ColumnChunk;
+} // namespace tparquet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 class Column;
 class NullableColumn;
+<<<<<<< HEAD
+=======
+
+namespace parquet {
+struct ParquetField;
+} // namespace parquet
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -58,8 +82,12 @@ public:
 
     virtual Status get_dict_values(Column* column) = 0;
 
+<<<<<<< HEAD
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) = 0;
+=======
+    virtual Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual Status load_dictionary_page() { return Status::InternalError("Not supported load_dictionary_page"); }
 
@@ -84,10 +112,16 @@ public:
     Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                       Column* dst) override;
 
+<<<<<<< HEAD
     virtual Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
 
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) override {
+=======
+    Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
+
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 

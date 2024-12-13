@@ -139,7 +139,10 @@ public class ShowStmtAnalyzer {
             return visitShowTableStatement(node, context);
         }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt node, ConnectContext context) {
             ShowTabletStmtAnalyzer.analyze(node, context);
@@ -358,12 +361,20 @@ public class ShowStmtAnalyzer {
         }
 
         private void descInternalCatalogTable(DescribeStmt node, ConnectContext context) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(node.getDb());
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(node.getDb());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
             }
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 Table table = null;
                 try {
@@ -374,7 +385,11 @@ public class ShowStmtAnalyzer {
                 }
                 //if getTable not find table, may be is statement "desc materialized-view-name"
                 if (table == null) {
+<<<<<<< HEAD
                     for (Table tb : db.getTables()) {
+=======
+                    for (Table tb : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (tb.getType() == Table.TableType.OLAP) {
                             OlapTable olapTable = (OlapTable) tb;
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
@@ -498,15 +513,24 @@ public class ShowStmtAnalyzer {
                                 mysqlTable.getPort(),
                                 mysqlTable.getUserName(),
                                 mysqlTable.getPasswd(),
+<<<<<<< HEAD
                                 mysqlTable.getMysqlDatabaseName(),
                                 mysqlTable.getMysqlTableName());
+=======
+                                mysqlTable.getCatalogDBName(),
+                                mysqlTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         node.getTotalRows().add(row);
                     } else {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_STORAGE_ENGINE, table.getType());
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -561,7 +585,11 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -569,7 +597,11 @@ public class ShowStmtAnalyzer {
             final String tableName = statement.getTableName();
             final boolean isTempPartition = statement.isTempPartition();
             Locker locker = new Locker();
+<<<<<<< HEAD
             locker.lockDatabase(db, LockType.READ);
+=======
+            locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
                 if (!(table instanceof OlapTable)) {
@@ -600,7 +632,11 @@ public class ShowStmtAnalyzer {
                         analyzeOrderBy(statement.getOrderByElements(), statement.getNode());
                 statement.setOrderByPairs(orderByPairs);
             } finally {
+<<<<<<< HEAD
                 locker.unLockDatabase(db, LockType.READ);
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return null;
         }

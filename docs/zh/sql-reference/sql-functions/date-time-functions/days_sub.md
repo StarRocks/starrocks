@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从给定日期或者日期时间中减去指定的天数，获得新的 DATETIME 结果。
 

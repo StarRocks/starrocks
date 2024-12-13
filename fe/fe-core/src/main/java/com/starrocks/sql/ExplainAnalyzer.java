@@ -91,7 +91,14 @@ public class ExplainAnalyzer {
         return Integer.parseInt(matcher.group(1));
     }
 
+<<<<<<< HEAD
     public static String analyze(ProfilingExecPlan plan, RuntimeProfile profile, List<Integer> planNodeIds) {
+=======
+    public static String analyze(ProfilingExecPlan plan,
+                                 RuntimeProfile profile,
+                                 List<Integer> planNodeIds,
+                                 boolean colorExplainOutput) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.debug("plan {} profile {} planNodeIds {}", plan, profile, planNodeIds);
         if (plan == null && profile.getChild("Summary") != null) {
             String loadType = profile.getChild("Summary").getInfoString(ProfileManager.LOAD_TYPE);
@@ -102,7 +109,11 @@ public class ExplainAnalyzer {
                 return builder.toString();
             }
         }
+<<<<<<< HEAD
         ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds);
+=======
+        ExplainAnalyzer analyzer = new ExplainAnalyzer(plan, profile, planNodeIds, colorExplainOutput);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return analyzer.analyze();
     }
 
@@ -150,14 +161,27 @@ public class ExplainAnalyzer {
     private boolean isFinishedIdentical;
 
     private String color = ANSI_RESET;
+<<<<<<< HEAD
+=======
+    private boolean colorExplainOutput = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private long cumulativeOperatorTime;
     private Counter cumulativeScanTime;
     private Counter cumulativeNetworkTime;
     private Counter scheduleTime;
 
+<<<<<<< HEAD
     public ExplainAnalyzer(ProfilingExecPlan plan, RuntimeProfile queryProfile, List<Integer> planNodeIds) {
         this.plan = plan;
+=======
+    public ExplainAnalyzer(ProfilingExecPlan plan,
+                           RuntimeProfile queryProfile,
+                           List<Integer> planNodeIds,
+                           boolean colorExplainOutput) {
+        this.plan = plan;
+        this.colorExplainOutput = colorExplainOutput;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (this.plan == null) {
             this.summaryProfile = null;
             this.plannerProfile = null;
@@ -336,6 +360,7 @@ public class ExplainAnalyzer {
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         if (plan.getFragments().stream()
                 .anyMatch(fragment -> fragment.getSink().instanceOf(OlapTableSink.class))) {
+<<<<<<< HEAD
             appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
                     "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
                     ANSI_RESET);
@@ -343,6 +368,15 @@ public class ExplainAnalyzer {
         if (!isFinishedIdentical) {
             appendSummaryLine("Attention: ", ANSI_BOLD + ANSI_BLACK_ON_RED,
                     "Profile is not identical!!!", ANSI_RESET);
+=======
+            appendSummaryLine("Attention: ", getAnsiColor(ANSI_BOLD + ANSI_BLACK_ON_RED),
+                    "The transaction of the statement will be aborted, and no data will be actually inserted!!!",
+                    getAnsiColor(ANSI_RESET));
+        }
+        if (!isFinishedIdentical) {
+            appendSummaryLine("Attention: ", getAnsiColor(ANSI_BOLD + ANSI_BLACK_ON_RED),
+                    "Profile is not identical!!!", getAnsiColor(ANSI_RESET));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         appendSummaryLine("QueryId: ", summaryProfile.getInfoString(ProfileManager.QUERY_ID));
         appendSummaryLine("Version: ", summaryProfile.getInfoString("StarRocks Version"));
@@ -447,10 +481,19 @@ public class ExplainAnalyzer {
         pushIndent(GraphElement.LEAF_METRIC_INDENT);
         for (int i = 0; i < topCpuNodes.size(); i++) {
             NodeInfo nodeInfo = topCpuNodes.get(i);
+<<<<<<< HEAD
             if (nodeInfo.isMostConsuming) {
                 setRedColor();
             } else if (nodeInfo.isSecondMostConsuming) {
                 setCoralColor();
+=======
+            if (colorExplainOutput) {
+                if (nodeInfo.isMostConsuming) {
+                    setRedColor();
+                } else if (nodeInfo.isSecondMostConsuming) {
+                    setCoralColor();
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             appendSummaryLine(String.format("%d. ", i + 1), nodeInfo.getTitle(),
                     ": ", nodeInfo.totalTime, String.format(" (%.2f%%)", nodeInfo.totalTimePercentage));
@@ -514,10 +557,19 @@ public class ExplainAnalyzer {
                 // at the receiver side fragment through exchange node
                 sinkInfo = allNodeInfos.get(FINAL_SINK_PSEUDO_PLAN_NODE_ID);
                 sinkInfo.computeTimeUsage(cumulativeOperatorTime);
+<<<<<<< HEAD
                 if (sinkInfo.isMostConsuming) {
                     setRedColor();
                 } else if (sinkInfo.isSecondMostConsuming) {
                     setCoralColor();
+=======
+                if (colorExplainOutput) {
+                    if (sinkInfo.isMostConsuming) {
+                        setRedColor();
+                    } else if (sinkInfo.isSecondMostConsuming) {
+                        setCoralColor();
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             } else {
                 sinkInfo = allNodeInfos.get(sink.getId());
@@ -563,10 +615,19 @@ public class ExplainAnalyzer {
 
         nodeInfo.computeTimeUsage(cumulativeOperatorTime);
         nodeInfo.computeMemoryUsage();
+<<<<<<< HEAD
         if (nodeInfo.isMostConsuming) {
             setRedColor();
         } else if (nodeInfo.isSecondMostConsuming) {
             setCoralColor();
+=======
+        if (colorExplainOutput) {
+            if (nodeInfo.isMostConsuming) {
+                setRedColor();
+            } else if (nodeInfo.isSecondMostConsuming) {
+                setCoralColor();
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         boolean isMiddleChild = (parent != null && index < parent.getChildren().size() - 1);
@@ -907,7 +968,11 @@ public class ExplainAnalyzer {
         }
         Counter minCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MIN + name);
         Counter maxCounter = uniqueMetrics.getCounter(RuntimeProfile.MERGED_INFO_PREFIX_MAX + name);
+<<<<<<< HEAD
         boolean needHighlight = enableHighlight && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+=======
+        boolean needHighlight = enableHighlight && colorExplainOutput && nodeInfo.isTimeConsumingMetric(uniqueMetrics, name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Object> items = Lists.newArrayList();
         if (needHighlight) {
             items.add(getBackGround());
@@ -1057,7 +1122,11 @@ public class ExplainAnalyzer {
         }
         boolean isColorAppended = false;
         for (Object content : contents) {
+<<<<<<< HEAD
             if (!isColorAppended && !(content instanceof GraphElement)) {
+=======
+            if (colorExplainOutput && !isColorAppended && !(content instanceof GraphElement)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 buffer.append(color);
                 isColorAppended = true;
             }
@@ -1074,7 +1143,13 @@ public class ExplainAnalyzer {
                 buffer.append(content);
             }
         }
+<<<<<<< HEAD
         buffer.append(ANSI_RESET);
+=======
+        if (colorExplainOutput) {
+            buffer.append(ANSI_RESET);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buffer.append('\n');
     }
 
@@ -1107,6 +1182,16 @@ public class ExplainAnalyzer {
         color = ANSI_RESET;
     }
 
+<<<<<<< HEAD
+=======
+    private String getAnsiColor(String color) {
+        if (!colorExplainOutput) {
+            return "";
+        }
+        return color;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private enum NodeState {
         INIT("\u23F3"), // ⏳
         RUNNING("\uD83D\uDE80"), // 🚀

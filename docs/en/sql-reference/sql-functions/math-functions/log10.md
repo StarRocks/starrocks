@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # log10, dlog10
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the base 10 logarithm of a number.
 

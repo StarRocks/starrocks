@@ -408,7 +408,11 @@ class DeleteFileIndex {
             return Iterables.filter(deleteFiles, file -> file.dataSequenceNumber() > minSequenceNumber);
         }
 
+<<<<<<< HEAD
         private Collection<DeleteFile> loadDeleteFiles() {
+=======
+        public Collection<DeleteFile> loadDeleteFiles() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // read all of the matching delete manifests in parallel and accumulate the matching files in
             // a queue
             Queue<DeleteFile> files = new ConcurrentLinkedQueue<>();

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # version
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回当前 MySQL 数据库的版本。可以使用 `current_version` 函数查询 StarRocks 当前的版本。
 

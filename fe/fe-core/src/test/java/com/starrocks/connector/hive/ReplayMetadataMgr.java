@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableList;
@@ -20,15 +23,28 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
+=======
+import com.starrocks.catalog.HiveResource;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.InternalCatalog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
@@ -139,7 +155,12 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+=======
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
+                                           ConnectorMetadatRequestContext requestContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return replayTableMap.get(catalogName).get(dbName).get(tableName).partitionNames;
     }
 
@@ -160,7 +181,17 @@ public class ReplayMetadataMgr extends MetadataMgr {
         if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName)) {
             catalogName = CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive");
         }
+<<<<<<< HEAD
         return replayTableMap.get(catalogName).get(dbName).get(tblName).table;
+=======
+
+        HiveTableInfo tableInfo = replayTableMap.get(catalogName).get(dbName).get(tblName);
+        if (tableInfo != null) {
+            return tableInfo.table;
+        }
+        // probably it's a hive view but being created in default catalog.
+        return super.getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -172,9 +203,15 @@ public class ReplayMetadataMgr extends MetadataMgr {
                                          ScalarOperator predicate) {
         Statistics.Builder resStatistics = Statistics.builder();
         Map<ColumnRefOperator, ColumnStatistic> res = new HashMap<>();
+<<<<<<< HEAD
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
         Statistics statistics =  replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
+=======
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+        Statistics statistics = replayTableMap.get(catalogName).get(dbName).get(tblName).statistics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<ColumnRefOperator, ColumnStatistic> columnStatisticMap = statistics.getColumnStatistics();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatisticMap.entrySet()) {
             for (ColumnRefOperator columnRefOperator : columns.keySet()) {
@@ -189,7 +226,11 @@ public class ReplayMetadataMgr extends MetadataMgr {
     }
 
     @Override
+<<<<<<< HEAD
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
+=======
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList(MOCKED_FILES);
     }
 

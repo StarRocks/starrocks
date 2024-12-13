@@ -75,6 +75,11 @@ public:
 
     void set_priority(const int8_t priority) { _priority = priority; }
 
+<<<<<<< HEAD
+=======
+    void set_frequency(const int8_t frequency) { _frequency = frequency; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void set_ttl_seconds(const uint64_t ttl_seconds) { _ttl_seconds = ttl_seconds; }
 
     int64_t get_align_size() const;
@@ -119,6 +124,10 @@ protected:
     std::unordered_map<int64_t, BlockBuffer> _block_map;
     int8_t _priority = 0;
     uint64_t _ttl_seconds = 0;
+<<<<<<< HEAD
+=======
+    int8_t _frequency = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     inline int64_t _calculate_remote_latency_per_block(int64_t io_bytes, int64_t read_time_ns);

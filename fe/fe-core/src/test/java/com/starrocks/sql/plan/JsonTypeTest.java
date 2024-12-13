@@ -84,6 +84,22 @@ public class JsonTypeTest extends PlanTestBase {
     /**
      * Arrow expression should be rewrite to json_query
      */
+<<<<<<< HEAD
+=======
+    @Test
+    public void testRewriteArrowExpr() throws Exception {
+        assertPlanContains("select parse_json('1') -> '$.k1' ",
+                "json_query(parse_json('1'), '$.k1')");
+        assertPlanContains("select v_json -> '$.k1' from tjson_test ",
+                "json_query(2: v_json, '$.k1')");
+
+        // arrow and cast
+        assertPlanContains("select cast(parse_json('1') -> '$.k1' as int) ",
+                "json_query(parse_json('1'), '$.k1')");
+        assertPlanContains("select cast(v_json -> '$.k1' as int) from tjson_test",
+                "CAST(get_json_int(2: v_json, '$.k1') AS INT)");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Test
     public void testPredicateImplicitCast() throws Exception {

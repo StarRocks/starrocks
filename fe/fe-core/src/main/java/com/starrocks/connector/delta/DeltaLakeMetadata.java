@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
@@ -35,6 +36,25 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.ErrorType;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.PredicateSearchKey;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -57,6 +77,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.HashSet;
+<<<<<<< HEAD
+=======
+import java.util.Iterator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -74,13 +98,24 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     private final Map<PredicateSearchKey, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<PredicateSearchKey> scannedTables = new HashSet<>();
     private final DeltaStatisticProvider statisticProvider = new DeltaStatisticProvider();
+<<<<<<< HEAD
 
     public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
                              DeltaLakeCacheUpdateProcessor cacheUpdateProcessor) {
+=======
+    private final ConnectorProperties properties;
+
+    public DeltaLakeMetadata(HdfsEnvironment hdfsEnvironment, String catalogName, DeltaMetastoreOperations deltaOps,
+                             DeltaLakeCacheUpdateProcessor cacheUpdateProcessor, ConnectorProperties properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.deltaOps = deltaOps;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
+<<<<<<< HEAD
+=======
+        this.properties = properties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getCatalogName() {
@@ -108,11 +143,16 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+=======
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return deltaOps.getPartitionKeys(databaseName, tableName);
     }
 
     @Override
+<<<<<<< HEAD
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator operator,
                                                    List<String> fieldNames, long limit) {
@@ -134,15 +174,51 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 DeltaLakeRemoteFileDesc.createDeltaLakeRemoteFileDesc(scanTasks));
         remoteFileInfo.setFiles(remoteFileDescs);
         return Lists.newArrayList(remoteFileInfo);
+=======
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+        String dbName = deltaLakeTable.getCatalogDBName();
+        String tableName = deltaLakeTable.getCatalogTableName();
+        PredicateSearchKey key =
+                PredicateSearchKey.of(dbName, tableName, params.getTableVersionRange().end().get(), params.getPredicate());
+
+        triggerDeltaLakePlanFilesIfNeeded(key, table, params.getPredicate(), params.getFieldNames());
+
+        List<FileScanTask> scanTasks = splitTasks.get(key);
+        if (scanTasks == null) {
+            throw new StarRocksConnectorException("Missing deltalake split task for table:[{}.{}]. predicate:[{}]",
+                    dbName, tableName, params.getPredicate());
+        }
+
+        return scanTasks.stream().map(DeltaRemoteFileInfo::new).collect(Collectors.toList());
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        return buildRemoteInfoSource(table, params.getPredicate(), false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
+<<<<<<< HEAD
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
         String dbName = deltaLakeTable.getDbName();
         String tableName = deltaLakeTable.getTableName();
+=======
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange versionRange) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
+        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+        SnapshotImpl snapshot = (SnapshotImpl) deltaLakeTable.getDeltaSnapshot();
+        String dbName = deltaLakeTable.getCatalogDBName();
+        String tableName = deltaLakeTable.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Engine engine = deltaLakeTable.getDeltaEngine();
         StructType schema = deltaLakeTable.getDeltaMetadata().getSchema();
         PredicateSearchKey key = PredicateSearchKey.of(dbName, tableName, snapshot.getVersion(engine), predicate);
@@ -157,12 +233,21 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                     dbName, table, predicate);
         }
 
+<<<<<<< HEAD
         if (session.getSessionVariable().enableDeltaLakeColumnStatistics()) {
             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.getTableStatistics" + key)) {
                 return statisticProvider.getTableStatistics(schema, key, columns);
             }
         } else {
             try (Timer ignored = Tracers.watchScope(EXTERNAL, "DELTA_LAKE.getCardinalityStats" + key)) {
+=======
+        String traceLabel = session.getSessionVariable().enableDeltaLakeColumnStatistics() ?
+                "DELTA_LAKE.getTableStatistics" + key : "DELTA_LAKE.getCardinalityStats" + key;
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
+            if (session.getSessionVariable().enableDeltaLakeColumnStatistics()) {
+                return statisticProvider.getTableStatistics(schema, key, columns);
+            } else {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return statisticProvider.getCardinalityStats(schema, key, columns);
             }
         }
@@ -188,8 +273,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
     private void collectDeltaLakePlanFiles(PredicateSearchKey key, Table table, ScalarOperator operator,
                                            ConnectContext connectContext, List<String> fieldNames) {
+=======
+    private Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> buildFileScanTaskIterator(
+            Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
         Metadata metadata = deltaLakeTable.getDeltaMetadata();
         Engine engine = deltaLakeTable.getDeltaEngine();
@@ -205,17 +295,100 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
 
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder(engine);
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(engine, deltaLakePredicate).build();
+<<<<<<< HEAD
+=======
+        long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+        return new Iterator<>() {
+            CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
+            CloseableIterator<Row> scanFileRows;
+            boolean hasMore = true;
+
+            @Override
+            public boolean hasNext() {
+                if (hasMore) {
+                    ensureOpen();
+                }
+                return hasMore;
+            }
+
+            @Override
+            public Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> next() {
+                ensureOpen();
+                Row scanFileRow = scanFileRows.next();
+
+                DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
+                return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow,
+                                estimateRowSize, dv);
+            }
+
+            private void ensureOpen() {
+                try {
+                    if (scanFilesAsBatches == null) {
+                        scanFilesAsBatches = scan.getScanFiles(engine, true);
+                    }
+                    while (scanFileRows == null || !scanFileRows.hasNext()) {
+                        if (!scanFilesAsBatches.hasNext()) {
+                            scanFilesAsBatches.close();
+                            hasMore = false;
+                            break;
+                        }
+                        if (scanFileRows != null) {
+                            scanFileRows.close();
+                        }
+                        FilteredColumnarBatch scanFileBatch = scanFilesAsBatches.next();
+                        scanFileRows = scanFileBatch.getRows();
+                    }
+                } catch (IOException e) {
+                    LOG.error("Failed to get delta lake scan files", e);
+                    throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
+                }
+            }
+        };
+    }
+
+    private RemoteFileInfoSource buildRemoteInfoSource(Table table, ScalarOperator operator, boolean enableCollectColumnStats) {
+        Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
+                buildFileScanTaskIterator(table, operator, enableCollectColumnStats);
+        return new RemoteFileInfoSource() {
+            @Override
+            public RemoteFileInfo getOutput() {
+                Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
+                return new DeltaRemoteFileInfo(pair.first);
+            }
+
+            @Override
+            public boolean hasMoreOutput() {
+                return iterator.hasNext();
+            }
+        };
+    }
+
+    private void collectDeltaLakePlanFiles(PredicateSearchKey key, Table table, ScalarOperator operator,
+                                           ConnectContext connectContext, List<String> fieldNames) {
+        DeltaLakeTable deltaLakeTable = (DeltaLakeTable) table;
+        Metadata metadata = deltaLakeTable.getDeltaMetadata();
+        StructType schema = metadata.getSchema();
+        Set<String> partitionColumns = metadata.getPartitionColNames();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Set<String> nonPartitionPrimitiveColumns;
         Set<String> partitionPrimitiveColumns;
         if (fieldNames != null) {
             nonPartitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
+<<<<<<< HEAD
                     && !partitionColumns.contains(column))
                     .collect(Collectors.toSet());
             partitionPrimitiveColumns = fieldNames.stream()
                     .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
                     && partitionColumns.contains(column))
+=======
+                            && !partitionColumns.contains(column))
+                    .collect(Collectors.toSet());
+            partitionPrimitiveColumns = fieldNames.stream()
+                    .filter(column -> DeltaDataType.canUseStatsType(schema.get(column).getDataType())
+                            && partitionColumns.contains(column))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .collect(Collectors.toSet());
         } else {
             nonPartitionPrimitiveColumns = schema.fieldNames().stream()
@@ -227,6 +400,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         }
 
         List<FileScanTask> files = Lists.newArrayList();
+<<<<<<< HEAD
 
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
 
@@ -269,6 +443,22 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
             throw new StarRocksConnectorException("Failed to get delta lake scan files", e);
         }
 
+=======
+        boolean enableCollectColumnStats = enableCollectColumnStatistics(connectContext);
+        String traceLabel = enableCollectColumnStats ? "DELTA_LAKE.updateDeltaLakeFileStats" :
+                "DELTA_LAKE.updateDeltaLakeCardinality";
+
+        Iterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
+                buildFileScanTaskIterator(table, operator, enableCollectColumnStats);
+        while (iterator.hasNext()) {
+            Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
+            files.add(pair.first);
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, traceLabel)) {
+                statisticProvider.updateFileStats(deltaLakeTable, key, pair.first, pair.second,
+                        nonPartitionPrimitiveColumns, partitionPrimitiveColumns);
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         splitTasks.put(key, files);
         scannedTables.add(key);
     }

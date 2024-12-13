@@ -50,7 +50,11 @@ public class ReplicaMinReadableVersionTest {
 
     @Test
     public void testReplicaMinReadableVersionReported() throws Exception {
+<<<<<<< HEAD
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable(tableName);
+=======
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long tableId = olapTable.getId();
         PseudoBackend be = cluster.getBackend(10001);
         Tablet tablet = be.getTabletsByTable(tableId).get(0);

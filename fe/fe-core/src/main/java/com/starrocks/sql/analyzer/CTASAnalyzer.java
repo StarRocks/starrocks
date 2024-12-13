@@ -20,11 +20,16 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
+=======
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.Table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
@@ -89,6 +94,7 @@ public class CTASAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         for (int i = 0; i < allFields.size(); i++) {
             boolean isConnectorTable = false;
             try {
@@ -107,6 +113,18 @@ public class CTASAnalyzer {
             Expr originExpression = allFields.get(i).getOriginExpression();
             ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
                     null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+=======
+        TableName tableNameObject = createTableStmt.getDbTbl();
+        tableNameObject.normalization(session);
+        CreateTableAnalyzer.analyzeEngineName(createTableStmt, tableNameObject.getCatalog());
+
+        for (int i = 0; i < allFields.size(); i++) {
+            Type type = AnalyzerUtils.transformTableColumnType(allFields.get(i).getType(),
+                    createTableStmt.isOlapEngine());
+            Expr originExpression = allFields.get(i).getOriginExpression();
+            ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
+                    null, null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (isPKTable && keysDesc.containsCol(finalColumnNames.get(i))) {
                 columnDef.setAllowNull(false);
             }

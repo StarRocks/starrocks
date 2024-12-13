@@ -194,9 +194,15 @@ public class HiveMetastoreApiConverter {
 
     public static Table toMetastoreApiTable(HiveTable table) {
         Table apiTable = new Table();
+<<<<<<< HEAD
         apiTable.setDbName(table.getDbName());
         apiTable.setTableName(table.getTableName());
         apiTable.setTableType("MANAGED_TABLE");
+=======
+        apiTable.setDbName(table.getCatalogDBName());
+        apiTable.setTableName(table.getCatalogTableName());
+        apiTable.setTableType(table.getHiveTableType().name());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
         apiTable.setParameters(toApiTableProperties(table));
         apiTable.setPartitionKeys(table.getPartitionColumns().stream()
@@ -216,7 +222,11 @@ public class HiveMetastoreApiConverter {
 
     private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
         SerDeInfo serdeInfo = new SerDeInfo();
+<<<<<<< HEAD
         serdeInfo.setName(table.getTableName());
+=======
+        serdeInfo.setName(table.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HiveStorageFormat storageFormat = table.getStorageFormat();
         serdeInfo.setSerializationLib(storageFormat.getSerde());
 
@@ -270,6 +280,12 @@ public class HiveMetastoreApiConverter {
         if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
             tableProperties.put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString());
         }
+<<<<<<< HEAD
+=======
+        if (table.getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            tableProperties.put("EXTERNAL", "TRUE");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return tableProperties.build();
     }

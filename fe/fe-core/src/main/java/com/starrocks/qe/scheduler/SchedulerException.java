@@ -14,9 +14,15 @@
 
 package com.starrocks.qe.scheduler;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class SchedulerException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class SchedulerException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public SchedulerException(String msg) {
         super(msg);
     }

@@ -268,8 +268,12 @@ public class AggregationAnalyzer {
                         node.getPos());
             }
 
+<<<<<<< HEAD
             if (node.getChildren().stream().anyMatch(argument ->
                     !analyzeState.getColumnReferences().containsKey(argument) || !isGroupingKey(argument))) {
+=======
+            if (node.getChildren().stream().anyMatch(argument -> !analyzeState.getGroupBy().contains(argument))) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new SemanticException(PARSER_ERROR_MSG.argsCanOnlyFromGroupBy(), node.getPos());
             }
 

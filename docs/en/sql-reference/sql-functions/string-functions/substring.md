@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # substring, substr
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Extracts characters staring from the specified position and returns a substring of specified length.
 

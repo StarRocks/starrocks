@@ -59,6 +59,10 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/compression/compression_utils.h"
+<<<<<<< HEAD
+=======
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
 #include "util/uid_util.h"
@@ -119,7 +123,11 @@ public:
     // of close operation, client should call close_wait() to finish channel's close.
     // We split one close operation into two phases in order to make multiple channels
     // can run parallel.
+<<<<<<< HEAD
     void close(RuntimeState* state);
+=======
+    void close(RuntimeState* state) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Get close wait's response, to finish channel close operation.
     void close_wait(RuntimeState* state);
@@ -178,7 +186,11 @@ private:
 
     size_t _current_request_bytes = 0;
 
+<<<<<<< HEAD
     PInternalService_Stub* _brpc_stub = nullptr;
+=======
+    std::shared_ptr<PInternalService_RecoverableStub> _brpc_stub;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -340,10 +352,13 @@ Status DataStreamSender::Channel::close_internal() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void DataStreamSender::Channel::close(RuntimeState* state) {
     state->log_error(close_internal().message());
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {
     if (_need_close) {
         auto st = _wait_prev_request();

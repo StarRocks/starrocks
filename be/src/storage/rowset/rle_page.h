@@ -167,7 +167,11 @@ class RlePageDecoder final : public PageDecoder {
 public:
     RlePageDecoder(Slice slice) : _data(slice) {}
 
+<<<<<<< HEAD
     [[nodiscard]] Status init() override {
+=======
+    Status init() override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK(!_parsed);
 
         if (_data.size < RLE_PAGE_HEADER_SIZE) {
@@ -182,7 +186,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+=======
+    Status seek_to_position_in_page(uint32_t pos) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed) << "Must call init()";
         DCHECK_LE(pos, _num_elements) << "Tried to seek to " << pos << " which is > number of elements ("
                                       << _num_elements << ") in the block!";
@@ -205,7 +213,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(size_t* n, Column* dst) override {
+=======
+    Status next_batch(size_t* n, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SparseRange<> read_range;
         uint32_t begin = current_index();
         read_range.add(Range<>(begin, begin + *n));
@@ -214,7 +226,11 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override {
+=======
+    Status next_batch(const SparseRange<>& range, Column* dst) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK(_parsed);
         if (PREDICT_FALSE(_cur_index >= _num_elements)) {
             return Status::OK();

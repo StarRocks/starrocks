@@ -55,9 +55,14 @@ public:
     static jobject convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
                                                  const uint8_t* filter, int num_rows);
 
+<<<<<<< HEAD
     [[nodiscard]] static Status convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
                                                        const Column** columns, int num_cols, int num_rows,
                                                        std::vector<jobject>* res);
+=======
+    static Status convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
+                                         const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <bool handle_null>

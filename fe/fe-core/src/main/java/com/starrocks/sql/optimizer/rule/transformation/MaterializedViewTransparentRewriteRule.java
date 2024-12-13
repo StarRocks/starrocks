@@ -32,7 +32,10 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.Operator;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -56,6 +59,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_MV_TRANSPARENT_REWRITE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.deriveLogicalProperty;
 
 public class MaterializedViewTransparentRewriteRule extends TransformationRule {
@@ -67,7 +74,11 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         // To avoid dead-loop rewrite, no rewrite when query extra predicate is not changed
+<<<<<<< HEAD
         if (Utils.isOpAppliedRule(input.getOp(), Operator.OP_TRANSPARENT_MV_BIT)) {
+=======
+        if (input.getOp().isOpRuleBitSet(OP_MV_TRANSPARENT_REWRITE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
         return true;
@@ -124,7 +135,11 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
 
     public static void setOpRuleMask(OptExpression input) {
         List<LogicalScanOperator> scanOps = MvUtils.getScanOperator(input);
+<<<<<<< HEAD
         scanOps.stream().forEach(op -> op.setOpRuleMask(Operator.OP_TRANSPARENT_MV_BIT));
+=======
+        scanOps.stream().forEach(op -> op.setOpRuleBit(OP_MV_TRANSPARENT_REWRITE));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -136,9 +151,15 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                                  LogicalOlapScanOperator olapScanOperator,
                                                  OptExpression input) {
         // Fetch mv from catalog again since table from olap scan operator is copied.
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(mvId.getDbId());
         Preconditions.checkState(db != null, "Database not found: %s", mvId.getDbId());
         Table table = db.getTable(mvId.getId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+        Preconditions.checkState(db != null, "Database not found: %s", mvId.getDbId());
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkState(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
         MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);

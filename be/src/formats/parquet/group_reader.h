@@ -14,11 +14,26 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <unordered_map>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
+=======
+#include <atomic>
+#include <memory>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#include "column/vectorized_fwd.h"
+#include "common/global_types.h"
+#include "common/object_pool.h"
+#include "common/status.h"
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
@@ -28,11 +43,26 @@
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
 #include "util/runtime_profile.h"
 namespace starrocks {
 class RandomAccessFile;
 
 struct HdfsScanStats;
+=======
+#include "storage/range.h"
+
+namespace starrocks {
+class RandomAccessFile;
+struct HdfsScanStats;
+class ExprContext;
+class TIcebergSchemaField;
+
+namespace parquet {
+class FileMetaData;
+} // namespace parquet
+struct TypeDescriptor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -55,7 +85,10 @@ struct GroupReaderParam {
         const SlotId slot_id() const { return slot_desc->id(); }
     };
 
+<<<<<<< HEAD
     const TupleDescriptor* tuple_desc = nullptr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // conjunct_ctxs that column is materialized in group reader
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
 
@@ -81,6 +114,17 @@ struct GroupReaderParam {
 
     // used for pageIndex
     std::vector<ExprContext*> min_max_conjunct_ctxs;
+<<<<<<< HEAD
+=======
+    const PredicateTree* predicate_tree = nullptr;
+
+    // partition column
+    const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
+    // partition column value which read from hdfs file path
+    const std::vector<ColumnPtr>* partition_values = nullptr;
+    // not existed column
+    const std::vector<SlotDescriptor*>* not_existed_slots = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class PageIndexReader;
@@ -91,14 +135,27 @@ class GroupReader {
 public:
     GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
                 int64_t row_group_first_row);
+<<<<<<< HEAD
     ~GroupReader() = default;
+=======
+    ~GroupReader();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // init used to init column reader, and devide active/lazy
     // then we can use inited column collect io range.
     Status init();
     Status prepare();
+<<<<<<< HEAD
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
+=======
+    const tparquet::ColumnChunk* get_chunk_metadata(SlotId slot_id);
+    const ParquetField* get_column_parquet_field(SlotId slot_id);
+    ColumnReader* get_column_reader(SlotId slot_id);
+    uint64_t get_row_group_first_row() const { return _row_group_first_row; }
+    const tparquet::RowGroup* get_row_group_metadata() const;
+    Status get_next(ChunkPtr* chunk, size_t* row_count);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                            ColumnIOType type = ColumnIOType::PAGES);
 
@@ -113,12 +170,21 @@ private:
     void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
     Status _rewrite_conjunct_ctxs_to_predicates(bool* is_group_filtered);
 
+<<<<<<< HEAD
     void _init_chunk_dict_column(ChunkPtr* chunk);
     StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
     Status _fill_dst_chunk(const ChunkPtr& read_chunk, ChunkPtr* chunk);
 
     Status _init_column_readers();
     Status _create_column_reader(const GroupReaderParam::Column& column);
+=======
+    StatusOr<bool> _filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter);
+    Status _fill_dst_chunk(ChunkPtr& read_chunk, ChunkPtr* chunk);
+
+    Status _create_column_readers();
+    StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
+    Status _prepare_column_readers() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
     void _process_columns_and_conjunct_ctxs();
@@ -176,6 +242,16 @@ private:
 
     // round by round ctx
     std::unique_ptr<ColumnReadOrderCtx> _column_read_order_ctx;
+<<<<<<< HEAD
 };
 
+=======
+
+    // a flag to reflect prepare() is called
+    bool _has_prepared = false;
+};
+
+using GroupReaderPtr = std::shared_ptr<GroupReader>;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::parquet

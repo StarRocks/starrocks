@@ -33,7 +33,11 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -623,15 +627,25 @@ public class ReplicationJob implements GsonPostProcessable {
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(request.database_id);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.database_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
 
         Locker locker = new Locker();
+<<<<<<< HEAD
         locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(request.table_id);
+=======
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), request.table_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 throw new MetaNotFoundException(
                         "Table " + request.table_id + " in database " + db.getFullName() + " not found");
@@ -663,7 +677,11 @@ public class ReplicationJob implements GsonPostProcessable {
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
         } finally {
+<<<<<<< HEAD
             locker.unLockDatabase(db, LockType.READ);
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return new TableInfo(request.table_id, tableType, Table.TableType.OLAP, tableDataSize,
@@ -737,6 +755,7 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
+<<<<<<< HEAD
         for (PhysicalPartition partition : table.getPhysicalPartitions()) {
             PhysicalPartition srcPartition = srcTable.getPhysicalPartition(partition.getName());
             Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
@@ -749,6 +768,20 @@ public class ReplicationJob implements GsonPostProcessable {
                 continue;
             }
             PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, partition, srcPartition,
+=======
+        for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
+            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
+            Preconditions.checkState(physicalPartition.getCommittedVersion() == physicalPartition.getVisibleVersion(),
+                    "Partition " + physicalPartition.getName() + " in table " + table.getName()
+                            + " publish version not finished");
+            Preconditions.checkState(physicalPartition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
+                    "Target visible version: " + physicalPartition.getVisibleVersion()
+                            + " is larger than source visible version: " + srcPartition.getVisibleVersion());
+            if (physicalPartition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
+                continue;
+            }
+            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     srcSystemInfoService);
             partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
         }
@@ -829,7 +862,11 @@ public class ReplicationJob implements GsonPostProcessable {
                 Config.replication_transaction_timeout_sec);
     }
 
+<<<<<<< HEAD
     private void commitTransaction() throws UserException {
+=======
+    private void commitTransaction() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Pair<List<TabletCommitInfo>, List<TabletFailInfo>> tabletsCommitInfo = getTabletsCommitInfo();
 
         Map<Long, Long> partitionVersions = Maps.newHashMap();
@@ -881,8 +918,14 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getServingState().getDb(databaseId);
             if (db == null || db.getTable(tableId) == null) {
+=======
+            Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb(databaseId);
+            if (db == null
+                    || GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 abortTransaction("Table is deleted");
                 return true;
             }

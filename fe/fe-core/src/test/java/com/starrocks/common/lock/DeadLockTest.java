@@ -216,6 +216,10 @@ public class DeadLockTest {
         Config.lock_manager_enable_resolve_deadlock = true;
         TestLocker testLocker4 = new TestLocker();
         testLocker4.lock(rid1, LockType.READ);
+<<<<<<< HEAD
+=======
+        testLocker4.release(rid1, LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         assertDeadLock(Lists.newArrayList(testLocker1, testLocker2, testLocker3),
                 Lists.newArrayList(new Pair<>(rid1, LockType.WRITE),

@@ -16,8 +16,11 @@ package com.starrocks.service;
 
 import com.google.gson.Gson;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;

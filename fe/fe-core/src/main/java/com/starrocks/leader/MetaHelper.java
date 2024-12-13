@@ -51,6 +51,10 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.io.InputStream;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -133,6 +137,11 @@ public class MetaHelper {
         if (!partFile.renameTo(imageFile)) {
             throw new IOException("rename file:" + partFile.getName() + " to file:" + destFilename + " failed");
         }
+<<<<<<< HEAD
+=======
+
+        LOG.info("successfully download image file: {}", imageFile.getAbsolutePath());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static OutputStream getOutputStream(String filename, File dir)
@@ -141,6 +150,30 @@ public class MetaHelper {
         return new FileOutputStream(file);
     }
 
+<<<<<<< HEAD
+=======
+    public static void httpGet(String urlStr, int timeout) throws IOException {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = null;
+
+        try {
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(timeout);
+            conn.setReadTimeout(timeout);
+
+            try (InputStream in = conn.getInputStream()) {
+                byte[] buf = new byte[BUFFER_BYTES];
+                while (in.read(buf) >= 0) {}
+            }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
+        }
+    }
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // download file from remote node
     public static void getRemoteFile(String urlStr, int timeout, OutputStream out)
             throws IOException {

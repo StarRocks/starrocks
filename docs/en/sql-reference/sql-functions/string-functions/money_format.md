@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # money_format
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function returns a string formatted as a currency string. The integer part is separated by comma every three bits and the decimal part is reserved for two bits.
 

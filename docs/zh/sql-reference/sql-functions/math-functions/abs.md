@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # abs
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 `x` 的绝对值。如果输入值为 NULL，则返回 NULL。
 

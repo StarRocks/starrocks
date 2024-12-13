@@ -16,8 +16,15 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -32,8 +39,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.List;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class OlapTableSinkTest2 {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
@@ -58,6 +68,7 @@ public class OlapTableSinkTest2 {
             }
         };
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("db2");
         OlapTable olapTable = (OlapTable) db.getTable("tbl1");
 
@@ -72,6 +83,23 @@ public class OlapTableSinkTest2 {
         try {
             OlapTableSink.createLocation(olapTable, partitionParam, false);
         } catch (UserException e) {
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                tPartition.setId(physicalPartition.getId());
+                partitionParam.addToPartitions(tPartition);
+            }
+        }
+
+        try {
+            OlapTableSink.createLocation(olapTable, partitionParam, false);
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
             return;

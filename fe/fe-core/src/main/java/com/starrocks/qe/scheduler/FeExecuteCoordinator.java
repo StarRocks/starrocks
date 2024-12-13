@@ -69,7 +69,11 @@ public class FeExecuteCoordinator extends Coordinator {
         this.execPlan = execPlan;
     }
     @Override
+<<<<<<< HEAD
     public void startScheduling(boolean needDeploy) throws Exception {
+=======
+    public void startScheduling(ScheduleOption option) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 

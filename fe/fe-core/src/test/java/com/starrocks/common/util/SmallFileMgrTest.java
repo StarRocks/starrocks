@@ -81,7 +81,11 @@ public class SmallFileMgrTest {
                 db.getId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db;
                 stmt1.getDbName();

@@ -40,7 +40,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.catalog.AuthorizationInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -50,7 +53,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LoadPriority;
@@ -126,9 +133,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected JobState state = JobState.PENDING;
     @SerializedName("j")
     protected EtlJobType jobType;
+<<<<<<< HEAD
     // the auth info could be null when load job is created before commit named 'Persist auth info in load job'
     @SerializedName("a")
     protected AuthorizationInfo authorizationInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // optional properties
     // timeout second need to be reset in constructor of subclass
@@ -150,9 +160,12 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected int priority = LoadPriority.NORMAL_VALUE;
     @SerializedName("ln")
     protected long logRejectedRecordNum = 0;
+<<<<<<< HEAD
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @SerializedName("c")
     protected long createTimestamp = -1;
@@ -273,7 +286,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public Database getDb() throws MetaNotFoundException {
         // get db
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + " already has been deleted");
         }
@@ -395,7 +412,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return state == JobState.FINISHED || state == JobState.CANCELLED || state == JobState.UNKNOWN;
     }
 
+<<<<<<< HEAD
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
+=======
+    public void setJobProperties(Map<String, String> properties) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // resource info
         if (ConnectContext.get() != null) {
             loadMemLimit = ConnectContext.get().getSessionVariable().getLoadMemLimit();
@@ -731,7 +752,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .abortTransaction(dbId, transactionId, failMsg.getMsg(),
                                 getTabletCommitInfos(), getTabletFailInfos(), null);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                         .add("transaction_id", transactionId)
                         .add("error_msg", "failed to abort txn when job is cancelled. " + e.getMessage())
@@ -765,7 +790,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         idToTasks.clear();
     }
 
+<<<<<<< HEAD
     protected boolean checkDataQuality() {
+=======
+    public boolean checkDataQuality() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> counters = loadingStatus.getCounters();
         if (!counters.containsKey(DPP_NORMAL_ALL) || !counters.containsKey(DPP_ABNORMAL_ALL)) {
             return true;
@@ -1073,6 +1102,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         jobInfo.trackingUrl = loadingStatus.getTrackingUrl();
     }
 
+<<<<<<< HEAD
     public static LoadJob read(DataInput in) throws IOException {
         LoadJob job = null;
         EtlJobType type = EtlJobType.valueOf(Text.readString(in));
@@ -1091,6 +1121,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return job;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public long getCallbackId() {
         return id;
@@ -1110,7 +1142,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     @Override
+<<<<<<< HEAD
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!txnOperated) {
             return;
         }
@@ -1261,6 +1297,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @Override
     public void write(DataOutput out) throws IOException {
+<<<<<<< HEAD
         // Add the type of load secondly
         Text.writeString(out, jobType.name());
 
@@ -1328,6 +1365,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             authorizationInfo.readFields(in);
         }
         timezone = Text.readString(in);
+=======
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void replayUpdateStateInfo(LoadJobStateUpdateInfo info) {

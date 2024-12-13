@@ -14,8 +14,20 @@
 
 #include "formats/parquet/stored_column_reader_with_index.h"
 
+<<<<<<< HEAD
 #include "util/defer_op.h"
 
+=======
+#include <glog/logging.h>
+
+#include "gen_cpp/parquet_types.h"
+#include "util/defer_op.h"
+
+namespace starrocks {
+class Column;
+} // namespace starrocks
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::parquet {
 
 Status StoredColumnReaderWithIndex::read_range(const Range<uint64_t>& range, const Filter* filter,

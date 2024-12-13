@@ -64,6 +64,10 @@
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "runtime/batch_write/batch_write_mgr.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
@@ -79,6 +83,10 @@
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+<<<<<<< HEAD
+=======
+#include "util/arrow/row_batch.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/failpoint/fail_point.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
@@ -427,6 +435,14 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+<<<<<<< HEAD
+=======
+    // incremental scan ranges deployment.
+    if (!t_request.__isset.fragment) {
+        return pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }
@@ -483,6 +499,11 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
         return "InternalError";
     case TIMEOUT:
         return "TimeOut";
+<<<<<<< HEAD
+=======
+    case QUERY_FINISHED:
+        return "QueryFinished";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default:
         return "UnknownReason";
     }
@@ -885,6 +906,30 @@ void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::Rpc
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller,
+                                                     const PFetchArrowSchemaRequest* request,
+                                                     PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    std::shared_ptr<arrow::Schema> schema =
+            ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(UniqueId(request->finst_id()).to_thrift());
+    if (schema == nullptr) {
+        const auto status = Status::NotFound("arrow schema not found");
+        status.to_protobuf(result->mutable_status());
+        return;
+    }
+
+    std::string schema_as_str;
+    const auto status = serialize_arrow_schema(&schema, &schema_as_str);
+    if (status.ok()) {
+        result->set_schema(std::move(schema_as_str));
+    }
+    status.to_protobuf(result->mutable_status());
+}
+
+template <typename T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -1243,7 +1288,20 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
+<<<<<<< HEAD
 template class PInternalServiceImplBase<PInternalService>;
 template class PInternalServiceImplBase<doris::PBackendService>;
+=======
+template <typename T>
+void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* cntl_base,
+                                              const PStreamLoadRequest* request, PStreamLoadResponse* response,
+                                              google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
+}
+
+template class PInternalServiceImplBase<PInternalService>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

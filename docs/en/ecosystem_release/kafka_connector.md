@@ -6,7 +6,11 @@ displayed_sidebar: docs
 
 ## Notifications
 
+<<<<<<< HEAD
 **User guide:** [Load data using Kafka connector](../loading/Kafka-connector-starrocks.md)
+=======
+**User guide:** [Load data using Kafka connector](https://docs.starrocks.io/docs/loading/Kafka-connector-starrocks/)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
 

@@ -351,7 +351,11 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         size_t type_size = res->type_size();
         memset(res->mutable_raw_data(), 1, res->size() * type_size);
     } else {
+<<<<<<< HEAD
         const std::vector<uint32_t>& offsets = haystack->get_offset();
+=======
+        const Buffer<uint32_t>& offsets = haystack->get_offset();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res->resize(haystack->size());
 
         const char* begin = haystack->get_slice(0).data;

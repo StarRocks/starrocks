@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # char_length
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回字符串的长度。
 对于多字节字符，返回 **字符** 数，目前仅支持 UTF-8 编码，该函数还有一个别名 `character_length`。

@@ -17,6 +17,10 @@ package com.starrocks.connector;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.IcebergTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -25,9 +29,17 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -54,10 +66,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.FileContent;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.starrocks.catalog.system.information.InfoSchemaDb.isInfoSchemaDb;
@@ -88,6 +109,17 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    private ConnectorMetadata metadataOfTable(Table table) {
+        if (table instanceof MetadataTable) {
+            return tableMetadata;
+        }
+
+        return null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private ConnectorMetadata metadataOfDb(String dBName) {
         if (isInfoSchemaDb(dBName)) {
             return informationSchema;
@@ -115,8 +147,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         return normal.listPartitionNames(databaseName, tableName, snapshotId);
+=======
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+        return normal.listPartitionNames(databaseName, tableName, requestContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -136,6 +173,21 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean tableExists(String dbName, String tblName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.tableExists(dbName, tblName);
@@ -147,9 +199,19 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
         return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+=======
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        return normal.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        return normal.getRemoteFilesAsync(table, params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -158,9 +220,20 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
                                                     long snapshotId, String serializedPredicate) {
         return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+=======
+    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
+        return normal.getRemotePartitions(table, partitionNames);
+    }
+
+    @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
+        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -170,6 +243,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
+<<<<<<< HEAD
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
         return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
     }
@@ -177,6 +251,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
         return normal.getPrunedPartitions(table, predicate, limit);
+=======
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange version) {
+        return normal.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
+    }
+
+    @Override
+    public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
+        return normal.getDeleteFiles(table, snapshotId, predicate, content);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -227,8 +311,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         normal.finishSink(dbName, table, commitInfos);
+=======
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
+        normal.finishSink(dbName, table, commitInfos, branch);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -237,7 +326,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+=======
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         normal.alterTable(context, stmt);
     }
 
@@ -263,7 +356,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public void addPartitions(ConnectContext ctx, Database db, String tableName, AddPartitionClause addPartitionClause)
+<<<<<<< HEAD
             throws DdlException, AnalysisException {
+=======
+            throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         normal.addPartitions(ctx, db, tableName, addPartitionClause);
     }
 
@@ -316,7 +413,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+=======
+    public void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         normal.alterView(stmt);
     }
 

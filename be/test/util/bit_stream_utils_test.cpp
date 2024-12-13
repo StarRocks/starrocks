@@ -174,7 +174,11 @@ TEST(TestBitStreamUtil, TestMixed) {
             EXPECT_EQ(val, parity);
             parity = !parity;
         } else {
+<<<<<<< HEAD
             int val;
+=======
+            int val = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             result = reader.GetValue(10, &val);
             EXPECT_EQ(val, i);
         }

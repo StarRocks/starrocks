@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_add,adddate
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Adds a specified time interval to a date.
 

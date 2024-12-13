@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # var_samp,variance_samp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the sample variance of an expression. Since v2.5.10, this function can also be used as a window function.
 

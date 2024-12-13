@@ -14,17 +14,36 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.TableName;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public abstract class DmlStmt extends StatementBase {
     public static final long INVALID_TXN_ID = -1L;
 
     private long txnId = INVALID_TXN_ID;
 
+<<<<<<< HEAD
     protected DmlStmt(NodePosition pos) {
         super(pos);
+=======
+    protected final Map<String, String> properties;
+
+    protected DmlStmt(NodePosition pos) {
+        super(pos);
+        this.properties = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -41,4 +60,33 @@ public abstract class DmlStmt extends StatementBase {
     public void setTxnId(long txnId) {
         this.txnId = txnId;
     }
+<<<<<<< HEAD
+=======
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public double getMaxFilterRatio() {
+        if (properties.containsKey(LoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            try {
+                return Double.parseDouble(properties.get(LoadStmt.MAX_FILTER_RATIO_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    public int getTimeout() {
+        if (properties.containsKey(LoadStmt.TIMEOUT_PROPERTY)) {
+            try {
+                return Integer.parseInt(properties.get(LoadStmt.TIMEOUT_PROPERTY));
+            } catch (NumberFormatException e) {
+                // ignore
+            }
+        }
+        return ConnectContext.get().getSessionVariable().getInsertTimeoutS();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -41,9 +41,21 @@ import com.starrocks.common.io.JsonWriter;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
 public class Frontend extends JsonWriter {
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.staros.StarMgrServer;
+import com.starrocks.system.HeartbeatResponse.HbStatus;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+public class Frontend extends JsonWriter {
+    public static final Logger LOG = LogManager.getLogger(Frontend.class);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "r")
     private FrontendNodeType role;
     @SerializedName(value = "n")
@@ -66,6 +78,11 @@ public class Frontend extends JsonWriter {
 
     private int heartbeatRetryTimes = 0;
 
+<<<<<<< HEAD
+=======
+    private float heapUsedPercent;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Frontend() {
     }
 
@@ -124,6 +141,13 @@ public class Frontend extends JsonWriter {
         return feVersion;
     }
 
+<<<<<<< HEAD
+=======
+    public float getHeapUsedPercent() {
+        return heapUsedPercent;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void updateHostAndEditLogPort(String host, int editLogPort) {
         this.host = host;
         this.editLogPort = editLogPort;
@@ -141,6 +165,7 @@ public class Frontend extends JsonWriter {
 
     /**
      * handle Frontend's heartbeat response.
+<<<<<<< HEAD
      * Because the replayed journal id is very likely to be changed at each heartbeat response,
      * so we simple return true if the heartbeat status is OK.
      * But if heartbeat status is BAD, only return true if it is the first time to transfer from alive to dead.
@@ -156,6 +181,13 @@ public class Frontend extends JsonWriter {
                     ha.removeUnstableNode(host, GlobalStateMgr.getCurrentState().getNodeMgr().getFollowerCnt());
                 }
             }
+=======
+     */
+    public boolean handleHbResponse(FrontendHbResponse hbResponse, boolean isReplay) {
+        boolean prevIsAlive = isAlive;
+        long prevStartTime = startTime;
+        if (hbResponse.getStatus() == HbStatus.OK) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             isAlive = true;
             queryPort = hbResponse.getQueryPort();
             rpcPort = hbResponse.getRpcPort();
@@ -164,8 +196,13 @@ public class Frontend extends JsonWriter {
             startTime = hbResponse.getFeStartTime();
             feVersion = hbResponse.getFeVersion();
             heartbeatErrMsg = "";
+<<<<<<< HEAD
             isChanged = true;
             this.heartbeatRetryTimes = 0;
+=======
+            heartbeatRetryTimes = 0;
+            heapUsedPercent = hbResponse.getHeapUsedPercent();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             if (this.heartbeatRetryTimes < Config.heartbeat_retry_times) {
                 this.heartbeatRetryTimes++;
@@ -175,6 +212,7 @@ public class Frontend extends JsonWriter {
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
             }
+<<<<<<< HEAD
             // When the master receives an error heartbeat info which status not ok, 
             // this heartbeat info also need to be synced to follower.
             // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
@@ -182,6 +220,10 @@ public class Frontend extends JsonWriter {
             // that will cause the Follower and leader’s memory to be inconsistent
             isChanged = true;
         }
+=======
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!isReplay) {
             hbResponse.aliveStatus = isAlive ?
                 HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
@@ -194,6 +236,7 @@ public class Frontend extends JsonWriter {
             }
         }
 
+<<<<<<< HEAD
         if (!GlobalStateMgr.isCheckpointThread()) {
             if (prevIsAlive && !isAlive) {
                 GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(nodeName);
@@ -205,6 +248,66 @@ public class Frontend extends JsonWriter {
         return isChanged;
     }
 
+=======
+        try {
+            if (!prevIsAlive && isAlive) {
+                changeToAlive(isReplay);
+            } else if (prevIsAlive && !isAlive) {
+                changeToDead(isReplay);
+            } else if (prevStartTime != 0 && prevStartTime != startTime) {
+                restartHappened(isReplay);
+            }
+        } catch (Throwable t) {
+            LOG.warn("call status hook failed", t);
+        }
+
+        return true;
+    }
+
+    private void changeToAlive(boolean isReplay) {
+        if (!isReplay && GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
+            BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
+            ha.removeUnstableNode(host, GlobalStateMgr.getCurrentState().getNodeMgr().getFollowerCnt());
+        }
+    }
+
+    private void changeToDead(boolean isReplay) {
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(nodeName);
+        }
+
+        if (!isReplay) {
+            GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(nodeName, "FE is dead");
+            if (RunMode.isSharedDataMode()) {
+                StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(nodeName, "FE is dead");
+            }
+        }
+    }
+
+    /**
+     * restartHappened will be called when the restart time interval is in
+     * (heartbeat_retry_times * heartbeat_timeout_second).
+     * If the restart time interval exceed (heartbeat_retry_times * heartbeat_timeout_second),
+     * changeToAlive will be called.
+     */
+    private void restartHappened(boolean isReplay) {
+        if (!GlobalStateMgr.isCheckpointThread()) {
+            GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendRestartAsync(nodeName, startTime);
+        }
+
+        // When the Worker node is its own node, the Checkpoint can be started at startup.
+        // Therefore, if the restarted node is its own node, do not cancel the Checkpoint.
+        if (!isReplay
+                && !nodeName.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
+            GlobalStateMgr.getCurrentState().getCheckpointController().workerRestarted(nodeName, startTime);
+            if (RunMode.isSharedDataMode()) {
+                StarMgrServer.getCurrentState().getCheckpointController().workerRestarted(nodeName, startTime);
+            }
+        }
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("name: ").append(nodeName).append(", role: ").append(role.name());

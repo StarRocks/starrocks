@@ -13,13 +13,22 @@
 // limitations under the License.
 package com.starrocks.catalog.system.sys;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+<<<<<<< HEAD
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetRoleEdgesItem;

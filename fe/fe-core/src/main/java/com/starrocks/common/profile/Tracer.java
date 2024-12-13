@@ -43,7 +43,11 @@ public abstract class Tracer {
     public void record(String name, String value) {
     }
 
+<<<<<<< HEAD
     public void count(String name, int count) {
+=======
+    public void count(String name, long count) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<Var<?>> getAllVars() {

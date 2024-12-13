@@ -24,7 +24,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,7 +59,14 @@ public class UniqueConstraint extends Constraint {
     public List<String> getUniqueColumnNames(Table selfTable) {
         Table targetTable;
         if (selfTable.isMaterializedView()) {
+<<<<<<< HEAD
             targetTable = MetaUtils.getTable(catalogName, dbName, tableName);
+=======
+            targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            if (targetTable == null) {
+                throw new SemanticException("Table %s.%s.%s is not found", catalogName, dbName, tableName);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             targetTable = selfTable;
         }

@@ -21,7 +21,12 @@
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+#include "runtime/types.h"
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -623,6 +628,27 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status convert_columns_to_arrow_batch(size_t num_rows, const Columns& columns, arrow::MemoryPool* pool,
+                                      const TypeDescriptor* type_descs, const std::shared_ptr<arrow::Schema>& schema,
+                                      std::shared_ptr<arrow::RecordBatch>* result) {
+    size_t num_columns = columns.size();
+    std::vector<std::shared_ptr<arrow::Array>> arrays(num_columns);
+
+    for (size_t i = 0; i < num_columns; ++i) {
+        auto& array = arrays[i];
+        ColumnToArrowArrayConverter converter(columns[i], pool, type_descs[i], schema->field(i)->type(), array);
+        auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
+        if (!arrow_st.ok()) {
+            return Status::InvalidArgument(arrow_st.ToString());
+        }
+    }
+    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
+    return Status::OK();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // only used for UT test
 Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDescriptor*>& slot_types,
                                     const std::vector<SlotId>& slot_ids, const std::shared_ptr<arrow::Schema>& schema,

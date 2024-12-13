@@ -81,11 +81,19 @@ public class ShowExecutorTest {
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb("testDb");
                 minTimes = 0;
                 result = db;
 
                 globalStateMgr.getDb("testDb1");
+=======
+                globalStateMgr.getLocalMetastore().getDb("testDb");
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getDb("testDb1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db1;
             }

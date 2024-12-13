@@ -23,12 +23,25 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+<<<<<<< HEAD
 import com.starrocks.connector.exception.StarRocksConnectorException;
+=======
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.statistics.StatisticsUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -75,11 +88,22 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PaimonFilter, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final Map<String, Long> partitionInfos = new ConcurrentHashMap<>();
+<<<<<<< HEAD
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog) {
         this.paimonNativeCatalog = paimonNativeCatalog;
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
+=======
+    private final ConnectorProperties properties;
+
+    public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
+                          ConnectorProperties properties) {
+        this.paimonNativeCatalog = paimonNativeCatalog;
+        this.hdfsEnvironment = hdfsEnvironment;
+        this.catalogName = catalogName;
+        this.properties = properties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -141,7 +165,11 @@ public class PaimonMetadata implements ConnectorMetadata {
                         .split(",");
                 if (partitionValues.length != partitionColumnNames.size()) {
                     String errorMsg = String.format("The length of partitionValues %s is not equal to " +
+<<<<<<< HEAD
                                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
+=======
+                            "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new IllegalArgumentException(errorMsg);
                 }
                 StringBuilder sb = new StringBuilder();
@@ -172,7 +200,11 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+=======
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         updatePartitionInfo(databaseName, tableName);
         return new ArrayList<>(this.partitionInfos.keySet());
     }
@@ -231,6 +263,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> fieldNames, long limit) {
@@ -241,6 +274,19 @@ public class PaimonMetadata implements ConnectorMetadata {
             ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
             int[] projected = fieldNames.stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, predicate);
+=======
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        PaimonTable paimonTable = (PaimonTable) table;
+        PaimonFilter filter =
+                new PaimonFilter(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), params.getPredicate(),
+                        params.getFieldNames());
+        if (!paimonSplits.containsKey(filter)) {
+            ReadBuilder readBuilder = paimonTable.getNativeTable().newReadBuilder();
+            int[] projected =
+                    params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
+            List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<Split> splits = readBuilder.withFilter(predicates).withProjection(projected).newScan().plan().splits();
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
@@ -262,15 +308,30 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
+<<<<<<< HEAD
                                          long limit) {
+=======
+                                         long limit,
+                                         TableVersionRange versionRange) {
+        if (!properties.enableGetTableStatsFromExternalMetadata()) {
+            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
 
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
+<<<<<<< HEAD
         List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
                 catalogName, table, null, -1, predicate, fieldNames, limit);
+=======
+        GetRemoteFilesParams params =
+                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
         List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
         long rowCount = getRowCount(splits);
@@ -394,13 +455,22 @@ public class PaimonMetadata implements ConnectorMetadata {
         PaimonTable paimonTable = (PaimonTable) table;
         List<PartitionInfo> result = new ArrayList<>();
         if (table.isUnPartitioned()) {
+<<<<<<< HEAD
             result.add(new Partition(paimonTable.getTableName(),
                     this.getTableUpdateTime(paimonTable.getDbName(), paimonTable.getTableName())));
+=======
+            result.add(new Partition(paimonTable.getCatalogTableName(),
+                    this.getTableUpdateTime(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return result;
         }
         for (String partitionName : partitionNames) {
             if (this.partitionInfos.get(partitionName) == null) {
+<<<<<<< HEAD
                 this.updatePartitionInfo(paimonTable.getDbName(), paimonTable.getTableName());
+=======
+                this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (this.partitionInfos.get(partitionName) != null) {
                 result.add(new Partition(partitionName, this.partitionInfos.get(partitionName)));

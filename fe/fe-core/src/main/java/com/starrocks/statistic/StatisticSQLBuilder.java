@@ -35,7 +35,11 @@ import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRAM_VERSION;
+<<<<<<< HEAD
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION;
+=======
+import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
@@ -68,10 +72,18 @@ public class StatisticSQLBuilder {
                     + " WHERE $predicate"
                     + " GROUP BY db_id, table_id, column_name";
 
+<<<<<<< HEAD
     private static final String QUERY_EXTERNAL_FULL_STATISTIC_TEMPLATE =
             "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_VERSION + " as INT), column_name,"
                     + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
                     + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string)"
+=======
+    private static final String QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE =
+            "SELECT cast(" + STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT), column_name,"
+                    + " sum(row_count), cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), "
+                    + " cast(max(cast(max as $type)) as string), cast(min(cast(min as $type)) as string),"
+                    + " max(update_time)"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     + " FROM " + StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME
                     + " WHERE $predicate"
                     + " GROUP BY table_uuid, column_name";
@@ -175,7 +187,11 @@ public class StatisticSQLBuilder {
             context.put("predicate",
                     "table_uuid = \"" + tableUUID + "\"" + " and column_name in (" +
                             names.stream().map(c -> "\"" + c + "\"").collect(Collectors.joining(", ")) + ")");
+<<<<<<< HEAD
             querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_TEMPLATE));
+=======
+            querySQL.add(build(context, QUERY_EXTERNAL_FULL_STATISTIC_V2_TEMPLATE));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
 
         return Joiner.on(" UNION ALL ").join(querySQL);

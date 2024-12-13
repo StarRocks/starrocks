@@ -19,6 +19,10 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.VectorSearchOptions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -84,6 +88,11 @@ public class OptimizerContext {
     // collect all LogicalOlapScanOperators in the query before any optimization
     private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
 
+<<<<<<< HEAD
+=======
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -309,4 +318,15 @@ public class OptimizerContext {
     public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
         return allLogicalOlapScanOperators;
     }
+<<<<<<< HEAD
+=======
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

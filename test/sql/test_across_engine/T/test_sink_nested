@@ -1,0 +1,114 @@
+-- name: test_sink_nested_map
+
+shell: ossutil64 cp ./sql/test_across_engine/data/nested_maps.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet > /dev/null
+
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
+    "file_format" = "parquet"
+)
+as select * from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+drop catalog hive_sink_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_maps.parquet > /dev/null
+
+-- name: test_sink_nested_list
+
+shell: ossutil64 cp ./sql/test_across_engine/data/nested_lists.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet > /dev/null
+
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
+    "file_format" = "parquet"
+)
+as select * from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+drop catalog hive_sink_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_lists.parquet > /dev/null
+
+-- name: test_sink_nested_struct
+
+shell: ossutil64 cp ./sql/test_across_engine/data/nested_structs.parquet oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet > /dev/null
+
+create external catalog hive_sink_${uuid0} PROPERTIES (
+    "type"="hive", 
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+create database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+
+create table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} properties (
+    "file_format" = "parquet"
+)
+as select * from files (
+    "path" = "oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}"
+);
+
+select * from hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+trino: select * from hive.hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+spark: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+hive: select * from hive_sink_db_${uuid0}.hive_sink_table_${uuid0};
+
+drop table hive_sink_${uuid0}.hive_sink_db_${uuid0}.hive_sink_table_${uuid0} force;
+
+drop database hive_sink_${uuid0}.hive_sink_db_${uuid0};
+drop catalog hive_sink_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_across_engine/test_sink/${uuid0}/nested_structs.parquet > /dev/null

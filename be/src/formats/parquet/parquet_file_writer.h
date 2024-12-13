@@ -19,18 +19,48 @@
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
+<<<<<<< HEAD
+=======
+#include <arrow/result.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <gen_cpp/DataSinks_types.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
 
 #include <utility>
+=======
+#include <parquet/platform.h>
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "arrow_memory_pool.h"
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+<<<<<<< HEAD
+=======
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "exprs/function_context.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
@@ -38,9 +68,34 @@
 #include "formats/parquet/file_writer.h"
 #include "formats/utils.h"
 #include "fs/fs.h"
+<<<<<<< HEAD
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
+=======
+#include "gen_cpp/Types_types.h"
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "util/priority_thread_pool.hpp"
+
+namespace parquet {
+class FileMetaData;
+class ParquetFileWriter;
+class WriterProperties;
+} // namespace parquet
+namespace starrocks {
+class Chunk;
+class FileSystem;
+class PriorityThreadPool;
+class RuntimeState;
+
+namespace parquet {
+class ChunkWriter;
+class ParquetOutputStream;
+} // namespace parquet
+} // namespace starrocks
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::formats {
 
 struct FileColumnId {

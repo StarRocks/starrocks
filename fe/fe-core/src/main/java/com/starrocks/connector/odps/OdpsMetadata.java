@@ -45,11 +45,22 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.TableVersionRange;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
@@ -219,7 +230,11 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+=======
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
         List<Partition> partitions = get(partitionCache, odpsTableName);
@@ -266,7 +281,12 @@ public class OdpsMetadata implements ConnectorMetadata {
                                          Map<ColumnRefOperator, Column> columns,
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
+<<<<<<< HEAD
                                          long limit) {
+=======
+                                         long limit,
+                                         TableVersionRange version) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
@@ -289,7 +309,11 @@ public class OdpsMetadata implements ConnectorMetadata {
         }
         OdpsTable odpsTable = (OdpsTable) table;
         List<Partition> partitions = get(partitionCache,
+<<<<<<< HEAD
                 OdpsTableName.of(odpsTable.getDbName(), odpsTable.getTableName()));
+=======
+                OdpsTableName.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
@@ -311,6 +335,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
                                                    long snapshotId, ScalarOperator predicate,
                                                    List<String> columnNames, long limit) {
@@ -326,6 +351,18 @@ public class OdpsMetadata implements ConnectorMetadata {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         OdpsTable odpsTable = (OdpsTable) table;
         Set<String> set = new HashSet<>(columnNames);
+=======
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        // add scanBuilder param for mock
+        return getRemoteFiles(table, params, new TableReadSessionBuilder());
+    }
+
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params,
+                                               TableReadSessionBuilder scanBuilder) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        OdpsTable odpsTable = (OdpsTable) table;
+        Set<String> set = new HashSet<>(params.getFieldNames());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> orderedColumnNames = new ArrayList<>();
         for (Column column : odpsTable.getFullSchema()) {
             if (set.contains(column.getName())) {
@@ -333,8 +370,13 @@ public class OdpsMetadata implements ConnectorMetadata {
             }
         }
         List<PartitionSpec> partitionSpecs = new ArrayList<>();
+<<<<<<< HEAD
         if (partitionKeys != null) {
             for (PartitionKey partitionKey : partitionKeys) {
+=======
+        if (params.getPartitionKeys() != null) {
+            for (PartitionKey partitionKey : params.getPartitionKeys()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 String hivePartitionName = toHivePartitionName(odpsTable.getPartitionColumnNames(), partitionKey);
                 if (!hivePartitionName.isEmpty()) {
                     partitionSpecs.add(new PartitionSpec(hivePartitionName));
@@ -342,17 +384,28 @@ public class OdpsMetadata implements ConnectorMetadata {
             }
         }
         try {
+<<<<<<< HEAD
             LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getDbName(),
                     odpsTable.getTableName(), columnNames);
             TableReadSessionBuilder tableReadSessionBuilder =
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getDbName(), odpsTable.getTableName()))
+=======
+            LOG.info("get remote file infos, project:{}, table:{}, columns:{}", odpsTable.getCatalogDBName(),
+                    odpsTable.getCatalogTableName(), params.getFieldNames());
+            TableReadSessionBuilder tableReadSessionBuilder =
+                    scanBuilder.identifier(TableIdentifier.of(odpsTable.getCatalogDBName(), odpsTable.getCatalogTableName()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             .withSettings(settings)
                             .requiredDataColumns(orderedColumnNames)
                             .requiredPartitions(partitionSpecs);
             OdpsSplitsInfo odpsSplitsInfo;
             switch (properties.get(OdpsProperties.SPLIT_POLICY)) {
                 case OdpsProperties.ROW_OFFSET:
+<<<<<<< HEAD
                     odpsSplitsInfo = callRowOffsetSplitsInfo(tableReadSessionBuilder, limit);
+=======
+                    odpsSplitsInfo = callRowOffsetSplitsInfo(tableReadSessionBuilder, params.getLimit());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 case OdpsProperties.SIZE:
                     odpsSplitsInfo = callSizeSplitsInfo(tableReadSessionBuilder);
@@ -366,7 +419,11 @@ public class OdpsMetadata implements ConnectorMetadata {
             remoteFileInfo.setFiles(remoteFileDescs);
             return Lists.newArrayList(remoteFileInfo);
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.error("getRemoteFileInfos error", e);
+=======
+            LOG.error("getRemoteFiles error", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return Collections.emptyList();
     }

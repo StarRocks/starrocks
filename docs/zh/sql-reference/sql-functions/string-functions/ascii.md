@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ascii
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回字符串第一个字符对应的 ASCII 码。
 

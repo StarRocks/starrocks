@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # yearweek
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns year and week number for a given date. This function works in the same way as the yearweek() function in MySQL.
 

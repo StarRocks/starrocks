@@ -47,8 +47,13 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TreeNode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -118,8 +123,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // sum of tupleIds' avgSerializedSizes; set in computeStats()
     protected float avgRowSize;
 
+<<<<<<< HEAD
     protected int numInstances;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
 
     // For vector query engine
@@ -140,6 +148,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected Set<Integer> localRfWaitingSet = Sets.newHashSet();
     protected ExprSubstitutionMap outputSmap;
 
+<<<<<<< HEAD
+=======
+    // set if you want to collect execution statistics for this plan node
+    protected boolean needCollectExecStats = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;
         this.limit = -1;
@@ -147,7 +161,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList(tupleIds);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
+<<<<<<< HEAD
         this.numInstances = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     protected PlanNode(PlanNodeId id, String planNodeName) {
@@ -156,7 +173,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList();
         this.cardinality = -1;
         this.planNodeName = planNodeName;
+<<<<<<< HEAD
         this.numInstances = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -170,7 +190,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.conjuncts = Expr.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
+<<<<<<< HEAD
         this.numInstances = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<RuntimeFilterDescription> getProbeRuntimeFilters() {
@@ -547,7 +570,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (PlanNode child : children) {
             child.finalizeStats(analyzer);
         }
@@ -583,7 +610,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return outputSmap;
     }
 
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -623,7 +654,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      *
      * @throws AnalysisException
      */
+<<<<<<< HEAD
     protected void createDefaultSmap(Analyzer analyzer) throws UserException {
+=======
+    protected void createDefaultSmap(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
         outputSmap =
                 ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);
@@ -693,6 +728,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
     }
 
+<<<<<<< HEAD
     public int getNumInstances() {
         return numInstances;
     }
@@ -701,6 +737,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.numInstances = numInstances;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void appendTrace(StringBuilder sb) {
         sb.append(planNodeName);
         if (!children.isEmpty()) {
@@ -1018,4 +1056,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // eg: sortedStreamingAGG/ PerBucketCompute
     public void disablePhysicalPropertyOptimize() {
     }
+<<<<<<< HEAD
+=======
+
+    public void forceCollectExecStats() {
+        this.needCollectExecStats = true;
+    }
+
+    public boolean needCollectExecStats() {
+        return needCollectExecStats;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

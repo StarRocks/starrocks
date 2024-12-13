@@ -47,6 +47,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -63,7 +67,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
 import com.starrocks.catalog.ColumnId;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
@@ -74,8 +81,13 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
@@ -86,7 +98,11 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -116,9 +132,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.Set;
+=======
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -143,6 +165,10 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
+<<<<<<< HEAD
+=======
+    private boolean enableDynamicOverwrite = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -190,7 +216,11 @@ public class OlapTableSink extends DataSink {
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
+<<<<<<< HEAD
             tSink.setWrite_txn_log(txnState.isCombinedTxnLog());
+=======
+            tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
@@ -201,7 +231,11 @@ public class OlapTableSink extends DataSink {
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db != null) {
             tSink.setDb_name(db.getFullName());
         }
@@ -229,7 +263,15 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = mode;
     }
 
+<<<<<<< HEAD
     public void complete(String mergeCondition) throws UserException {
+=======
+    public void setDynamicOverwrite(boolean enableDynamicOverwrite) {
+        this.enableDynamicOverwrite = enableDynamicOverwrite;
+    }
+
+    public void complete(String mergeCondition) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
             tSink.setMerge_condition(mergeCondition);
@@ -238,6 +280,13 @@ public class OlapTableSink extends DataSink {
     }
 
     public List<Long> getOpenPartitions() {
+<<<<<<< HEAD
+=======
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            return new ArrayList<>(Collections.singletonList(
+                    dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
                 || partitionIds.size() < Config.max_load_initial_open_partition_number) {
             return partitionIds;
@@ -255,7 +304,11 @@ public class OlapTableSink extends DataSink {
     }
 
     // must called after tupleDescriptor is computed
+<<<<<<< HEAD
     public void complete() throws UserException {
+=======
+    public void complete() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
 
         tSink.setTable_id(dstTable.getId());
@@ -267,6 +320,12 @@ public class OlapTableSink extends DataSink {
             long partitionId = optionalPartition.get().getId();
             numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
         }
+<<<<<<< HEAD
+=======
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            tSink.setDynamic_overwrite(true);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
@@ -364,6 +423,10 @@ public class OlapTableSink extends DataSink {
                     .stream()
                     .map(column -> column.isShadowColumn() ? column.getName() : column.getColumnId().getId())
                     .collect(Collectors.toList()));
+<<<<<<< HEAD
+=======
+            boolean isShadow = indexMeta.getSchema().stream().anyMatch(column -> column.isShadowColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getColumnId().getId());
@@ -388,9 +451,20 @@ public class OlapTableSink extends DataSink {
             indexSchema.setColumn_param(columnParam);
             indexSchema.setSchema_id(indexMeta.getSchemaId());
             indexSchema.setColumn_to_expr_value(columnToExprValue);
+<<<<<<< HEAD
             schemaParam.addToIndexes(indexSchema);
             if (indexMeta.getWhereClause() != null) {
                 String dbName = MetaUtils.getDatabase(dbId).getFullName();
+=======
+            indexSchema.setIs_shadow(isShadow);
+            schemaParam.addToIndexes(indexSchema);
+            if (indexMeta.getWhereClause() != null) {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+                if (db == null) {
+                    throw new SemanticException("Database %s is not found", dbId);
+                }
+                String dbName = db.getFullName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 Map<String, SlotDescriptor> descMap = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
                 for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
@@ -448,7 +522,11 @@ public class OlapTableSink extends DataSink {
         return schemaParam;
     }
 
+<<<<<<< HEAD
     private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws UserException {
+=======
+    private static List<String> getDistColumns(DistributionInfo distInfo, OlapTable table) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> distColumns = Lists.newArrayList();
         switch (distInfo.getType()) {
             case HASH: {
@@ -462,7 +540,11 @@ public class OlapTableSink extends DataSink {
                 break;
             }
             default:
+<<<<<<< HEAD
                 throw new UserException("unsupported distributed type, type=" + distInfo.getType());
+=======
+                throw new StarRocksException("unsupported distributed type, type=" + distInfo.getType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return distColumns;
     }
@@ -482,7 +564,11 @@ public class OlapTableSink extends DataSink {
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
                                                            long automaticBucketSize,
+<<<<<<< HEAD
                                                            List<Long> partitionIds) throws UserException {
+=======
+                                                           List<Long> partitionIds) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
@@ -642,7 +728,11 @@ public class OlapTableSink extends DataSink {
                 break;
             }
             default: {
+<<<<<<< HEAD
                 throw new UserException("unsupported partition for OlapTable, partition=" + partType);
+=======
+                throw new StarRocksException("unsupported partition for OlapTable, partition=" + partType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         LOG.debug("partitionParam: {}", partitionParam);
@@ -718,14 +808,23 @@ public class OlapTableSink extends DataSink {
 
     private static DistributionInfo setDistributedColumns(TOlapTablePartitionParam partitionParam,
                                                           DistributionInfo selectedDistInfo,
+<<<<<<< HEAD
                                                           Partition partition, OlapTable table) throws UserException {
+=======
+                                                          Partition partition, OlapTable table) throws
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DistributionInfo distInfo = partition.getDistributionInfo();
         if (selectedDistInfo == null) {
             partitionParam.setDistributed_columns(getDistColumns(distInfo, table));
             return distInfo;
         } else {
             if (selectedDistInfo.getType() != distInfo.getType()) {
+<<<<<<< HEAD
                 throw new UserException("different distribute types in two different partitions, type1="
+=======
+                throw new StarRocksException("different distribute types in two different partitions, type1="
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         + selectedDistInfo.getType() + ", type2=" + distInfo.getType());
             }
         }
@@ -733,7 +832,11 @@ public class OlapTableSink extends DataSink {
     }
 
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
+<<<<<<< HEAD
                                                          boolean enableReplicatedStorage) throws UserException {
+=======
+                                                         boolean enableReplicatedStorage) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return createLocation(table, partitionParam, enableReplicatedStorage,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
     }
@@ -748,7 +851,11 @@ public class OlapTableSink extends DataSink {
 
     public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
                                                          boolean enableReplicatedStorage,
+<<<<<<< HEAD
                                                          long warehouseId) throws UserException {
+=======
+                                                         long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
@@ -757,13 +864,22 @@ public class OlapTableSink extends DataSink {
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
+<<<<<<< HEAD
         for (TOlapTablePartition partition : partitionParam.getPartitions()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(partition.getId());
+=======
+        for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
             // `selectedBackedIds` keeps the selected backendIds for 1st index which will be used to choose the later index's
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
+<<<<<<< HEAD
             LOG.debug("partition: {}, physical partition: {}", partition, physicalPartition);
+=======
+            LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
@@ -778,7 +894,11 @@ public class OlapTableSink extends DataSink {
                         Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(infoService);
                         if (bePathsMap.keySet().size() < quorum) {
+<<<<<<< HEAD
                             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+=======
+                            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     String.format("Tablet lost replicas. Check if any backend is down or not. " +
                                                     "tablet_id: %s, replicas: %s. Check quorum number failed" +
                                                     "(OlapTableSink): BeReplicaSize:%s, quorum:%s",

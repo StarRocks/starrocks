@@ -122,7 +122,11 @@ public class BackupJobMaterializedViewTest {
     private EditLog editLog;
 
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
+<<<<<<< HEAD
             new BlobStorage("broker", Maps.newHashMap()));
+=======
+                new BlobStorage("broker", Maps.newHashMap()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @BeforeAll
     public static void start() {
@@ -141,7 +145,11 @@ public class BackupJobMaterializedViewTest {
             File backupDir = new File(path.toString());
             if (backupDir.exists()) {
                 Files.walk(path, FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+<<<<<<< HEAD
                         .forEach(File::delete);
+=======
+                            .forEach(File::delete);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -156,11 +164,19 @@ public class BackupJobMaterializedViewTest {
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
         db = UnitTestUtil.createDbWithMaterializedView(dbId, tblId, partId, idxId, tabletId,
+<<<<<<< HEAD
                 backendId, version, KeysType.DUP_KEYS);
 
         new Expectations(globalStateMgr) {
             {
                 globalStateMgr.getDb(anyLong);
+=======
+                    backendId, version, KeysType.DUP_KEYS);
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = db;
 
@@ -171,6 +187,17 @@ public class BackupJobMaterializedViewTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_mv");
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getLocalMetastore().getTable("testDb", "unknown_tbl");
+                minTimes = 0;
+                result = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -239,14 +266,26 @@ public class BackupJobMaterializedViewTest {
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assert.assertNotNull(backupTbl);
                 Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
+<<<<<<< HEAD
                         ((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+=======
+                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
+                                        true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             {
                 OlapTable backupTbl = (OlapTable) backupMeta.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
                 List<String> partNames = Lists.newArrayList(backupTbl.getPartitionNames());
                 Assert.assertNotNull(backupTbl);
                 Assert.assertEquals(backupTbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true),
+<<<<<<< HEAD
                         ((OlapTable) db.getTable(tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+=======
+                            ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, partNames,
+                                        true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -271,7 +310,11 @@ public class BackupJobMaterializedViewTest {
             Assert.assertTrue(task instanceof SnapshotTask);
             SnapshotTask snapshotTask = (SnapshotTask) task;
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+<<<<<<< HEAD
                     snapshotTask.getSignature(), taskStatus);
+=======
+                        snapshotTask.getSignature(), taskStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             request.setSnapshot_files(snapshotFiles);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
@@ -284,7 +327,11 @@ public class BackupJobMaterializedViewTest {
             Assert.assertTrue(task instanceof SnapshotTask);
             SnapshotTask snapshotTask = (SnapshotTask) task;
             TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
+<<<<<<< HEAD
                     snapshotTask.getSignature(), taskStatus);
+=======
+                        snapshotTask.getSignature(), taskStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             request.setSnapshot_files(snapshotFiles);
             request.setSnapshot_path(snapshotPath);
             Assert.assertTrue(job.finishTabletSnapshotTask(snapshotTask, request));
@@ -307,7 +354,11 @@ public class BackupJobMaterializedViewTest {
         Assert.assertEquals(job.getJobId(), upTask.getJobId());
         Map<String, String> srcToDest = upTask.getSrcToDestPath();
         Assert.assertEquals(1, srcToDest.size());
+<<<<<<< HEAD
         String dest = srcToDest.get(snapshotPath + "/" + tabletId  + "/" + 0);
+=======
+        String dest = srcToDest.get(snapshotPath + "/" + tabletId + "/" + 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(dest);
 
         // 5. uploading
@@ -316,7 +367,11 @@ public class BackupJobMaterializedViewTest {
         Assert.assertEquals(BackupJobState.UPLOADING, job.getState());
         Map<Long, List<String>> tabletFileMap = Maps.newHashMap();
         TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.UPLOAD,
+<<<<<<< HEAD
                 upTask.getSignature(), taskStatus);
+=======
+                    upTask.getSignature(), taskStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         request.setTablet_files(tabletFileMap);
 
         Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
@@ -354,16 +409,28 @@ public class BackupJobMaterializedViewTest {
                 Assert.assertNotNull(olapTable);
                 Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.TABLE_NAME));
                 List<String> names = Lists.newArrayList(olapTable.getPartitionNames());
+<<<<<<< HEAD
                 Assert.assertEquals(((OlapTable) db.getTable(tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
                         olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+=======
+                Assert.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(db.getId(), tblId)).getSignature(BackupHandler.SIGNATURE_VERSION, names, true),
+                            olapTable.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             {
                 MaterializedView mv = (MaterializedView) restoreMetaInfo.getTable(tblId + 1);
                 Assert.assertNotNull(mv);
                 Assert.assertNotNull(restoreMetaInfo.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME));
                 List<String> names = Lists.newArrayList(mv.getPartitionNames());
+<<<<<<< HEAD
                 Assert.assertEquals(((OlapTable) db.getTable(tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, names,
                                 true), mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+=======
+                Assert.assertEquals(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tblId + 1)).getSignature(BackupHandler.SIGNATURE_VERSION, names,
+                            true), mv.getSignature(BackupHandler.SIGNATURE_VERSION, names, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             restoreJobInfo = BackupJobInfo.fromFile(job.getLocalJobInfoFilePath());
@@ -387,10 +454,16 @@ public class BackupJobMaterializedViewTest {
             Assert.assertTrue(mv != null);
             Assert.assertTrue(!mv.isActive());
             Assert.assertTrue(mv.getInactiveReason().contains(String.format("Set the materialized view %s inactive in backup",
+<<<<<<< HEAD
                     UnitTestUtil.MATERIALIZED_VIEW_NAME)));
         } catch (IOException e) {
             e.printStackTrace();
             Assert.fail();
+=======
+                        UnitTestUtil.MATERIALIZED_VIEW_NAME)));
+        } catch (IOException e) {
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         Assert.assertNull(job.getBackupMeta());
@@ -417,7 +490,11 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
         job = new BackupJob("mv_label_abnormal", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000,
+<<<<<<< HEAD
                 globalStateMgr, repo.getId());
+=======
+                    globalStateMgr, repo.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());

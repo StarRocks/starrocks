@@ -50,8 +50,11 @@
 namespace starrocks {
 
 const std::string FILE_PARAMETER = "file";
+<<<<<<< HEAD
 const std::string DB_PARAMETER = "db";
 const std::string LABEL_PARAMETER = "label";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 const std::string TOKEN_PARAMETER = "token";
 
 DownloadAction::DownloadAction(ExecEnv* exec_env, const std::vector<std::string>& allow_dirs)

@@ -49,15 +49,25 @@ public class OdpsTableTest {
     @Test
     public void testGetDbName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
+<<<<<<< HEAD
         when(odpsTable.getDbName()).thenReturn("dbName");
         assertEquals("dbName", odpsTable.getDbName());
+=======
+        when(odpsTable.getCatalogDBName()).thenReturn("dbName");
+        assertEquals("dbName", odpsTable.getCatalogDBName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testGetTableName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
+<<<<<<< HEAD
         when(odpsTable.getTableName()).thenReturn("tableName");
         assertEquals("tableName", odpsTable.getTableName());
+=======
+        when(odpsTable.getCatalogTableName()).thenReturn("tableName");
+        assertEquals("tableName", odpsTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

@@ -132,6 +132,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.close_trino()
         self.close_spark()
         self.close_hive()
+<<<<<<< HEAD
+=======
+        self.close_starrocks_arrow()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))

@@ -97,7 +97,11 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+<<<<<<< HEAD
         Table table = currentState.getDb("test").getTable("mv9");
+=======
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv9");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
@@ -125,7 +129,11 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+<<<<<<< HEAD
         Table table = currentState.getDb("test").getTable("mv10");
+=======
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv10");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
@@ -154,7 +162,11 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+<<<<<<< HEAD
         Table table = currentState.getDb("test").getTable("mv8");
+=======
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv8");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0),

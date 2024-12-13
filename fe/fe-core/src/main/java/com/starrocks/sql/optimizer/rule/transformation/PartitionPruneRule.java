@@ -18,16 +18,27 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
+<<<<<<< HEAD
 import java.util.List;
 
+=======
+import java.util.Collections;
+import java.util.List;
+
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * This class does:
  * 1. Prune the Olap table partition ids, Dependency predicates push down scan node
@@ -58,6 +69,7 @@ public class PartitionPruneRule extends TransformationRule {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean check(final OptExpression input, OptimizerContext context) {
         Operator op = input.getOp();
         // if the partition id is already selected, no need to prune again
@@ -70,6 +82,14 @@ public class PartitionPruneRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator logicalOlapScanOperator = (LogicalOlapScanOperator) input.getOp();
+=======
+    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+        LogicalOlapScanOperator logicalOlapScanOperator = (LogicalOlapScanOperator) input.getOp();
+        if (logicalOlapScanOperator.isOpRuleBitSet(OP_PARTITION_PRUNED)) {
+            return Collections.emptyList();
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LogicalOlapScanOperator prunedOlapScanOperator = null;
         if (logicalOlapScanOperator.getSelectedPartitionId() == null) {
             prunedOlapScanOperator = OptOlapPartitionPruner.prunePartitions(logicalOlapScanOperator);
@@ -77,7 +97,11 @@ public class PartitionPruneRule extends TransformationRule {
             // do merge pruned partitions with new pruned partitions
             prunedOlapScanOperator = OptOlapPartitionPruner.mergePartitionPrune(logicalOlapScanOperator);
         }
+<<<<<<< HEAD
         Utils.setOpAppliedRule(prunedOlapScanOperator, Operator.OP_PARTITION_PRUNE_BIT);
+=======
+        prunedOlapScanOperator.setOpRuleBit(OP_PARTITION_PRUNED);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Lists.newArrayList(OptExpression.create(prunedOlapScanOperator, input.getInputs()));
     }
 }

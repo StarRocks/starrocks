@@ -18,9 +18,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.apache.iceberg.hive.RuntimeMetaException;
+=======
+import mockit.Expectations;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -339,6 +343,12 @@ public class AnalyzeCreateTableTest {
                 metadata.getDb("iceberg_catalog", "iceberg_db");
                 result = new Database();
                 minTimes = 0;
+<<<<<<< HEAD
+=======
+
+                metadata.tableExists("iceberg_catalog", "iceberg_db", anyString);
+                result = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -354,6 +364,7 @@ public class AnalyzeCreateTableTest {
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog("iceberg_catalog");
         analyzeSuccess("create external table iceberg_db.iceberg_table (k1 int, k2 int) partition by (k2)");
 
+<<<<<<< HEAD
         try {
             String stmt = "create external table iceberg_table (k1 int, k2 int) partition by (k2)";
             UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
@@ -363,6 +374,8 @@ public class AnalyzeCreateTableTest {
             Assert.assertTrue(e.getMessage().contains("Failed to connect to Hive Metastore"));
         }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AnalyzeTestUtil.getConnectContext().setDatabase("iceberg_db");
         analyzeSuccess("create external table iceberg_table (k1 int, k2 int) partition by (k2)");
         analyzeSuccess("create external table iceberg_table (k1 int, k2 int) engine=iceberg partition by (k2)");
@@ -378,8 +391,11 @@ public class AnalyzeCreateTableTest {
             }
         };
 
+<<<<<<< HEAD
         analyzeFail("create external table hive_catalog.hive_db.hive_table (k1 int, k2 int) engine=iceberg partition by (k2)");
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
         AnalyzeTestUtil.getConnectContext().setDatabase("test");
     }

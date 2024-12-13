@@ -60,7 +60,14 @@ public:
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
+<<<<<<< HEAD
     StatusOr<TxnLogPtr> finish(DeltaWriterFinishMode mode = kWriteTxnLog);
+=======
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Manual flush used by stale memtable flush
     // different from `flush()`, this method will reduce memory usage in `mem_tracker`

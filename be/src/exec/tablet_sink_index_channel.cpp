@@ -18,12 +18,20 @@
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
+<<<<<<< HEAD
+=======
+#include "common/utils.h"
+#include "config.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/tablet_sink.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
+<<<<<<< HEAD
 #include "runtime/exec_env.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
@@ -832,6 +840,10 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     }
 
     if (closure->result.has_load_channel_profile()) {
+<<<<<<< HEAD
+=======
+        SCOPED_TIMER(_ts_profile->update_load_channel_profile_timer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         const auto* buf = (const uint8_t*)(closure->result.load_channel_profile().data());
         uint32_t len = closure->result.load_channel_profile().size();
         TRuntimeProfileTree thrift_profile;

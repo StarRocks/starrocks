@@ -184,7 +184,11 @@ public:
     explicit BinaryPlainPageDecoder(Slice data)
             : _data(data), _parsed(false), _num_elems(0), _offsets_pos(0), _cur_idx(0) {}
 
+<<<<<<< HEAD
     [[nodiscard]] Status init() override {
+=======
+    Status init() override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF(_parsed, Status::OK());
 
         if (_data.size < sizeof(uint32_t)) {
@@ -206,15 +210,25 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status seek_to_position_in_page(uint32_t pos) override {
+=======
+    Status seek_to_position_in_page(uint32_t pos) override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK_LE(pos, _num_elems);
         _cur_idx = pos;
         return Status::OK();
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status next_batch(size_t* count, Column* dst) override;
 
     [[nodiscard]] Status next_batch(const SparseRange<>& range, Column* dst) override;
+=======
+    Status next_batch(size_t* count, Column* dst) override;
+
+    Status next_batch(const SparseRange<>& range, Column* dst) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool append_range(uint32_t idx, uint32_t end, Column* dst) const;
 

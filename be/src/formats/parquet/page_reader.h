@@ -14,9 +14,19 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <cstdint>
 
 #include "common/status.h"
+=======
+#include <stddef.h>
+
+#include <cstdint>
+#include <string_view>
+
+#include "common/status.h"
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/parquet_types.h"
 #include "io/seekable_input_stream.h"
 

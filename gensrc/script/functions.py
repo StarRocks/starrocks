@@ -56,15 +56,30 @@ vectorized_functions = [
     [10090, "tan", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::tan"],
     [10100, "atan", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::atan"],
     [10101, "tanh", True, False, "DOUBLE", ["DOUBLE"], "MathFunctions::tanh"],
+<<<<<<< HEAD
     [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"],
      "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
     [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"],
      "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+=======
+
+    #   cosine function
+    [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
+    [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+    [10106, "approx_cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [10110, "ceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10111, "ceiling", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10112, "dceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
 
+<<<<<<< HEAD
+=======
+    #   l2 function
+    [10114, "l2_distance", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::l2_distance<TYPE_FLOAT>"],
+    [10116, "approx_l2_distance", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::l2_distance<TYPE_FLOAT>"],
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     [10120, "floor", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
     [10121, "dfloor", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::floor"],
 
@@ -285,6 +300,10 @@ vectorized_functions = [
     [30120, 'length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::length'],
     [30130, 'char_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
     [30131, 'character_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
+<<<<<<< HEAD
+=======
+    [30132, 'inet_aton', True, False, 'BIGINT', ['VARCHAR'], 'StringFunctions::inet_aton'],
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
     [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
@@ -343,6 +362,13 @@ vectorized_functions = [
      'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     [30332, 'replace', True, True, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::replace',
      'StringFunctions::replace_prepare', 'StringFunctions::replace_close'],
+<<<<<<< HEAD
+=======
+    [30333, 'regexp_split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_split',
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
+    [30334, 'regexp_split', True, True, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::regexp_split',
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     [30400, "money_format", True, False, "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", True, False, "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", True, False, "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -1319,5 +1345,13 @@ vectorized_functions = [
     [170501, 'named_struct', True, False, 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::named_struct'],
 
     # user function
+<<<<<<< HEAD
     [180000, 'is_role_in_session', True, False, 'BOOLEAN', ['VARCHAR'], 'nullptr']
+=======
+    [180000, 'is_role_in_session', True, False, 'BOOLEAN', ['VARCHAR'], 'nullptr'],
+    
+    # data synopse functions
+    [181000, 'bar', True, False, 'VARCHAR', ['BIGINT', "BIGINT", 'BIGINT', 'BIGINT'], 'UtilityFunctions::bar'],
+    [181001, 'equiwidth_bucket', True, False, 'BIGINT', ['BIGINT', 'BIGINT', 'BIGINT', 'BIGINT'], 'UtilityFunctions::equiwidth_bucket'],
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ]

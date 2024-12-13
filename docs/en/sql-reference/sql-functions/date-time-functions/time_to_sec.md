@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # time_to_sec
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a time value into the number of seconds. The formula used for the conversion is as follows:
 

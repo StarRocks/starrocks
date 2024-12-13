@@ -80,6 +80,15 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    void acquire_runtime_filter(RuntimeState* state) {
+        for (auto& op : _op_factories) {
+            op->acquire_runtime_filter(state);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string to_readable_string() const {
         std::stringstream ss;
         ss << "operator-chain: [";

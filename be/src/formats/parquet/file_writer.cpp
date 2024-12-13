@@ -16,6 +16,7 @@
 #include "formats/parquet/file_writer.h"
 
 #include <arrow/buffer.h>
+<<<<<<< HEAD
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
@@ -33,12 +34,34 @@
 #include "exprs/expr_context.h"
 #include "formats/parquet/utils.h"
 #include "runtime/exec_env.h"
+=======
+#include <arrow/io/type_fwd.h>
+#include <arrow/util/string_builder.h>
+#include <fmt/core.h>
+#include <glog/logging.h>
+#include <parquet/exception.h>
+#include <parquet/metadata.h>
+#include <parquet/type_fwd.h>
+#include <runtime/current_thread.h>
+
+#include <ostream>
+
+#include "column/chunk.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "formats/parquet/utils.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
+<<<<<<< HEAD
+=======
+#include "util/stopwatch.hpp"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 
@@ -315,8 +338,13 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     case TYPE_DECIMAL128: {
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+<<<<<<< HEAD
                 ::parquet::Type::FIXED_LEN_BYTE_ARRAY, decimal_precision_to_byte_count(type_desc.precision),
                 file_column_id.field_id);
+=======
+                ::parquet::Type::FIXED_LEN_BYTE_ARRAY,
+                ParquetUtils::decimal_precision_to_byte_count(type_desc.precision), file_column_id.field_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     case TYPE_STRUCT: {
         DCHECK(type_desc.children.size() == type_desc.field_names.size());

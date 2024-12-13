@@ -16,7 +16,10 @@ package com.starrocks.load.pipe;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
@@ -28,7 +31,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -81,10 +88,14 @@ public class Pipe implements GsonPostProcessable {
     public static final long DEFAULT_BATCH_FILES = 256;
     public static final int FAILED_TASK_THRESHOLD = 5;
 
+<<<<<<< HEAD
     private static final ImmutableMap<String, String> DEFAULT_TASK_EXECUTION_VARIABLES =
             ImmutableMap.<String, String>builder()
                     .put("query_timeout", "3600")
                     .build();
+=======
+    private static final String TASK_PROPERTY_PREFIX = "task.";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @SerializedName(value = "name")
     private final String name;
@@ -128,12 +139,19 @@ public class Pipe implements GsonPostProcessable {
         this.createdTime = TimeUtils.getEpochSeconds();
         this.properties = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
         this.taskExecutionVariables = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+<<<<<<< HEAD
         this.taskExecutionVariables.putAll(DEFAULT_TASK_EXECUTION_VARIABLES);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static Pipe fromStatement(long id, CreatePipeStmt stmt) {
         PipeName pipeName = stmt.getPipeName();
+<<<<<<< HEAD
         long dbId = GlobalStateMgr.getCurrentState().getDb(pipeName.getDbName()).getId();
+=======
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(pipeName.getDbName()).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PipeId pipeId = new PipeId(dbId, id);
         Pipe res = new Pipe(pipeId, pipeName.getPipeName(), stmt.getTargetTable(), stmt.getDataSource(),
                 stmt.getInsertSql());
@@ -145,9 +163,15 @@ public class Pipe implements GsonPostProcessable {
 
     public void processProperties(Map<String, String> properties) {
         for (Map.Entry<String, String> entry : properties.entrySet()) {
+<<<<<<< HEAD
             String key = entry.getKey();
             String value = entry.getValue();
             switch (key.toLowerCase()) {
+=======
+            String key = entry.getKey().toLowerCase();
+            String value = entry.getValue();
+            switch (key) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case PipeAnalyzer.PROPERTY_POLL_INTERVAL: {
                     this.pollIntervalSecond = Integer.parseInt(value);
                     break;
@@ -171,11 +195,19 @@ public class Pipe implements GsonPostProcessable {
                 }
                 default: {
                     // task execution variables
+<<<<<<< HEAD
                     if (key.toUpperCase().startsWith("TASK.")) {
                         String taskVariable = StringUtils.removeStart(key.toUpperCase(), "TASK.");
                         this.taskExecutionVariables.put(taskVariable, value);
                     } else {
                         throw new IllegalArgumentException("unsupported property: " + key);
+=======
+                    if (key.startsWith(TASK_PROPERTY_PREFIX)) {
+                        String taskVariable = StringUtils.removeStart(key, TASK_PROPERTY_PREFIX);
+                        this.taskExecutionVariables.put(taskVariable, value);
+                    } else {
+                        throw new IllegalArgumentException("unsupported property: " + entry.getKey());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
@@ -186,7 +218,11 @@ public class Pipe implements GsonPostProcessable {
     /**
      * Poll event from data source
      */
+<<<<<<< HEAD
     public void poll() throws UserException {
+=======
+    public void poll() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long nextPollTime = lastPolledTime + pollIntervalSecond;
         if (System.currentTimeMillis() / 1000 < nextPollTime) {
             return;
@@ -314,7 +350,11 @@ public class Pipe implements GsonPostProcessable {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
+<<<<<<< HEAD
             String dbName = GlobalStateMgr.getCurrentState().mayGetDb(pipeId.getDbId())
+=======
+            String dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipeId.getDbId())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .map(Database::getOriginName)
                     .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR));
             String sqlTask = FilePipeSource.buildInsertSql(this, piece, uniqueName);

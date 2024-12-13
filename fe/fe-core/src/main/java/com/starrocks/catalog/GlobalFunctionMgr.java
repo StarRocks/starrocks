@@ -17,7 +17,11 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -28,8 +32,11 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -77,6 +84,7 @@ public class GlobalFunctionMgr {
         return func;
     }
 
+<<<<<<< HEAD
     private void addFunction(Function function, boolean isReplay) throws UserException {
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
@@ -106,22 +114,97 @@ public class GlobalFunctionMgr {
 
     public synchronized void userAddFunction(Function f) throws UserException {
         addFunction(f, false);
+=======
+    private void addFunction(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
+            throws StarRocksException {
+        String functionName = function.getFunctionName().getFunction();
+        List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
+        if (allowExists && createIfNotExists) {
+            // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+            throw new StarRocksException(
+                    "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
+        }
+        if (!isReplay) {
+            for (Function existFunc : existFuncs) {
+                if (function.compare(existFunc, Function.CompareMode.IS_IDENTICAL)) {
+                    if (createIfNotExists) {
+                        LOG.info("create function [{}] which already exists", functionName);
+                        return;
+                    } else if (!allowExists) {
+                        throw new StarRocksException("function already exists");
+                    }
+                }
+            }
+            assignIdToUserDefinedFunction(function);
+        }
+        name2Function.put(functionName, addOrReplaceFunction(function, existFuncs));
+    }
+
+    /**
+     * Add the function to the given list of functions. If an identical function exists within the list, it is replaced
+     * by the incoming function.
+     *
+     * @param function   The function to be added.
+     * @param existFuncs The list of functions to which the function is added. This list is not modified.
+     * @return a new list of functions with the given function added or replaced.
+     */
+    public static ImmutableList<Function> addOrReplaceFunction(Function function, List<Function> existFuncs) {
+        return ImmutableList.<Function>builder()
+                .addAll(existFuncs.stream()
+                        .filter(f -> !function.compare(f, Function.CompareMode.IS_IDENTICAL))
+                        .collect(ImmutableList.toImmutableList()))
+                .add(function)
+                .build();
+    }
+
+    /**
+     * Assign a globally unique id to the given user-defined function.
+     * All user-defined functions IDs are negative to avoid conflicts with the builtin function.
+     *
+     * @param function Function to be modified.
+     */
+    public static void assignIdToUserDefinedFunction(Function function) {
+        long functionId = GlobalStateMgr.getCurrentState().getNextId();
+        function.setFunctionId(-functionId);
+    }
+
+    public synchronized void userAddFunction(Function f, boolean allowExists, boolean createIfNotExists) throws
+            StarRocksException {
+        addFunction(f, false, allowExists, createIfNotExists);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(f);
     }
 
     public synchronized void replayAddFunction(Function f) {
         try {
+<<<<<<< HEAD
             addFunction(f, true);
         } catch (UserException e) {
+=======
+            addFunction(f, true, false, false);
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkArgument(false);
         }
     }
 
+<<<<<<< HEAD
     private void dropFunction(FunctionSearchDesc function) throws UserException {
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
             throw new UserException("Unknown function, function=" + function.toString());
+=======
+    private void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
+        String functionName = function.getName().getFunction();
+        List<Function> existFuncs = name2Function.get(functionName);
+        if (existFuncs == null) {
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         boolean isFound = false;
         ImmutableList.Builder<Function> builder = ImmutableList.builder();
@@ -133,7 +216,15 @@ public class GlobalFunctionMgr {
             }
         }
         if (!isFound) {
+<<<<<<< HEAD
             throw new UserException("Unknown function, function=" + function.toString());
+=======
+            if (dropIfExists) {
+                LOG.info("drop function [{}] which does not exist", functionName);
+                return;
+            }
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         ImmutableList<Function> newFunctions = builder.build();
         if (newFunctions.isEmpty()) {
@@ -143,19 +234,30 @@ public class GlobalFunctionMgr {
         }
     }
 
+<<<<<<< HEAD
     public synchronized void userDropFunction(FunctionSearchDesc f) throws UserException {
         dropFunction(f);
+=======
+    public synchronized void userDropFunction(FunctionSearchDesc f, boolean dropIfExists) throws StarRocksException {
+        dropFunction(f, dropIfExists);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(f);
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc f) {
         try {
+<<<<<<< HEAD
             dropFunction(f);
         } catch (UserException e) {
+=======
+            dropFunction(f, false);
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkArgument(false);
         }
     }
 
+<<<<<<< HEAD
     public long loadGlobalFunctions(DataInputStream dis, long checksum) throws IOException {
         int count = dis.readInt();
         checksum ^= count;
@@ -178,6 +280,8 @@ public class GlobalFunctionMgr {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         List<Function> functions = getFunctions();
 

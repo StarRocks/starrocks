@@ -29,6 +29,10 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
+<<<<<<< HEAD
+=======
+import org.junit.Ignore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
@@ -74,6 +78,10 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void test1BestEffortBalance() throws SQLException, InterruptedException {
         // Initialize 3 backends with location: rack:r1, rack:r1, rack:r2
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -103,7 +111,11 @@ public class LocationLabeledTableBalanceTest {
                 ");";
         cluster.runSql("test", sql);
 
+<<<<<<< HEAD
         Database test = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");
 
         // Add another backend without location property, with best-effort balance strategy,
@@ -158,7 +170,11 @@ public class LocationLabeledTableBalanceTest {
 
     private void printTabletReplicaInfo(OlapTable table) {
         table.getPartitions().forEach(partition -> {
+<<<<<<< HEAD
             partition.getBaseIndex().getTablets().forEach(tablet -> {
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().forEach(tablet -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StringBuffer stringBuffer = new StringBuffer();
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {
@@ -173,8 +189,14 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void test2LocationMatchedBalance() throws InterruptedException, SQLException {
         Database test = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+    @Ignore
+    public void test2LocationMatchedBalance() throws InterruptedException, SQLException {
+        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");
 
         long start = System.currentTimeMillis();

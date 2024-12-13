@@ -25,6 +25,10 @@
 #include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
+=======
+#include "column/vectorized_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -109,6 +113,12 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
             // return Status::EndOfFile("EOF of reading json file, nothing read");
             return src_chunk;
         } else if (status.is_time_out()) {
+<<<<<<< HEAD
+=======
+            if (src_chunk->is_empty()) {
+                _reusable_empty_chunk.swap(src_chunk);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // if timeout happens at the beginning of reading src_chunk, we return the error state
             // else we will _materialize the lines read before timeout and return ok()
             return status;
@@ -240,6 +250,15 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
 }
 
 Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
+<<<<<<< HEAD
+=======
+    if (_reusable_empty_chunk) {
+        DCHECK(_reusable_empty_chunk->is_empty());
+        _reusable_empty_chunk.swap(*chunk);
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SCOPED_RAW_TIMER(&_counter->init_chunk_ns);
     *chunk = std::make_shared<Chunk>();
     size_t slot_size = _src_slot_descriptors.size();
@@ -282,7 +301,17 @@ Status JsonScanner::_open_next_reader() {
     }
     _cur_file_reader = std::make_unique<JsonReader>(_state, _counter, this, file, _strict_mode, _src_slot_descriptors,
                                                     _json_types, range_desc);
+<<<<<<< HEAD
     RETURN_IF_ERROR(_cur_file_reader->open());
+=======
+    st = _cur_file_reader->open();
+    // Timeout can happen when reading data from a TimeBoundedStreamLoadPipe.
+    // In this case, open file should be successful, and just need to try to
+    // read data next time
+    if (!st.ok() && !st.is_time_out()) {
+        return st;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _next_range++;
     return Status::OK();
 }
@@ -587,7 +616,11 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
             if (UNLIKELY(i == _op_col_index)) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
+<<<<<<< HEAD
                     std::ignore = column->append_strings(std::vector{Slice{"0"}});
+=======
+                    std::ignore = column->append_strings(std::vector<Slice>{Slice{"0"}});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -614,7 +647,12 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
             if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
+<<<<<<< HEAD
                     column->append_strings(std::vector{Slice{"0"}});
+=======
+                    Slice s{"0"};
+                    column->append_strings(&s, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     column->append_datum(Datum((uint8_t)0));
                 }
@@ -646,7 +684,12 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
                     if (column->is_binary()) {
+<<<<<<< HEAD
                         column->append_strings(std::vector{Slice{"0"}});
+=======
+                        Slice s{"0"};
+                        column->append_strings(&s, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     } else {
                         column->append_datum(Datum((uint8_t)0));
                     }

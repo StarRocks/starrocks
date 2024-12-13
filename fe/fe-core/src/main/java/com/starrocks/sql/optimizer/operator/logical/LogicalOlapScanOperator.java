@@ -21,7 +21,13 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.PartitionNames;
+=======
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.TableSampleClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -45,10 +51,21 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     private List<ScalarOperator> prunedPartitionPredicates;
     private boolean usePkIndex;
+<<<<<<< HEAD
+=======
+    private TableSampleClause sample;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // record if this scan is derived from SplitScanORToUnionRule
     private boolean fromSplitOR;
 
+<<<<<<< HEAD
+=======
+    private long gtid = 0;
+
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
         this(table, Maps.newHashMap(), Maps.newHashMap(), null, Operator.DEFAULT_LIMIT, null);
@@ -128,6 +145,13 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return selectedTabletId;
     }
 
+<<<<<<< HEAD
+=======
+    public long getGtid() {
+        return gtid;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean isEmptyOutputRows() {
         return selectedTabletId == null || selectedTabletId.isEmpty() ||
@@ -158,6 +182,29 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return fromSplitOR;
     }
 
+<<<<<<< HEAD
+=======
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
+    }
+
+    public boolean isSample() {
+        return sample != null && sample.isUseSampling();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalOlapScan(this, context);
@@ -175,18 +222,31 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
+<<<<<<< HEAD
+=======
+                gtid == that.gtid &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId) &&
+<<<<<<< HEAD
+=======
+                Objects.equals(sample, that.sample) &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Objects.equals(hintsTabletIds, that.hintsTabletIds) &&
                 Objects.equals(hintsReplicaIds, that.hintsReplicaIds);
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds);
+=======
+        return Objects.hash(super.hashCode(), selectedIndexId, gtid, selectedPartitionId,
+                selectedTabletId, hintsTabletIds, hintsReplicaIds, sample);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static Builder builder() {
@@ -206,6 +266,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
             builder.distributionSpec = scanOperator.distributionSpec;
             builder.selectedIndexId = scanOperator.selectedIndexId;
+<<<<<<< HEAD
+=======
+            builder.gtid = scanOperator.gtid;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
             builder.hasTableHints = scanOperator.hasTableHints;
@@ -215,6 +279,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             builder.usePkIndex = scanOperator.usePkIndex;
             builder.fromSplitOR = scanOperator.fromSplitOR;
+<<<<<<< HEAD
+=======
+            builder.vectorSearchOptions = scanOperator.vectorSearchOptions;
+            builder.sample = scanOperator.getSample();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
@@ -223,6 +292,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder setGtid(long gtid) {
+            builder.gtid = gtid;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Builder setSelectedTabletId(List<Long> selectedTabletId) {
             builder.selectedTabletId = ImmutableList.copyOf(selectedTabletId);
             return this;
@@ -276,5 +353,13 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.usePkIndex = usePkIndex;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public Builder setSample(TableSampleClause sample) {
+            builder.sample = sample;
+            return this;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

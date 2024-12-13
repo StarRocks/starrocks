@@ -41,7 +41,11 @@ on lo_custkey = c_custkey;
 
 refresh materialized view mv_left_outer with sync mode;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1';
@@ -51,7 +55,11 @@ from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1';
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1';
@@ -71,7 +79,11 @@ on lo_custkey = c_custkey;
 
 refresh materialized view mv_left_outer_2 with sync mode;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder inner join customer
 on lo_custkey = c_custkey;
 
@@ -79,7 +91,11 @@ select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
 from lineorder inner join customer
 on lo_custkey = c_custkey order by lo_orderkey;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder inner join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1' and c_custkey = 1;
@@ -89,7 +105,11 @@ from lineorder inner join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1' and c_custkey = 1;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left anti join customer
 on lo_custkey = c_custkey;
 
@@ -109,7 +129,11 @@ refresh materialized view mv_left_outer_agg with sync mode;
 
 select count() from mv_left_outer_agg;
 
+<<<<<<< HEAD
 explain select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
+=======
+[UC]explain select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1'
@@ -137,7 +161,11 @@ refresh materialized view mv_right_outer with sync mode;
 
 select count() from mv_right_outer;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder right outer join customer
 on lo_custkey = c_custkey
 where lo_orderkey = 10001;
@@ -147,7 +175,11 @@ from lineorder right outer join customer
 on lo_custkey = c_custkey
 where lo_orderkey = 10001;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder inner join customer
 on lo_custkey = c_custkey;
 
@@ -156,7 +188,11 @@ from lineorder inner join customer
 on lo_custkey = c_custkey
 order by lo_orderkey, lo_linenumber;
 
+<<<<<<< HEAD
 explain select c_custkey, c_name
+=======
+[UC]explain select c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder right anti join customer
 on lo_custkey = c_custkey;
 
@@ -174,7 +210,11 @@ refresh materialized view mv_right_outer_2 with sync mode;
 
 select count() from mv_right_outer_2;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder inner join customer
 on lo_custkey = c_custkey and lo_linenumber = c_id;
 
@@ -210,7 +250,11 @@ on lo_custkey = c_custkey
 where lo_orderkey = 10001
 group by lo_orderkey, lo_custkey;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+=======
+[UC]explain select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder inner join customer
 on lo_custkey = c_custkey
 group by lo_orderkey, lo_custkey;
@@ -238,7 +282,11 @@ refresh materialized view mv_inner_join with sync mode;
 
 select count() from mv_inner_join;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left semi join customer
 on lo_custkey = c_custkey;
 
@@ -276,7 +324,11 @@ refresh materialized view mv_inner_join_2 with sync mode;
 
 select count() from mv_inner_join_2;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left semi join customer_primary
 on lo_custkey = c_custkey;
 
@@ -316,7 +368,11 @@ refresh materialized view mv_inner_join_3 with sync mode;
 select count() from mv_inner_join_3;
 
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left semi join customer_unique
 on lo_custkey = c_custkey;
 
@@ -339,7 +395,11 @@ refresh materialized view mv_inner_join_4 with sync mode;
 
 select count() from mv_inner_join_4;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from customer right semi join lineorder
 on lo_custkey = c_custkey;
 
@@ -362,7 +422,11 @@ refresh materialized view mv_inner_join_5 with sync mode;
 
 select count() from mv_inner_join_5;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from customer_primary right semi join lineorder
 on lo_custkey = c_custkey;
 
@@ -385,7 +449,11 @@ refresh materialized view mv_inner_join_6 with sync mode;
 
 select count() from mv_inner_join_6;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from customer_unique right semi join lineorder
 on lo_custkey = c_custkey;
 
@@ -408,13 +476,21 @@ refresh materialized view mv_full_outer_join with sync mode;
 
 select count() from mv_full_outer_join;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder left outer join customer
 on lo_custkey = c_custkey;
 
 select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name from lineorder left outer join customer on lo_custkey = c_custkey order by lo_orderkey, lo_linenumber;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder right outer join customer
 on lo_custkey = c_custkey;
 
@@ -423,7 +499,11 @@ from lineorder right outer join customer
 on lo_custkey = c_custkey
 order by lo_orderkey, lo_linenumber;
 
+<<<<<<< HEAD
 explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+=======
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 from lineorder inner join customer
 on lo_custkey = c_custkey;
 

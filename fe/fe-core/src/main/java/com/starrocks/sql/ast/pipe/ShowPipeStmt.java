@@ -69,7 +69,11 @@ public class ShowPipeStmt extends ShowStmt {
      * NOTE: Must be consistent with the META_DATA
      */
     public static void handleShow(List<Comparable> row, Pipe pipe) {
+<<<<<<< HEAD
         Optional<Database> db = GlobalStateMgr.getCurrentState().mayGetDb(pipe.getPipeId().getDbId());
+=======
+        Optional<Database> db = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(pipe.getPipeId().getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         row.add(db.map(Database::getFullName).orElse(""));
         row.add(String.valueOf(pipe.getPipeId().getId()));
         row.add(pipe.getName());

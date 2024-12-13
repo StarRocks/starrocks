@@ -869,7 +869,11 @@ std::string BitmapValue::to_string() const {
 }
 
 // Append values to array
+<<<<<<< HEAD
 void BitmapValue::to_array(std::vector<int64_t>* array) const {
+=======
+void BitmapValue::to_array(Buffer<int64_t>* array) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     switch (_type) {
     case EMPTY:
         break;

@@ -99,7 +99,12 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void genFileMapping(OlapTable localTbl, Partition localPartition, Long remoteTblId,
                                   BackupJobInfo.BackupPartitionInfo backupPartInfo, boolean overwrite) {
+<<<<<<< HEAD
         for (MaterializedIndex localIdx : localPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+=======
+        for (MaterializedIndex localIdx : localPartition.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             BackupIndexInfo backupIdxInfo = backupPartInfo.getIdx(localTbl.getIndexNameById(localIdx.getId()));
             Preconditions.checkState(backupIdxInfo.tablets.size() == localIdx.getTablets().size());
             for (int i = 0; i < localIdx.getTablets().size(); i++) {
@@ -124,9 +129,16 @@ public class LakeRestoreJob extends RestoreJob {
         for (IdChain idChain : fileMapping.getMapping().keySet()) {
             LakeTablet tablet = null;
             try {
+<<<<<<< HEAD
                 OlapTable tbl = (OlapTable) db.getTable(idChain.getTblId());
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
+=======
+                OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), idChain.getTblId());
+                Partition part = tbl.getPartition(idChain.getPartId());
+                MaterializedIndex index = part.getDefaultPhysicalPartition().getIndex(idChain.getIdxId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
                 Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                         .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_NAME, tablet);
@@ -154,7 +166,12 @@ public class LakeRestoreJob extends RestoreJob {
         }
         request.restoreInfos = Lists.newArrayList();
         for (SnapshotInfo info : beSnapshotInfos) {
+<<<<<<< HEAD
             OlapTable tbl = (OlapTable) db.getTable(info.getTblId());
+=======
+            OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), info.getTblId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "restored table "
                         + info.getTblId() + " does not exist");
@@ -169,7 +186,11 @@ public class LakeRestoreJob extends RestoreJob {
                 return;
             }
 
+<<<<<<< HEAD
             MaterializedIndex idx = part.getIndex(info.getIndexId());
+=======
+            MaterializedIndex idx = part.getDefaultPhysicalPartition().getIndex(info.getIndexId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (idx == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND,
                         "index " + info.getIndexId() + " does not exist in partion " + part.getName()
@@ -275,7 +296,12 @@ public class LakeRestoreJob extends RestoreJob {
 
     @Override
     protected void modifyInvertedIndex(OlapTable restoreTbl, Partition restorePart) {
+<<<<<<< HEAD
         for (MaterializedIndex restoredIdx : restorePart.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+=======
+        for (MaterializedIndex restoredIdx : restorePart.getDefaultPhysicalPartition()
+                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MaterializedIndexMeta indexMeta = restoreTbl.getIndexMetaByIndexId(restoredIdx.getId());
             TStorageMedium medium = restoreTbl.getPartitionInfo().getDataProperty(restorePart.getId()).getStorageMedium();
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
@@ -289,7 +315,12 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void addRestoredPartitions(Database db, boolean modify) {
         for (Pair<String, Partition> entry : restoredPartitions) {
+<<<<<<< HEAD
             OlapTable localTbl = (OlapTable) db.getTable(entry.first);
+=======
+            OlapTable localTbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getFullName(), entry.first);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Partition restorePart = entry.second;
             OlapTable remoteTbl = (OlapTable) backupMeta.getTable(entry.first);
             RangePartitionInfo localPartitionInfo = (RangePartitionInfo) localTbl.getPartitionInfo();

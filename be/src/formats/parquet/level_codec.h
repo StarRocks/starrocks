@@ -14,7 +14,16 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <cstdint>
+=======
+#include <glog/logging.h>
+#include <string.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <vector>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "common/status.h"
 #include "formats/parquet/types.h"
@@ -22,6 +31,10 @@
 #include "util/bit_stream_utils.h"
 #include "util/rle_encoding.h"
 #include "util/runtime_profile.h"
+<<<<<<< HEAD
+=======
+#include "util/stopwatch.hpp"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 class Slice;

@@ -71,6 +71,10 @@ public:
         return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
     }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
+<<<<<<< HEAD
+=======
+    int32_t extended_column_index(SlotId id) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int64_t raw_rows_read() const override;
     int64_t num_rows_read() const override;
@@ -91,11 +95,19 @@ private:
     Status _init_conjunct_ctxs(RuntimeState* state);
     void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
+<<<<<<< HEAD
+=======
+    Status _setup_all_conjunct_ctxs(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
     void _init_rf_counters();
 
     Status _init_partition_values();
+<<<<<<< HEAD
+=======
+    Status _init_extended_values();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status _init_scanner(RuntimeState* state);
     HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
     HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
@@ -117,6 +129,11 @@ private:
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
+<<<<<<< HEAD
+=======
+    // contains whole conjuncts, used to generate PredicateTree
+    std::vector<ExprContext*> _all_conjunct_ctxs{};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // complex conjuncts, such as contains multi slot, are evaled in scanner.
     std::vector<ExprContext*> _scanner_conjunct_ctxs;
     // conjuncts that contains only one slot.
@@ -133,6 +150,10 @@ private:
     // partition conjuncts of each partition slot.
     std::vector<ExprContext*> _partition_conjunct_ctxs;
     std::vector<ExprContext*> _partition_values;
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool _has_partition_conjuncts = false;
     bool _filter_by_eval_partition_conjuncts = false;
     bool _no_data = false;
@@ -147,11 +168,22 @@ private:
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
 
+<<<<<<< HEAD
     // iceberg equality delete column slots.
     std::vector<SlotDescriptor*> _equality_delete_slots;
 
     // iceberg equality delete column tuple desc.
     TupleDescriptor* _delete_column_tuple_desc;
+=======
+    std::vector<ExprContext*> _extended_column_values;
+    // extended columns.
+    std::vector<SlotDescriptor*> _extended_slots;
+    // extended column index in `tuple_desc`
+    std::vector<int> _extended_index_in_chunk;
+    // index in extended columns
+    std::vector<int> _index_in_extended_column;
+    bool _has_extended_columns = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;

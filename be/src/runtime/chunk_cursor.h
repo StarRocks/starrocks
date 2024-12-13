@@ -71,7 +71,11 @@ public:
 
     [[nodiscard]] ChunkPtr clone_empty_chunk(size_t reserved_row_number) const;
 
+<<<<<<< HEAD
     [[nodiscard]] Status chunk_supplier(Chunk**);
+=======
+    Status chunk_supplier(Chunk**);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool chunk_probe_supplier(Chunk**);
     bool chunk_has_supplier();
 
