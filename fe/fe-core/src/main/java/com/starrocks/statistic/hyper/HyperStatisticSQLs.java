@@ -167,12 +167,21 @@ public class HyperStatisticSQLs {
         if (tablets.isEmpty()) {
             return null;
         }
-        return String.format(" SELECT * FROM (SELECT * " +
-                        " FROM %s tablet(%s) " +
-                        " WHERE rand() <= %f " +
-                        " LIMIT %d) %s",
-                table,
-                tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", ")),
-                ratio, limit, alias);
+
+        String tabletHint =
+                tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", "));
+        if (!Config.enable_column_stats_use_table_sample) {
+            return String.format(" SELECT * FROM (SELECT * " +
+                            " FROM %s tablet(%s) " +
+                            " WHERE rand() <= %f " +
+                            " LIMIT %d) %s",
+                    table, tabletHint, ratio, limit, alias);
+        } else {
+            int percent = (int) (ratio * 100);
+            return String.format(" SELECT * FROM (SELECT * " +
+                            " FROM %s TABLET(%s) SAMPLE('percent'='%d') " +
+                            " LIMIT %d) %s",
+                    table, tabletHint, percent, limit, alias);
+        }
     }
 }
