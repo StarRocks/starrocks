@@ -14,7 +14,7 @@
 
 package com.starrocks.http.rest.v2;
 
-
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Partition;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -22,7 +22,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.http.rest.v2.RestBaseResultV2.PagedResult;
 import com.starrocks.http.rest.v2.vo.PartitionInfoView.PartitionView;
-import com.starrocks.privilege.AccessDeniedException;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;

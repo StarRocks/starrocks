@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;

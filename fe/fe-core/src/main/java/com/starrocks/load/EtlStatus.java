@@ -45,7 +45,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.load.LoadConstants;
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;

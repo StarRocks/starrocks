@@ -16,7 +16,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

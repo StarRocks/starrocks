@@ -15,8 +15,8 @@
 package com.starrocks.connector.metadata;
 
 import com.google.common.collect.Sets;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
