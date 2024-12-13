@@ -2648,6 +2648,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+##### max_automatic_partition_number
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of automatically created partitions.
+- Introduced in: v3.1
+
 ### Shared-data
 
 ##### run_mode
