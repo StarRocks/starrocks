@@ -1,4 +1,4 @@
--- name: test_table_sample
+-- name: test_table_sample @sequential
 set pipeline_dop = 1;
 -- result:
 -- !result
@@ -24,6 +24,10 @@ alter table t1 compact;
 -- !result
 alter table pk_t1 compact;
 -- result:
+-- !result
+select sleep(3);
+-- result:
+1
 -- !result
 select count(k1), sum(k1), sum(k2) from t1 sample('method'='by_nothing');
 -- result:
