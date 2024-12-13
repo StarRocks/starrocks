@@ -170,7 +170,7 @@ public class HyperStatisticSQLs {
 
         String tabletHint =
                 tablets.stream().map(t -> String.valueOf(t.getTabletId())).collect(Collectors.joining(", "));
-        if (!Config.enable_column_stats_use_table_sample) {
+        if (!Config.enable_use_table_sample_collect_statistics) {
             return String.format(" SELECT * FROM (SELECT * " +
                             " FROM %s tablet(%s) " +
                             " WHERE rand() <= %f " +

@@ -239,7 +239,7 @@ public class SampleInfo {
                 .map(e -> String.valueOf(e.getTabletId()))
                 .collect(Collectors.joining(", ", "(", ")")));
 
-        if (Config.enable_column_stats_use_table_sample) {
+        if (Config.enable_use_table_sample_collect_statistics) {
             int percent = Math.max(1, Math.min(100, (int) (readRatio * 100)));
             hint.append(String.format(" SAMPLE('percent'='%d') LIMIT %d ", percent, sampleRowsLimit));
         } else {
