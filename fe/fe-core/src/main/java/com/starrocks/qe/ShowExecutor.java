@@ -593,8 +593,8 @@ public class ShowExecutor {
                         }
 
                         try {
-                            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                                    context.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
+                                    context.getCurrentRoleIds(), db.getFullName(), table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -1841,6 +1841,7 @@ public class ShowExecutor {
                 List<String> info = restoreJob.getInfo();
                 infos.add(info);
             }
+
             return new ShowResultSet(statement.getMetaData(), infos);
         }
 

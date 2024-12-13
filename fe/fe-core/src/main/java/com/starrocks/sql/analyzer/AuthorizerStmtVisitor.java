@@ -22,6 +22,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -1677,7 +1678,10 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), statement.getTbl());
+            BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                    statement.getTbl().getCatalog(), statement.getTbl().getDb(), statement.getTbl().getTbl());
+            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    statement.getDb(), basicTable);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     statement.getTbl().getCatalog(),
