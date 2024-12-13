@@ -47,6 +47,10 @@ public:
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
                                              const uint64_t rg_num_rows) const override;
 
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
+
 private:
     const Datum _fixed_value;
 };
@@ -120,6 +124,10 @@ public:
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, uint64_t rg_first_row,
                                              uint64_t rg_num_rows) const override;
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
 
 private:
     // Returns true if all of the data pages in the column chunk are dict encoded
