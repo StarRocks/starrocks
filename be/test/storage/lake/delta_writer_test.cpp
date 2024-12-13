@@ -189,7 +189,11 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     // Write
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // close
     delta_writer->close();
 
@@ -276,7 +280,11 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
     // Write
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // close
     delta_writer->close();
 
@@ -348,12 +356,21 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
 
     // write()
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish(DeltaWriter::kDontWriteTxnLog));
     delta_writer->close();
 
     // TxnLog should not exist
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
     ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog(DeltaWriterFinishMode::kDontWriteTxnLog));
+    delta_writer->close();
+
+    // TxnLog should not exist
+    auto txn_log_path = _tablet_mgr->txn_log_location(tablet_id, txn_id);
+    ASSERT_TRUE(FileSystem::Default()->path_exists(txn_log_path).is_not_found());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Segment file should exist
     int segment_files = 0;
@@ -377,7 +394,11 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
                                                .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     delta_writer->close();
 
     // Check TxnLog
@@ -406,7 +427,11 @@ TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {
                                                .set_schema_id(_tablet_schema->id())
                                                .build());
     ASSERT_OK(delta_writer->open());
+<<<<<<< HEAD
     ASSERT_ERROR(delta_writer->finish());
+=======
+    ASSERT_ERROR(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     delta_writer->close();
 }
 
@@ -437,7 +462,11 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // close
     delta_writer->close();
 
@@ -488,7 +517,11 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // close
     delta_writer->close();
 
@@ -497,6 +530,10 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     ASSIGN_OR_ABORT(auto txnlog, tablet.get_txn_log(txn_id));
     ASSERT_EQ(tablet_id, txnlog->tablet_id());
     ASSERT_EQ(txn_id, txnlog->txn_id());
+<<<<<<< HEAD
+=======
+    ASSERT_EQ(_partition_id, txnlog->partition_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_TRUE(txnlog->has_op_write());
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
@@ -539,7 +576,11 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // close
     delta_writer->close();
 
@@ -590,7 +631,11 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
     // finish
+<<<<<<< HEAD
     ASSERT_OK(delta_writer->finish());
+=======
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // close
     delta_writer->close();
 

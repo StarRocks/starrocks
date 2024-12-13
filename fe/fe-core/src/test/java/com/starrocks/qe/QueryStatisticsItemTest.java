@@ -25,10 +25,18 @@ class QueryStatisticsItemTest {
         String warehouseName = "wh1";
 
         final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+<<<<<<< HEAD
+=======
+                .customQueryId("abc")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .queryId("123")
                 .warehouseName("wh1").build();
 
         Assert.assertEquals("wh1", item.getWarehouseName());
+<<<<<<< HEAD
+=======
+        Assert.assertEquals("abc", item.getCustomQueryId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("123", item.getQueryId());
     }
 }

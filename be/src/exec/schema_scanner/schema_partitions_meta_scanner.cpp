@@ -26,6 +26,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         //   name,       type,          size,     is_null
+<<<<<<< HEAD
         {"DB_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PARTITION_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -51,6 +52,36 @@ SchemaScanner::ColumnDesc SchemaPartitionsMetaScanner::_s_columns[] = {
         {"P50_CS", TYPE_DOUBLE, sizeof(double), false},
         {"MAX_CS", TYPE_DOUBLE, sizeof(double), false},
         {"STORAGE_PATH", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PARTITION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"COMPACT_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"VISIBLE_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"VISIBLE_VERSION_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"NEXT_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"DATA_VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"VERSION_EPOCH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"VERSION_TXN_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PARTITION_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PARTITION_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DISTRIBUTION_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"BUCKETS", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int), false},
+        {"REPLICATION_NUM", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int), false},
+        {"STORAGE_MEDIUM", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COOLDOWN_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"LAST_CONSISTENCY_CHECK_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"IS_IN_MEMORY", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
+        {"IS_TEMP", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
+        {"DATA_SIZE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ROW_COUNT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"ENABLE_DATACACHE", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
+        {"AVG_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"P50_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"MAX_CS", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"STORAGE_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaPartitionsMetaScanner::SchemaPartitionsMetaScanner()
@@ -106,7 +137,11 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
     const TPartitionMetaInfo& info = _partitions_meta_response.partitions_meta_infos[_partitions_meta_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
+<<<<<<< HEAD
         if (slot_id < 1 || slot_id > 25) {
+=======
+        if (slot_id < 1 || slot_id > _column_num) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
         }
         ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -162,40 +197,84 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 9: {
+<<<<<<< HEAD
+=======
+            // DATA_VERSION
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.data_version);
+            break;
+        }
+        case 10: {
+            // VERSION_EPOCH
+            fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.version_epoch);
+            break;
+        }
+        case 11: {
+            // VERSION_TXN_TYPE
+            std::string version_txn_type_str = to_string(info.version_txn_type);
+            Slice version_txn_type = Slice(version_txn_type_str);
+            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&version_txn_type);
+            break;
+        }
+        case 12: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // PARTITION_KEY
             Slice partition_key = Slice(info.partition_key);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&partition_key);
             break;
         }
+<<<<<<< HEAD
         case 10: {
+=======
+        case 13: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // PARTITION_VALUE
             Slice partition_value = Slice(info.partition_value);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&partition_value);
             break;
         }
+<<<<<<< HEAD
         case 11: {
+=======
+        case 14: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // DISTRIBUTION_KEY
             Slice distribution_key = Slice(info.distribution_key);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&distribution_key);
             break;
         }
+<<<<<<< HEAD
         case 12: {
+=======
+        case 15: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // BUCKETS
             fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.buckets);
             break;
         }
+<<<<<<< HEAD
         case 13: {
+=======
+        case 16: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // REPLICATION_NUM
             fill_column_with_slot<TYPE_INT>(column.get(), (void*)&info.replication_num);
             break;
         }
+<<<<<<< HEAD
         case 14: {
+=======
+        case 17: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // STORAGE_MEDIUM
             Slice storage_medium = Slice(info.storage_medium);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_medium);
             break;
         }
+<<<<<<< HEAD
         case 15: {
+=======
+        case 18: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // COOLDOWN_TIME
             if (info.cooldown_time > 0) {
                 DateTimeValue ts;
@@ -206,7 +285,11 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+<<<<<<< HEAD
         case 16: {
+=======
+        case 19: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // LAST_CONSISTENCY_CHECK_TIME
             if (info.last_consistency_check_time > 0) {
                 DateTimeValue ts;
@@ -217,48 +300,84 @@ Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+<<<<<<< HEAD
         case 17: {
+=======
+        case 20: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // IS_IN_MEMORY
             fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.is_in_memory);
             break;
         }
+<<<<<<< HEAD
         case 18: {
+=======
+        case 21: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // IS_TEMP
             fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.is_temp);
             break;
         }
+<<<<<<< HEAD
         case 19: {
+=======
+        case 22: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // DATA_SIZE
             Slice data_size = Slice(info.data_size);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_size);
             break;
         }
+<<<<<<< HEAD
         case 20: {
+=======
+        case 23: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // ROW_COUNT
             fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.row_count);
             break;
         }
+<<<<<<< HEAD
         case 21: {
+=======
+        case 24: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // ENABLE_DATACACHE
             fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.enable_datacache);
             break;
         }
+<<<<<<< HEAD
         case 22: {
+=======
+        case 25: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // AVG_CS
             fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.avg_cs);
             break;
         }
+<<<<<<< HEAD
         case 23: {
+=======
+        case 26: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // P50_CS
             fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.p50_cs);
             break;
         }
+<<<<<<< HEAD
         case 24: {
+=======
+        case 27: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // MAX_CS
             fill_column_with_slot<TYPE_DOUBLE>(column.get(), (void*)&info.max_cs);
             break;
         }
+<<<<<<< HEAD
         case 25: {
+=======
+        case 28: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // STORAGE_PATH
             Slice storage_path = Slice(info.storage_path);
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&storage_path);

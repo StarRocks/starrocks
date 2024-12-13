@@ -14,7 +14,12 @@
 
 package com.starrocks.connector.iceberg;
 
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Test;
 import software.amazon.awssdk.regions.Region;

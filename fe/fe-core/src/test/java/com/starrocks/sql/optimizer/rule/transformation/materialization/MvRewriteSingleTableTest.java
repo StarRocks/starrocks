@@ -16,6 +16,10 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -30,6 +34,10 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         MvRewriteTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
+<<<<<<< HEAD
+=======
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

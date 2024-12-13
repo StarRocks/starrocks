@@ -14,10 +14,20 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+import java.util.Map;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class LazyConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(LazyConnector.class);
     private Connector delegate;
@@ -56,4 +66,33 @@ public class LazyConnector implements Connector {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean supportMemoryTrack() {
+        initIfNeeded();
+        return delegate.supportMemoryTrack();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        initIfNeeded();
+        return delegate.estimateCount();
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        initIfNeeded();
+        return delegate.getSamples();
+    }
+
+    public String getRealConnectorClassName() {
+        if (delegate != null) {
+            return delegate.getClass().getSimpleName();
+        } else {
+            return LazyConnector.class.getSimpleName();
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

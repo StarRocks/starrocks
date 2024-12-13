@@ -64,7 +64,11 @@ class CacheManager {
 public:
     explicit CacheManager(size_t capacity);
     ~CacheManager() = default;
+<<<<<<< HEAD
     Status populate(const std::string& key, const CacheValue& value);
+=======
+    void populate(const std::string& key, const CacheValue& value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<CacheValue> probe(const std::string& key);
     size_t memory_usage();
     size_t capacity();

@@ -242,7 +242,11 @@ TEST_F(ChunkTest, get_column_by_index) {
 TEST_F(ChunkTest, test_copy_one_row) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
+<<<<<<< HEAD
     std::unique_ptr<Chunk> new_chunk = chunk->clone_empty_with_tuple();
+=======
+    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < chunk->num_rows(); ++i) {
         new_chunk->append(*chunk, i, 1);
     }

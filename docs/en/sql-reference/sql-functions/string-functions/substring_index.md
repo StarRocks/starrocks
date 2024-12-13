@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # substring_index
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Extracts a substring that precedes or follows the `count` occurrences of the delimiter.
 

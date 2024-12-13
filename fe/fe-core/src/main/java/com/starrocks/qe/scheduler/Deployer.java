@@ -17,8 +17,13 @@ package com.starrocks.qe.scheduler;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -27,6 +32,10 @@ import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.slot.DeployState;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -61,6 +70,10 @@ public class Deployer {
     private boolean enablePlanSerializeConcurrently;
 
     private final FailureHandler failureHandler;
+<<<<<<< HEAD
+=======
+    private final boolean needDeploy;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final Set<Long> deployedWorkerIds = Sets.newHashSet();
 
@@ -68,7 +81,12 @@ public class Deployer {
                     JobSpec jobSpec,
                     ExecutionDAG executionDAG,
                     TNetworkAddress coordAddress,
+<<<<<<< HEAD
                     FailureHandler failureHandler) {
+=======
+                    FailureHandler failureHandler,
+                    boolean needDeploy) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.jobSpec = jobSpec;
         this.executionDAG = executionDAG;
 
@@ -81,6 +99,7 @@ public class Deployer {
         this.deliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
 
         this.failureHandler = failureHandler;
+<<<<<<< HEAD
         this.enablePlanSerializeConcurrently = context.getSessionVariable().getEnablePlanSerializeConcurrently();
     }
 
@@ -94,11 +113,32 @@ public class Deployer {
                 ImmutableList.of(new ArrayList<>(), new ArrayList<>(), new ArrayList<>());
 
         concurrentFragments.forEach(fragment -> this.createFragmentInstanceExecStates(fragment, threeStageExecutionsToDeploy));
+=======
+        this.needDeploy = needDeploy;
+        this.enablePlanSerializeConcurrently = context.getSessionVariable().getEnablePlanSerializeConcurrently();
+    }
+
+    public DeployState createFragmentExecStates(List<ExecutionFragment> concurrentFragments) {
+        final DeployState deployState = new DeployState();
+        concurrentFragments.forEach(fragment ->
+                this.createFragmentInstanceExecStates(fragment, deployState.getThreeStageExecutionsToDeploy()));
+        return deployState;
+    }
+
+    public void deployFragments(DeployState deployState)
+            throws RpcException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (!needDeploy) {
             return;
         }
 
+<<<<<<< HEAD
+=======
+        final List<List<FragmentInstanceExecState>> threeStageExecutionsToDeploy =
+                deployState.getThreeStageExecutionsToDeploy();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (enablePlanSerializeConcurrently) {
             try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeConcurrencyTime")) {
                 threeStageExecutionsToDeploy.stream().parallel().forEach(
@@ -111,7 +151,10 @@ public class Deployer {
             try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
                 executions.forEach(FragmentInstanceExecState::deployAsync);
             }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
                 waitForDeploymentCompletion(executions);
             }
@@ -119,7 +162,12 @@ public class Deployer {
     }
 
     public interface FailureHandler {
+<<<<<<< HEAD
         void apply(Status status, FragmentInstanceExecState execution, Throwable failure) throws RpcException, UserException;
+=======
+        void apply(Status status, FragmentInstanceExecState execution, Throwable failure) throws RpcException,
+                StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void createFragmentInstanceExecStates(ExecutionFragment fragment,
@@ -199,8 +247,15 @@ public class Deployer {
                         fragment.getFragmentIndex(),
                         request,
                         instance.getWorker());
+<<<<<<< HEAD
 
                 threeStageExecutionsToDeploy.get(stageIndex).add(execution);
+=======
+                execution.setFragmentInstance(instance);
+
+                threeStageExecutionsToDeploy.get(stageIndex).add(execution);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 executionDAG.addExecution(execution);
 
                 if (needCheckExecutionState) {
@@ -215,7 +270,12 @@ public class Deployer {
         }
     }
 
+<<<<<<< HEAD
     private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException, UserException {
+=======
+    private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException,
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (executions.isEmpty()) {
             return;
         }
@@ -244,5 +304,12 @@ public class Deployer {
             failureHandler.apply(firstErrResult.getStatus(), firstErrExecution, firstErrResult.getFailure());
         }
     }
+<<<<<<< HEAD
+=======
+
+    public TExecPlanFragmentParams createIncrementalScanRangesRequest(FragmentInstance instance) {
+        return tFragmentInstanceFactory.createIncrementalScanRanges(instance);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

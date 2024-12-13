@@ -19,6 +19,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.sql.ast.TableSampleClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -38,11 +43,19 @@ import java.util.Objects;
 import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
+<<<<<<< HEAD
     private final DistributionSpec distributionSpec;
     private final long selectedIndexId;
     private final List<Long> selectedTabletId;
     private final List<Long> hintsReplicaId;
     private final List<Long> selectedPartitionId;
+=======
+    private DistributionSpec distributionSpec;
+    private long selectedIndexId;
+    private List<Long> selectedTabletId;
+    private List<Long> hintsReplicaId;
+    private List<Long> selectedPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private boolean isPreAggregation;
     private String turnOffReason;
@@ -51,14 +64,32 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private boolean withoutColocateRequirement = false;
 
     private boolean usePkIndex = false;
+<<<<<<< HEAD
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     // TODO: remove this
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
+=======
+    private TableSampleClause sample;
+
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Rewriting the scan column ref also needs to rewrite the pruned predicate at the same time.
     private List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
 
+<<<<<<< HEAD
+=======
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
+    private long gtid = 0;
+
+    private PhysicalOlapScanOperator() {
+        super(OperatorType.PHYSICAL_OLAP_SCAN);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public PhysicalOlapScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     DistributionSpec distributionDesc,
@@ -70,7 +101,12 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
                                     List<Long> hintsReplicaId,
                                     List<ScalarOperator> prunedPartitionPredicates,
                                     Projection projection,
+<<<<<<< HEAD
                                     boolean usePkIndex) {
+=======
+                                    boolean usePkIndex,
+                                    VectorSearchOptions vectorSearchOptions) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(OperatorType.PHYSICAL_OLAP_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
         this.distributionSpec = distributionDesc;
         this.selectedIndexId = selectedIndexId;
@@ -79,27 +115,62 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.hintsReplicaId = hintsReplicaId;
         this.prunedPartitionPredicates = prunedPartitionPredicates;
         this.usePkIndex = usePkIndex;
+<<<<<<< HEAD
+=======
+        this.vectorSearchOptions = vectorSearchOptions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public PhysicalOlapScanOperator(LogicalOlapScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
         this.distributionSpec = scanOperator.getDistributionSpec();
         this.selectedIndexId = scanOperator.getSelectedIndexId();
+<<<<<<< HEAD
+=======
+        this.gtid = scanOperator.getGtid();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.selectedPartitionId = scanOperator.getSelectedPartitionId();
         this.selectedTabletId = scanOperator.getSelectedTabletId();
         this.hintsReplicaId = scanOperator.getHintsReplicaIds();
         this.prunedPartitionPredicates = scanOperator.getPrunedPartitionPredicates();
         this.usePkIndex = scanOperator.isUsePkIndex();
+<<<<<<< HEAD
+=======
+        this.vectorSearchOptions = scanOperator.getVectorSearchOptions();
+        this.sample = scanOperator.getSample();
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getSelectedIndexId() {
         return selectedIndexId;
     }
 
+<<<<<<< HEAD
+=======
+    public long getGtid() {
+        return gtid;
+    }
+
+    public void setSelectedPartitionId(List<Long> selectedPartitionId) {
+        this.selectedPartitionId = selectedPartitionId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Long> getSelectedPartitionId() {
         return selectedPartitionId;
     }
 
+<<<<<<< HEAD
+=======
+    public void setSelectedTabletId(List<Long> tabletId) {
+        this.selectedTabletId = tabletId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Long> getSelectedTabletId() {
         return selectedTabletId;
     }
@@ -128,6 +199,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return globalDicts;
     }
 
+<<<<<<< HEAD
     public void setGlobalDicts(
             List<Pair<Integer, ColumnDict>> globalDicts) {
         this.globalDicts = globalDicts;
@@ -135,16 +207,27 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public Map<Integer, Integer> getDictStringIdToIntIds() {
         return dictStringIdToIntIds;
+=======
+    public void setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
+        this.globalDicts = globalDicts;
+    }
+
+    public Map<Integer, ScalarOperator> getGlobalDictsExpr() {
+        return globalDictsExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<ScalarOperator> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
     }
 
+<<<<<<< HEAD
     public void setDictStringIdToIntIds(Map<Integer, Integer> dictStringIdToIntIds) {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setOutputColumns(List<ColumnRefOperator> outputColumns) {
         this.outputColumns = outputColumns;
     }
@@ -177,6 +260,17 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return usePkIndex;
     }
 
+<<<<<<< HEAD
+=======
+    public TableSampleClause getSample() {
+        return sample;
+    }
+
+    public void setSample(TableSampleClause sample) {
+        this.sample = sample;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return "PhysicalOlapScan" + " {" +
@@ -198,7 +292,11 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
+<<<<<<< HEAD
                 selectedTabletId);
+=======
+                selectedTabletId, sample);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -214,8 +312,15 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         }
         PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
+<<<<<<< HEAD
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
+=======
+                gtid == that.gtid &&
+                Objects.equals(distributionSpec, that.distributionSpec) &&
+                Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
+                Objects.equals(sample, that.sample) &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Objects.equals(selectedTabletId, that.selectedTabletId);
     }
 
@@ -235,4 +340,56 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         return true;
     }
+<<<<<<< HEAD
+=======
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder
+            extends PhysicalScanOperator.Builder<PhysicalOlapScanOperator, PhysicalScanOperator.Builder> {
+        @Override
+        protected PhysicalOlapScanOperator newInstance() {
+            return new PhysicalOlapScanOperator();
+        }
+
+        @Override
+        public Builder withOperator(PhysicalOlapScanOperator operator) {
+            super.withOperator(operator);
+            builder.distributionSpec = operator.distributionSpec;
+            builder.selectedIndexId = operator.selectedIndexId;
+            builder.gtid = operator.gtid;
+            builder.selectedTabletId = operator.selectedTabletId;
+            builder.hintsReplicaId = operator.hintsReplicaId;
+            builder.selectedPartitionId = operator.selectedPartitionId;
+
+            builder.isPreAggregation = operator.isPreAggregation;
+            builder.turnOffReason = operator.turnOffReason;
+            builder.needSortedByKeyPerTablet = operator.needSortedByKeyPerTablet;
+            builder.needOutputChunkByBucket = operator.needOutputChunkByBucket;
+            builder.usePkIndex = operator.usePkIndex;
+            builder.globalDicts = operator.globalDicts;
+            builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
+            builder.vectorSearchOptions = operator.vectorSearchOptions;
+            builder.sample = operator.getSample();
+            return this;
+        }
+
+        public Builder setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
+            builder.globalDicts = globalDicts;
+            return this;
+        }
+
+        public Builder setGlobalDictsExpr(Map<Integer, ScalarOperator> globalDictsExpr) {
+            builder.globalDictsExpr = globalDictsExpr;
+            return this;
+        }
+
+        public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
+            builder.prunedPartitionPredicates = prunedPartitionPredicates;
+            return this;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -14,6 +14,11 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/balanced_chunk_buffer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/source_operator.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
@@ -94,6 +99,11 @@ public:
 
     virtual int64_t get_scan_table_id() const { return -1; }
 
+<<<<<<< HEAD
+=======
+    void update_exec_stats(RuntimeState* state) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -102,6 +112,7 @@ protected:
     virtual void attach_chunk_source(int32_t source_index) = 0;
     virtual void detach_chunk_source(int32_t source_index) {}
     virtual bool has_shared_chunk_source() const = 0;
+<<<<<<< HEAD
     virtual ChunkPtr get_chunk_from_buffer() = 0;
     virtual size_t num_buffered_chunks() const = 0;
     virtual size_t buffer_size() const = 0;
@@ -111,6 +122,28 @@ protected:
     virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
     virtual bool is_buffer_full() const = 0;
     virtual void set_buffer_finished() = 0;
+=======
+
+    virtual BalancedChunkBuffer& get_chunk_buffer() const = 0;
+
+    ChunkPtr get_chunk_from_buffer() {
+        auto& chunk_buffer = get_chunk_buffer();
+        ChunkPtr chunk = nullptr;
+        if (chunk_buffer.try_get(_driver_sequence, &chunk)) {
+            return chunk;
+        }
+        return nullptr;
+    }
+
+    size_t num_buffered_chunks() const { return get_chunk_buffer().size(_driver_sequence); }
+    size_t buffer_size() const { return get_chunk_buffer().size(_driver_sequence); }
+    size_t buffer_capacity() const { return get_chunk_buffer().limiter()->capacity(); }
+    size_t buffer_memory_usage() const { return get_chunk_buffer().memory_usage(); }
+    size_t default_buffer_capacity() const { return get_chunk_buffer().limiter()->default_capacity(); }
+    ChunkBufferTokenPtr pin_chunk(int num_chunks) { return get_chunk_buffer().limiter()->pin(num_chunks); }
+    bool is_buffer_full() const { return get_chunk_buffer().limiter()->is_full(); }
+    void set_buffer_finished() { get_chunk_buffer().set_finished(_driver_sequence); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
@@ -200,6 +233,12 @@ private:
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_io_tasks_counter = nullptr;
+<<<<<<< HEAD
+=======
+
+    RuntimeProfile::Counter* _prepare_chunk_source_timer = nullptr;
+    RuntimeProfile::Counter* _submit_io_task_timer = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {
@@ -220,7 +259,11 @@ public:
     virtual void do_close(RuntimeState* state) = 0;
     virtual OperatorPtr do_create(int32_t dop, int32_t driver_sequence) = 0;
 
+<<<<<<< HEAD
     SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::shared_ptr<workgroup::ScanTaskGroup> scan_task_group() const { return _scan_task_group; }
 

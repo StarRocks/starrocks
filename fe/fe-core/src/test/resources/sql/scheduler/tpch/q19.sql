@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     sum(l_extendedprice* (1 - l_discount)) as revenue
@@ -34,6 +35,8 @@ where
             and l_shipmode in ('AIR', 'AIR REG')
             and l_shipinstruct = 'DELIVER IN PERSON'
     ) ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F03)
   DOP: 16

@@ -61,7 +61,13 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+<<<<<<< HEAD
         StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+=======
+
+        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyBackendClause clause = (ModifyBackendClause) field.get(statement);
@@ -76,7 +82,12 @@ public class AstBuilderTest {
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
+<<<<<<< HEAD
         StatementBase statement = (StatementBase) new AstBuilder(32).visitSingleStatement(sqlStatements.singleStatement(0));
+=======
+        AstBuilder astBuilder = AstBuilder.getInstance().create(32);
+        StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(sqlStatements.singleStatement(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Field field = statement.getClass().getDeclaredField("alterClause");
         field.setAccessible(true);
         ModifyFrontendAddressClause clause = (ModifyFrontendAddressClause) field.get(statement);
@@ -88,7 +99,11 @@ public class AstBuilderTest {
         String sql = "alter table db.test truncate partition p1";
         StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode()).get(0);
         AlterTableStmt aStmt = (AlterTableStmt) statement;
+<<<<<<< HEAD
         List<AlterClause> alterClauses = aStmt.getOps();
+=======
+        List<AlterClause> alterClauses = aStmt.getAlterClauseList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
     }

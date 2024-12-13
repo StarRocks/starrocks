@@ -148,7 +148,11 @@ PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
+<<<<<<< HEAD
         auto buf = ByteBuffer::allocate(64);
+=======
+        auto buf = ByteBuffer::allocate_with_tracker(64).value();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int k = 0;
         for (int j = 0; j < 64; ++j) {
             char c = '0' + (k++ % 10);
@@ -179,13 +183,22 @@ PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
     ASSERT_TRUE(eof);
 
     t1.join();
+<<<<<<< HEAD
+=======
+    ASSERT_EQ(1, pipe.num_append_buffers());
+    ASSERT_EQ(64, pipe.append_buffer_bytes());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
+<<<<<<< HEAD
         auto buf = ByteBuffer::allocate(64);
+=======
+        auto buf = ByteBuffer::allocate_with_tracker(64).value();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int k = 0;
         for (int j = 0; j < 64; ++j) {
             char c = '0' + (k++ % 10);
@@ -211,6 +224,11 @@ PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
     ASSERT_TRUE(st.status().is_end_of_file());
 
     t1.join();
+<<<<<<< HEAD
+=======
+    ASSERT_EQ(1, pipe.num_append_buffers());
+    ASSERT_EQ(64, pipe.append_buffer_bytes());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {
@@ -281,4 +299,76 @@ PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
     producer.join();
 }
 
+<<<<<<< HEAD
+=======
+PARALLEL_TEST(StreamLoadPipeTest, append_after_finish) {
+    StreamLoadPipe pipe(66, 64);
+
+    auto buf1 = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf1->put_bytes(&c, sizeof(c));
+    }
+    buf1->flip();
+    ASSERT_OK(pipe.append(std::move(buf1)));
+
+    auto appender = [&pipe] {
+        while (pipe.num_waiting_append_buffer() == 0) {
+            SleepFor(MonoDelta::FromMilliseconds(1));
+        }
+        EXPECT_OK(pipe.finish());
+    };
+    std::thread t1(appender);
+
+    auto buf2 = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf2->put_bytes(&c, sizeof(c));
+    }
+    buf2->flip();
+    EXPECT_TRUE(pipe.append(std::move(buf2)).is_capacity_limit_exceeded());
+    t1.join();
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, non_blocking_read) {
+    StreamLoadPipe pipe(true, 50, 1000, 1000);
+
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+
+    auto buf = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf->put_bytes(&c, sizeof(c));
+    }
+    buf->flip();
+    ASSERT_OK(pipe.append(std::move(buf)));
+
+    auto ret = pipe.read();
+    ASSERT_TRUE(ret.ok());
+    auto read_buf = ret.value();
+    ASSERT_EQ(64, read_buf->limit);
+    for (int i = 0; i < read_buf->limit; ++i) {
+        ASSERT_EQ('0' + i, *(read_buf->ptr + i));
+    }
+
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, non_blocking_cancel_with_ok_status) {
+    StreamLoadPipe pipe(true, 50, 1000, 1000);
+    for (int i = 0; i < 10; ++i) {
+        char buf = '0' + i;
+        pipe.append(&buf, 1);
+    }
+    pipe.cancel(Status::OK());
+    auto st = pipe.read();
+    ASSERT_TRUE(st.status().is_cancelled());
+
+    char read_buf[128];
+    size_t buf_len = 128;
+    bool eof = false;
+    ASSERT_TRUE(pipe.read((uint8_t*)read_buf, &buf_len, &eof).is_cancelled());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

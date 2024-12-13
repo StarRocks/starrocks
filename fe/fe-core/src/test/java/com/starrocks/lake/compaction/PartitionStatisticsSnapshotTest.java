@@ -35,5 +35,10 @@ public class PartitionStatisticsSnapshotTest {
         statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
         Assert.assertNotEquals(stat.getPriority(), statistics.getPriority());
         Assert.assertFalse(stat.getCompactionScore().compareTo(statistics.getCompactionScore()) == 0);
+<<<<<<< HEAD
+=======
+
+        stat.toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

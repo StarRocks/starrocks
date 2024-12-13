@@ -41,6 +41,10 @@ include "Types.thrift"
 include "Status.thrift"
 include "WorkGroup.thrift"
 include "ResourceUsage.thrift"
+<<<<<<< HEAD
+=======
+include "DataCache.thrift"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct TTabletInfo {
     1: required Types.TTabletId tablet_id
@@ -127,6 +131,10 @@ struct TReportRequest {
     // active workgroup on this backend
     9: optional list<WorkGroup.TWorkGroup> active_workgroups
     10: optional ResourceUsage.TResourceUsage resource_usage
+<<<<<<< HEAD
+=======
+    11: optional DataCache.TDataCacheMetrics datacache_metrics
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TMasterResult {

@@ -23,6 +23,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaStreamLoadsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
+<<<<<<< HEAD
         {"LABEL", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"LOAD_ID", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -48,6 +49,33 @@ SchemaScanner::ColumnDesc SchemaStreamLoadsScanner::_s_tbls_columns[] = {
         {"CHANNEL_STATE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TRACKING_SQL", TYPE_VARCHAR, sizeof(StringValue), true}};
+=======
+        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LOAD_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TXN_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"DB_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ERROR_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TRACKING_URL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"CHANNEL_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"PREPARED_CHANNEL_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_ROWS_NORMAL", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_ROWS_AB_NORMAL", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_ROWS_UNSELECTED", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"NUM_LOAD_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"TIMEOUT_SECOND", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CREATE_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"BEFORE_LOAD_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"START_LOADING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"START_PREPARING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_PREPARING_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"END_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"CHANNEL_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 SchemaStreamLoadsScanner::SchemaStreamLoadsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

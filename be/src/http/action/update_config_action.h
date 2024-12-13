@@ -60,7 +60,11 @@ private:
     static std::atomic<UpdateConfigAction*> _instance;
     ExecEnv* _exec_env;
     std::once_flag _once_flag;
+<<<<<<< HEAD
     std::unordered_map<std::string, std::function<void()>> _config_callback;
+=======
+    std::unordered_map<std::string, std::function<Status()>> _config_callback;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

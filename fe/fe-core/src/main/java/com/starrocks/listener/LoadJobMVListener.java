@@ -22,8 +22,15 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.DebugUtil;
+<<<<<<< HEAD
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.qe.DmlType;
+import com.starrocks.scheduler.Constants;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.InsertOverwriteJobStats;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionState;
@@ -69,7 +76,12 @@ public class LoadJobMVListener implements LoadJobListener {
     }
 
     @Override
+<<<<<<< HEAD
     public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table) {
+=======
+    public void onDMLStmtJobTransactionFinish(TransactionState transactionState, Database db, Table table,
+                                              DmlType dmlType) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table != null && table.isMaterializedView()) {
             return;
         }
@@ -80,7 +92,11 @@ public class LoadJobMVListener implements LoadJobListener {
     }
 
     @Override
+<<<<<<< HEAD
     public void onInsertOverwriteJobCommitFinish(Database db, Table table) {
+=======
+    public void onInsertOverwriteJobCommitFinish(Database db, Table table, InsertOverwriteJobStats stats) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         triggerToRefreshRelatedMVs(db, table);
     }
 
@@ -100,7 +116,11 @@ public class LoadJobMVListener implements LoadJobListener {
             return;
         }
         for (long tableId : transactionState.getTableIdList()) {
+<<<<<<< HEAD
             Table table = db.getTable(tableId);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
                 return;
@@ -141,7 +161,12 @@ public class LoadJobMVListener implements LoadJobListener {
         while (mvIdIterator.hasNext()) {
             MvId mvId = mvIdIterator.next();
             Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+<<<<<<< HEAD
             MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+=======
+            MaterializedView materializedView = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(mvId.getDbId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (materializedView == null) {
                 LOG.warn("materialized view {} does not exists.", mvId.getId());
                 mvIdIterator.remove();
@@ -153,7 +178,11 @@ public class LoadJobMVListener implements LoadJobListener {
                                 "db:{}, mv:{}", table.getName(), mvDb.getFullName(),
                         materializedView.getName());
                 GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
+<<<<<<< HEAD
                         mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
+=======
+                        mvDb.getFullName(), materializedView.getName(), false, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Constants.TaskRunPriority.NORMAL.value(), true, false);
             }
         }

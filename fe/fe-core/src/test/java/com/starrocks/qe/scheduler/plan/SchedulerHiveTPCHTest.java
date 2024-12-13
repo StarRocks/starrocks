@@ -16,7 +16,10 @@ package com.starrocks.qe.scheduler.plan;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.scheduler.SchedulerConnectorTestBase;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,7 +38,11 @@ public class SchedulerHiveTPCHTest extends SchedulerConnectorTestBase {
 
     @Before
     public void before() throws DdlException {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");
+=======
+        connectContext.changeCatalogDb("hive0.tpch");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

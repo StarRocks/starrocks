@@ -159,6 +159,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
     auto start_ts = butil::gettimeofday_us();
     auto thread_pool = publish_version_thread_pool(_env);
+<<<<<<< HEAD
+=======
+    CHECK(thread_pool != nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
@@ -220,10 +224,17 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 g_publish_version_failed_tasks << 1;
                 if (res.status().is_resource_busy()) {
                     VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+<<<<<<< HEAD
                             << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
                 } else {
                     LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
                                  << " txn_ids=" << JoinMapped(txns, txn_info_string, ";") << " version=" << new_version;
+=======
+                            << " txns=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+                } else {
+                    LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                                 << " txn_ids=" << JoinMapped(txns, txn_info_string, ",") << " version=" << new_version;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
@@ -260,9 +271,16 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
 }
 
 void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size,
+<<<<<<< HEAD
                                                        const int64_t* txn_ids, const int64_t* log_versions,
                                                        size_t txn_size,
                                                        ::starrocks::PublishLogVersionResponse* response) {
+=======
+                                                       std::span<const TxnInfoPB> txn_infos,
+                                                       const int64_t* log_versions,
+                                                       ::starrocks::PublishLogVersionResponse* response) {
+    auto txn_size = txn_infos.size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto thread_pool = publish_version_thread_pool(_env);
     auto latch = BThreadCountDownLatch(tablet_size);
     bthread::Mutex response_mtx;
@@ -271,11 +289,19 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
         auto tablet_id = tablet_ids[i];
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
+<<<<<<< HEAD
             auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_ids, log_versions, txn_size);
             if (!st.ok()) {
                 g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
                              << " txn_ids=" << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
+=======
+            auto st = lake::publish_log_version(_tablet_mgr, tablet_id, txn_infos, log_versions);
+            if (!st.ok()) {
+                g_publish_version_failed_tasks << 1;
+                LOG(WARNING) << "Fail to publish log version: " << st << " tablet_id=" << tablet_id
+                             << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                              << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
@@ -285,10 +311,16 @@ void LakeServiceImpl::_submit_publish_log_version_task(const int64_t* tablet_ids
         auto st = thread_pool->submit_func(task);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
+<<<<<<< HEAD
             LOG(WARNING) << "Fail to submit publish log version task, tablet_id: " << tablet_id
                          << ", txn_ids: " << JoinElementsIterator(txn_ids, txn_ids + txn_size, ",")
                          << ", versions: " << JoinElementsIterator(log_versions, log_versions + txn_size, ",")
                          << ", error" << st;
+=======
+            LOG(WARNING) << "Fail to submit publish log version task: " << st << " tablet_id=" << tablet_id
+                         << " txns=" << JoinMapped(txn_infos, txn_info_string, ",")
+                         << " versions=" << JoinElementsIterator(log_versions, log_versions + txn_size, ",");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             latch.count_down();
@@ -308,8 +340,13 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
         cntl->SetFailed("missing tablet_ids");
         return;
     }
+<<<<<<< HEAD
     if (!request->has_txn_id()) {
         cntl->SetFailed("missing txn_id");
+=======
+    if (!request->has_txn_id() && !request->has_txn_info()) {
+        cntl->SetFailed("missing txn_id and txn_info");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return;
     }
     if (!request->has_version()) {
@@ -318,10 +355,26 @@ void LakeServiceImpl::publish_log_version(::google::protobuf::RpcController* con
     }
 
     auto tablet_ids = request->tablet_ids().data();
+<<<<<<< HEAD
     int64_t txn_id = request->txn_id();
     int64_t version = request->version();
 
     _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), &txn_id, &version, 1, response);
+=======
+    auto version = int64_t{request->version()};
+    if (!request->has_txn_info()) {
+        DCHECK(request->has_txn_id());
+        auto txn_info = TxnInfoPB();
+        txn_info.set_txn_id(request->txn_id());
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        auto txn_infos = std::span<const TxnInfoPB>(&txn_info, 1);
+        _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), txn_infos, &version, response);
+    } else {
+        auto txn_infos = std::span<const TxnInfoPB>(&request->txn_info(), 1);
+        _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), txn_infos, &version, response);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcController* controller,
@@ -335,8 +388,13 @@ void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcControlle
         cntl->SetFailed("missing tablet_ids");
         return;
     }
+<<<<<<< HEAD
     if (request->txn_ids_size() == 0) {
         cntl->SetFailed("missing txn_ids");
+=======
+    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return;
     }
     if (request->versions_size() == 0) {
@@ -344,6 +402,7 @@ void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcControlle
         return;
     }
 
+<<<<<<< HEAD
     auto tablet_ids = request->tablet_ids().data();
     auto txn_ids = request->txn_ids().data();
     auto versions = request->versions().data();
@@ -351,6 +410,25 @@ void LakeServiceImpl::publish_log_version_batch(::google::protobuf::RpcControlle
 
     _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), txn_ids, versions, request->txn_ids_size(),
                                      response);
+=======
+    auto txn_infos = std::vector<TxnInfoPB>{};
+    auto tablet_ids = request->tablet_ids().data();
+    auto versions = request->versions().data();
+    if (request->txn_infos_size() == 0) {
+        DCHECK_EQ(request->txn_ids_size(), request->versions_size());
+        txn_infos.reserve(request->txn_ids_size());
+        for (auto txn_id : request->txn_ids()) {
+            auto& txn_info = txn_infos.emplace_back();
+            txn_info.set_txn_id(txn_id);
+            txn_info.set_combined_txn_log(false);
+            txn_info.set_txn_type(TXN_NORMAL);
+        }
+    } else {
+        txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
+    }
+
+    _submit_publish_log_version_task(tablet_ids, request->tablet_ids_size(), txn_infos, versions, response);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
@@ -359,6 +437,7 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     brpc::ClosureGuard guard(done);
     (void)controller;
 
+<<<<<<< HEAD
     LOG(INFO) << "Aborting transactions=[" << JoinInts(request->txn_ids(), ",") << "] tablets=["
               << JoinInts(request->tablet_ids(), ",") << "]";
 
@@ -367,6 +446,18 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
         for (auto txn_id : request->txn_ids()) {
             load_mgr->abort_txn(txn_id);
         }
+=======
+    LOG(INFO) << "Aborting transactions. request=" << request->DebugString();
+
+    // Cancel active tasks.
+    if (LoadChannelMgr* load_mgr = _env->load_channel_mgr(); load_mgr != nullptr) {
+        for (auto& txn_id : request->txn_ids()) { // For request sent by and older version FE
+            load_mgr->abort_txn(txn_id);
+        }
+        for (auto& txn_info : request->txn_infos()) { // For request sent by a new version FE
+            load_mgr->abort_txn(txn_info.txn_id());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (!request->has_skip_cleanup() || request->skip_cleanup()) {
@@ -377,10 +468,29 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
+<<<<<<< HEAD
         auto txn_ids = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
         auto txn_types = std::span<const int32_t>(request->txn_types().data(), request->txn_types_size());
         for (auto tablet_id : request->tablet_ids()) {
             lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_types);
+=======
+        std::vector<TxnInfoPB> txn_infos;
+        if (request->txn_infos_size() > 0) {
+            txn_infos.insert(txn_infos.begin(), request->txn_infos().begin(), request->txn_infos().end());
+        } else {
+            // Construct TxnInfoPB from txn_id and txn_type
+            txn_infos.reserve(request->txn_ids_size());
+            auto has_txn_type = request->txn_types_size() == request->txn_ids_size();
+            for (int i = 0, sz = request->txn_ids_size(); i < sz; i++) {
+                auto& info = txn_infos.emplace_back();
+                info.set_txn_id(request->txn_ids(i));
+                info.set_txn_type(has_txn_type ? request->txn_types(i) : TXN_NORMAL);
+                info.set_combined_txn_log(false);
+            }
+        }
+        for (auto tablet_id : request->tablet_ids()) {
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_infos);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     };
     auto st = thread_pool->submit_func(task);
@@ -438,8 +548,13 @@ void LakeServiceImpl::delete_txn_log(::google::protobuf::RpcController* controll
         return;
     }
 
+<<<<<<< HEAD
     if (request->txn_ids_size() == 0) {
         cntl->SetFailed("missing txn_ids");
+=======
+    if (request->txn_ids_size() == 0 && request->txn_infos_size() == 0) {
+        cntl->SetFailed("neither txn_ids nor txn_infos is set, one of them must be set");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return;
     }
 
@@ -636,8 +751,12 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                 return;
             }
 
+<<<<<<< HEAD
             auto location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
             auto tablet_metadata = _tablet_mgr->get_tablet_metadata(location, /*fll_cache=*/false);
+=======
+            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!tablet_metadata.ok()) {
                 LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
                              << ", error: " << tablet_metadata.status();
@@ -713,7 +832,11 @@ void LakeServiceImpl::upload_snapshots(::google::protobuf::RpcController* contro
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit upload snapshots task: " << st;
+<<<<<<< HEAD
         cntl->SetFailed(st.get_error_msg());
+=======
+        cntl->SetFailed(std::string(st.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         latch.count_down();
     }
     latch.wait();
@@ -744,7 +867,11 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit restore snapshots task: " << st;
+<<<<<<< HEAD
         cntl->SetFailed(st.get_error_msg());
+=======
+        cntl->SetFailed(std::string(st.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         latch.count_down();
     }
     latch.wait();

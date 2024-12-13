@@ -35,6 +35,10 @@
 package com.starrocks.consistency;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -48,6 +52,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.EditLog;
@@ -75,7 +85,11 @@ public class CheckConsistencyJob {
     }
 
     private JobState state;
+<<<<<<< HEAD
     private long tabletId;
+=======
+    private final long tabletId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // backend id -> check sum
     // add backend id to this map only after sending task
@@ -118,19 +132,28 @@ public class CheckConsistencyJob {
      *  false: cancel
      */
     public boolean sendTasks() {
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.debug("tablet[{}] has been removed", tabletId);
             return false;
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.debug("db[{}] does not exist", tabletMeta.getDbId());
             return false;
         }
 
+<<<<<<< HEAD
         LocalTablet tablet = null;
 
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -144,6 +167,22 @@ public class CheckConsistencyJob {
             OlapTable olapTable = (OlapTable) table;
 
             PhysicalPartition physicalPartition = olapTable.getPartition(tabletMeta.getPhysicalPartitionId());
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+        if (table == null) {
+            LOG.debug("table[{}] does not exist", tabletMeta.getTableId());
+            return false;
+        }
+
+        LocalTablet tablet = null;
+
+        AgentBatchTask batchTask = new AgentBatchTask();
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+                    LockType.READ)) {
+            OlapTable olapTable = (OlapTable) table;
+
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (physicalPartition == null) {
                 LOG.debug("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return false;
@@ -176,7 +215,11 @@ public class CheckConsistencyJob {
             for (Replica replica : tablet.getImmutableReplicas()) {
                 // 1. if state is CLONE, do not send task at this time
                 if (replica.getState() == ReplicaState.CLONE
+<<<<<<< HEAD
                         || replica.getState() == ReplicaState.DECOMMISSION) {
+=======
+                            || replica.getState() == ReplicaState.DECOMMISSION) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     continue;
                 }
 
@@ -210,18 +253,27 @@ public class CheckConsistencyJob {
                 timeoutMs = Math.max(timeoutMs, Config.check_consistency_default_timeout_second * 1000L);
                 state = JobState.RUNNING;
             }
+<<<<<<< HEAD
 
         } finally {
             db.readUnlock();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (state != JobState.RUNNING) {
             // failed to send task. set tablet's checked version to avoid choosing it again
+<<<<<<< HEAD
             db.writeLock();
             try {
                 tablet.setCheckedVersion(checkedVersion);
             } finally {
                 db.writeUnlock();
+=======
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+                        LockType.WRITE)) {
+                tablet.setCheckedVersion(checkedVersion);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return false;
         }
@@ -249,18 +301,27 @@ public class CheckConsistencyJob {
         }
 
         // check again. in case tablet has already been removed
+<<<<<<< HEAD
         TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+=======
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (tabletMeta == null) {
             LOG.warn("tablet[{}] has been removed", tabletId);
             return -1;
         }
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tabletMeta.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.warn("db[{}] does not exist", tabletMeta.getDbId());
             return -1;
         }
 
+<<<<<<< HEAD
         boolean isConsistent = true;
         db.writeLock();
         JournalTask journalTask;
@@ -273,6 +334,21 @@ public class CheckConsistencyJob {
             OlapTable olapTable = (OlapTable) table;
 
             PhysicalPartition physicalPartition = olapTable.getPartition(tabletMeta.getPhysicalPartitionId());
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tabletMeta.getTableId());
+        if (table == null) {
+            LOG.warn("table[{}] does not exist", tabletMeta.getTableId());
+            return -1;
+        }
+
+        boolean isConsistent = true;
+        JournalTask journalTask;
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
+            OlapTable olapTable = (OlapTable) table;
+
+            PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (physicalPartition == null) {
                 LOG.warn("partition[{}] does not exist", tabletMeta.getPhysicalPartitionId());
                 return -1;
@@ -293,7 +369,11 @@ public class CheckConsistencyJob {
             // check if schema has changed
             if (checkedSchemaHash != olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId())) {
                 LOG.info("index[{}]'s schema hash has been changed. [{} -> {}]. retry", tabletMeta.getIndexId(),
+<<<<<<< HEAD
                         checkedSchemaHash, olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId()));
+=======
+                            checkedSchemaHash, olapTable.getSchemaHashByIndexId(tabletMeta.getIndexId()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return -1;
             }
 
@@ -305,14 +385,22 @@ public class CheckConsistencyJob {
                     Map.Entry<Long, Long> entry = iter.next();
                     if (tablet.getReplicaByBackendId(entry.getKey()) == null) {
                         LOG.debug("tablet[{}]'s replica in backend[{}] does not exist. remove from checksumMap",
+<<<<<<< HEAD
                                 tabletId, entry.getKey());
+=======
+                                    tabletId, entry.getKey());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         iter.remove();
                         continue;
                     }
 
                     if (entry.getValue() == -1) {
                         LOG.debug("tablet[{}] has unfinished replica check sum task. backend[{}]",
+<<<<<<< HEAD
                                 tabletId, entry.getKey());
+=======
+                                    tabletId, entry.getKey());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         isFinished = false;
                     }
                 }
@@ -371,8 +459,11 @@ public class CheckConsistencyJob {
                         index.getId(), tabletId, lastCheckTime,
                         checkedVersion, isConsistent);
             journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
+<<<<<<< HEAD
         } finally {
             db.writeUnlock();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // Wait for edit log write finish out of db lock.

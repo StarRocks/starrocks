@@ -193,7 +193,11 @@ Status HeapChunkMerger::merge(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* ro
     StorageEngine* storage_engine = StorageEngine::instance();
     bool bg_worker_stopped = storage_engine->bg_worker_stopped();
     while (!_heap.empty() && !bg_worker_stopped) {
+<<<<<<< HEAD
         if (tmp_chunk->capacity_limit_reached() || nread >= config::vector_chunk_size) {
+=======
+        if (!tmp_chunk->capacity_limit_reached().ok() || nread >= config::vector_chunk_size) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (_tablet->keys_type() == KeysType::AGG_KEYS) {
                 aggregate_chunk(*_aggregator, tmp_chunk, rowset_writer);
             } else {
@@ -365,7 +369,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         const std::string path = Rowset::delta_column_group_path(new_tablet->schema_hash_path(), rid, idx, version,
                                                                  last_dcg_counts[idx]);
         // must record unique column id in delta column group
+<<<<<<< HEAD
         std::vector<uint32_t> unique_column_ids;
+=======
+        std::vector<ColumnUID> unique_column_ids;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (const auto& iter : *chunk_changer->get_gc_exprs()) {
             ColumnUID unique_id = new_tablet_schema->column(iter.first).unique_id();
             unique_column_ids.emplace_back(unique_id);
@@ -399,7 +407,11 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
 
         // Get DeltaColumnGroup for current cols file
         auto dcg = std::make_shared<DeltaColumnGroup>();
+<<<<<<< HEAD
         std::vector<std::vector<uint32_t>> dcg_column_ids{unique_column_ids};
+=======
+        std::vector<std::vector<ColumnUID>> dcg_column_ids{unique_column_ids};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::vector<std::string> dcg_column_files{file_name(segment_writer->segment_path())};
         dcg->init(version, dcg_column_ids, dcg_column_files);
         dcgs.emplace_back(dcg);
@@ -445,7 +457,11 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         if (st = reader->do_get_next(base_chunk.get()); !st.ok()) {
             if (is_eos = st.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header()
+<<<<<<< HEAD
                              << "tablet reader failed to get next chunk, status: " << st.get_error_msg();
+=======
+                             << "tablet reader failed to get next chunk, status: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return st;
             }
         }
@@ -466,7 +482,11 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         }
 
         if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
+=======
+            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return st;
         }
 
@@ -476,7 +496,11 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             std::string err_msg = strings::Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
+<<<<<<< HEAD
                     base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
+=======
+                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG(WARNING) << alter_msg_header() << err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
@@ -547,7 +571,11 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
             mem_table = std::make_unique<MemTable>(new_tablet->tablet_id(), &new_schema, &mem_table_sink,
                                                    max_buffer_size, CurrentThread::mem_tracker());
+<<<<<<< HEAD
             VLOG(1) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
+=======
+            VLOG(2) << alter_msg_header() << "SortSchemaChange memory usage: " << cur_usage << " after mem table flush "
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     << CurrentThread::mem_tracker()->consumption();
         }
 #endif
@@ -578,7 +606,18 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
+<<<<<<< HEAD
         bool full = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
+=======
+        auto res = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
+        if (!res.ok()) {
+            std::string msg = strings::Substitute("$0 failed to insert mem table: $1", alter_msg_header(),
+                                                  res.status().to_string());
+            LOG(WARNING) << msg;
+            return res.status();
+        }
+        auto full = res.value();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), alter_msg_header() + "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
@@ -701,6 +740,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
     }
 
     // Create a new tablet schema, should merge with dropped columns in light schema change
+<<<<<<< HEAD
     TabletSchemaSPtr base_tablet_schema = std::make_shared<TabletSchema>();
     base_tablet_schema->copy_from(base_tablet->tablet_schema());
     if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
@@ -709,6 +749,13 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
             base_tablet_schema->append_column(TabletColumn(column));
         }
         base_tablet_schema->generate_sort_key_idxes();
+=======
+    TabletSchemaCSPtr base_tablet_schema;
+    if (!request.columns.empty() && request.columns[0].col_unique_id >= 0) {
+        base_tablet_schema = TabletSchema::copy(*base_tablet->tablet_schema(), request.columns);
+    } else {
+        base_tablet_schema = base_tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
 
@@ -753,7 +800,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet(const TAlterTabletReqV2& re
                                                      &sc_params.sc_directly, &generated_column_idxs);
 
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
+=======
+        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return status;
     }
 
@@ -840,6 +891,12 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+<<<<<<< HEAD
+=======
+            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
+                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (rowsets_to_change.back() == nullptr) {
                 std::vector<Version> base_tablet_versions;
                 base_tablet->list_versions(&base_tablet_versions);
@@ -884,7 +941,11 @@ Status SchemaChangeHandler::_do_process_alter_tablet_normal(const TAlterTabletRe
         }
         VLOG(3) << "rowsets_to_delete size is:" << rowsets_to_delete.size()
                 << " version is:" << max_rowset->end_version();
+<<<<<<< HEAD
         new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
+=======
+        new_tablet->modify_rowsets_without_lock(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new_tablet->set_cumulative_layer_point(-1);
         new_tablet->save_meta();
         for (auto& rowset : rowsets_to_delete) {

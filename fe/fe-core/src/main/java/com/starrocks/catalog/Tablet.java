@@ -42,6 +42,13 @@ public abstract class Tablet extends MetaObject implements Writable {
 
     public abstract long getRowCount(long version);
 
+<<<<<<< HEAD
+=======
+    public long getFuzzyRowCount() {
+        return 1L;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract Set<Long> getBackendIds();
 
     public abstract List<Replica> getAllReplicas();
@@ -49,6 +56,12 @@ public abstract class Tablet extends MetaObject implements Writable {
     public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                               long visibleVersion, long localBeId, int schemaHash);
 
+<<<<<<< HEAD
+=======
+    public abstract void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
+                                              long visibleVersion, long localBeId, int schemaHash, long warehouseId);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return "id=" + id;

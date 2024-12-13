@@ -31,11 +31,21 @@ const std::vector<int>& ColumnReadOrderCtx::get_column_read_order() {
     }
 }
 
+<<<<<<< HEAD
 void ColumnReadOrderCtx::update_ctx(size_t round_cost) {
+=======
+void ColumnReadOrderCtx::update_ctx(size_t round_cost, double first_selectivity) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_rand_round_order_index > 0) {
         if (round_cost < _min_round_cost) {
             _column_indices = _trying_column_indices;
             _min_round_cost = round_cost;
+<<<<<<< HEAD
+=======
+        } else if (round_cost == _min_round_cost && first_selectivity > 0 && first_selectivity < _first_selectivity) {
+            _column_indices = _trying_column_indices;
+            _first_selectivity = first_selectivity;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         _trying_column_indices.clear();
         _rand_round_order_index--;

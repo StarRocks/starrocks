@@ -34,15 +34,24 @@
 
 package com.starrocks.http;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TQueryPlanInfo;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.apache.thrift.TDeserializer;
+<<<<<<< HEAD
 import org.apache.thrift.TException;
 import org.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Before;
+=======
+import org.json.JSONObject;
+import org.junit.Assert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.io.IOException;
@@ -55,14 +64,22 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     protected static String ES_TABLE_URL;
 
     @Override
+<<<<<<< HEAD
     @Before
     public void setUp() {
         super.setUp();
+=======
+    protected void doSetUp() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ES_TABLE_URL = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/es_table";
     }
 
     @Test
+<<<<<<< HEAD
     public void testQueryPlanAction() throws IOException, TException {
+=======
+    public void testQueryPlanAction() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.setUpWithCatalog();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
@@ -90,7 +107,11 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             String queryPlan = jsonObject.getString("opaqued_query_plan");
             Assert.assertNotNull(queryPlan);
             byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
+<<<<<<< HEAD
             TDeserializer deserializer = new TDeserializer();
+=======
+            TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
             deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
             Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
@@ -164,7 +185,11 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testQueryPlanActionPruneEmpty() throws IOException {
+=======
+    public void testQueryPlanActionPruneEmpty() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.setUpWithCatalog();
 
 

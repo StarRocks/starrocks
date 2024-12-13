@@ -36,6 +36,10 @@ package com.starrocks.analysis;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
@@ -264,15 +268,40 @@ public class SlotDescriptor {
             type = type.isNull() ? ScalarType.BOOLEAN : type;
             tSlotDescriptor.setSlotType(type.toThrift());
             if (column != null) {
+<<<<<<< HEAD
                 LOG.debug("column name:{}, column unique id:{}", column.getName(), column.getUniqueId());
                 tSlotDescriptor.setCol_unique_id(column.getUniqueId());
             }
         }
+=======
+                LOG.debug("column id:{}, column unique id:{}",
+                        column.getColumnId(), column.getUniqueId());
+                tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
+        }
+        // set column unique id or physical name
+        if (column != null) {
+            if (column.getUniqueId() != Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                tSlotDescriptor.setCol_unique_id(column.getUniqueId());
+            }
+            if (!Strings.isNullOrEmpty(column.getPhysicalName())) {
+                tSlotDescriptor.setCol_physical_name(column.getPhysicalName());
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tSlotDescriptor.setColumnPos(-1);
         tSlotDescriptor.setByteOffset(-1);
         tSlotDescriptor.setNullIndicatorByte(-1);
         tSlotDescriptor.setNullIndicatorBit(nullIndicatorBit);
+<<<<<<< HEAD
         tSlotDescriptor.setColName(((column != null) ? column.getName() : ""));
+=======
+        String colName = "";
+        if (column != null) {
+            colName = column.isShadowColumn() ? column.getName() : column.getColumnId().getId();
+        }
+        tSlotDescriptor.setColName(colName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tSlotDescriptor.setSlotIdx(-1);
         tSlotDescriptor.setIsMaterialized(true);
         tSlotDescriptor.setIsOutputColumn(isOutputColumn);

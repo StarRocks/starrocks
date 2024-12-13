@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_to_bitmap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts an array into BITMAP values. This function is supported from v2.3.
 

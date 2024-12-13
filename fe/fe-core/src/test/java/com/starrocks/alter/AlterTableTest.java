@@ -28,7 +28,10 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
+<<<<<<< HEAD
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -72,6 +75,7 @@ public class AlterTableTest {
     @Test(expected = AnalysisException.class)
     public void testAlterTableBucketSize() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_bucket_size (\n" +
+<<<<<<< HEAD
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
                 "city_code VARCHAR(100),\n" +
@@ -95,11 +99,37 @@ public class AlterTableTest {
         String sql = "ALTER TABLE test_alter_bucket_size SET (\"bucket_size\" = \"-1\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+=======
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY RANDOM\n" +
+                    "PROPERTIES(\n" +
+                    "\t\"replication_num\" = \"1\",\n" +
+                    "    \"storage_medium\" = \"SSD\",\n" +
+                    "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
+                    ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_alter_bucket_size SET (\"bucket_size\" = \"-1\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAlterTableStorageCoolDownTTL() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl (\n" +
+<<<<<<< HEAD
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
                 "city_code VARCHAR(100),\n" +
@@ -125,6 +155,33 @@ public class AlterTableTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("test_alter_cool_down_ttl");
+=======
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "\t\"replication_num\" = \"1\",\n" +
+                    "    \"storage_medium\" = \"SSD\",\n" +
+                    "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
+                    ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_alter_cool_down_ttl SET (\"storage_cooldown_ttl\" = \"3 day\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("test_alter_cool_down_ttl");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable = (OlapTable) table;
         String storageCooldownTtl = olapTable.getTableProperty().getProperties().get("storage_cooldown_ttl");
         Assert.assertEquals("3 day", storageCooldownTtl);
@@ -135,6 +192,7 @@ public class AlterTableTest {
     @Test(expected = AnalysisException.class)
     public void testAlterTableStorageCoolDownTTLExcept() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl_2 (\n" +
+<<<<<<< HEAD
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
                 "city_code VARCHAR(100),\n" +
@@ -158,11 +216,37 @@ public class AlterTableTest {
         String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+=======
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "\t\"replication_num\" = \"1\",\n" +
+                    "    \"storage_medium\" = \"SSD\",\n" +
+                    "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
+                    ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testAlterTableStorageCoolDownTTLPartition() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_alter_cool_down_ttl_partition (\n" +
+<<<<<<< HEAD
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
                 "city_code VARCHAR(100),\n" +
@@ -184,6 +268,30 @@ public class AlterTableTest {
                 ");");
         ConnectContext ctx = starRocksAssert.getCtx();
         Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("test_alter_cool_down_ttl_partition");
+=======
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "\t\"replication_num\" = \"1\",\n" +
+                    "    \"storage_medium\" = \"SSD\",\n" +
+                    "    \"storage_cooldown_ttl\" = \"1 day\"\n" +
+                    ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+                    .getTable("test_alter_cool_down_ttl_partition");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable = (OlapTable) table;
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
         DataProperty p20200321 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200321").getId());
@@ -196,9 +304,16 @@ public class AlterTableTest {
         Assert.assertEquals("9999-12-31 23:59:59", TimeUtils.longToTimeString(p20200324.getCooldownTimeMs()));
 
         String sql = "ALTER TABLE test_alter_cool_down_ttl_partition\n" +
+<<<<<<< HEAD
                 "MODIFY PARTITION (*) SET(\"storage_cooldown_ttl\" = \"2 day\", \"storage_medium\" = \"SSD\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+=======
+                    "MODIFY PARTITION (*) SET(\"storage_cooldown_ttl\" = \"2 day\", \"storage_medium\" = \"SSD\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
+        alterJobExecutor.process(alterTableStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         p20200321 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200321").getId());
         p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());
@@ -214,6 +329,7 @@ public class AlterTableTest {
     @Test
     public void testAlterTablePartitionTTLInvalid() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_partition_live_number (\n" +
+<<<<<<< HEAD
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
                 "city_code VARCHAR(100),\n" +
@@ -245,12 +361,47 @@ public class AlterTableTest {
         sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"1\");";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+=======
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "\t\"replication_num\" = \"1\",\n" +
+                    "    \"storage_medium\" = \"SSD\",\n" +
+                    "    \"partition_live_number\" = \"2\"\n" +
+                    ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"-1\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+        Set<Pair<Long, Long>> ttlPartitionInfo = GlobalStateMgr.getCurrentState()
+                    .getDynamicPartitionScheduler().getTtlPartitionInfo();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table =
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_partition_live_number");
+        Assert.assertFalse(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
+        sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"1\");";
+        alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
     }
 
     @Test
     public void testAlterTablePartitionStorageMedium() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_partition_storage_medium (\n" +
+<<<<<<< HEAD
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
                 "city_code VARCHAR(100),\n" +
@@ -274,12 +425,39 @@ public class AlterTableTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("test_partition_storage_medium");
+=======
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '0'\n" +
+                    ")\n" +
+                    "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                    "PARTITION BY RANGE(event_day)(\n" +
+                    "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                    "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                    "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                    "PARTITION p20200324 VALUES LESS THAN MAXVALUE\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "ALTER TABLE test_partition_storage_medium SET(\"default.storage_medium\" = \"SSD\");";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(ctx, alterTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_partition_storage_medium");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(olapTable.getStorageMedium().equals("SSD"));
     }
 
     @Test
     public void testAlterTableStorageType() throws Exception {
         starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_storage_type (\n" +
+<<<<<<< HEAD
                 "event_day DATE,\n" +
                 "site_id INT DEFAULT '10',\n" +
                 "city_code VARCHAR(100),\n" +
@@ -292,10 +470,25 @@ public class AlterTableTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_type\" = \"column_with_row\"\n" +
                 ");");
+=======
+                    "event_day DATE,\n" +
+                    "site_id INT DEFAULT '10',\n" +
+                    "city_code VARCHAR(100),\n" +
+                    "user_name VARCHAR(32) DEFAULT '',\n" +
+                    "pv BIGINT DEFAULT '2'\n" +
+                    ")\n" +
+                    "PRIMARY KEY(event_day, site_id, city_code, user_name)\n" +
+                    "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                    "PROPERTIES(\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_type\" = \"column_with_row\"\n" +
+                    ");");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectContext ctx = starRocksAssert.getCtx();
 
         String sql1 = "ALTER TABLE test_storage_type SET(\"storage_type\" = \"column\");";
         AnalysisException e1 =
+<<<<<<< HEAD
                 Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, ctx));
         Assert.assertTrue(e1.getMessage().contains("Can't change storage type"));
         String sql2 = "ALTER TABLE test_storage_type SET(\"storage_type\" = \"column_with_row\");";
@@ -305,11 +498,27 @@ public class AlterTableTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("test_storage_type");
+=======
+                    Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, ctx));
+        Assert.assertTrue(e1.getMessage().contains("Can't change storage type"));
+        String sql2 = "ALTER TABLE test_storage_type SET(\"storage_type\" = \"column_with_row\");";
+        AnalysisException e2 =
+                    Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql2, ctx));
+        Assert.assertTrue(e2.getMessage().contains("Can't change storage type"));
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_storage_type");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(olapTable.getStorageType().equals(TStorageType.COLUMN_WITH_ROW));
     }
 
     public void testAlterTableLocationProp() throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -317,6 +526,7 @@ public class AlterTableTest {
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+<<<<<<< HEAD
                 ":" + backend.getHeartbeatPort() + "' set ('" +
                 AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
@@ -333,10 +543,29 @@ public class AlterTableTest {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
+=======
+                    ":" + backend.getHeartbeatPort() + "' set ('" +
+                    AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                    connectContext);
+
+        String sql = "CREATE TABLE test.`test_location_alter` (\n" +
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withTable(sql);
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
 
         // ** test alter table location to rack:*
@@ -365,10 +594,44 @@ public class AlterTableTest {
         localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
         OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                 .getTable("test_location_alter");
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
+
+        // ** test alter table location to rack:*
+        sql = "ALTER TABLE test.`test_location_alter` SET ('" +
+                    PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
+                    connectContext);
+        Assert.assertEquals("rack", ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_location_alter"))
+                    .getLocation().keySet().stream().findFirst().get());
+        Assert.assertEquals("*", ((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_location_alter"))
+                    .getLocation().get("rack").stream().findFirst().get());
+
+        // ** test alter table location to nil
+        sql = "ALTER TABLE test.`test_location_alter` SET ('" +
+                    PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = '');";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext),
+                    connectContext);
+        Assert.assertNull(((OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_location_alter"))
+                    .getLocation());
+
+        // ** test replay from edit log: alter to rack:*
+        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreFollower.load(initialImage.getMetaBlockReader());
+        ModifyTablePropertyOperationLog info = (ModifyTablePropertyOperationLog)
+                    UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TABLE_PROPERTIES);
+        localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+        OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                    .getTable("test_location_alter");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(olapTable.getLocation());
         Assert.assertEquals(1, olapTable.getLocation().size());
         Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
 
+<<<<<<< HEAD
 
         // ** test replay from edit log: alter to nil
         info = (ModifyTablePropertyOperationLog)
@@ -376,13 +639,25 @@ public class AlterTableTest {
         localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
         olapTable = (OlapTable) localMetastoreFollower.getDb("test")
                 .getTable("test_location_alter");
+=======
+        // ** test replay from edit log: alter to nil
+        info = (ModifyTablePropertyOperationLog)
+                    UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TABLE_PROPERTIES);
+        localMetastoreFollower.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                    .getTable("test_location_alter");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(olapTable.getLocation());
         Assert.assertNull(olapTable.getLocation());
     }
 
     @Test
     public void testAlterColocateTableLocationProp() throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -390,6 +665,7 @@ public class AlterTableTest {
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+<<<<<<< HEAD
                 ":" + backend.getHeartbeatPort() + "' set ('" +
                 AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
@@ -413,6 +689,32 @@ public class AlterTableTest {
 
         sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
+=======
+                    ":" + backend.getHeartbeatPort() + "' set ('" +
+                    AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                    connectContext);
+
+        String sql = "CREATE TABLE test.`test_location_colocate_alter1` (\n" +
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"colocate_with\" = \"cg1\"\n" +
+                    ");";
+        starRocksAssert.withTable(sql);
+
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_location_colocate_alter1");
+        Assert.assertNull(olapTable.getLocation());
+
+        sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
+                    PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:*');";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
         } catch (DdlException e) {
@@ -422,7 +724,11 @@ public class AlterTableTest {
 
     @Test
     public void testAlterLocationPropTableToColocate() throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -430,6 +736,7 @@ public class AlterTableTest {
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
         String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+<<<<<<< HEAD
                 ":" + backend.getHeartbeatPort() + "' set ('" +
                 AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
@@ -452,6 +759,31 @@ public class AlterTableTest {
 
         sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
                 PropertyAnalyzer.PROPERTIES_COLOCATE_WITH + "' = 'cg1');";
+=======
+                    ":" + backend.getHeartbeatPort() + "' set ('" +
+                    AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                    connectContext);
+
+        String sql = "CREATE TABLE test.`test_location_colocate_alter2` (\n" +
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\"\n" +
+                    ");";
+        starRocksAssert.withTable(sql);
+
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), "test_location_colocate_alter2");
+        Assert.assertTrue(olapTable.getLocation().containsKey("*"));
+
+        sql = "ALTER TABLE test.`test_location_colocate_alter1` SET ('" +
+                    PropertyAnalyzer.PROPERTIES_COLOCATE_WITH + "' = 'cg1');";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, connectContext), connectContext);
         } catch (DdlException e) {

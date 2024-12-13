@@ -171,9 +171,16 @@ public class BackupJobInfo implements Writable {
 
         public void checkAndRecoverAutoIncrementId(Table tbl) {
             Long newId = tbl.getId();
+<<<<<<< HEAD
     
             if (autoIncrementId != null) {
                 GlobalStateMgr.getCurrentState().addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
+=======
+
+            if (autoIncrementId != null) {
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addOrReplaceAutoIncrementIdByTableId(newId, autoIncrementId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -318,14 +325,28 @@ public class BackupJobInfo implements Writable {
                 BackupPartitionInfo partitionInfo = new BackupPartitionInfo();
                 partitionInfo.id = partition.getId();
                 partitionInfo.name = partition.getName();
+<<<<<<< HEAD
                 partitionInfo.version = partition.getVisibleVersion();
                 if (partition.getSubPartitions().size() == 1) {
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+                partitionInfo.version = partition.getDefaultPhysicalPartition().getVisibleVersion();
+
+                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                    BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
+                    physicalPartitionInfo.id = physicalPartition.getId();
+                    physicalPartitionInfo.version = physicalPartition.getVisibleVersion();
+                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         BackupIndexInfo idxInfo = new BackupIndexInfo();
                         idxInfo.id = index.getId();
                         idxInfo.name = olapTbl.getIndexNameById(index.getId());
                         idxInfo.schemaHash = olapTbl.getSchemaHashByIndexId(index.getId());
+<<<<<<< HEAD
                         partitionInfo.indexes.put(idxInfo.name, idxInfo);
+=======
+                        physicalPartitionInfo.indexes.put(idxInfo.name, idxInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         // tablets
                         for (Tablet tablet : index.getTablets()) {
                             BackupTabletInfo tabletInfo = new BackupTabletInfo();
@@ -333,6 +354,7 @@ public class BackupJobInfo implements Writable {
                             idxInfo.tablets.add(tabletInfo);
                         }
                     }
+<<<<<<< HEAD
                 } else {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         BackupPhysicalPartitionInfo physicalPartitionInfo = new BackupPhysicalPartitionInfo();
@@ -353,12 +375,20 @@ public class BackupJobInfo implements Writable {
                         }
                         partitionInfo.subPartitions.put(physicalPartition.getId(), physicalPartitionInfo);
                     }
+=======
+                    partitionInfo.subPartitions.put(physicalPartition.getId(), physicalPartitionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 tableInfo.partitions.put(partitionInfo.name, partitionInfo);
             }
 
             tableInfo.autoIncrementId = null;
+<<<<<<< HEAD
             Long id = GlobalStateMgr.getCurrentState().getCurrentAutoIncrementIdByTableId(tbl.getId());
+=======
+            Long id = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getCurrentAutoIncrementIdByTableId(tbl.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Column col : tbl.getBaseSchema()) {
                 if (col.isAutoIncrement() && id != null) {
                     tableInfo.autoIncrementId = id;
@@ -443,6 +473,19 @@ public class BackupJobInfo implements Writable {
 
         JSONObject backupObjs = root.getJSONObject("backup_objects");
         String[] tblNames = JSONObject.getNames(backupObjs);
+<<<<<<< HEAD
+=======
+        if (tblNames == null) {
+            // means that pure snapshot for functions
+            String result = root.getString("backup_result");
+            if (result.equals("succeed")) {
+                jobInfo.success = true;
+            } else {
+                jobInfo.success = false;
+            }
+            return;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (String tblName : tblNames) {
             BackupTableInfo tblInfo = new BackupTableInfo();
             tblInfo.name = tblName;

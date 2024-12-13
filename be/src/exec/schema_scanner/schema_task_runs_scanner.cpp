@@ -25,6 +25,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
+<<<<<<< HEAD
         {"QUERY_ID", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
@@ -38,6 +39,22 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
         {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), true}};
+=======
+        {"QUERY_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
+        {"ERROR_CODE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(StringValue), true},
+        {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -148,29 +165,62 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 6: {
+<<<<<<< HEAD
             // DATABASE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+=======
+            // CATALOG
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                std::string catalog_name = "default_catalog";
+                if (task_run_info.__isset.catalog) {
+                    catalog_name = task_run_info.catalog;
+                }
+                Slice value(catalog_name.c_str(), catalog_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 7: {
+            // DATABASE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 const std::string* db_name = &task_run_info.database;
                 Slice value(db_name->c_str(), db_name->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
+<<<<<<< HEAD
         case 7: {
             // DEFINITION
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
+=======
+        case 8: {
+            // DEFINITION
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 const std::string* str = &task_run_info.definition;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
+<<<<<<< HEAD
         case 8: {
             // EXPIRE_TIME
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
+=======
+        case 9: {
+            // EXPIRE_TIME
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 auto* nullable_column = down_cast<NullableColumn*>(column.get());
                 if (task_run_info.__isset.expire_time) {
                     int64_t expire_time = task_run_info.expire_time;
@@ -187,10 +237,17 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+<<<<<<< HEAD
         case 9: {
             // ERROR_CODE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
+=======
+        case 10: {
+            // ERROR_CODE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (task_run_info.__isset.error_code) {
                     int64_t value = task_run_info.error_code;
                     fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
@@ -200,10 +257,17 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+<<<<<<< HEAD
         case 10: {
             // ERROR_MESSAGE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+=======
+        case 11: {
+            // ERROR_MESSAGE
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (task_run_info.__isset.error_message) {
                     const std::string* str = &task_run_info.error_message;
                     Slice value(str->c_str(), str->length());
@@ -215,10 +279,17 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+<<<<<<< HEAD
         case 11: {
             // progress
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+=======
+        case 12: {
+            // progress
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (task_run_info.__isset.progress) {
                     const std::string* str = &task_run_info.progress;
                     Slice value(str->c_str(), str->length());
@@ -230,10 +301,17 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+<<<<<<< HEAD
         case 12: {
             // extra_message
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
+=======
+        case 13: {
+            // extra_message
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (task_run_info.__isset.extra_message) {
                     const std::string* str = &task_run_info.extra_message;
                     Slice value(str->c_str(), str->length());
@@ -245,10 +323,17 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
+<<<<<<< HEAD
         case 13: {
             // properties
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
+=======
+        case 14: {
+            // properties
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 const std::string* str = &task_run_info.properties;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);

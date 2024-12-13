@@ -322,7 +322,11 @@ public class CostModel {
                     // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
                     boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
                             && sessionVariable.isEnablePipelineEngine()
+<<<<<<< HEAD
                             && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+=======
+                            && GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
                     result = CostEstimate.of(outputSize * factor, 0, networkCost * factor);
@@ -331,6 +335,12 @@ public class CostModel {
                     result = CostEstimate.of(outputSize, 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
                     break;
+<<<<<<< HEAD
+=======
+                case ROUND_ROBIN:
+                    result = CostEstimate.of(outputSize * factor, 0, outputSize * factor);
+                    break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 default:
                     throw new StarRocksPlannerException(
                             "not support " + distributionSpec.getType() + "distribution type",
@@ -515,6 +525,9 @@ public class CostModel {
             return Optional.empty();
         }
     }
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_suppkey,
@@ -36,12 +37,18 @@ where
 )
 order by
     s_suppkey;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F08)
   DOP: 16
   INSTANCES
     INSTANCE(0-F08#0)
+<<<<<<< HEAD
       BE: 10002
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -95,20 +102,32 @@ PLAN FRAGMENT 3(F05)
   INSTANCES
     INSTANCE(7-F05#0)
       DESTINATIONS: 4-F02#0,5-F02#1,6-F02#2
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 4(F04)
   DOP: 16
   INSTANCES
     INSTANCE(8-F04#0)
       DESTINATIONS: 7-F05#0
+<<<<<<< HEAD
       BE: 10003
+=======
+      BE: 10001
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     INSTANCE(9-F04#1)
       DESTINATIONS: 7-F05#0
       BE: 10002
     INSTANCE(10-F04#2)
       DESTINATIONS: 7-F05#0
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 5(F03)
   DOP: 16
@@ -355,5 +374,9 @@ PLAN FRAGMENT 6
      tabletList=1004,1006,1008,1010,1012,1014,1016,1018,1020,1022 ...
      cardinality=1
      avgRowSize=32.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

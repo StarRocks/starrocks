@@ -22,6 +22,10 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -42,6 +46,13 @@ public class TimeWatcher {
         return t;
     }
 
+<<<<<<< HEAD
+=======
+    public Optional<Timer> getTimer(String name) {
+        return Optional.ofNullable(timers.get(name));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Timer> getAllTimerWithOrder() {
         return timers.values().stream().sorted(Comparator.comparingLong(o -> o.firstTimePoints))
                 .collect(Collectors.toList());
@@ -78,8 +89,13 @@ public class TimeWatcher {
 
         public void close() {
             reentrantCount--;
+<<<<<<< HEAD
             if (reentrantCount == 0) {
                 levels--;
+=======
+            levels--;
+            if (reentrantCount == 0) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 stopWatch.stop();
             }
         }

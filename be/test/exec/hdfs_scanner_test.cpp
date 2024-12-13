@@ -24,6 +24,10 @@
 #include "exec/hdfs_scanner_parquet.h"
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/fragment_context.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -80,6 +84,12 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     }
     _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
     _runtime_state->init_instance_mem_tracker();
+<<<<<<< HEAD
+=======
+    pipeline::FragmentContext* fragment_context = _pool.add(new pipeline::FragmentContext());
+    fragment_context->set_pred_tree_params({true, true});
+    _runtime_state->set_fragment_ctx(fragment_context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status HdfsScannerTest::_init_datacache(size_t mem_size, const std::string& engine) {
@@ -116,6 +126,10 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->file_size = range->file_length;
     param->scan_range = range;
     param->tuple_desc = tuple_desc;
+<<<<<<< HEAD
+=======
+    param->runtime_filter_collector = _pool.add(new RuntimeFilterProbeCollector());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
     std::vector<SlotDescriptor*> mat_slots;
@@ -168,11 +182,18 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     }
     tuple_desc_builder.build(&table_desc_builder);
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                   .ok());
     auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+    DescriptorTbl* tbl = nullptr;
+    CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
+                  .ok());
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
@@ -328,7 +349,11 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
     Status st = Expr::create_expr_tree(pool, texpr, &ctx, nullptr);
+<<<<<<< HEAD
     DCHECK(st.ok()) << st.get_error_msg();
+=======
+    DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return ctx;
 }
 
@@ -356,7 +381,11 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
             chunk->reset();                                                               \
             status = scanner->get_next(_runtime_state, &chunk);                           \
             if (!status.ok() && !status.is_end_of_file()) {                               \
+<<<<<<< HEAD
                 std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
+=======
+                std::cout << "status not ok: " << status.message() << std::endl;          \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;                                                                    \
             }                                                                             \
             chunk->check_or_die();                                                        \
@@ -599,12 +628,19 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
 
         tuple_desc_builder.build(&table_desc_builder);
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples = std::vector<bool>{true};
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl,
                                     config::vector_chunk_size)
                       .ok());
+<<<<<<< HEAD
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         min_max_tuple_desc = row_desc->tuple_descriptors()[0];
     }
 
@@ -612,8 +648,13 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {20, 30, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
+<<<<<<< HEAD
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -643,8 +684,13 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {2000, 5000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
+<<<<<<< HEAD
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -674,8 +720,13 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // id min/max = 2629/5212, PART_Y min/max=20/20
     std::vector<int> thres = {3000, 10000, 20, 20};
     extend_mtypes_orc_min_max_conjuncts(&_pool, param, thres);
+<<<<<<< HEAD
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -745,8 +796,13 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
+<<<<<<< HEAD
         Expr::prepare(it.second, _runtime_state);
         Expr::open(it.second, _runtime_state);
+=======
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -831,8 +887,13 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
+<<<<<<< HEAD
         Expr::prepare(it.second, _runtime_state);
         Expr::open(it.second, _runtime_state);
+=======
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -929,8 +990,13 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
         param->min_max_conjunct_ctxs.push_back(ctx);
     }
 
+<<<<<<< HEAD
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1028,8 +1094,13 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
+<<<<<<< HEAD
         Expr::prepare(it.second, _runtime_state);
         Expr::open(it.second, _runtime_state);
+=======
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1150,8 +1221,13 @@ TEST_F(HdfsScannerTest, TestOrcDecodeMinMaxDateTime) {
             param->min_max_conjunct_ctxs.push_back(ctx);
         }
 
+<<<<<<< HEAD
         Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
         Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+        ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+        ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         auto scanner = std::make_shared<HdfsOrcScanner>();
         Status status = scanner->init(_runtime_state, *param);
@@ -1348,8 +1424,13 @@ TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
+<<<<<<< HEAD
         Expr::prepare(it.second, _runtime_state);
         Expr::open(it.second, _runtime_state);
+=======
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1474,8 +1555,13 @@ TEST_F(HdfsScannerTest, TestOrcBooleanConjunct) {
     }
 
     for (auto& it : param->conjunct_ctxs_by_slot) {
+<<<<<<< HEAD
         Expr::prepare(it.second, _runtime_state);
         Expr::open(it.second, _runtime_state);
+=======
+        ASSERT_OK(Expr::prepare(it.second, _runtime_state));
+        ASSERT_OK(Expr::open(it.second, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status status = scanner->init(_runtime_state, *param);
@@ -1568,11 +1654,19 @@ TEST_F(HdfsScannerTest, TestOrcCompoundConjunct) {
 
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         std::cout << ctx->root()->debug_string() << std::endl;
+<<<<<<< HEAD
         param->conjunct_ctxs.push_back(ctx);
     }
 
     ASSERT_OK(Expr::prepare(param->conjunct_ctxs, _runtime_state));
     ASSERT_OK(Expr::open(param->conjunct_ctxs, _runtime_state));
+=======
+        param->scanner_conjunct_ctxs.push_back(ctx);
+    }
+
+    ASSERT_OK(Expr::prepare(param->scanner_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->scanner_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1631,10 +1725,17 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
     auto* param = _create_param(parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
     ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
     status = scanner->open(_runtime_state);
     ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+    ASSERT_TRUE(status.ok()) << status.message();
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     READ_SCANNER_ROWS(scanner, 100000);
 
@@ -1674,9 +1775,15 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ExprContext probe_expr_ctx(&c1ref);
 
         status = probe_expr_ctx.prepare(_runtime_state);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
         status = probe_expr_ctx.open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+        status = probe_expr_ctx.open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // build runtime filter.
         JoinRuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, LogicalType::TYPE_BIGINT);
@@ -1693,10 +1800,17 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         param->runtime_filter_collector = &rf_collector;
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, tc.exp_rows);
 
@@ -1761,8 +1875,13 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
     }
 
     param->min_max_tuple_desc = min_max_tuple_desc;
+<<<<<<< HEAD
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -1805,10 +1924,17 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 100);
         scanner->close();
@@ -1821,10 +1947,17 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 100);
         scanner->close();
@@ -1889,10 +2022,17 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         uint64_t records = 0;
         READ_SCANNER_RETURN_ROWS(scanner, records);
@@ -1920,10 +2060,17 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 5);
         scanner->close();
@@ -1938,10 +2085,17 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 5);
         scanner->close();
@@ -1971,10 +2125,17 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 2);
         scanner->close();
@@ -2024,10 +2185,17 @@ TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 2);
         scanner->close();
@@ -2049,21 +2217,33 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         auto* param = _create_param(small_file, range, tuple_desc);
 #if defined(WITH_STARCACHE)
         status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
         param->use_datacache = true;
 #elif defined(WITH_CACHELIB)
         status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
         param->use_datacache = true;
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+        param->datacache_options.enable_datacache = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 3);
         scanner->close();
@@ -2084,10 +2264,17 @@ TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
 
@@ -2116,10 +2303,17 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
 
@@ -2433,7 +2627,11 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
 
     status = scanner->open(_runtime_state);
     // parquet column reader: not supported convert from parquet `INT96` to `VARCHAR`
+<<<<<<< HEAD
     EXPECT_TRUE(!status.ok()) << status.get_error_msg();
+=======
+    EXPECT_TRUE(!status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     scanner->close();
 }
 
@@ -2459,10 +2657,17 @@ TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
+<<<<<<< HEAD
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        ASSERT_TRUE(status.ok()) << status.message();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         READ_SCANNER_ROWS(scanner, 3);
         scanner->close();
@@ -2509,7 +2714,11 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
         param->conjunct_ctxs.push_back(ctx);
+=======
+        param->scanner_conjunct_ctxs.push_back(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         std::vector<TExprNode> nodes;
@@ -2518,11 +2727,19 @@ TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
         param->conjunct_ctxs.push_back(ctx);
     }
 
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+        param->scanner_conjunct_ctxs.push_back(ctx);
+    }
+
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2675,7 +2892,11 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
         param->conjunct_ctxs.push_back(ctx);
+=======
+        param->scanner_conjunct_ctxs.push_back(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         std::vector<TExprNode> nodes;
@@ -2684,11 +2905,19 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
         param->conjunct_ctxs.push_back(ctx);
     }
 
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+        param->scanner_conjunct_ctxs.push_back(ctx);
+    }
+
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
@@ -2720,7 +2949,12 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
         param->conjunct_ctxs.push_back(ctx);
+=======
+        param->scanner_conjunct_ctxs.push_back(ctx);
+        param->all_conjunct_ctxs.push_back(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         std::vector<TExprNode> nodes;
@@ -2729,11 +2963,20 @@ TEST_F(HdfsScannerTest, TestMinMaxFilterWhenContainsComplexTypes) {
                                     lit_node);
         ExprContext* ctx = create_expr_context(&_pool, nodes);
         param->min_max_conjunct_ctxs.push_back(ctx);
+<<<<<<< HEAD
         param->conjunct_ctxs.push_back(ctx);
     }
 
     Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state);
     Expr::open(param->min_max_conjunct_ctxs, _runtime_state);
+=======
+        param->scanner_conjunct_ctxs.push_back(ctx);
+        param->all_conjunct_ctxs.push_back(ctx);
+    }
+
+    ASSERT_OK(Expr::prepare(param->min_max_conjunct_ctxs, _runtime_state));
+    ASSERT_OK(Expr::open(param->min_max_conjunct_ctxs, _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());

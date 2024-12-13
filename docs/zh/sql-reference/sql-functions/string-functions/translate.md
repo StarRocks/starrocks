@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # translate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 用于替换给定字符串中的字符。该函数会将给定字符串 `source` 中出现在 `from_string` 中的字符替换为对应位置的 `to_string` 中的字符。
 

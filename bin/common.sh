@@ -95,12 +95,15 @@ export_shared_envvars() {
     # ===================================================================================
 }
 
+<<<<<<< HEAD
 # Export cachelib libraries
 export_cachelib_lib_path() {
     CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 update_submodules()
 {
     pushd ${STARROCKS_HOME} &>/dev/null

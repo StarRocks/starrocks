@@ -40,12 +40,21 @@ public:
 
     ordinal_t get_current_ordinal() const override { return _offsets->get_current_ordinal(); }
 
+<<<<<<< HEAD
     /// for vectorized engine
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override;
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+=======
+    ordinal_t num_rows() const override { return _reader->num_rows(); }
+
+    Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    ColumnReader* get_column_reader() override { return _reader; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     ColumnReader* _reader;
 

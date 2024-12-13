@@ -174,4 +174,21 @@ OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal
     return {this, left};
 }
 
+<<<<<<< HEAD
+=======
+OrdinalPageIndexIterator OrdinalIndexReader::seek_by_page_index(int page_index) {
+    if (!(page_index < _num_pages && page_index >= 0)) {
+        // mean it's valid
+        return {this, _num_pages};
+    }
+
+    return {this, page_index};
+}
+
+void OrdinalIndexReader::print_debug_info() {
+    LOG(INFO) << fmt::format("ordinals: {}", fmt::join(_ordinals.get(), _ordinals.get() + _num_pages, ", "));
+    LOG(INFO) << fmt::format("pages: {}", fmt::join(_pages.get(), _pages.get() + _num_pages, ", "));
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

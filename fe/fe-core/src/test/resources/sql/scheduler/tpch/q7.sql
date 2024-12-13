@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     supp_nation,
@@ -38,22 +39,35 @@ order by
     supp_nation,
     cust_nation,
     l_year ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F18)
   DOP: 16
   INSTANCES
     INSTANCE(0-F18#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F17)
   DOP: 16
   INSTANCES
     INSTANCE(1-F17#0)
       DESTINATIONS: 0-F18#0
+<<<<<<< HEAD
       BE: 10003
     INSTANCE(2-F17#1)
       DESTINATIONS: 0-F18#0
       BE: 10002
+=======
+      BE: 10002
+    INSTANCE(2-F17#1)
+      DESTINATIONS: 0-F18#0
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     INSTANCE(3-F17#2)
       DESTINATIONS: 0-F18#0
       BE: 10001
@@ -63,10 +77,17 @@ PLAN FRAGMENT 2(F16)
   INSTANCES
     INSTANCE(4-F16#0)
       DESTINATIONS: 1-F17#0,2-F17#1,3-F17#2
+<<<<<<< HEAD
       BE: 10001
     INSTANCE(5-F16#1)
       DESTINATIONS: 1-F17#0,2-F17#1,3-F17#2
       BE: 10003
+=======
+      BE: 10003
+    INSTANCE(5-F16#1)
+      DESTINATIONS: 1-F17#0,2-F17#1,3-F17#2
+      BE: 10001
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     INSTANCE(6-F16#2)
       DESTINATIONS: 1-F17#0,2-F17#1,3-F17#2
       BE: 10002
@@ -118,6 +139,7 @@ PLAN FRAGMENT 5(F10)
   INSTANCES
     INSTANCE(11-F10#0)
       DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
+<<<<<<< HEAD
       BE: 10001
     INSTANCE(12-F10#1)
       DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
@@ -125,6 +147,15 @@ PLAN FRAGMENT 5(F10)
     INSTANCE(13-F10#2)
       DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
       BE: 10003
+=======
+      BE: 10003
+    INSTANCE(12-F10#1)
+      DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
+      BE: 10001
+    INSTANCE(13-F10#2)
+      DESTINATIONS: 4-F16#0,5-F16#1,6-F16#2
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 6(F08)
   DOP: 16
@@ -510,5 +541,9 @@ PLAN FRAGMENT 10
      tabletList=1365,1367,1369,1371,1373,1375,1377,1379,1381,1383 ...
      cardinality=1
      avgRowSize=16.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

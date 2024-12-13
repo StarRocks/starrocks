@@ -13,8 +13,17 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.join;
 
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.OptimizerContext;
 
+=======
+import com.google.api.client.util.Lists;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.OptimizerContext;
+
+import java.util.List;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // JoinReorderFactory is used to choose join reorder algorithm in RBO phase,
 // it is used by ReorderJoinRule.rewrite method, at present JoinReorderFactory
 // provides two factory implementation:
@@ -23,15 +32,45 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 // 2. factory for creating JoinReorderCardinalityPreserving, which used by table pruning
 //    feature.
 public interface JoinReorderFactory {
+<<<<<<< HEAD
     JoinOrder create(OptimizerContext context);
 
     // used by AutoMV to eliminate cross join.
     static JoinReorderFactory createJoinReorderDummyStatisticsFactory() {
         return JoinReorderDummyStatistics::new;
+=======
+    List<JoinOrder> create(OptimizerContext context, MultiJoinNode multiJoinNode);
+
+    // used by AutoMV to eliminate cross join.
+    static JoinReorderFactory createJoinReorderDummyStatisticsFactory() {
+        return (context, multiJoinNode) -> List.of(new JoinReorderDummyStatistics(context));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // used by table pruning feature.
     static JoinReorderFactory createJoinReorderCardinalityPreserving() {
+<<<<<<< HEAD
         return JoinReorderCardinalityPreserving::new;
+=======
+        return (context, multiJoinNode) -> List.of(new JoinReorderCardinalityPreserving(context));
+    }
+
+    static JoinReorderFactory createJoinReorderAdaptive() {
+        return (context, multiJoinNode) -> {
+            List<JoinOrder> algorithms = Lists.newArrayList();
+            algorithms.add(new JoinReorderLeftDeep(context));
+
+            SessionVariable sv = context.getSessionVariable();
+            if (multiJoinNode.getAtoms().size() <= sv.getCboMaxReorderNodeUseDP() && sv.isCboEnableDPJoinReorder()) {
+                algorithms.add(new JoinReorderDP(context));
+            }
+
+            if (sv.isCboEnableGreedyJoinReorder()) {
+                algorithms.add(new JoinReorderGreedy(context));
+            }
+
+            return algorithms;
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

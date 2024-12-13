@@ -106,7 +106,12 @@ protected:
 // data. And client doesn't have to release the codec.
 //
 // Return not OK, if error happens.
+<<<<<<< HEAD
 Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec);
+=======
+Status get_block_compression_codec(CompressionTypePB type, const BlockCompressionCodec** codec,
+                                   int compression_level = -1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 bool use_compression_pool(CompressionTypePB type);
 

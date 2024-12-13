@@ -33,7 +33,11 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.FileScanNode;
@@ -45,6 +49,11 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -96,7 +105,10 @@ public class LoadPlannerTest {
     private long loadMemLimit = 1000000;
     private long execMemLimit = 1000000;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Mocked
     Partition partition;
     @Mocked
@@ -132,7 +144,11 @@ public class LoadPlannerTest {
 
     @Test
     public void testParallelInstance(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+<<<<<<< HEAD
                                      @Injectable Database db, @Injectable OlapTable table) throws UserException {
+=======
+                                     @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -143,7 +159,11 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -238,7 +258,11 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -264,6 +288,12 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -370,7 +400,11 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -402,6 +436,12 @@ public class LoadPlannerTest {
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 minTimes = 0;
                 result = null;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -453,8 +493,13 @@ public class LoadPlannerTest {
 
     @Test
     public void testColumnWithRowPartialUpdate(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                                       @Mocked SystemInfoService systemInfoService,
                                       @Injectable Database db, @Injectable OlapTable table) throws Exception {
+=======
+                                               @Mocked SystemInfoService systemInfoService,
+                                               @Injectable Database db, @Injectable OlapTable table) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 table.getKeysType();
@@ -462,6 +507,12 @@ public class LoadPlannerTest {
                 result = KeysType.PRIMARY_KEYS;
                 table.hasRowStorageType();
                 result = true;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -519,7 +570,11 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -543,6 +598,12 @@ public class LoadPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -606,7 +667,11 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -630,6 +695,12 @@ public class LoadPlannerTest {
                 result = columns.get(2);
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -702,7 +773,11 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -737,6 +812,12 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f2, f3);
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -812,7 +893,11 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -834,6 +919,12 @@ public class LoadPlannerTest {
                 table.getColumn(Load.LOAD_OP_COLUMN);
                 result = null;
                 returns(f1, f2, f3);
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -866,7 +957,10 @@ public class LoadPlannerTest {
         fileStatusList.add(new TBrokerFileStatus("/path/file1", false, 128000000, true));
         fileStatusesList.add(fileStatusList);
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // plan
         LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
@@ -907,7 +1001,11 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -941,6 +1039,12 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -1021,7 +1125,11 @@ public class LoadPlannerTest {
                 Type.INT, true);
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -1057,12 +1165,22 @@ public class LoadPlannerTest {
                 result = null;
                 globalStateMgr.getFunction((Function) any, (Function.CompareMode) any);
                 returns(f1, f1, f2);
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getSqlParser();
+                result = new SqlParser(AstBuilder.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
         // column mappings
         String sql = "LOAD LABEL label0 (DATA INFILE('path/k2=1/file1') INTO TABLE t2 FORMAT AS 'orc' (k1,k33,v) " +
                 "COLUMNS FROM PATH AS (k2) set (k3 = substr(k33,1,5))) WITH BROKER 'broker0'";
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LoadStmt loadStmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql,
                 ctx.getSessionVariable().getSqlMode()).get(0);
         List<Expr> columnMappingList = Deencapsulation.getField(loadStmt.getDataDescriptions().get(0),
@@ -1140,7 +1258,11 @@ public class LoadPlannerTest {
 
     @Test
     public void testLoadLocalFile(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+<<<<<<< HEAD
                                   @Injectable Database db, @Injectable OlapTable table) throws UserException {
+=======
+                                  @Injectable Database db, @Injectable OlapTable table) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -1151,7 +1273,11 @@ public class LoadPlannerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;
@@ -1231,4 +1357,8 @@ public class LoadPlannerTest {
 
         Assert.assertNotNull(planner.getExecPlan());
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

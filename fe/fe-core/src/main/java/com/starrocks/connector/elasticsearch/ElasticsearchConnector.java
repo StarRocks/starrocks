@@ -59,5 +59,8 @@ public class ElasticsearchConnector
         this.esRestClient = new EsRestClient(esConfig.getNodes(), esConfig.getUserName(),
                 esConfig.getPassword(), esConfig.isEnableSsl());
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

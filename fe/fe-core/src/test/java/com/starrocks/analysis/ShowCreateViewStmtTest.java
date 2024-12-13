@@ -24,6 +24,10 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -38,6 +42,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
@@ -138,24 +146,94 @@ public class ShowCreateViewStmtTest {
         String dropSQL = "drop table tbl1";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception ex) {
 
         }
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCreateView() throws Exception {
+        List<String[]> testCases = new ArrayList<>();
+        testCases.add(new String[]{"test_view_0",
+                "create view test_view_0 AS SELECT " +
+                        " *, concat('', null) FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_0` (`k1`, `k2`, `v1`, `concat('', NULL)`) AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, concat('', NULL) AS `concat('', NULL)`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_1",
+                "create view test_view_1 AS SELECT " +
+                        "concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_1` (`concat(test.tbl1.k1, test.tbl1.k2)`) AS SELECT concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) AS `concat(test.tbl1.k1, test.tbl1.k2)`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_2",
+                "create view test_view_2 AS SELECT " +
+                        "`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2` FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_2` (`k1`, `k2`) AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_3",
+                "create view test_view_3 AS SELECT " +
+                        "*, `test`.`tbl1`.`k2` as k3 FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_3` (`k1`, `k2`, `v1`, `k3`) AS " +
+                        "SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, `test`.`tbl1`.`k2` AS `k3`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_4",
+                "create view test_view_4 AS " +
+                        "SELECT  `test`.`tbl1`.`k1` as c1, `test`.`tbl1`.`k2` as c2 FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_4` (`c1`, `c2`) AS SELECT `test`.`tbl1`.`k1` AS `c1`, `test`.`tbl1`.`k2` AS `c2`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        for (String[] testcase : testCases) {
+            String dropViewSql = "drop view if exists " + testcase[0];
+            DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
+            CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
+
+            List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+            List<String> res = Lists.newArrayList();
+            AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
+                    null, null, false, false, false);
+
+            Assert.assertEquals(testcase[2], res.get(0));
+
+            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
+        }
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testShowCreateView() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createViewSql = "create view test_view (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
                 "as select * from tbl1";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().createView(createViewStmt);
 
         List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
+
+        List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
+        List<String> res = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
+                null, null, false, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
                 "COMMENT \"view comment\" AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
                 "FROM `test`.`tbl1`;", res.get(0));
@@ -187,7 +265,11 @@ public class ShowCreateViewStmtTest {
                 "\tt0.c4 as d\n" +
                 "from t0";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().createView(createViewStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String descViewSql = "describe v2";
 
@@ -195,8 +277,12 @@ public class ShowCreateViewStmtTest {
                 com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
         Assert.assertTrue(statement instanceof DescribeStmt);
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(ctx, (DescribeStmt) statement);
         ShowResultSet rs = showExecutor.execute();
+=======
+        ShowResultSet rs = ShowExecutor.execute((DescribeStmt) statement, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(rs.getResultRows().stream().allMatch(r -> r.get(1).toUpperCase().startsWith("VARCHAR")));
         String query = "select * from v2 union all select c1 as a, c2 as b, NULL as c, c4 as d from t0";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
@@ -216,27 +302,47 @@ public class ShowCreateViewStmtTest {
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testDdlComment() {
+<<<<<<< HEAD
         List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt("test", commentTest, res,
                 null, null, false, false);
+=======
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+        Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
+        List<String> res = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt("test", commentTest, res,
+                null, null, false, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof CreateTableStmt);
     }
 
     @Test
     public void testDdlStorageType() {
+<<<<<<< HEAD
         List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt("storage_test", storageTest, res,
                 null, null, false, false);
+=======
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
+        Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
+        List<String> res = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,
+                null, null, false, false, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(storageTest.isOlapTable() &&
                 ((OlapTable) storageTest).getStorageType() == COLUMN_WITH_ROW);
     }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_union_agg
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 该函数将多个 HLL 类型数据合并成一个 HLL。
 

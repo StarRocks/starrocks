@@ -20,11 +20,18 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
 import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.share.iceberg.IcebergAwsClientFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -48,12 +55,20 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+<<<<<<< HEAD
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+=======
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.apache.iceberg.CatalogProperties.WAREHOUSE_LOCATION;
 
 public class IcebergHadoopCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHadoopCatalog.class);
+<<<<<<< HEAD
     public static final String LOCATION_PROPERTY = "location";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final Configuration conf;
     private final HadoopCatalog delegate;
@@ -105,7 +120,11 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void createDb(String dbName, Map<String, String> properties) {
+=======
+    public void createDB(String dbName, Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         properties = properties == null ? new HashMap<>() : properties;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
@@ -128,7 +147,11 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
     public void dropDb(String dbName) throws MetaNotFoundException {
+=======
+    public void dropDB(String dbName) throws MetaNotFoundException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Database database;
         try {
             database = getDB(dbName);
@@ -185,6 +208,14 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void deleteUncommittedDataFiles(List<String> fileLocations) {
         if (fileLocations.isEmpty()) {
             return;

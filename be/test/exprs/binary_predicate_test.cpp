@@ -18,7 +18,13 @@
 #include <gtest/gtest.h>
 
 #include "column/fixed_length_column.h"
+<<<<<<< HEAD
 #include "exprs/mock_vectorized_expr.h"
+=======
+#include "exprs/exprs_test_helper.h"
+#include "exprs/mock_vectorized_expr.h"
+#include "runtime/runtime_state.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -35,6 +41,10 @@ public:
     }
 
 public:
+<<<<<<< HEAD
+=======
+    RuntimeState runtime_state;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TExprNode expr_node;
 };
 
@@ -42,15 +52,22 @@ TEST_F(VectorizedBinaryPredicateTest, eqExpr) {
     expr_node.opcode = TExprOpcode::EQ;
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
 
+<<<<<<< HEAD
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
 
+=======
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
+    MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
 
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
 
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
@@ -61,22 +78,49 @@ TEST_F(VectorizedBinaryPredicateTest, eqExpr) {
         for (int j = 0; j < v->size(); ++j) {
             ASSERT_EQ(0, (int)v->get_data()[j]);
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
+
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
+
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(0, (int)v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, neExpr) {
     expr_node.opcode = TExprOpcode::NE;
+<<<<<<< HEAD
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
 
+=======
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
+    MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
+
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
 
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
 
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
@@ -87,13 +131,35 @@ TEST_F(VectorizedBinaryPredicateTest, neExpr) {
         for (int j = 0; j < v->size(); ++j) {
             ASSERT_EQ(1, (int)v->get_data()[j]);
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
+
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
+
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(1, (int)v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, geExpr) {
     expr_node.opcode = TExprOpcode::GE;
+<<<<<<< HEAD
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
 
+=======
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
 
@@ -103,6 +169,7 @@ TEST_F(VectorizedBinaryPredicateTest, geExpr) {
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
 
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
@@ -113,12 +180,32 @@ TEST_F(VectorizedBinaryPredicateTest, geExpr) {
         for (int j = 0; j < v->size(); ++j) {
             ASSERT_EQ(1, v->get_data()[j]);
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
+
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
+
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(1, v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
     expr_node.opcode = TExprOpcode::LT;
     expr_node.child_type = TPrimitiveType::BOOLEAN;
+<<<<<<< HEAD
+=======
+    expr_node.is_nullable = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
@@ -132,7 +219,10 @@ TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
         ColumnPtr v = col1.evaluate(nullptr, nullptr);
         ASSERT_TRUE(v->is_nullable());
         ASSERT_EQ(10, v->size());
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (int j = 0; j < v->size(); ++j) {
             if (j % 2) {
                 ASSERT_TRUE(v->is_null(j));
@@ -162,6 +252,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
     }
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
 
         ASSERT_TRUE(v->is_nullable());
@@ -174,15 +265,43 @@ TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
         for (int j = 0; j < ptr->size(); ++j) {
             ASSERT_TRUE(v->is_null(j));
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+
+                    ASSERT_TRUE(v->is_nullable());
+                    ASSERT_FALSE(v->is_numeric());
+
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_EQ(0, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+                    }
+
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_TRUE(v->is_null(j));
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
     expr_node.opcode = TExprOpcode::LT;
     expr_node.child_type = TPrimitiveType::BOOLEAN;
+<<<<<<< HEAD
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
 
     MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 0);
+=======
+    expr_node.is_nullable = true;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+
+    expr_node.is_nullable = false;
+    MockVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 0);
+    expr_node.is_nullable = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
     ++col2.flag;
 
@@ -203,7 +322,10 @@ TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
     {
         ColumnPtr v = col2.evaluate(nullptr, nullptr);
         ASSERT_TRUE(v->is_nullable());
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (int j = 0; j < v->size(); ++j) {
             for (int j = 0; j < v->size(); ++j) {
                 if (j % 2) {
@@ -218,6 +340,7 @@ TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
     col2.flag = 1;
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
 
         ASSERT_TRUE(v->is_nullable());
@@ -234,22 +357,57 @@ TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
                 ASSERT_TRUE(v->is_null(j));
             }
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+
+                    ASSERT_TRUE(v->is_nullable());
+                    ASSERT_FALSE(v->is_numeric());
+
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+                    }
+
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        if (j % 2) {
+                            ASSERT_FALSE(v->is_null(j));
+                        } else {
+                            ASSERT_TRUE(v->is_null(j));
+                        }
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, eqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
+<<<<<<< HEAD
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
 
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);
 
+=======
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    expr_node.is_nullable = false;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
+    MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);
+
+    expr->_children.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
 
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
 
         ASSERT_FALSE(ptr->is_nullable());
         ASSERT_TRUE(ptr->is_numeric());
@@ -260,11 +418,28 @@ TEST_F(VectorizedBinaryPredicateTest, eqForNullExpr) {
         for (int j = 0; j < v->size(); ++j) {
             ASSERT_EQ(1, v->get_data()[j]);
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
+
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
+
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(1, v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, nullEqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
+<<<<<<< HEAD
     expr_node.child_type = TPrimitiveType::BOOLEAN;
 
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
@@ -272,6 +447,20 @@ TEST_F(VectorizedBinaryPredicateTest, nullEqForNullExpr) {
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 0);
     MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
 
+=======
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    expr_node.child_type = TPrimitiveType::BOOLEAN;
+    expr_node.is_nullable = false;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    expr_node.is_nullable = true;
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 0);
+    expr_node.is_nullable = true;
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    MockNullVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
+
+    expr->_children.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
 
@@ -309,6 +498,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullEqForNullExpr) {
     }
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         auto ptr = std::static_pointer_cast<BooleanColumn>(v);
 
         ASSERT_FALSE(v->is_nullable());
@@ -321,11 +511,31 @@ TEST_F(VectorizedBinaryPredicateTest, nullEqForNullExpr) {
                 ASSERT_EQ(0, (int)ptr->get_data()[j]);
             }
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    auto ptr = std::static_pointer_cast<BooleanColumn>(v);
+
+                    ASSERT_FALSE(v->is_nullable());
+                    ASSERT_TRUE(v->is_numeric());
+
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        if (j % 2) {
+                            ASSERT_EQ(1, (int)ptr->get_data()[j]);
+                        } else {
+                            ASSERT_EQ(0, (int)ptr->get_data()[j]);
+                        }
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
+<<<<<<< HEAD
     expr_node.child_type = TPrimitiveType::BOOLEAN;
 
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
@@ -333,6 +543,19 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
     MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
     MockVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
 
+=======
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    expr_node.child_type = TPrimitiveType::BOOLEAN;
+    expr_node.is_nullable = false;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    expr_node.is_nullable = true;
+    MockNullVectorizedExpr<TYPE_BOOLEAN> col1(expr_node, 10, 1);
+    expr_node.is_nullable = false;
+    MockVectorizedExpr<TYPE_BOOLEAN> col2(expr_node, 10, 1);
+
+    expr->_children.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
 
@@ -357,6 +580,7 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         auto ptr = std::static_pointer_cast<BooleanColumn>(v);
 
         ASSERT_FALSE(v->is_nullable());
@@ -369,17 +593,48 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
                 ASSERT_EQ(1, (int)ptr->get_data()[j]);
             }
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    auto ptr = std::static_pointer_cast<BooleanColumn>(v);
+
+                    ASSERT_FALSE(v->is_nullable());
+                    ASSERT_TRUE(v->is_numeric());
+
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        if (j % 2) {
+                            ASSERT_EQ(0, (int)ptr->get_data()[j]);
+                        } else {
+                            ASSERT_EQ(1, (int)ptr->get_data()[j]);
+                        }
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 TEST_F(VectorizedBinaryPredicateTest, diffNullEqForNullExpr) {
     expr_node.opcode = TExprOpcode::EQ_FOR_NULL;
+<<<<<<< HEAD
     std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
     MockNullVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);
     col2.flag++;
 
+=======
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    expr_node.is_nullable = false;
+    std::unique_ptr<Expr> expr(VectorizedBinaryPredicateFactory::from_thrift(expr_node));
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    expr_node.is_nullable = true;
+    MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 1);
+    MockNullVectorizedExpr<TYPE_INT> col2(expr_node, 10, 1);
+    col2.flag++;
+    expr->_children.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
 
@@ -400,7 +655,10 @@ TEST_F(VectorizedBinaryPredicateTest, diffNullEqForNullExpr) {
         ColumnPtr v = col2.evaluate(nullptr, nullptr);
         ASSERT_TRUE(v->is_nullable());
         ASSERT_EQ(10, v->size());
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (int j = 0; j < v->size(); ++j) {
             if (j % 2) {
                 ASSERT_FALSE(v->is_null(j));
@@ -412,6 +670,7 @@ TEST_F(VectorizedBinaryPredicateTest, diffNullEqForNullExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
+<<<<<<< HEAD
         auto ptr = std::static_pointer_cast<BooleanColumn>(v);
 
         ASSERT_FALSE(v->is_nullable());
@@ -420,6 +679,21 @@ TEST_F(VectorizedBinaryPredicateTest, diffNullEqForNullExpr) {
         for (int j = 0; j < ptr->size(); ++j) {
             ASSERT_EQ(0, (int)ptr->get_data()[j]);
         }
+=======
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    auto ptr = std::static_pointer_cast<BooleanColumn>(v);
+
+                    ASSERT_FALSE(v->is_nullable());
+                    ASSERT_TRUE(v->is_numeric());
+
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_EQ(0, (int)ptr->get_data()[j]);
+                    }
+                },
+                expr->is_compilable(&runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

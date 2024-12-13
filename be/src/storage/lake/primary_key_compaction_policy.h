@@ -114,8 +114,14 @@ struct PKSizeTieredLevel {
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
+<<<<<<< HEAD
     explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
             : CompactionPolicy(tablet_mgr, std::move(tablet_metadata)) {}
+=======
+    explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                                     bool force_base_compaction)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~PrimaryCompactionPolicy() override = default;
 

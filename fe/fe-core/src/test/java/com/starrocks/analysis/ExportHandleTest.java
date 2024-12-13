@@ -35,6 +35,11 @@ public class ExportHandleTest {
     @Test
     public void testCancelExportHandler(@Mocked ExportMgr exportMgr, @Mocked EditLog editLog) {
 
+<<<<<<< HEAD
+=======
+        DDLStmtExecutor ddlStmtExecutor = new DDLStmtExecutor(DDLStmtExecutor.StmtExecutorVisitor.getInstance());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<ConnectContext>() {
             @Mock
             GlobalStateMgr getGlobalStateMgr() {
@@ -46,6 +51,12 @@ public class ExportHandleTest {
             {
                 globalStateMgr.getExportMgr();
                 result = exportMgr;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getDdlStmtExecutor();
+                result = ddlStmtExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

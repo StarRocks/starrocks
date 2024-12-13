@@ -15,7 +15,11 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.util.StringUtils;
+=======
+import com.starrocks.common.util.SRStringUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
@@ -175,7 +179,11 @@ public final class ColumnRefOperator extends ScalarOperator {
         }
 
         ColumnRefOperator rightColumn = (ColumnRefOperator) obj;
+<<<<<<< HEAD
         return StringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+=======
+        return SRStringUtils.areColumnNamesEqual(this.getName(), rightColumn.getName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 && this.getType().equals(rightColumn.getType())
                 && this.isNullable() == rightColumn.isNullable();
     }

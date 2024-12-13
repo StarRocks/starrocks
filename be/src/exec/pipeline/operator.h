@@ -148,7 +148,11 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
+<<<<<<< HEAD
     MemTracker* mem_tracker() const { return _mem_tracker; }
+=======
+    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
@@ -267,6 +271,11 @@ public:
     // apply operation for each child operator
     virtual void for_each_child_operator(const std::function<void(Operator*)>& apply) {}
 
+<<<<<<< HEAD
+=======
+    virtual void update_exec_stats(RuntimeState* state);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -325,11 +334,16 @@ private:
     void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
 
+<<<<<<< HEAD
     // All the memory usage will be automatically added to this MemTracker by memory allocate hook.
     // DO NOT use this MemTracker manually.
     // The MemTracker is owned by QueryContext, so that all the operators with the same plan_node_id can share
     // the same MemTracker.
     MemTracker* _mem_tracker = nullptr;
+=======
+    std::shared_ptr<MemTracker> _mem_tracker;
+    std::vector<ExprContext*> _runtime_in_filters;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class OperatorFactory {
@@ -376,6 +390,11 @@ public:
     RuntimeFilterHub* runtime_filter_hub() { return _runtime_filter_hub; }
 
     std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
+<<<<<<< HEAD
+=======
+    // acquire local colocate runtime filter
+    std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
         if (_runtime_filter_collector == nullptr) {
             return nullptr;
@@ -404,8 +423,18 @@ public:
     // Whether it has any runtime filter built by TopN node.
     bool has_topn_filter() const;
 
+<<<<<<< HEAD
 protected:
     void _prepare_runtime_in_filters(RuntimeState* state);
+=======
+    // try to get runtime filter from cache
+    void acquire_runtime_filter(RuntimeState* state);
+
+protected:
+    void _prepare_runtime_in_filters(RuntimeState* state);
+    void _prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
+                                  std::vector<ExprContext*>* runtime_in_filters);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const int32_t _id;
     const std::string _name;

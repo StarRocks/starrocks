@@ -18,6 +18,10 @@
 #include <vector>
 
 #include "common/statusor.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/base_rowset.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 class TabletSchema;
@@ -67,12 +71,26 @@ public:
     RowsetList get_rowsets() const;
 
     // `segment_max_rows` is used in vertical writer
+<<<<<<< HEAD
+=======
+    // create a tablet writer with given `tablet_schema`
+    StatusOr<std::unique_ptr<TabletWriter>> new_writer_with_schema(
+            WriterType type, int64_t txn_id, uint32_t max_rows_per_segment, ThreadPool* flush_pool, bool is_compaction,
+            const std::shared_ptr<const TabletSchema>& tablet_schema);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
                                                        uint32_t max_rows_per_segment = 0,
                                                        ThreadPool* flush_pool = nullptr, bool is_compaction = false);
 
     StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
 
+<<<<<<< HEAD
+=======
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema, bool could_split, bool could_split_physically,
+                                                       const std::vector<BaseRowsetSharedPtr>& base_rowsets);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TabletManager* tablet_manager() const { return _tablet_mgr; }
 
     bool has_delete_predicates() const;

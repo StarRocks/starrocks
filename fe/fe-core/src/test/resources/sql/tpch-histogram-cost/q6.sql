@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     sum(l_extendedprice * l_discount) as revenue
@@ -8,6 +9,8 @@ where
   and l_shipdate < date '1996-01-01'
   and l_discount between 0.02 and 0.04
   and l_quantity < 24 ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F01)
 Output Exprs:19: sum

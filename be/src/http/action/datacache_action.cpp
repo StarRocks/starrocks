@@ -22,6 +22,10 @@
 #include <string>
 
 #include "block_cache/block_cache.h"
+<<<<<<< HEAD
+=======
+#include "block_cache/block_cache_hit_rate_counter.hpp"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
@@ -32,7 +36,11 @@ namespace starrocks {
 const static std::string HEADER_JSON = "application/json";
 const static std::string ACTION_KEY = "action";
 const static std::string ACTION_STAT = "stat";
+<<<<<<< HEAD
 const static std::string ACTION_INVALIDATE_ALL = "invalidate_all";
+=======
+const static std::string ACTION_APP_STAT = "app_stat";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 std::string cache_status_str(const DataCacheStatus& status) {
     std::string str_status;
@@ -58,7 +66,11 @@ bool DataCacheAction::_check_request(HttpRequest* req) {
         HttpChannel::send_reply(req, HttpStatus::METHOD_NOT_ALLOWED, "Method Not Allowed");
         return false;
     }
+<<<<<<< HEAD
     if (req->param(ACTION_KEY) != ACTION_STAT) {
+=======
+    if (req->param(ACTION_KEY) != ACTION_STAT && req->param(ACTION_KEY) != ACTION_APP_STAT) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Not Found");
         return false;
     }
@@ -75,8 +87,15 @@ void DataCacheAction::handle(HttpRequest* req) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
     } else if (block_cache->engine_type() != DataCacheEngineType::STARCACHE) {
         _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
+<<<<<<< HEAD
     } else {
         _handle_stat(req, block_cache);
+=======
+    } else if (req->param(ACTION_KEY) == ACTION_STAT) {
+        _handle_stat(req, block_cache);
+    } else {
+        _handle_app_stat(req);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -173,6 +192,26 @@ void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
     });
 }
 
+<<<<<<< HEAD
+=======
+void DataCacheAction::_handle_app_stat(HttpRequest* req) {
+    _handle(req, [=](rapidjson::Document& root) {
+#ifdef WITH_STARCACHE
+        auto& allocator = root.GetAllocator();
+        BlockCacheHitRateCounter* hit_rate_counter = BlockCacheHitRateCounter::instance();
+        root.AddMember("hit_bytes", rapidjson::Value(hit_rate_counter->get_hit_bytes()), allocator);
+        root.AddMember("miss_bytes", rapidjson::Value(hit_rate_counter->get_miss_bytes()), allocator);
+        root.AddMember("hit_rate", rapidjson::Value(hit_rate_counter->hit_rate()), allocator);
+        root.AddMember("hit_bytes_last_minute", rapidjson::Value(hit_rate_counter->get_hit_bytes_last_minute()),
+                       allocator);
+        root.AddMember("miss_bytes_last_minute", rapidjson::Value(hit_rate_counter->get_miss_bytes_last_minute()),
+                       allocator);
+        root.AddMember("hit_rate_last_minute", rapidjson::Value(hit_rate_counter->hit_rate_last_minute()), allocator);
+#endif
+    });
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void DataCacheAction::_handle_error(HttpRequest* req, const std::string& err_msg) {
     _handle(req, [err_msg](rapidjson::Document& root) {
         auto& allocator = root.GetAllocator();

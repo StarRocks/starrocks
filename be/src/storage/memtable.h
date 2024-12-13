@@ -30,6 +30,49 @@ class TabletSchema;
 
 class MemTableSink;
 
+<<<<<<< HEAD
+=======
+struct MemtableStats {
+    // The number of insert operation
+    int32_t insert_count = 0;
+    // Accumulated time to insert
+    int64_t insert_time_ns = 0;
+    // Time to finalize
+    int64_t finalize_time_ns = 0;
+    // The number of sort operation
+    int32_t sort_count = 0;
+    // Accumulated time to sort
+    int64_t sort_time_ns = 0;
+    // The number of agg operation
+    int32_t agg_count = 0;
+    // Accumulated time to aggregate
+    int64_t agg_time_ns = 0;
+    // Time to flush the memtable
+    int64_t flush_time_ns = 0;
+    // IO time for flush
+    int64_t io_time_ns = 0;
+    // Memory size to flush
+    int64_t flush_memory_size = 0;
+    // Disk size to flush
+    int64_t flush_disk_size = 0;
+
+    MemtableStats& operator+=(const MemtableStats& other) {
+        insert_count += other.insert_count;
+        insert_time_ns += other.insert_time_ns;
+        finalize_time_ns += other.finalize_time_ns;
+        sort_count += other.sort_count;
+        sort_time_ns += other.sort_time_ns;
+        agg_count += other.agg_count;
+        agg_time_ns += other.agg_time_ns;
+        flush_time_ns += other.flush_time_ns;
+        io_time_ns += other.io_time_ns;
+        flush_memory_size += other.flush_memory_size;
+        flush_disk_size += other.flush_disk_size;
+        return *this;
+    }
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class MemTable {
 public:
     MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
@@ -54,7 +97,11 @@ public:
     size_t write_buffer_rows() const;
 
     // return true suggests caller should flush this memory table
+<<<<<<< HEAD
     bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+=======
+    StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status flush(SegmentPB* seg_info = nullptr);
 
@@ -71,11 +118,21 @@ public:
 
     bool check_supported_column_partial_update(const Chunk& chunk);
 
+<<<<<<< HEAD
 private:
     void _merge();
 
     void _sort(bool is_final, bool by_sort_key = false);
     void _sort_column_inc(bool by_sort_key = false);
+=======
+    const MemtableStats& get_stat() const { return _stats; }
+
+private:
+    Status _merge();
+
+    Status _sort(bool is_final, bool by_sort_key = false);
+    Status _sort_column_inc(bool by_sort_key = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
     void _init_aggregator_if_needed();
@@ -123,6 +180,11 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
+<<<<<<< HEAD
+=======
+
+    MemtableStats _stats;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 inline std::ostream& operator<<(std::ostream& os, const MemTable& table) {

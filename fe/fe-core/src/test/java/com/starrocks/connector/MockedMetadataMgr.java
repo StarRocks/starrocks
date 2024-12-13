@@ -19,6 +19,10 @@ import com.google.common.base.Strings;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.TemporaryTableMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,7 +33,11 @@ public class MockedMetadataMgr extends MetadataMgr {
     private final LocalMetastore localMetastore;
 
     public MockedMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+<<<<<<< HEAD
         super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
+=======
+        super(localMetastore, new TemporaryTableMgr(), connectorMgr, new ConnectorTblMetaInfoMgr());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.localMetastore = localMetastore;
     }
 

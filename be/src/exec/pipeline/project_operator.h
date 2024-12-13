@@ -103,7 +103,10 @@ private:
 
     std::vector<int32_t> _common_sub_column_ids;
     std::vector<ExprContext*> _common_sub_expr_ctxs;
+<<<<<<< HEAD
     DictOptimizeParser _dict_optimize_parser;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace pipeline

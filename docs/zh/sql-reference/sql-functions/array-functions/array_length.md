@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_length
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算数组中的元素个数，返回值类型是 INT。如果输入参数是 NULL，返回值也是 NULL。数组中的 NULL 元素会计入长度。
 

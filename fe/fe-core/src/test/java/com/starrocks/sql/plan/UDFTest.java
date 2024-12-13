@@ -101,11 +101,21 @@ public class UDFTest extends PlanTestBase {
     @Test
     public void testMultiUnnest() throws Exception {
         String sql = "with t as (select [1,2,3] as a, [4,5,6] as b, [4,5,6] as c) select * from t,unnest(a,b,c)";
+<<<<<<< HEAD
         PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
+=======
+        ExecPlan execPlan = getExecPlan(sql);
+        PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) execPlan.getPhysicalPlan().getOp();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(3, tp.getFnParamColumnRefs().size());
         Assert.assertEquals("[8, 9, 10]",
                 tp.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
+<<<<<<< HEAD
+=======
+        Assert.assertTrue(execPlan.getOptExpression(2).getStatistics().getColumnStatistics().values()
+                .stream().anyMatch(x -> !x.isUnknown()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select * from tarray, unnest(v3, v3)";
         tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();

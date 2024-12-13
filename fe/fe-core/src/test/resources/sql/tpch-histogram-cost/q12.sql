@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_shipmode,
@@ -27,6 +28,8 @@ group by
     l_shipmode
 order by
     l_shipmode ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F04)
 Output Exprs:25: L_SHIPMODE | 30: sum | 31: sum

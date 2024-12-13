@@ -61,7 +61,12 @@ TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
 #endif
 
+<<<<<<< HEAD
 static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx);
+=======
+static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms,
+                                  TLoadTxnCommitResult* result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db,
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
@@ -110,7 +115,11 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 } else {
                     LOG(WARNING) << "fragment execute failed"
                                  << ", query_id=" << UniqueId(ctx->put_result.params.params.query_id)
+<<<<<<< HEAD
                                  << ", err_msg=" << status.get_error_msg() << ", " << ctx->brief();
+=======
+                                 << ", err_msg=" << status.message() << ", " << ctx->brief();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // cancel body_sink, make sender known it
                     if (ctx->body_sink != nullptr) {
                         ctx->body_sink->cancel(status);
@@ -166,6 +175,14 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.label = ctx->label;
+<<<<<<< HEAD
+=======
+    auto backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        request.__set_backend_id(backend_id.value());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // set timestamp
     request.__set_timestamp(GetCurrentTimeMicros());
     if (ctx->timeout_second != -1) {
@@ -184,7 +201,11 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
 #endif
     Status status(result.status);
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "begin transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
+=======
+        LOG(WARNING) << "begin transaction failed, errmsg=" << status.message() << ctx->brief();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (result.__isset.job_status) {
             ctx->existing_job_status = result.job_status;
         }
@@ -224,6 +245,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
+<<<<<<< HEAD
     return commit_txn_internal(request, rpc_timeout_ms, ctx);
 }
 
@@ -263,6 +285,52 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
         ctx->need_rollback = true;
         return status;
     }
+=======
+    int retry = 0;
+    TLoadTxnCommitResult result;
+    while (true) {
+        RETURN_IF_ERROR(commit_txn_internal(request, rpc_timeout_ms, &result));
+        Status st(result.status);
+        if (st.ok()) {
+            ctx->need_rollback = false;
+            return st;
+        } else if (st.is_publish_timeout()) {
+            ctx->need_rollback = false;
+            bool visible =
+                    wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
+            return visible ? Status::OK() : st;
+        } else if (st.is_eagain()) {
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
+                         << result.retry_interval_ms << "ms. errmsg=" << st.message();
+            std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
+        } else if (st.is_time_out()) {
+            if (++retry > 1) {
+                ctx->need_rollback = true;
+                return st;
+            }
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
+            if (ctx->load_deadline_sec > 0) {
+                rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
+            }
+        } else {
+            ctx->need_rollback = true;
+            return st;
+        }
+    }
+}
+
+Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, TLoadTxnCommitResult* result) {
+    TNetworkAddress master_addr = get_master_address();
+#ifndef BE_TEST
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+            master_addr.hostname, master_addr.port,
+            [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(*result, request); },
+            rpc_timeout_ms));
+#else
+    *result = k_stream_load_commit_result;
+#endif
+    return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db, std::string_view table,
@@ -350,7 +418,11 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     // to rollback this transaction.
     Status status(result.status);
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "prepare transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
+=======
+        LOG(WARNING) << "prepare transaction failed, errmsg=" << status.message() << ctx->brief();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return status;
     }
     // commit success, set need_rollback to false
@@ -371,7 +443,11 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
     request.__isset.failInfos = true;
+<<<<<<< HEAD
     request.__set_reason(ctx->status.get_error_msg());
+=======
+    request.__set_reason(std::string(ctx->status.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -386,7 +462,11 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
             master_addr.hostname, master_addr.port,
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnRollback(result, request); });
     if (!rpc_st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.get_error_msg() << ctx->brief();
+=======
+        LOG(WARNING) << "transaction rollback failed. errmsg=" << rpc_st.message() << ctx->brief();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return rpc_st;
     }
     if (result.status.status_code != TStatusCode::TXN_NOT_EXISTS) {
@@ -423,6 +503,12 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
         manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
+<<<<<<< HEAD
+=======
+        manual_load_attach.__set_beginTxnTime(ctx->begin_txn_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_planTime(ctx->stream_load_put_cost_nanos / 1000 / 1000);
+        manual_load_attach.__set_receiveDataTime(ctx->total_received_data_cost_nanos / 1000 / 1000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }

@@ -14,6 +14,11 @@
 
 #include "exec/jni_scanner.h"
 
+<<<<<<< HEAD
+=======
+#include <utility>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -24,12 +29,21 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& message) {
     if (jthrowable thr = _jni_env->ExceptionOccurred(); thr) {
         std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
         _jni_env->ExceptionDescribe();
         _jni_env->ExceptionClear();
         _jni_env->DeleteLocalRef(thr);
+=======
+Status JniScanner::_check_jni_exception(JNIEnv* env, const std::string& message) {
+    if (jthrowable thr = env->ExceptionOccurred(); thr) {
+        std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        env->DeleteLocalRef(thr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::InternalError(message + " java exception details: " + jni_error_message);
     }
     return Status::OK();
@@ -54,6 +68,7 @@ Status JniScanner::do_open(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void JniScanner::do_update_counter(HdfsScanProfile* profile) {}
 
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
@@ -67,10 +82,24 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
     }
     if (_jni_scanner_cls != nullptr) {
         _jni_env->DeleteLocalRef(_jni_scanner_cls);
+=======
+void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    if (_jni_scanner_obj != nullptr) {
+        if (_jni_scanner_close != nullptr) {
+            env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
+        }
+        env->DeleteLocalRef(_jni_scanner_obj);
+        _jni_scanner_obj = nullptr;
+    }
+    if (_jni_scanner_cls != nullptr) {
+        env->DeleteLocalRef(_jni_scanner_cls);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _jni_scanner_cls = nullptr;
     }
 }
 
+<<<<<<< HEAD
 Status JniScanner::_init_jni_method(JNIEnv* _jni_env) {
     // init jmethod
     _jni_scanner_open = _jni_env->GetMethodID(_jni_scanner_cls, "open", "()V");
@@ -115,6 +144,53 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
+=======
+Status JniScanner::_init_jni_method(JNIEnv* env) {
+    // init jmethod
+    _jni_scanner_open = env->GetMethodID(_jni_scanner_cls, "open", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `open` jni method"));
+
+    _jni_scanner_get_next_chunk = env->GetMethodID(_jni_scanner_cls, "getNextOffHeapChunk", "()J");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `getNextOffHeapChunk` jni method"));
+
+    _jni_scanner_close = env->GetMethodID(_jni_scanner_cls, "close", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `close` jni method"));
+
+    _jni_scanner_release_column = env->GetMethodID(_jni_scanner_cls, "releaseOffHeapColumnVector", "(I)V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `releaseOffHeapColumnVector` jni method"));
+
+    _jni_scanner_release_table = env->GetMethodID(_jni_scanner_cls, "releaseOffHeapTable", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `releaseOffHeapTable` jni method"));
+    return Status::OK();
+}
+
+Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_state) {
+    jclass scanner_factory_class = env->FindClass(_jni_scanner_factory_class.c_str());
+    jmethodID scanner_factory_constructor = env->GetMethodID(scanner_factory_class, "<init>", "()V");
+    jobject scanner_factory_obj = env->NewObject(scanner_factory_class, scanner_factory_constructor);
+    jmethodID get_scanner_method =
+            env->GetMethodID(scanner_factory_class, "getScannerClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    jstring scanner_type = env->NewStringUTF(_scanner_type().c_str());
+    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
+    env->DeleteLocalRef(scanner_factory_class);
+    env->DeleteLocalRef(scanner_factory_obj);
+
+    jmethodID scanner_constructor = env->GetMethodID(_jni_scanner_cls, "<init>", "(ILjava/util/Map;)V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get a scanner class constructor."));
+
+    jclass hashmap_class = env->FindClass("java/util/HashMap");
+    jmethodID hashmap_constructor = env->GetMethodID(hashmap_class, "<init>", "(I)V");
+    jobject hashmap_object = env->NewObject(hashmap_class, hashmap_constructor, _jni_scanner_params.size());
+    jmethodID hashmap_put =
+            env->GetMethodID(hashmap_class, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get the HashMap methods."));
+
+    std::string message = "Initialize a scanner with parameters: ";
+    for (const auto& it : _jni_scanner_params) {
+        jstring key = env->NewStringUTF(it.first.c_str());
+        jstring value = env->NewStringUTF(it.second.c_str());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // skip encoded object
         if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
             message.append(it.first);
@@ -123,6 +199,7 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
             message.append(", ");
         }
 
+<<<<<<< HEAD
         _jni_env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
         _jni_env->DeleteLocalRef(key);
         _jni_env->DeleteLocalRef(value);
@@ -135,10 +212,25 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     _jni_env->DeleteLocalRef(hashmap_object);
     DCHECK(_jni_scanner_obj != nullptr);
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to initialize a scanner instance."));
+=======
+        env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
+        env->DeleteLocalRef(key);
+        env->DeleteLocalRef(value);
+    }
+    env->DeleteLocalRef(hashmap_class);
+    LOG(INFO) << message;
+
+    int fetch_size = runtime_state->chunk_size();
+    _jni_scanner_obj = env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
+    env->DeleteLocalRef(hashmap_object);
+    DCHECK(_jni_scanner_obj != nullptr);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to initialize a scanner instance."));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
     SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
     SCOPED_RAW_TIMER(&_app_stats.io_ns);
@@ -146,6 +238,14 @@ Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
     *chunk_meta = _jni_env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
     RETURN_IF_ERROR(
             _check_jni_exception(_jni_env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
+=======
+Status JniScanner::_get_next_chunk(JNIEnv* env, long* chunk_meta) {
+    SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+    SCOPED_RAW_TIMER(&_app_stats.io_ns);
+    _app_stats.io_count += 1;
+    *chunk_meta = env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -342,7 +442,11 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
+=======
+StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
 
     long num_rows = next_chunk_meta_as_long();
@@ -363,17 +467,30 @@ StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk) {
                             .column = column.get(),
                             .must_nullable = true};
         RETURN_IF_ERROR(_fill_column(&args));
+<<<<<<< HEAD
         _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
         RETURN_IF_ERROR(_check_jni_exception(
                 _jni_env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
+=======
+        env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
+        RETURN_IF_ERROR(_check_jni_exception(
+                env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return num_rows;
 }
 
+<<<<<<< HEAD
 Status JniScanner::_release_off_heap_table(JNIEnv* _jni_env) {
     _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_table);
     RETURN_IF_ERROR(
             _check_jni_exception(_jni_env, "Failed to call the releaseOffHeapTable method of off-heap table scanner."));
+=======
+Status JniScanner::_release_off_heap_table(JNIEnv* env) {
+    env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_table);
+    RETURN_IF_ERROR(
+            _check_jni_exception(env, "Failed to call the releaseOffHeapTable method of off-heap table scanner."));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -476,7 +593,11 @@ Status JniScanner::update_jni_scanner_params() {
 class HiveJniScanner : public JniScanner {
 public:
     HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
+<<<<<<< HEAD
             : JniScanner(factory_class, params) {}
+=======
+            : JniScanner(std::move(factory_class), std::move(params)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
 
@@ -628,4 +749,40 @@ std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOpti
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 
+<<<<<<< HEAD
+=======
+// ---------------iceberg metadata jni scanner------------------
+std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(options.hive_table);
+    std::map<std::string, std::string> jni_scanner_params;
+
+    jni_scanner_params["metadata_column_names"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
+    jni_scanner_params["time_zone"] = hdfs_table->get_time_zone();
+
+    jni_scanner_params["split_info"] = scan_range.serialized_split;
+    jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
+    jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
+    jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
+    jni_scanner_params["scanner_type"] = options.scan_node->metadata_table_type;
+
+    const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------kudu jni scanner------------------
+std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["kudu_scan_token"] = scan_range.kudu_scan_token;
+    jni_scanner_params["kudu_master"] = scan_range.kudu_master;
+
+    std::string scanner_factory_class = "com/starrocks/kudu/reader/KuduSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

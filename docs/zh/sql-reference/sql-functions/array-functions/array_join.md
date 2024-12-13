@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_join
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将数组中的所有元素连接生成一个字符串。
 

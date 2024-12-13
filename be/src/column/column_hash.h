@@ -16,6 +16,13 @@
 
 #include <cstddef>
 #include <cstdint>
+<<<<<<< HEAD
+=======
+#include <type_traits>
+
+#include "column/vectorized_fwd.h"
+#include "storage/uint24.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
@@ -126,6 +133,17 @@ struct Hash128WithSeed {
         return phmap_mix_with_seed<sizeof(size_t), seed>()(hash_128(seed, value));
     }
 };
+<<<<<<< HEAD
+=======
+template <typename T>
+struct HashTypeTraits {
+    using HashFunc = StdHashWithSeed<T, PhmapSeed2>;
+};
+template <>
+struct HashTypeTraits<int128_t> {
+    using HashFunc = Hash128WithSeed<PhmapSeed2>;
+};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 template <LogicalType LT, PhmapSeed seed>
 struct PhmapDefaultHashFunc {

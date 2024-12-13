@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # now, current_timestamp, localtime, localtimestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取当前的时间，以 DATETIME 类型返回。
 

@@ -15,6 +15,7 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
@@ -23,14 +24,31 @@ import com.starrocks.journal.JournalEntity;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+=======
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.journal.JournalEntity;
+import com.starrocks.persist.OperationType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+=======
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -40,7 +58,13 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+<<<<<<< HEAD
 import java.util.List;
+=======
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class AnalyzeMgrTest {
     public static ConnectContext connectContext;
@@ -63,6 +87,7 @@ public class AnalyzeMgrTest {
     @Test
     public void testRefreshConnectorTableBasicStatisticsCache(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
+<<<<<<< HEAD
         new Expectations() {
             {
                 cachedStatisticStorage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2"));
@@ -73,10 +98,13 @@ public class AnalyzeMgrTest {
                 minTimes = 1;
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         AnalyzeMgr analyzeMgr = new AnalyzeMgr();
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), true);
+<<<<<<< HEAD
 
         new Expectations() {
             {
@@ -88,6 +116,8 @@ public class AnalyzeMgrTest {
                 minTimes = 1;
             }
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeMgr.refreshConnectorTableBasicStatisticsCache("hive0", "partitioned_db", "t1",
                 ImmutableList.of("c1", "c2"), false);
 
@@ -114,9 +144,15 @@ public class AnalyzeMgrTest {
         analyzeMgr.addAnalyzeStatus(analyzeStatus);
         // test persist by image
         UtFrameUtils.PseudoImage testImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         analyzeMgr.save(testImage.getDataOutputStream());
 
         analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+=======
+        analyzeMgr.save(testImage.getImageWriter());
+
+        analyzeMgr.load(testImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, analyzeMgr.getAnalyzeStatusMap().size());
         AnalyzeStatus analyzeStatus1 = analyzeMgr.getAnalyzeStatusMap().get(100L);
         Assert.assertEquals("hive0", analyzeStatus1.getCatalogName());
@@ -136,8 +172,13 @@ public class AnalyzeMgrTest {
         JournalEntity journalEntity = new JournalEntity();
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_ANALYZE_STATUS);
         journalEntity.setData(externalAnalyzeStatus);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeStatusMap().size());
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeMgr.dropExternalAnalyzeStatus(table.getUUID());
         ExternalAnalyzeStatus removeExternalAnalyzeStatus = (ExternalAnalyzeStatus)
@@ -149,8 +190,13 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_ANALYZE_STATUS);
         journalEntity.setData(removeExternalAnalyzeStatus);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeStatusMap().size());
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeStatusMap().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // test analyze job
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(123, 1234, null, null,
@@ -166,8 +212,13 @@ public class AnalyzeMgrTest {
         analyzeMgr.addAnalyzeJob(externalAnalyzeJob);
 
         testImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         analyzeMgr.save(testImage.getDataOutputStream());
         analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+=======
+        analyzeMgr.save(testImage.getImageWriter());
+        analyzeMgr.load(testImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(2, analyzeMgr.getAllAnalyzeJobList().size());
         NativeAnalyzeJob analyzeJob = (NativeAnalyzeJob) analyzeMgr.getAllAnalyzeJobList().get(0);
         Assert.assertEquals(123, analyzeJob.getDbId());
@@ -185,8 +236,13 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_ADD_ANALYZER_JOB);
         journalEntity.setData(nativeAnalyzeJob);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ExternalAnalyzeJob externalAnalyzeJob1 = (ExternalAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
                 replayNextJournal(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB);
@@ -196,8 +252,13 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_ANALYZER_JOB);
         journalEntity.setData(externalAnalyzeJob1);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(2, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(2, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeMgr.removeAnalyzeJob(nativeAnalyzeJob.getId());
         NativeAnalyzeJob nativeAnalyzeJob2 = (NativeAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
@@ -207,7 +268,11 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_ANALYZER_JOB);
         journalEntity.setData(nativeAnalyzeJob);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeMgr.removeAnalyzeJob(externalAnalyzeJob.getId());
         ExternalAnalyzeJob externalAnalyzeJob2 = (ExternalAnalyzeJob) UtFrameUtils.PseudoJournalReplayer.
@@ -218,8 +283,13 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_ANALYZER_JOB);
         journalEntity.setData(externalAnalyzeJob2);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList().size());
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // test analyze basic stats
         ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta("hive0", "hive_db",
@@ -227,8 +297,13 @@ public class AnalyzeMgrTest {
         analyzeMgr.addExternalBasicStatsMeta(externalBasicStatsMeta);
 
         testImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         analyzeMgr.save(testImage.getDataOutputStream());
         analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+=======
+        analyzeMgr.save(testImage.getImageWriter());
+        analyzeMgr.load(testImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, analyzeMgr.getExternalBasicStatsMetaMap().size());
 
         ExternalBasicStatsMeta replayBasicStatsMeta = (ExternalBasicStatsMeta) UtFrameUtils.PseudoJournalReplayer.
@@ -245,8 +320,13 @@ public class AnalyzeMgrTest {
         };
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META);
         journalEntity.setData(externalBasicStatsMeta);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(1, GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(1, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeMgr.removeExternalBasicStatsMeta(externalBasicStatsMeta.getCatalogName(),
                 externalBasicStatsMeta.getDbName(), externalBasicStatsMeta.getTableName());
@@ -258,8 +338,13 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_BASIC_STATS_META);
         journalEntity.setData(externalBasicStatsMeta);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
         Assert.assertEquals(0, GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+        Assert.assertEquals(0, GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -273,8 +358,13 @@ public class AnalyzeMgrTest {
         analyzeMgr.addExternalHistogramStatsMeta(externalHistogramStatsMeta);
         // test persist by image
         UtFrameUtils.PseudoImage testImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         analyzeMgr.save(testImage.getDataOutputStream());
         analyzeMgr.load(new SRMetaBlockReader(testImage.getDataInputStream()));
+=======
+        analyzeMgr.save(testImage.getImageWriter());
+        analyzeMgr.load(testImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, analyzeMgr.getExternalHistogramStatsMetaMap().size());
         // test replay json to histogram stats
         ExternalHistogramStatsMeta replayHistogramStatsMeta =
@@ -287,7 +377,11 @@ public class AnalyzeMgrTest {
         JournalEntity journalEntity = new JournalEntity();
         journalEntity.setOpCode(OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META);
         journalEntity.setData(externalHistogramStatsMeta);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1,
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
 
@@ -311,7 +405,11 @@ public class AnalyzeMgrTest {
 
         journalEntity.setOpCode(OperationType.OP_REMOVE_EXTERNAL_HISTOGRAM_STATS_META);
         journalEntity.setData(externalHistogramStatsMeta);
+<<<<<<< HEAD
         EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+=======
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(GlobalStateMgr.getCurrentState(), journalEntity);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0,
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().size());
     }
@@ -349,4 +447,23 @@ public class AnalyzeMgrTest {
         analyzeMgr.dropExternalAnalyzeStatus(table.getUUID());
         Assert.assertEquals(0, analyzeMgr.getAnalyzeStatusMap().size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testUpdateLoadRowsWithTableDropped() {
+        long dbId = 11111L;
+        long tableId = 22222L;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(new Database(dbId, "test"));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(dbId, tableId,
+                Lists.newArrayList("c1"), StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), new HashMap<>()));
+
+        UUID uuid = UUID.randomUUID();
+        TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+        TransactionState transactionState = new TransactionState(dbId, Lists.newArrayList(tableId), 33333L, "xxx",
+                requestId, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 44444L, 10000);
+        transactionState.setTxnCommitAttachment(new InsertTxnCommitAttachment(0));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

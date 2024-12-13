@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cast
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a value between the JSON type and SQL type.
 

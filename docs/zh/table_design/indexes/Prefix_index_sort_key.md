@@ -22,10 +22,24 @@ sidebar_position: 10
 
 ## 使用说明
 
+<<<<<<< HEAD
 对于明细表，排序列通过 `DUPLICATE KEY` 指定。对于聚合表和更新表，排序列和约束列耦合，通过 `AGGREGATE KEY` 和 `UNIQUE KEY` 中指定。而自 3.0 版本起，主键表解耦了排序列和主键列，提供更加灵活的表能力，排序列通过 `ORDER BY` 指定，而主键列通过 `PRIMARY KEY` 指定。
 下文以明细表为例，说明建表时如何指定排序列，以及其前缀索引的组成。
 
 创建明细表，在 `DUPLICATE KEY` 中指定排序列为 `uid` 和 `name`。
+=======
+自 3.0 版本起，主键表支持使用 `ORDER BY` 定义排序键，自 3.3 版本起，明细表、聚合表和更新表支持使用 `ORDER BY` 定义排序键。
+
+- 明细表中数据按照排序键 `ORDER BY` 排序，排序键可以为任意列的排列组合。
+  :::info
+  如果同时指定 `ORDER BY` 和 `DUPLICATE KEY`，则 `DUPLICATE KEY` 不生效。
+  :::
+- 聚合表中数据先按照聚合键 `AGGREGATE KEY` 进行聚合后，再按照排序键 `ORDER BY` 排序。`ORDER BY` 和 `AGGREGATE KEY` 中的列需要保持一致，但是列的顺序不需要保持一致。
+- 更新表中数据先按照唯一键 `UNIQUE KEY` 进行 REPLACE 后，再按照排序键 `ORDER BY` 排序。`ORDER BY` 和 `UNIQUE KEY` 中的列需要保持一致，但是列的顺序不需要保持一致。
+- 主键表中数据先按照主键 `PRIMARY KEY` 进行 REPLACE 后，再按照排序键 `ORDER BY` 排序。
+
+以明细表为例，使用 `ORDER BY` 定义排序键为 `uid` 和 `name`。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 CREATE TABLE user_access (
@@ -36,12 +50,21 @@ CREATE TABLE user_access (
     last_access datetime,
     credits double
 )
+<<<<<<< HEAD
 DUPLICATE KEY(uid, name);
 ```
 
 :::note
 
 建表后，对于明细表、聚合表和更新表，可以通过 `DESCRIBE <table_name>;` 查看排序列，返回结果中 Key 字段显示 `true` 的列为排序列。对于主键表，建表后可以通过 `SHOW CREATE TABLE  <table_name>;` 在返回结果中的 ORDER BY 子句中查看指定的排序列。
+=======
+ORDER BY (uid, name);
+```
+
+:::tip
+
+建表后可以通过 `SHOW CREATE TABLE <table_name>;` 在返回结果中的 `ORDER BY` 子句中查看指定的排序列和排序列的顺序。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 :::
 
@@ -70,16 +93,24 @@ DUPLICATE KEY(uid, name);
     6 rows in set (0.00 sec)
     ```
 
+<<<<<<< HEAD
+=======
+- 如果表中通过 `ORDER BY` 指定了排序键，就根据排序键构建前缀索引；如果没有通过 `ORDER BY` 指定排序键，就根据 Key 列构建前缀索引。
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### 如何设计合理排序键，以便查询利用前缀索引加速
 
 根据分析业务场景中查询和数据特点，选择合理的排序列和设计排序列的顺序，来组成前缀索引，能够显著提高查询性能。
 
+<<<<<<< HEAD
 :::tip
 
 除了主键表外，目前暂时不支持建表后修改表的排序列，因此建议您在建表前仔细研究业务中数据和查询特点后选择合适的排序列。
 
 :::
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 排序列不宜过多， 一般为 3 个，建议不超过 4 个。排序列过多并不有助于提升查询性能，反而会导致数据导入时会增加排序的开销。
 - 选择排序列和排序列的顺序，从以下两个方面按优先级展开：
   
@@ -105,6 +136,7 @@ DUPLICATE KEY(uid, name);
      
 ### 建表时定义排序列的注意事项
 
+<<<<<<< HEAD
 在明细表、聚合表和更新表中定义排序列时，需要注意：
 
 - 作为排序列的列必须定义在其他列之前。
@@ -116,6 +148,21 @@ DUPLICATE KEY(uid, name);
 建表后无法修改排序列（除了主键表外），因此也无法直接修改前缀索引。
 
 如果业务场景中查询特点发生变化，查询条件经常使用前缀字段之外的列，现有的前缀索引无法过滤数据，此时查询性能可能不佳。此时您还可以基于该表创建[同步物化视图](../../using_starrocks/Materialized_view-single_table.md)，并基于其它常用的条件过滤列构建前缀索引，从而提升查询性能。但是注意这样会增加存储空间。
+=======
+- 排序列的数据类型：
+  - 主键表的排序列支持数值（包括整型、布尔）、字符串、时间日期类型。
+  - 明细表、聚合表和更新表的排序列支持数值（包括整型、布尔、Decimal）、字符串、时间日期类型。
+
+- 聚合表和更新表中，排序列必须定义在其他列之前。
+
+### 是否支持修改前缀索引
+
+如果业务场景中查询特点发生变化，查询条件经常使用前缀字段之外的列，现有的前缀索引无法过滤数据，此时查询性能可能不佳。
+
+自 3.0 版本起，支持修改主键表的排序键，自 3.3 版本起，支持修改明细表、聚合表和更新表的排序键。明细表和主键表中排序键可以为任意列的排序组合，聚合表和更新表中排序键必须包含所有 key 列，但是列的顺序无需与 key 列保持一致。
+
+或者，您还可以基于该表创建[同步物化视图](../../using_starrocks/Materialized_view-single_table.md)，并基于其它常用的条件过滤列构建前缀索引，从而提升查询性能。但是注意这样会增加存储空间。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 如何判断前缀索引是否生效
 

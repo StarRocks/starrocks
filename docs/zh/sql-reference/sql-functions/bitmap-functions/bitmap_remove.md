@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_remove
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从 Bitmap 中删除指定的数值。
 

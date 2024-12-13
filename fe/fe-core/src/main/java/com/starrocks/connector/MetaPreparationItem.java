@@ -17,15 +17,30 @@ package com.starrocks.connector;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+<<<<<<< HEAD
+=======
+import java.util.StringJoiner;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MetaPreparationItem {
     private final Table table;
     private final ScalarOperator predicate;
     private final long limit;
+<<<<<<< HEAD
 
     public MetaPreparationItem(Table table, ScalarOperator predicate, long limit) {
         this.table = table;
         this.predicate = predicate;
         this.limit = limit;
+=======
+    private final TableVersionRange version;
+
+    public MetaPreparationItem(Table table, ScalarOperator predicate, long limit, TableVersionRange version) {
+        this.table = table;
+        this.predicate = predicate;
+        this.limit = limit;
+        this.version = version;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Table getTable() {
@@ -40,6 +55,7 @@ public class MetaPreparationItem {
         return limit;
     }
 
+<<<<<<< HEAD
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("MetaPreparationItem{");
@@ -48,5 +64,19 @@ public class MetaPreparationItem {
         sb.append(", limit=").append(limit);
         sb.append('}');
         return sb.toString();
+=======
+    public TableVersionRange getVersion() {
+        return version;
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", MetaPreparationItem.class.getSimpleName() + "[", "]")
+                .add("table=" + table)
+                .add("predicate=" + predicate)
+                .add("limit=" + limit)
+                .add("version=" + version)
+                .toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

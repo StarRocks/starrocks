@@ -38,8 +38,15 @@
 
 #include "column/chunk.h"
 #include "column/const_column.h"
+<<<<<<< HEAD
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+=======
+#include "common/statusor.h"
+#include "exprs/expr.h"
+#include "runtime/buffer_control_block.h"
+#include "runtime/buffer_control_result_writer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/current_thread.h"
 #include "types/logical_type.h"
 #include "util/mysql_row_buffer.h"
@@ -48,11 +55,18 @@ namespace starrocks {
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                      bool is_binary_format, RuntimeProfile* parent_profile)
+<<<<<<< HEAD
         : _sinker(sinker),
           _output_expr_ctxs(output_expr_ctxs),
           _row_buffer(nullptr),
           _is_binary_format(is_binary_format),
           _parent_profile(parent_profile) {}
+=======
+        : BufferControlResultWriter(sinker, parent_profile),
+          _output_expr_ctxs(output_expr_ctxs),
+          _row_buffer(nullptr),
+          _is_binary_format(is_binary_format) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 MysqlResultWriter::~MysqlResultWriter() {
     delete _row_buffer;
@@ -73,6 +87,7 @@ Status MysqlResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void MysqlResultWriter::_init_profile() {
     _append_chunk_timer = ADD_TIMER(_parent_profile, "AppendChunkTime");
     _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
@@ -80,6 +95,8 @@ void MysqlResultWriter::_init_profile() {
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status MysqlResultWriter::append_chunk(Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
@@ -107,11 +124,14 @@ Status MysqlResultWriter::append_chunk(Chunk* chunk) {
     return add_status;
 }
 
+<<<<<<< HEAD
 Status MysqlResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
@@ -140,7 +160,12 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
             DCHECK_EQ(0, _row_buffer->length());
             if (_is_binary_format) {
                 _row_buffer->start_binary_row(num_columns);
+<<<<<<< HEAD
             };
+=======
+            }
+            // TODO: codegen here
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (auto& result_column : result_columns) {
                 if (_is_binary_format && !result_column->is_nullable()) {
                     _row_buffer->update_field_pos();
@@ -223,6 +248,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
     return results;
 }
 
+<<<<<<< HEAD
 StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     SCOPED_TIMER(_result_send_timer);
     size_t num_rows = 0;
@@ -244,4 +270,6 @@ StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     return status;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

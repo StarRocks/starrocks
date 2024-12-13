@@ -102,8 +102,13 @@ public class HudiTableTest {
                 .setHudiProperties(properties);
         HudiTable oTable = tableBuilder.build();
 
+<<<<<<< HEAD
         Assert.assertEquals("db0", oTable.getDbName());
         Assert.assertEquals("table0", oTable.getTableName());
+=======
+        Assert.assertEquals("db0", oTable.getCatalogDBName());
+        Assert.assertEquals("table0", oTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(new Column("col1", Type.INT, true), oTable.getColumn("col1"));
         Assert.assertEquals("table0:" + createTime, oTable.getTableIdentifier());
         Assert.assertTrue(oTable.toString().contains("HudiTable{resourceName='catalog', catalogName='catalog', " +
@@ -188,7 +193,11 @@ public class HudiTableTest {
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.DOUBLE)),
                 ScalarType.createType(PrimitiveType.DOUBLE));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
+<<<<<<< HEAD
                 ScalarType.createDefaultExternalTableString());
+=======
+                ScalarType.createDefaultCatalogString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
@@ -197,7 +206,11 @@ public class HudiTableTest {
                 ScalarType.createType(PrimitiveType.VARCHAR));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createMap(Schema.create(Schema.Type.INT))),
+<<<<<<< HEAD
                 new MapType(ScalarType.createDefaultExternalTableString(), ScalarType.createType(PrimitiveType.INT)));
+=======
+                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
                 ScalarType.createType(PrimitiveType.INT));

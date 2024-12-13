@@ -15,6 +15,7 @@
 
 package com.starrocks.mysql.privilege;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
@@ -26,10 +27,17 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -37,6 +45,10 @@ import java.util.Arrays;
 public class Password implements Writable {
     private static final Logger LOG = LogManager.getLogger(Password.class);
 
+=======
+
+public class Password implements Writable {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     //password is encrypted
     @SerializedName(value = "password")
     private byte[] password;
@@ -63,6 +75,7 @@ public class Password implements Writable {
         this.password = password;
     }
 
+<<<<<<< HEAD
     public AuthPlugin getAuthPlugin() {
         return authPlugin;
     }
@@ -71,14 +84,19 @@ public class Password implements Writable {
         this.authPlugin = authPlugin;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getUserForAuthPlugin() {
         return userForAuthPlugin;
     }
 
+<<<<<<< HEAD
     public void setUserForAuthPlugin(String userForAuthPlugin) {
         this.userForAuthPlugin = userForAuthPlugin;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         String jsonStr = GsonUtils.GSON.toJson(this);
@@ -89,6 +107,7 @@ public class Password implements Writable {
         String jsonStr = Text.readString(in);
         return GsonUtils.GSON.fromJson(jsonStr, Password.class);
     }
+<<<<<<< HEAD
 
     public boolean check(String remoteUser, byte[] remotePassword, byte[] randomString) {
         if (remoteUser.contains(":")) {
@@ -156,4 +175,6 @@ public class Password implements Writable {
             return false;
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

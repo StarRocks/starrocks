@@ -15,6 +15,10 @@
 #include "storage/lake/transactions.h"
 
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "gen_cpp/lake_types.pb.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
@@ -34,6 +38,14 @@ using ParallelSet = phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_h
                                                   phmap::priv::Allocator<T>, 4, std::mutex, true>;
 ParallelSet<int64_t> tablet_txns;
 
+<<<<<<< HEAD
+=======
+// publish version with EMPTY_TXNLOG_TXNID means there is no txnlog
+// and need to increase version number of the tablet,
+// the situation happens in create rollup.
+const int64_t EMPTY_TXNLOG_TXNID = -1;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool add_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
     return ok;
@@ -47,10 +59,13 @@ void remove_tablet(int64_t tablet_id) {
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
 static std::string txn_info_string(const TxnInfoPB& info) {
     return info.DebugString();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                         std::vector<std::string>* files_to_delete) {
     auto slog_path = tablet_mgr->txn_slog_location(tablet_id, txn_id);
@@ -101,8 +116,64 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     return version;
 }
 
+<<<<<<< HEAD
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, const std::vector<TxnInfoPB>& txns) {
+=======
+namespace {
+std::ostream& operator<<(std::ostream& os, std::span<const TxnInfoPB>& txns) {
+    os << "[";
+    for (auto i = size_t(0), sz = txns.size(); i < sz; i++) {
+        if (i > 0) {
+            os << ", ";
+        }
+        os << txns[i].DebugString();
+    }
+    os << "]";
+    return os;
+}
+
+StatusOr<TxnLogPtr> load_txn_log(TabletManager* tablet_mgr, int64_t tablet_id, const TxnInfoPB& txn_info) {
+    if (!txn_info.combined_txn_log()) {
+        auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
+        return tablet_mgr->get_txn_log(log_path, false);
+    } else {
+        auto cache_key = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
+        auto ptr = tablet_mgr->metacache()->lookup_txn_log(cache_key);
+        if (ptr) {
+            return ptr;
+        }
+        auto log_path = tablet_mgr->combined_txn_log_location(tablet_id, txn_info.txn_id());
+        ASSIGN_OR_RETURN(auto combined_log, tablet_mgr->get_combined_txn_log(log_path, true));
+        for (const auto& log : combined_log->txn_logs()) {
+            if (log.tablet_id() == tablet_id) {
+                return std::make_shared<TxnLogPB>(log);
+            }
+        }
+        return Status::InternalError(fmt::format("txn log list does not contain txn log of tablet {}", tablet_id));
+    }
+}
+
+} // namespace
+
+StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
+                                            int64_t new_version, std::span<const TxnInfoPB> txns) {
+    if (txns.size() == 1 && txns[0].txn_id() == EMPTY_TXNLOG_TXNID) {
+        LOG(INFO) << "publish version tablet_id: " << tablet_id << ", txn: " << EMPTY_TXNLOG_TXNID
+                  << ", base_version: " << base_version << ", new_version: " << new_version;
+        // means there is no txnlog and need to increase version number,
+        // just return tablet metadata of base_version.
+        DCHECK_EQ(new_version, base_version + 1);
+        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, base_version));
+
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
+        new_metadata->set_version(new_version);
+
+        RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
+        return new_metadata;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!add_tablet(tablet_id)) {
         return Status::ResourceBusy(
                 fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
@@ -115,16 +186,28 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         CHECK_EQ(new_version, base_version + txns.size());
     }
 
+<<<<<<< HEAD
     VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << JoinMapped(txns, txn_info_string, ";")
             << ", base_version: " << base_version << ", new_version: " << new_version;
+=======
+    VLOG(2) << "publish version tablet_id: " << tablet_id << ", txns: " << txns << ", base_version: " << base_version
+            << ", new_version: " << new_version;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto commit_time = txns.back().commit_time();
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
     auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
     if (cached_new_metadata != nullptr) {
+<<<<<<< HEAD
         LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
                   << " base_version=" << base_version << " new_version=" << new_version
                   << " txns=" << JoinMapped(txns, txn_info_string, ";");
+=======
+        // The retries may be caused by some tablets failing to publish in a partition
+        // set the following log as debug log to prevent excessive logging
+        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
+                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return std::move(cached_new_metadata);
     }
 
@@ -138,8 +221,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     int64_t new_base_version = cal_new_base_version(tablet_id, tablet_mgr, base_version, new_version);
     if (new_base_version > base_version) {
         LOG(INFO) << "Base version has been adjusted. tablet_id=" << tablet_id << " base_version=" << base_version
+<<<<<<< HEAD
                   << " new_base_version=" << new_base_version << " new_version=" << new_version
                   << " txns=" << JoinMapped(txns, txn_info_string, ";");
+=======
+                  << " new_base_version=" << new_base_version << " new_version=" << new_version << " txns=" << txns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         base_version = new_base_version;
     }
 
@@ -154,14 +241,23 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     }
 
     // Read base version metadata
+<<<<<<< HEAD
     auto base_version_path = tablet_mgr->tablet_metadata_location(tablet_id, base_version);
     auto base_metadata_or = tablet_mgr->get_tablet_metadata(base_version_path, false);
+=======
+    auto base_metadata_or = tablet_mgr->get_tablet_metadata(tablet_id, base_version, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
     }
 
     if (!base_metadata_or.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "Fail to get " << base_version_path << ": " << base_metadata_or.status();
+=======
+        LOG(WARNING) << "Fail to get tablet=" << tablet_id << ", version=" << base_version << ": "
+                     << base_metadata_or.status();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return base_metadata_or.status();
     }
 
@@ -183,6 +279,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     // 4. turn the mode of publish to single,
     // 5. txn4 will be published in later publish task, but we can't judge what's the latest_version in BE and we can not reapply txn_log if
     // txn logs have been deleted.
+<<<<<<< HEAD
     bool delete_txn_log = (txns.size() == 1);
     int txn_offset = base_version - ori_base_version;
     for (size_t i = txn_offset, sz = txns.size(); i < sz; i++) {
@@ -190,6 +287,12 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         auto txn_id = txns[i].txn_id();
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
+=======
+    int txn_offset = base_version - ori_base_version;
+    for (size_t i = txn_offset, sz = txns.size(); i < sz; i++) {
+        bool ignore_txn_log = false;
+        auto txn_log_st = load_txn_log(tablet_mgr, tablet_id, txns[i]);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (txn_log_st.status().is_not_found()) {
             if (i == 0) {
@@ -297,6 +400,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
         auto st = log_applier->apply(*txn_log);
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "Fail to apply " << log_path << ": " << st;
             return st;
         }
@@ -310,6 +414,23 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         // Clear remote snapshot and slog for replication txn
         if (txn_log->has_op_replication()) {
             clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, &files_to_delete);
+=======
+            LOG(WARNING) << "Fail to apply txn log : " << st << " tablet_id=" << tablet_id
+                         << " txn=" << txns[i].DebugString();
+            return st;
+        }
+
+        auto tablet_log_path = tablet_mgr->txn_log_location(tablet_id, txns[i].txn_id());
+        if (txns.size() == 1 && !txns[i].combined_txn_log()) {
+            files_to_delete.emplace_back(tablet_log_path);
+        }
+
+        tablet_mgr->metacache()->erase(tablet_log_path);
+
+        // Clear remote snapshot and slog for replication txn
+        if (txn_log->has_op_replication()) {
+            clear_remote_snapshot_async(tablet_mgr, tablet_id, txns[i].txn_id(), &files_to_delete);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -350,6 +471,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     return new_metadata;
 }
 
+<<<<<<< HEAD
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids,
                            const int64_t* log_versions, int txns_size) {
     std::vector<std::string> files_to_delete;
@@ -375,12 +497,46 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const i
         } else {
             files_to_delete.emplace_back(txn_log_path);
             tablet_mgr->metacache()->erase(txn_log_path);
+=======
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
+                           const int64_t* log_versions) {
+    auto files_to_delete = std::vector<std::string>{};
+    for (int i = 0; i < txn_infos.size(); i++) {
+        if (!txn_infos[i].combined_txn_log()) {
+            auto txn_id = txn_infos[i].txn_id();
+            auto log_version = log_versions[i];
+            auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+            auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
+            // TODO: use rename() API if supported by the underlying filesystem.
+            auto st = fs::copy_file(txn_log_path, txn_vlog_path);
+            if (st.is_not_found()) {
+                ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(txn_vlog_path));
+                auto check_st = fs->path_exists(txn_vlog_path);
+                if (check_st.ok()) {
+                    continue;
+                } else {
+                    LOG_IF(WARNING, !check_st.is_not_found())
+                            << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+                    return st;
+                }
+            } else if (!st.ok()) {
+                return st;
+            } else {
+                files_to_delete.emplace_back(txn_log_path);
+                tablet_mgr->metacache()->erase(txn_log_path);
+            }
+        } else {
+            ASSIGN_OR_RETURN(auto txn_log, load_txn_log(tablet_mgr, tablet_id, txn_infos[i]));
+            auto log_version = log_versions[i];
+            RETURN_IF_ERROR(tablet_mgr->put_txn_vlog(txn_log, log_version));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     delete_files_async(std::move(files_to_delete));
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids,
                std::span<const int32_t> txn_types) {
     TEST_SYNC_POINT("transactions::abort_txn:enter");
@@ -438,6 +594,83 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int
         tablet_mgr->metacache()->erase(log_path);
 
         tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_id);
+=======
+static void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log,
+                                 std::vector<std::string>* files_to_delete) {
+    auto tablet_id = txn_log.tablet_id();
+    if (txn_log.has_op_write()) {
+        for (const auto& segment : txn_log.op_write().rowset().segments()) {
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+        }
+        for (const auto& del_file : txn_log.op_write().dels()) {
+            files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
+        }
+    }
+    if (txn_log.has_op_compaction()) {
+        for (const auto& segment : txn_log.op_compaction().output_rowset().segments()) {
+            files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+        }
+    }
+    if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
+        for (const auto& rowset : txn_log.op_schema_change().rowsets()) {
+            for (const auto& segment : rowset.segments()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+            }
+        }
+    }
+    if (txn_log.has_op_replication()) {
+        for (const auto& op_write : txn_log.op_replication().op_writes()) {
+            for (const auto& segment : op_write.rowset().segments()) {
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+            }
+            for (const auto& del_file : op_write.dels()) {
+                files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
+            }
+        }
+    }
+
+    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
+    tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
+}
+
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns) {
+    TEST_SYNC_POINT("transactions::abort_txn:enter");
+    std::vector<std::string> files_to_delete;
+    for (size_t i = 0, sz = txns.size(); i < sz; ++i) {
+        auto txn_id = txns[i].txn_id();
+        auto txn_type = txns[i].txn_type();
+
+        // Clear remote snapshot and slog for replication txn
+        if (txn_type == TxnTypePB::TXN_REPLICATION) {
+            clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, &files_to_delete);
+        }
+
+        if (!txns[i].combined_txn_log()) {
+            auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+            auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
+            if (!txn_log_or.ok()) {
+                LOG_IF(WARNING, !txn_log_or.status().is_not_found())
+                        << "Fail to get txn log " << log_path << ": " << txn_log_or.status();
+                continue;
+            }
+
+            TxnLogPtr txn_log = std::move(txn_log_or).value();
+            collect_files_in_log(tablet_mgr, *txn_log, &files_to_delete);
+            files_to_delete.emplace_back(log_path);
+        } else {
+            auto combined_log_path = tablet_mgr->combined_txn_log_location(tablet_id, txn_id);
+            auto combined_log_or = tablet_mgr->get_combined_txn_log(combined_log_path, false);
+            if (!combined_log_or.ok()) {
+                LOG_IF(WARNING, !combined_log_or.status().is_not_found())
+                        << "Fail to get txn log " << combined_log_path << ": " << combined_log_or.status();
+                continue;
+            }
+            for (const auto& log : combined_log_or.value()->txn_logs()) {
+                collect_files_in_log(tablet_mgr, log, &files_to_delete);
+            }
+            files_to_delete.emplace_back(combined_log_path);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     delete_files_async(std::move(files_to_delete));

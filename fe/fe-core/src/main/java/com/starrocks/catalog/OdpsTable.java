@@ -31,7 +31,11 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
+<<<<<<< HEAD
 public class OdpsTable extends Table implements HiveMetaStoreTable {
+=======
+public class OdpsTable extends Table {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(OdpsTable.class);
     public static final String PARTITION_NULL_VALUE = "null";
 
@@ -74,12 +78,20 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
     public String getDbName() {
+=======
+    public String getCatalogDBName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return dbName;
     }
 
     @Override
+<<<<<<< HEAD
     public String getTableName() {
+=======
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return tableName;
     }
 
@@ -123,7 +135,11 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ODPS_TABLE,
+<<<<<<< HEAD
                 fullSchema.size(), 0, getName(), getDbName());
+=======
+                fullSchema.size(), 0, getName(), getCatalogDBName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         THdfsTable hdfsTable = new THdfsTable();
         hdfsTable.setColumns(getColumns().stream().map(Column::toThrift).collect(Collectors.toList()));
         // for be, partition column is equals to data column

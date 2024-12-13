@@ -21,19 +21,31 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+=======
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hudi.HudiRemoteFileDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -48,10 +60,13 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,7 +79,11 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
  * This logic should be decoupled from metastore when the related interfaces are ready.
  */
+<<<<<<< HEAD
 public class HudiTable extends Table implements HiveMetaStoreTable {
+=======
+public class HudiTable extends Table {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(HudiTable.class);
 
     private static final String JSON_KEY_HUDI_DB = "database";
@@ -116,7 +135,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     public HudiTable(long id, String name, String catalogName, String hiveDbName, String hiveTableName,
                      String resourceName, String comment, List<Column> schema, List<String> dataColumnNames,
+<<<<<<< HEAD
                      List<String> partColumnNames, long createTime, Map<String, String> properties) {
+=======
+                     List<String> partColumnNames, long createTime, Map<String, String> properties,
+                     HudiTableType type) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(id, name, TableType.HUDI, schema);
         this.catalogName = catalogName;
         this.hiveDbName = hiveDbName;
@@ -127,12 +151,24 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         this.createTime = createTime;
         this.hudiProperties = properties;
         this.comment = comment;
+<<<<<<< HEAD
     }
 
     public String getDbName() {
         return hiveDbName;
     }
 
+=======
+        this.tableType = type;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return hiveDbName;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getResourceName() {
         return resourceName;
     }
@@ -146,6 +182,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getTableLocation() {
         return hudiProperties.get(HUDI_BASE_PATH);
     }
@@ -155,7 +195,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
     public String getTableName() {
+=======
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return hiveTableName;
     }
 
@@ -180,6 +224,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }
@@ -245,8 +293,14 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
         List<RemoteFileInfo> hudiPartitions;
         try {
+<<<<<<< HEAD
             hudiPartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
+=======
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setPartitionKeys(partitionKeys).build();
+            hudiPartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getRemoteFiles(this, params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (StarRocksConnectorException e) {
             LOG.warn("Table {} gets partition info failed.", name, e);
             return null;
@@ -274,7 +328,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             {
                 RemoteFileInfo fileInfo = hudiPartitions.get(i);
                 for (RemoteFileDesc desc : fileInfo.getFiles()) {
+<<<<<<< HEAD
                     HoodieInstant instant = desc.getHudiInstant();
+=======
+                    HudiRemoteFileDesc hudiDesc = (HudiRemoteFileDesc) desc;
+                    HoodieInstant instant = hudiDesc.getHudiInstant();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (instant == null) {
                         continue;
                     }
@@ -312,6 +371,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -390,6 +450,8 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void onDrop(Database db, boolean force, boolean replay) {
         if (isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
@@ -526,7 +588,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
         public HudiTable build() {
             return new HudiTable(id, tableName, catalogName, hiveDbName, hiveTableName, resourceName, comment,
+<<<<<<< HEAD
                     fullSchema, dataColNames, partitionColNames, createTime, hudiProperties);
+=======
+                    fullSchema, dataColNames, partitionColNames, createTime, hudiProperties, tableType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

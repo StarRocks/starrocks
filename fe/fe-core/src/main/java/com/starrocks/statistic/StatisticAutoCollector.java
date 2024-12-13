@@ -14,7 +14,14 @@
 
 package com.starrocks.statistic;
 
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
+=======
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
@@ -33,6 +40,10 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class StatisticAutoCollector extends FrontendDaemon {
@@ -66,22 +77,70 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         initDefaultJob();
 
+<<<<<<< HEAD
+=======
+        runJobs();
+    }
+
+    @VisibleForTesting
+    public List<StatisticsCollectJob> runJobs() {
+        List<StatisticsCollectJob> result = Lists.newArrayList();
+
+        // TODO: define the priority in the job instead
+        List<NativeAnalyzeJob> allNativeAnalyzeJobs =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
+        allNativeAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
+        String analyzeJobIds = allNativeAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
+                .collect(Collectors.joining(", "));
+        Set<Long> analyzeTableSet = Sets.newHashSet();
+
+        LOG.info("auto collect statistic on analyze job[{}] start", analyzeJobIds);
+        for (NativeAnalyzeJob nativeAnalyzeJob : allNativeAnalyzeJobs) {
+            List<StatisticsCollectJob> jobs = nativeAnalyzeJob.instantiateJobs();
+            result.addAll(jobs);
+            ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+            statsConnectCtx.setThreadLocalInfo();
+            nativeAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
+
+            for (StatisticsCollectJob job : jobs) {
+                if (job.isAnalyzeTable()) {
+                    analyzeTableSet.add(job.getTable().getId());
+                }
+            }
+        }
+        LOG.info("auto collect statistic on analyze job[{}] end", analyzeJobIds);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (Config.enable_collect_full_statistic) {
             LOG.info("auto collect full statistic on all databases start");
             List<StatisticsCollectJob> allJobs =
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(createDefaultJobAnalyzeAll());
             for (StatisticsCollectJob statsJob : allJobs) {
+<<<<<<< HEAD
+=======
+                // user-created analyze job has a higher priority
+                if (statsJob.isAnalyzeTable() && analyzeTableSet.contains(statsJob.getTable().getId())) {
+                    continue;
+                }
+
+                result.add(statsJob);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                         statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
                         statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+=======
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
                 STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
             }
             LOG.info("auto collect full statistic on all databases end");
+<<<<<<< HEAD
         } else {
             List<NativeAnalyzeJob> allNativeAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllNativeAnalyzeJobList();
             allNativeAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
@@ -98,6 +157,13 @@ public class StatisticAutoCollector extends FrontendDaemon {
 
         // collect external table statistic
         List<ExternalAnalyzeJob> allExternalAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllExternalAnalyzeJobList();
+=======
+        }
+
+        // collect external table statistic
+        List<ExternalAnalyzeJob> allExternalAnalyzeJobs =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllExternalAnalyzeJobList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!allExternalAnalyzeJobs.isEmpty()) {
             allExternalAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             String jobIds = allExternalAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
@@ -106,10 +172,21 @@ public class StatisticAutoCollector extends FrontendDaemon {
             for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
+<<<<<<< HEAD
                 externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
             }
             LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);
         }
+=======
+                List<StatisticsCollectJob> jobs = externalAnalyzeJob.instantiateJobs();
+                result.addAll(jobs);
+                externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
+            }
+            LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);
+        }
+
+        return result;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**

@@ -248,8 +248,13 @@ public class QueryTransformer {
         }
 
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
+<<<<<<< HEAD
         outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
         outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+=======
+        outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+        outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
@@ -282,8 +287,13 @@ public class QueryTransformer {
         }
 
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
+<<<<<<< HEAD
         outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
         outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+=======
+        outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
+        outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections, limit);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
@@ -416,10 +426,17 @@ public class QueryTransformer {
         return subOpt.withNewRoot(limitOperator);
     }
 
+<<<<<<< HEAD
     private OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
         if (aggregates.size() == 0 && groupByExpressions.size() == 0) {
+=======
+    public OptExprBuilder aggregate(OptExprBuilder subOpt,
+                                     List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
+                                     List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
+        if (aggregates.isEmpty() && groupByExpressions.isEmpty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return subOpt;
         }
 
@@ -547,7 +564,11 @@ public class QueryTransformer {
                 // causing the data to be aggregated in advance.
                 // So add pow here to ensure that the grouping_id is not repeated, to ensure that the data will not be aggregated in advance
                 while (groupingID.contains(gid)) {
+<<<<<<< HEAD
                     gid += Math.pow(2, groupByColumnRefs.size());
+=======
+                    gid += (1L << groupByColumnRefs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 groupingID.add(gid);
             }
@@ -565,10 +586,17 @@ public class QueryTransformer {
                 }
 
                 for (int childIdx = 0; childIdx < groupingFunction.getChildren().size(); ++childIdx) {
+<<<<<<< HEAD
                     SlotRef slotRef = (SlotRef) groupingFunction.getChild(childIdx);
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(slotRef, subOpt.getExpressionMapping(), columnRefFactory);
+=======
+                    Expr expr = groupingFunction.getChild(childIdx);
+
+                    ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
+                            .translate(expr, subOpt.getExpressionMapping(), columnRefFactory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {

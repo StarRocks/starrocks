@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_agg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Aggregates values (excluding NULLs) in a column into a bitmap (multiple rows into one row).
 

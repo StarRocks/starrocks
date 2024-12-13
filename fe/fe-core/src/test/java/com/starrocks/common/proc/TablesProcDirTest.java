@@ -26,11 +26,22 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import mockit.Expectations;
+=======
+import com.starrocks.server.LocalMetastore;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -48,7 +59,11 @@ public class TablesProcDirTest {
         Map<String, Long> indexNameToId = Maps.newHashMap();
         indexNameToId.put("index1", 1000L);
 
+<<<<<<< HEAD
         List<Partition> p1 = Lists.newArrayList(new Partition(1001L, "p", null, null));
+=======
+        List<Partition> p1 = Lists.newArrayList(new Partition(1001L, 1011L, "p", null, null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> col1 = Lists.newArrayList(new Column("province", Type.VARCHAR));
         PartitionInfo pt1 = new ListPartitionInfo(PartitionType.LIST, col1);
         OlapTable tb1 = new OlapTable(1000L, "tb1", col1, null, pt1, null);
@@ -68,7 +83,11 @@ public class TablesProcDirTest {
             }
         };
 
+<<<<<<< HEAD
         List<Partition> p2 = Lists.newArrayList(new Partition(20001L, "p", null, null));
+=======
+        List<Partition> p2 = Lists.newArrayList(new Partition(20001L, 20011L, "p", null, null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> col2 = Lists.newArrayList(new Column("dt", Type.DATE));
         PartitionInfo pt2 = new RangePartitionInfo(col2);
         OlapTable tb2 = new OlapTable(2000L, "tb2", col2, null, pt2, null);
@@ -105,6 +124,31 @@ public class TablesProcDirTest {
         db.registerTableUnlocked(tb1);
         db.registerTableUnlocked(tb2);
         db.registerTableUnlocked(tb3);
+<<<<<<< HEAD
+=======
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+
+            @Mock
+            public List<Table> getTables(Long dbId) {
+                return db.getTables();
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

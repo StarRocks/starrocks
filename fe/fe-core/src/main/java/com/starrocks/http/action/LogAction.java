@@ -97,7 +97,11 @@ public class LogAction extends WebBaseAction {
             appendUpdateVerboseButton(buffer, "add_verbose");
             appendUpdateVerboseButton(buffer, "del_verbose");
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.error(e);
+=======
+            LOG.error(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

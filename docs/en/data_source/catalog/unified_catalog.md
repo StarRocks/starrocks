@@ -5,10 +5,17 @@ toc_max_heading_level: 5
 
 # Unified catalog
 
+<<<<<<< HEAD
 A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake data sources as a unified data source without ingestion. With unified catalogs, you can:
 
 - Directly query data stored in Hive, Iceberg, Hudi, and Delta Lake without the need to manually create tables.
 - Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
+=======
+A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, Delta Lake, and Apache Kudu data sources as a unified data source without ingestion. With unified catalogs, you can:
+
+- Directly query data stored in Hive, Iceberg, Hudi, Delta Lake, and Kudu without the need to manually create tables.
+- Use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, Delta Lake, and Kudu and load the data into StarRocks.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Perform operations on StarRocks to create or drop Hive and Iceberg databases and tables.
 
 To ensure successful SQL workloads on your unified data source, your StarRocks cluster must be able to access the storage system and metastore of your unified data source. StarRocks supports the following storage systems and metastores:
@@ -27,7 +34,11 @@ One unified catalog supports integrations with only a single storage system and 
 
 ## Usage notes
 
+<<<<<<< HEAD
 - See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md) to understand the file formats and data types supported.
+=======
+- See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md), and [Kudu catalog](../../data_source/catalog/kudu_catalog.md) to understand the file formats and data types supported.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
 
@@ -73,7 +84,12 @@ PROPERTIES
     "type" = "unified",
     MetastoreParams,
     StorageCredentialParams,
+<<<<<<< HEAD
     MetadataUpdateParams
+=======
+    MetadataUpdateParams,
+    KuduCatalogParams
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 )
 ```
 
@@ -433,6 +449,19 @@ However, if the frequency of data updates in Hive, Hudi, or Delta Lake is high, 
 | metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
 | remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 
+<<<<<<< HEAD
+=======
+#### KuduCatalogParams
+
+A set of parameters about how to connect Kudu Catalog. This parameter set is optional.
+
+| Parameter                              | Required | Description                                                  |
+| -------------------------------------- | -------- | ------------------------------------------------------------ |
+| kudu.master                 | No       | Specifies the Kudu Master address, which defaults to `localhost:7051`. |
+| kudu.schema-emulation.enabled               | No       | option to enable or disable the `schema` emulation. By default, it is turned off (false), which means that all tables belong to the `default` `schema`. |
+| kudu.schema-emulation.prefix   | No       | The prefix for `schema` emulation should only be set when `kudu.schema-emulation.enabled` = `true`. The default prefix used is empty string: ` `. |
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Examples
 
 The following examples create a unified catalog named `unified_catalog_hms` or `unified_catalog_glue`, depending on the type of metastore you use, to query data from your unified data source.
@@ -822,9 +851,15 @@ To query data from a unified catalog, follow these steps:
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
+<<<<<<< HEAD
 ## Load data from Hive, Iceberg, Hudi, or Delta Lake
 
 You can use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
+=======
+## Load data from Hive, Iceberg, Hudi, Delta Lake, or Kudu
+
+You can use [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) to load the data of a Hive, Iceberg, Hudi, Delta Lake, or Kudu table into a StarRocks table created within a unified catalog.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The following example loads the data of the Hive table `hive_table` into the StarRocks table `test_tbl` created in the database `test_database` that belongs to the unified catalog `unified_catalog`:
 

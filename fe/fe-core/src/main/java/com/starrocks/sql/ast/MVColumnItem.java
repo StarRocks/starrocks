@@ -39,9 +39,18 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 
 import java.util.Set;
 
+=======
+import com.starrocks.catalog.combinator.AggStateDesc;
+
+import java.util.Set;
+
+import static com.starrocks.catalog.Column.COLUMN_UNIQUE_ID_INIT_VALUE;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * This is a result of semantic analysis for AddMaterializedViewClause.
  * It is used to construct real mv column in MaterializedViewHandler.
@@ -54,16 +63,29 @@ public class MVColumnItem {
     private Type type;
     private boolean isKey;
     private AggregateType aggregationType;
+<<<<<<< HEAD
+=======
+    private AggStateDesc aggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean isAllowNull;
     private boolean isAggregationTypeImplicit;
     private Expr defineExpr;
     private Set<String> baseColumnNames;
 
+<<<<<<< HEAD
     public MVColumnItem(String name, Type type, AggregateType aggregateType, boolean isAggregationTypeImplicit,
+=======
+    public MVColumnItem(String name, Type type, AggregateType aggregateType, AggStateDesc aggStateDesc,
+                        boolean isAggregationTypeImplicit,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Expr defineExpr, boolean isAllowNull, Set<String> baseColumnNames) {
         this.name = name;
         this.type = type;
         this.aggregationType = aggregateType;
+<<<<<<< HEAD
+=======
+        this.aggStateDesc = aggStateDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.isAggregationTypeImplicit = isAggregationTypeImplicit;
         this.defineExpr = defineExpr;
         this.isAllowNull = isAllowNull;
@@ -122,6 +144,7 @@ public class MVColumnItem {
     public Column toMVColumn(OlapTable olapTable) {
         Column baseColumn = olapTable.getBaseColumn(name);
         Column result;
+<<<<<<< HEAD
         boolean useFastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
         if (baseColumn == null) {
             result = new Column(name, type, isKey, aggregationType, isAllowNull,
@@ -130,6 +153,16 @@ public class MVColumnItem {
                 result.setDefineExpr(defineExpr);
             }
             if (useFastSchemaEvolution) {
+=======
+        boolean hasUniqueId = olapTable.getMaxColUniqueId() >= 0;
+        if (baseColumn == null) {
+            result = new Column(name, type, isKey, aggregationType, aggStateDesc, isAllowNull,
+                    null, "", COLUMN_UNIQUE_ID_INIT_VALUE);
+            if (defineExpr != null) {
+                result.setDefineExpr(defineExpr);
+            }
+            if (hasUniqueId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
                 result.setUniqueId(nextUniqueId);
             }

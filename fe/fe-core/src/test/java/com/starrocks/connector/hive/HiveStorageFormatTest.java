@@ -26,6 +26,10 @@ public class HiveStorageFormatTest {
                 "Please use 'file_format' instead of 'format' in the table properties",
                 () -> HiveStorageFormat.check(ImmutableMap.of("format", "csv")));
 
+<<<<<<< HEAD
         HiveStorageFormat.check(ImmutableMap.of("file_format", "text"));
+=======
+        HiveStorageFormat.check(ImmutableMap.of("file_format", "textfile"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

@@ -427,8 +427,11 @@ TEST_F(CompactionManagerTest, test_compaction_parallel) {
     }
 
     _engine->compaction_manager()->init_max_task_num(config::max_compaction_concurrency);
+<<<<<<< HEAD
     _engine->compaction_manager()->clear_tasks();
     ASSERT_EQ(0, _engine->compaction_manager()->running_tasks_num());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < 9; i++) {
         bool ret = _engine->compaction_manager()->register_task(tasks[i].get());

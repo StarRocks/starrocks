@@ -15,9 +15,19 @@
 
 package com.starrocks.alter;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.OriginStatement;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.HashMap;
 import java.util.List;
@@ -32,18 +42,100 @@ public abstract class AlterJobV2Builder {
     protected long startTime = 0;
     protected long timeoutMs = 0;
     protected boolean bloomFilterColumnsChanged = false;
+<<<<<<< HEAD
     protected Set<String> bloomFilterColumns;
+=======
+    protected Set<ColumnId> bloomFilterColumns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected double bloomFilterFpp;
     protected boolean hasIndexChanged = false;
     protected List<Index> indexes;
     protected Map<Long, List<Column>> newIndexSchema = new HashMap<>();
     protected Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
     protected List<Integer> sortKeyIdxes;
+<<<<<<< HEAD
     protected List<Integer> sortKeyUniqueIds;
 
     public AlterJobV2Builder() {
     }
 
+=======
+    protected long warehouseId;
+    protected List<Integer> sortKeyUniqueIds;
+
+    // -------- for roll up-----------------
+    protected long baseIndexId;
+    protected String baseIndexName;
+    protected long rollupIndexId;
+    protected String rollupIndexName;
+    protected Expr whereClause;
+    List<Column> rollupColumns;
+    KeysType rollupKeysType;
+    short rollupShortKeyColumnCount;
+    protected OriginStatement origStmt;
+    protected String viewDefineSql;
+    protected boolean isColocateMVIndex;
+
+
+    public AlterJobV2Builder() {
+    }
+
+    public AlterJobV2Builder withBaseIndexId(long baseIndexId) {
+        this.baseIndexId = baseIndexId;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvKeysType(KeysType rollupKeysType) {
+        this.rollupKeysType = rollupKeysType;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvIndexId(long rollIndexId) {
+        this.rollupIndexId = rollIndexId;
+        return this;
+    }
+
+    public AlterJobV2Builder withBaseIndexName(String baseIndexName) {
+        this.baseIndexName = baseIndexName;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvName(String rollupIndexName) {
+        this.rollupIndexName = rollupIndexName;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvColumns(List<Column> rollupColumns) {
+        this.rollupColumns = rollupColumns;
+        return this;
+    }
+
+    public AlterJobV2Builder withWhereClause(Expr whereClause) {
+        this.whereClause = whereClause;
+        return this;
+    }
+
+    public AlterJobV2Builder withMvShortkeyColumnCoun(short rollupShortKeyColumnCount) {
+        this.rollupShortKeyColumnCount = rollupShortKeyColumnCount;
+        return this;
+    }
+
+    public AlterJobV2Builder withOriginStmt(OriginStatement origStmt) {
+        this.origStmt = origStmt;
+        return this;
+    }
+
+    public AlterJobV2Builder withViewDefineSql(String viewDefineSql) {
+        this.viewDefineSql = viewDefineSql;
+        return this;
+    }
+
+    public AlterJobV2Builder withIsColocateMv(boolean isColocateMv) {
+        this.isColocateMVIndex = isColocateMv;
+        return this;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AlterJobV2Builder withJobId(long jobId) {
         this.jobId = jobId;
         return this;
@@ -69,7 +161,11 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
+<<<<<<< HEAD
     public AlterJobV2Builder withBloomFilterColumns(@Nullable Set<String> bfColumns, double bfFpp) {
+=======
+    public AlterJobV2Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.bloomFilterColumns = bfColumns;
         this.bloomFilterFpp = bfFpp;
         return this;
@@ -106,10 +202,22 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public AlterJobV2Builder withWarehouse(@Nullable long warehouseId) {
+        this.warehouseId = warehouseId;
+        return this;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AlterJobV2Builder withSortKeyUniqueIds(@Nullable List<Integer> sortKeyUniqueIds) {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
         return this;
     }
 
+<<<<<<< HEAD
     public abstract AlterJobV2 build() throws UserException;
+=======
+    public abstract AlterJobV2 build() throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

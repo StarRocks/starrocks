@@ -20,10 +20,18 @@ import com.starrocks.thrift.TWarehouseInfo;
 import java.util.Objects;
 
 public class WarehouseInfo {
+<<<<<<< HEAD
     public static final long ABSENT_ID = -1L;
 
     @SerializedName(value = "warehouse")
     String warehouse;
+=======
+    public static final String ABSENT_NAME = "UNKNOWN";
+    private static final long ABSENT_ID = -1L;
+
+    @SerializedName(value = "warehouse")
+    String warehouse = ABSENT_NAME;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @SerializedName(value = "id")
     private long id = ABSENT_ID;
@@ -42,6 +50,7 @@ public class WarehouseInfo {
     public WarehouseInfo() {
     }
 
+<<<<<<< HEAD
     public WarehouseInfo(String warehouse) {
         this.warehouse = warehouse;
     }
@@ -49,6 +58,15 @@ public class WarehouseInfo {
     public WarehouseInfo(String warehouse, long id) {
         this.warehouse = warehouse;
         this.id = id;
+=======
+    public WarehouseInfo(long id) {
+        this(id, ABSENT_NAME);
+    }
+
+    public WarehouseInfo(long id, String warehouse) {
+        this.id = id;
+        this.warehouse = warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public WarehouseInfo(String warehouse, long id, long numUnfinishedQueryJobs, long numUnfinishedLoadJobs,
@@ -82,12 +100,21 @@ public class WarehouseInfo {
         lastFinishedJobTimestampMs = Math.max(lastFinishedJobTimestampMs, timestampMs);
     }
 
+<<<<<<< HEAD
     public String getWarehouse() {
         return warehouse;
     }
 
     public void setId(long id) {
         this.id = id;
+=======
+    public void setWarehouse(String warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getId() {
@@ -126,7 +153,11 @@ public class WarehouseInfo {
     }
 
     public static WarehouseInfo fromThrift(TWarehouseInfo tinfo) {
+<<<<<<< HEAD
         WarehouseInfo info = new WarehouseInfo(tinfo.getWarehouse());
+=======
+        WarehouseInfo info = new WarehouseInfo(tinfo.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         info.id = tinfo.getId();
         info.numUnfinishedQueryJobs = tinfo.getNum_unfinished_query_jobs();
         info.numUnfinishedLoadJobs = tinfo.getNum_unfinished_load_jobs();
@@ -137,7 +168,11 @@ public class WarehouseInfo {
     }
 
     public static WarehouseInfo fromWarehouse(Warehouse wh) {
+<<<<<<< HEAD
         return new WarehouseInfo(wh.getName(), wh.getId());
+=======
+        return new WarehouseInfo(wh.getId(), wh.getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

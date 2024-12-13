@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 if (CLANG_TIDY_PATH)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/io")
 
 # where to put generated binaries
@@ -32,5 +35,12 @@ add_library(IO STATIC
         s3_input_stream.cpp
         s3_output_stream.cpp
         cache_input_stream.cpp
+<<<<<<< HEAD
         shared_buffered_input_stream.cpp
+=======
+        cache_select_input_stream.hpp
+        shared_buffered_input_stream.cpp
+        async_flush_output_stream.cpp
+        direct_s3_output_stream.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         )

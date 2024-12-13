@@ -196,7 +196,11 @@ public class ColumnRefSet implements Cloneable {
         return rhs.stream().anyMatch(this::contains);
     }
 
+<<<<<<< HEAD
     public boolean containsAll(List<Integer> rhs) {
+=======
+    public boolean containsAll(Collection<Integer> rhs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return rhs.stream().allMatch(id -> bitSet.contains(id));
     }
 

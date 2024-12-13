@@ -8,7 +8,11 @@ displayed_sidebar: docs
 
 Modifies an existing table, including:
 
+<<<<<<< HEAD
 - [Rename table, partition, index](#rename)
+=======
+- [Rename table, partition, index, or column](#rename)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - [Modify table comment](#alter-table-comment-from-v31)
 - [Modify partitions (add/delete partitions and modify partition attributes)](#modify-partition)
 - [Modify the bucketing method and number of buckets](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
@@ -32,7 +36,11 @@ alter_clause1[, alter_clause2, ...]
 
 `alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
+<<<<<<< HEAD
 - rename: renames a table, rollup index, or partition.
+=======
+- rename: renames a table, rollup index, partition, or column (supported from **v3.3.2 onwards**).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - comment: modifies the table comment (supported from **v3.1 onwards**).
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
@@ -45,7 +53,10 @@ alter_clause1[, alter_clause2, ...]
 ## Limits and usage notes
 
 - Operations on partition, column, and rollup index cannot be performed in one ALTER TABLE statement.
+<<<<<<< HEAD
 - Column names cannot be modified.
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Column comments cannot be modified.
 - One table can have only one ongoing schema change operation at a time. You cannot run two schema change commands on a table at the same time.
 - Operations on bucket, column and rollup index are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](SHOW_ALTER.md) command to check the progress, and run the [CANCEL ALTER TABLE](CANCEL_ALTER_TABLE.md) command to cancel the operation.
@@ -75,6 +86,25 @@ ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>
 ```
 
+<<<<<<< HEAD
+=======
+#### Rename a column
+
+From v3.3.2 onwards, StarRocks supports renaming columns.
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- After renaming a column from A to B, adding a new column named A is not supported.
+- Materialized views built on a renamed column will not take effect. You must rebuild them upon the column with the new name.
+
+:::
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Alter table comment (from v3.1)
 
 Syntax:
@@ -89,7 +119,11 @@ Currently, column comments cannot be modified.
 
 ### Modify partition
 
+<<<<<<< HEAD
 #### Add a partition
+=======
+#### ADD PARTITION(S)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 You can choose to add range partitions or list partitions. Adding expression partitions is not supported.
 
@@ -183,6 +217,7 @@ Examples:
     );
     ```
 
+<<<<<<< HEAD
 #### Drop a partition
 
 Syntax:
@@ -201,6 +236,43 @@ Note:
 1. Keep at least one partition for partitioned tables.
 2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](../backup_restore/RECOVER.md) command within a specified period (1 day by default).
 3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally, this operation is not recommended.
+=======
+#### DROP PARTITION(S)
+
+- Drop a single partition:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
+```
+
+- Drop partitions in batch (Supported from v3.3.1):
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ]
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- The partition column values still need to be enclosed in double quotes even if the partition column values are integers. However, the interval values in the EVERY clause do not need to be enclosed in double quotes.
+```
+
+Notes for `multi_range_partitions`:
+
+- It only appiles to Range Partitioning.
+- The parameters involved is consistent with those in [ADD PARTITION(S)](#add-partitions).
+- It only supports partitions with a single Partition Key.
+
+:::note
+
+- Keep at least one partition for partitioned tables.
+- If FORCE is not specified, you can recover the dropped partitions by using the [RECOVER](../backup_restore/RECOVER.md) command within a specified period (1 day by default).
+- If FORCE is specified, the partitions will be deleted directly regardless of whether there are any unfinished operations on the partitions, and they cannot be recovered. Thus, generally, this operation is not recommended.
+
+:::
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### Add a temporary partition
 
@@ -490,9 +562,17 @@ Note:
 - All columns in the index must be written.
 - The value column is listed after the key column.
 
+<<<<<<< HEAD
 #### Modify columns of the sort key in a Primary Key table
 
 <!--Supported Versions-->
+=======
+#### Modify the sort key
+
+Since v3.0, the sort keys for the Primary Key tables can be modified. v3.3 extends this support to Duplicate Key tables, Aggregate tables, and Unique Key tables.
+
+The sort keys in Duplicate Key tables and Primary Key tables can be combination of any sort columns. The sort keys in Aggregate tables and Unique Key tables must include all key columns, but the order of the columns does not need to be same as the key columns.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Syntax:
 
@@ -504,9 +584,15 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
+<<<<<<< HEAD
 Example:
 
 For example, the original table is a Primary Key table where the sort key and  the primary key are coupled, which is `dt, order_id`.
+=======
+Example: modify the sort keys in Primary Key tables.
+
+For example, the original table is a Primary Key table where the sort key and the primary key are coupled, which is `dt, order_id`.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 create table orders (
@@ -718,6 +804,11 @@ Before v3.1, compaction is performed in two ways:
 
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
+<<<<<<< HEAD
+=======
+Shared-data clusters support this feature from v3.3.0 onwards.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 > **NOTE**
 >
 > From v3.2.13 onwards, you can forbid Base Compaction within certain time range using the property [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#forbid-base-compaction).

@@ -82,7 +82,11 @@ update_time: 2023-12-01 15:17:10.274000
 
 Data size and data distribution constantly change in a table. Statistics must be updated regularly to represent that data change. Before creating a statistics collection task, you must choose a collection type and method that best suit your business requirements.
 
+<<<<<<< HEAD
 StarRocks supports full and sampled collection, both can be performed automatically and manually. By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can set the FE configuration item `enable_collect_full_statistic` to `false` and customize a collection task.
+=======
+StarRocks supports full and sampled collection, both can be performed automatically and manually. By default, StarRocks automatically collects full statistics of a table. It checks for any data updates every 5 minutes. If data change is detected, data collection will be automatically triggered. If you do not want to use automatic full collection, you can customize a collection task.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 | **Collection type** | **Collection method** | **Description**                                              | **Advantage and disadvantage**                               |
 | ------------------- | --------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -93,23 +97,42 @@ StarRocks supports full and sampled collection, both can be performed automatica
 
 StarRocks offers flexible statistics collection methods. You can choose automatic, manual, or custom collection, whichever suits your business scenarios.
 
+<<<<<<< HEAD
 ### Automatic full collection
+=======
+### Automatic collection
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 For basic statistics, StarRocks automatically collects full statistics of a table by default, without requiring manual operations. For tables on which no statistics have been collected, StarRocks automatically collects statistics within the scheduling period. For tables on which statistics have been collected, StarRocks updates the total number of rows and modified rows in the tables, and persists this information regularly for judging whether to trigger automatic collection.
 
 From 2.4.5 onwards, StarRocks allows you to specify a collection period for automatic full collection, which prevents cluster performance jitter caused by automatic full collection. This period is specified by FE parameters `statistic_auto_analyze_start_time` and `statistic_auto_analyze_end_time`.
 
+<<<<<<< HEAD
 Conditions that trigger automatic collection:
 
 - `enable_statistic_collect` is `true`
 
 - The collection time is within the range of the configured collection period. (The default collection period is all day.)
+=======
+Conditions that will trigger automatic collection:
+
+- Table data has changed since previous statistics collection.
+
+- The collection time falls within the range of the configured collection period. (The default collection period is all day.)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - The update time of the previous collecting job is earlier than the latest update time of partitions.
 
 - The health of table statistics is below the specified threshold (`statistic_auto_collect_ratio`).
 
+<<<<<<< HEAD
 > Formula for calculating statistics health: 1 - Number of added rows since the previous statistics collection/Total number of rows in the smallest partition
+=======
+> Formula for calculating statistics health:
+>
+> If the number of partitions with data updated is less than 10, the formula is `1 - (Number of updated rows since previous collection/Total number of rows)`.
+> If the number of partitions with data updated is greater than or equal to 10, the formula is `1 - MIN(Number of updated rows since previous collection/Total number of rows, Number of updated partitions since previous collection/Total number of partitions)`.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 In addition, StarRocks allows you to configure collection policies based on table size and table update frequency:
 
@@ -262,7 +285,10 @@ PROPERTIES(
 
 You can use the CREATE ANALYZE statement to customize an automatic collection task. You must have the INSERT and SELECT privileges on the coreesponding table to perform the ANALYZE TABLE operation.
 
+<<<<<<< HEAD
 Before creating a custom automatic collection task, you must disable automatic full collection (`enable_collect_full_statistic = false`). Otherwise, custom tasks cannot take effect.
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 -- Automatically collect stats of all databases.
@@ -531,12 +557,28 @@ You can create an Analyze job on demand and the job runs immediately after you c
 Syntax:
 
 ```sql
+<<<<<<< HEAD
 ANALYZE [FULL] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
 [PROPERTIES(property [,property])]
 ```
 
 Example:
+=======
+-- Manual full collection
+ANALYZE [FULL] TABLE tbl_name (col_name [,col_name])
+[WITH SYNC | ASYNC MODE]
+[PROPERTIES(property [,property])]
+
+-- Manual histogram collection (since v3.3.0)
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
+[PROPERTIES (property [,property])]
+```
+
+Following is an example of manual full collection:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```sql
 ANALYZE TABLE ex_hive_tbl(k1);

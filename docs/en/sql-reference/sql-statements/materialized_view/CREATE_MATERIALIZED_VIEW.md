@@ -235,7 +235,15 @@ The partitioning strategy of the asynchronous materialized view. As for the curr
 
 > **CAUTION**
 >
+<<<<<<< HEAD
 > Currently, asynchronous materialized views do not support the list partitioning strategy.
+=======
+> From v3.3.3 onwards, StarRocks supports creating asynchronous materialized views with the List Partitioning strategy.
+>
+> - You can create list-partitioned materialized views based on tables that are created with the List Partitioning or Expression partitioning strategy.
+> - Currently, you can only specify one Partition Key when creating materialized views with the List Partitioning strategy. You must choose one Partition Key if the base table has more than one Partition Key.
+> - The refresh behavior and query rewrite logic of materialized views with the List Partitioning strategy are consistent with those with the Range Partitioning strategy.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Valid values:
 
@@ -260,12 +268,21 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `storage_cooldown_time`: the storage cooldown time for a partition. If both HDD and SSD storage mediums are used, data in the SSD storage is moved to the HDD storage after the time specified by this property. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this property is not explicitly specified, the storage cooldown is not performed by default.
 - `partition_ttl`: The time-to-live (TTL) for partitions. Partitions whose data is within the specified time range are retained. Expired partitions are deleted automatically. Unit: `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`. For example, you can specify this property as `2 MONTH`. This property is recommended over `partition_ttl_number`. It is supported from v3.1.5 onwards.
 - `partition_ttl_number`: The number of most recent materialized view partitions to retain. For the partitions with a start time earlier than the current time, after the number of these partitions exceeds this value, less recent partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. If you enabled the [dynamic partitioning](../../../table_design/data_distribution/dynamic_partitioning.md) strategy, the partitions created in advance are not counted in. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+<<<<<<< HEAD
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. The default value is `-1`.
+=======
+- `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fail to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. The default value is changed from `-1` to `1` since v3.3, meaning StarRocks refeshes partitions one by one.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, the automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. The default value is an empty string.
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes the current partition and N-1 most recent partitions. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes all pre-created partitions.
 - `mv_rewrite_staleness_second`: If the materialized view's last refresh is within the time interval specified in this property, this materialized view can be used directly for query rewrite, regardless of whether the data in the base tables changes. If the last refresh is before this time interval, StarRocks checks whether the base tables have been updated to determine whether the materialized view can be used for query rewrite. Unit: Second. This property is supported from v3.0.
 - `colocate_with`: The colocation group of the asynchronous materialized view. See [Colocate Join](../../../using_starrocks/Colocate_join.md) for further information. This property is supported from v3.0.
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
+<<<<<<< HEAD
+=======
+- `excluded_refresh_tables`：The base tables listed in this property will not trigger data refresh to the materialized view when their data changes. This property is usually used together with the `excluded_trigger_tables` property. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any data change in all base tables will trigger the corresponding materialized view refresh.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   > **CAUTION**
   >
@@ -280,19 +297,38 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
 - `storage_volume`: The name of the storage volume used to store the asynchronous materialized view you want to create if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
+<<<<<<< HEAD
   - `true`: Enable query rewrite for external catalog-based materialized views.
   - `false` (Default value): Disable query rewrite for external catalog-based materialized views.
 
   Because strong data consistency is not guaranteed between base tables and external catalog-based materialized views, this feature is set to `false` by default. When this feature is enabled, the materialized view is used for query rewrite in accordance with the rule specified in `query_rewrite_consistency`.
+=======
+  - `true`(Default value since v3.3): Enable query rewrite for external catalog-based materialized views.
+  - `false`: Disable query rewrite for external catalog-based materialized views.
+
+  Because strong data consistency is not guaranteed between base tables and external catalog-based materialized views, this feature is set to `false` by default. When this feature is enabled, the materialized view is used for query rewrite in accordance with the rule specified in `query_rewrite_consistency`.
+- `enable_query_rewrite`: Whether to use the materialized view for query rewrite. When there are many materialized views, query rewrite based on materialized views can impact the optimizer's time consumption. With this property, you can control whether the materialized view can be used for query rewrite. This feature is supported from v3.3.0 onwards. Valid values:
+  - `default` (Default): The system will not perform semantic checks on the materialized view, but only the SPJG-type materialized views can be used for query rewrite. Note that if the text-based query rewrite is enabled, non-SPJG-type materialized views can also be used for query rewrite.
+  - `true`: The system will perform semantic checks when creating or modifying the materialized view. If the materialized view is not eligible for query rewrite (that is, the definition of the materialized view is not an SPJG-type query), a failure will be returned.
+  - `false`: The materialized view will not be used for query rewrite.
+- [Preview] `transparent_mv_rewrite_mode`: Specifies the transparent rewrite mode for **queries directly against the materialized view**. This feature is supported from v3.3.0 onwards. Valid values:
+  - `false` (Default, compatible with the behavior in earlier versions): Queries directly against the materialized view will not be rewritten, and are only returned with the existing data in the materialized view. Their query results may be different from those of queries based on the definition of the materialized view according to the refresh status (data consistency) of the materialized view.
+  - `true`: Queries directly against the materialized view will be rewritten and returned with the most updated data, which is consistent with the result of the materialized view definition query. Please note that when the materialized view is inactive or does not support transparent query rewrite, these queries will be executed as the materialized view definition query.
+  - `transparent_or_error`: Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with an error.
+  - `transparent_or_default` Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with the existing data in the materialized view.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
 
+<<<<<<< HEAD
 > **CAUTION**
 >
 > Currently, StarRocks does not support creating asynchronous materialized views with base tables created with the list partitioning strategy.
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Query an asynchronous materialized view
 
 An asynchronous materialized view is a physical table. You can operate it as any regular table **except that you cannot directly load data into an asynchronous materialized view**.

@@ -50,14 +50,23 @@ public:
     TabletsChannel() = default;
     virtual ~TabletsChannel() = default;
 
+<<<<<<< HEAD
     [[nodiscard]] virtual Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                       std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
+=======
+    virtual Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
+                        std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+<<<<<<< HEAD
                            PTabletWriterAddBatchResult* response) = 0;
+=======
+                           PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual void cancel() = 0;
 
@@ -68,6 +77,11 @@ public:
     // timeout: in microseconds
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
 
+<<<<<<< HEAD
+=======
+    virtual void update_profile() = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     // counter of remaining senders
     std::atomic<int> _num_remaining_senders = 0;
@@ -80,6 +94,7 @@ protected:
 
 struct TabletsChannelKey {
     UniqueId id;
+<<<<<<< HEAD
     int64_t index_id;
 
     TabletsChannelKey(const PUniqueId& pid, int64_t index_id_) : id(pid), index_id(index_id_) {}
@@ -87,12 +102,39 @@ struct TabletsChannelKey {
     ~TabletsChannelKey() noexcept = default;
 
     bool operator==(const TabletsChannelKey& rhs) const noexcept { return index_id == rhs.index_id && id == rhs.id; }
+=======
+    int64_t sink_id;
+    int64_t index_id;
+
+    TabletsChannelKey(const PUniqueId& pid, int64_t sink_id_, int64_t index_id_)
+            : id(pid), sink_id(sink_id_), index_id(index_id_) {}
+
+    ~TabletsChannelKey() noexcept = default;
+
+    bool operator==(const TabletsChannelKey& rhs) const noexcept {
+        return index_id == rhs.index_id && id == rhs.id && sink_id == rhs.sink_id;
+    }
+
+    bool operator<(const TabletsChannelKey& rhs) const noexcept {
+        if (id != rhs.id) {
+            return id < rhs.id;
+        }
+        if (sink_id != rhs.sink_id) {
+            return sink_id < rhs.sink_id;
+        }
+        return index_id < rhs.index_id;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] std::string to_string() const;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const TabletsChannelKey& key) {
+<<<<<<< HEAD
     os << "(id=" << key.id << ",index_id=" << key.index_id << ")";
+=======
+    os << "(id=" << key.id << ",sink_id=" << key.sink_id << ",index_id=" << key.index_id << ")";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return os;
 }
 

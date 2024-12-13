@@ -23,6 +23,10 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.MvUpdateInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.persist.gson.GsonUtils;
@@ -40,6 +44,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.MvRefreshArbiter.getMVTimelinessUpdateInfo;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * Store materialized view context during the query lifecycle which is seperated from per materialized view's context.
  */
@@ -50,6 +59,11 @@ public class QueryMaterializationContext {
     private Set<MaterializedView> relatedMVs = Sets.newHashSet();
     // MVs with context that are valid (SPJG pattern) candidates for materialization rewrite
     private List<MaterializationContext> validCandidateMVs = Lists.newArrayList();
+<<<<<<< HEAD
+=======
+    // MV with the cached timeliness update info which should be initialized once in one query context.
+    private Map<MaterializedView, MvUpdateInfo> mvTimelinessInfos = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // query's logical plan with view: replace all inlined query plans with LogicalViewScanOperators which is used by
     // view-based mv rewrite
@@ -89,6 +103,11 @@ public class QueryMaterializationContext {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private boolean hasRewrittenSuccess = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public QueryMaterializationContext() {
     }
 
@@ -176,6 +195,27 @@ public class QueryMaterializationContext {
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Get or init the cached timeliness update info for the materialized view.
+     * @param mv intput mv
+     * @return MvUpdateInfo of the mv, null if mv is null or initialize fail
+     */
+    public MvUpdateInfo getOrInitMVTimelinessInfos(MaterializedView mv) {
+        if (mv == null) {
+            return null;
+        }
+        if (!mvTimelinessInfos.containsKey(mv)) {
+            MvUpdateInfo result = getMVTimelinessUpdateInfo(mv, true);
+            mvTimelinessInfos.put(mv, result);
+            return result;
+        } else {
+            return mvTimelinessInfos.get(mv);
+        }
+    }
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * All related mvs about this query which contains valid candidate mvs(SPJG) and other mvs(non SPGJ).
      * @return
      */
@@ -209,4 +249,15 @@ public class QueryMaterializationContext {
         Tracers.record(Tracers.Module.BASE, "MVQueryCacheStats", queryCacheStats.toString());
         this.mvQueryContextCache.invalidateAll();
     }
+<<<<<<< HEAD
+=======
+
+    public void markRewriteSuccess(boolean val) {
+        this.hasRewrittenSuccess = val;
+    }
+
+    public boolean hasRewrittenSuccess() {
+        return this.hasRewrittenSuccess;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

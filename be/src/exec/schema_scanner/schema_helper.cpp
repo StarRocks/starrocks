@@ -15,6 +15,10 @@
 #include "exec/schema_scanner/schema_helper.h"
 
 #include <sstream>
+<<<<<<< HEAD
+=======
+#include <utility>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
@@ -29,7 +33,11 @@ Status SchemaHelper::_call_rpc(const SchemaScannerState& state,
                                std::function<void(ClientConnection<FrontendServiceClient>&)> callback) {
     DCHECK(state.param);
     SCOPED_TIMER((state.param)->_rpc_timer);
+<<<<<<< HEAD
     return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, callback, state.timeout_ms);
+=======
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(state.ip, state.port, std::move(callback), state.timeout_ms);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status SchemaHelper::get_db_names(const SchemaScannerState& state, const TGetDbsParams& request,
@@ -88,6 +96,17 @@ Status SchemaHelper::get_tables_info(const SchemaScannerState& state, const TGet
     });
 }
 
+<<<<<<< HEAD
+=======
+Status SchemaHelper::get_temporary_tables_info(const SchemaScannerState& state,
+                                               const TGetTemporaryTablesInfoRequest& request,
+                                               TGetTemporaryTablesInfoResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getTemporaryTablesInfo(*response, request);
+    });
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status SchemaHelper::describe_table(const SchemaScannerState& state, const TDescribeTableParams& request,
                                     TDescribeTableResult* result) {
     return _call_rpc(

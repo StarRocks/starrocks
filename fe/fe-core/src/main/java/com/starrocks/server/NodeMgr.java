@@ -34,42 +34,75 @@
 
 package com.starrocks.server;
 
+<<<<<<< HEAD
 import com.fasterxml.jackson.databind.ObjectMapper;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
+=======
+import com.google.gson.stream.JsonReader;
+import com.starrocks.catalog.BrokerMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
+<<<<<<< HEAD
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
+=======
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.Storage;
+import com.starrocks.persist.StorageInfo;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
+=======
+import com.starrocks.qe.QueryStatisticsInfo;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TGetQueryStatisticsRequest;
+import com.starrocks.thrift.TGetQueryStatisticsResponse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -78,6 +111,7 @@ import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -85,6 +119,16 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.UnknownHostException;
+=======
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -145,8 +189,11 @@ public class NodeMgr {
     private final List<Pair<String, Integer>> helperNodes = Lists.newArrayList();
     private Pair<String, Integer> selfNode = null;
 
+<<<<<<< HEAD
     private final Map<Integer, SystemInfoService> systemInfoMap = new ConcurrentHashMap<>();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final AtomicInteger leaderChangeListenerIndex = new AtomicInteger();
     private final Map<Integer, Consumer<LeaderInfo>> leaderChangeListeners = new ConcurrentHashMap<>();
 
@@ -160,6 +207,16 @@ public class NodeMgr {
         this.brokerMgr = new BrokerMgr();
     }
 
+<<<<<<< HEAD
+=======
+    // For test
+    protected NodeMgr(FrontendNodeType role, String nodeName, Pair<String, Integer> selfNode) {
+        this.role = role;
+        this.nodeName = nodeName;
+        this.selfNode = selfNode;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void initialize(String[] args) throws Exception {
         getCheckedSelfHostPort();
         getHelperNodes(args);
@@ -211,6 +268,7 @@ public class NodeMgr {
         return Lists.newArrayList(removedFrontends);
     }
 
+<<<<<<< HEAD
     public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
         SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
         if (systemInfoService == null) {
@@ -220,6 +278,8 @@ public class NodeMgr {
         return systemInfoService;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public SystemInfoService getClusterInfo() {
         return this.systemInfo;
     }
@@ -326,7 +386,11 @@ public class NodeMgr {
             Preconditions.checkNotNull(nodeName);
 
             if (!versionFile.exists()) {
+<<<<<<< HEAD
                 clusterId = Config.cluster_id == -1 ? Storage.newClusterID() : Config.cluster_id;
+=======
+                clusterId = Storage.newClusterID();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 token = Strings.isNullOrEmpty(Config.auth_token) ?
                         Storage.newToken() : Config.auth_token;
                 storage = new Storage(clusterId, token, this.imageDir);
@@ -363,7 +427,11 @@ public class NodeMgr {
                         Thread.sleep(5000);
                         continue;
                     } catch (InterruptedException e) {
+<<<<<<< HEAD
                         LOG.warn(e);
+=======
+                        LOG.warn("Failed to execute sleep", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         System.exit(-1);
                     }
                 }
@@ -418,17 +486,25 @@ public class NodeMgr {
                     isVersionFileChanged = true;
                 }
                 try {
+<<<<<<< HEAD
                     URL idURL = new URL("http://" + rightHelperNode.first + ":" + Config.http_port + "/check");
+=======
+                    URL idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(
+                            rightHelperNode.first, Config.http_port) + "/check");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     HttpURLConnection conn = null;
                     conn = (HttpURLConnection) idURL.openConnection();
                     conn.setConnectTimeout(2 * 1000);
                     conn.setReadTimeout(2 * 1000);
+<<<<<<< HEAD
                     String clusterIdString = conn.getHeaderField(MetaBaseAction.CLUSTER_ID);
                     int remoteClusterId = Integer.parseInt(clusterIdString);
                     if (remoteClusterId != clusterId) {
                         LOG.error("cluster id is not equal with helper node {}. will exit.", rightHelperNode.first);
                         System.exit(-1);
                     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     String remoteToken = conn.getHeaderField(MetaBaseAction.TOKEN);
                     if (token == null && remoteToken != null) {
@@ -468,12 +544,15 @@ public class NodeMgr {
             }
         }
 
+<<<<<<< HEAD
         if (Config.cluster_id != -1 && clusterId != Config.cluster_id) {
             LOG.error("cluster id is not equal with config item cluster_id. will exit.");
             System.exit(-1);
         }
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (Strings.isNullOrEmpty(runMode)) {
             if (isFirstTimeStartUp) {
                 runMode = RunMode.name();
@@ -499,11 +578,16 @@ public class NodeMgr {
 
         isElectable = role.equals(FrontendNodeType.FOLLOWER);
 
+<<<<<<< HEAD
         systemInfoMap.put(clusterId, systemInfo);
 
         Preconditions.checkState(helperNodes.size() == 1);
         LOG.info("Got cluster id: {}, role: {}, node name: {} and run_mode: {}",
                 clusterId, role.name(), nodeName, runMode);
+=======
+        Preconditions.checkState(helperNodes.size() == 1);
+        LOG.info("Got role: {}, node name: {} and run_mode: {}", role.name(), nodeName, runMode);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // Get the role info and node name from helper node.
@@ -514,8 +598,16 @@ public class NodeMgr {
         Pair<String, Integer> rightHelperNode = null;
         for (Pair<String, Integer> helperNode : helperNodes) {
             try {
+<<<<<<< HEAD
                 URL url = new URL("http://" + helperNode.first + ":" + Config.http_port
                         + "/role?host=" + selfNode.first + "&port=" + selfNode.second);
+=======
+                String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
+                String encodedAddress = URLEncoder.encode(selfNode.first,
+                        StandardCharsets.UTF_8.toString());
+                URL url = new URL("http://" + accessibleHostPort + "/role?host=" + encodedAddress +
+                        "&port=" + selfNode.second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 HttpURLConnection conn = null;
                 conn = (HttpURLConnection) url.openConnection();
                 if (conn.getResponseCode() != 200) {
@@ -572,6 +664,10 @@ public class NodeMgr {
         for (Pair<String, Integer> helperNode : helperNodes) {
             if (selfNode.equals(helperNode)) {
                 containSelf = true;
+<<<<<<< HEAD
+=======
+                break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         if (containSelf) {
@@ -582,6 +678,7 @@ public class NodeMgr {
         return containSelf;
     }
 
+<<<<<<< HEAD
     public long loadFrontends(DataInputStream dis, long checksum) throws IOException {
         int size = dis.readInt();
         long newChecksum = checksum ^ size;
@@ -638,12 +735,22 @@ public class NodeMgr {
     private StorageInfo getStorageInfo(URL url) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
 
+=======
+    private StorageInfo getStorageInfo(URL url) throws IOException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(HTTP_TIMEOUT_SECOND * 1000);
             connection.setReadTimeout(HTTP_TIMEOUT_SECOND * 1000);
+<<<<<<< HEAD
             return mapper.readValue(connection.getInputStream(), StorageInfo.class);
+=======
+
+            InputStreamReader inputStreamReader = new InputStreamReader(connection.getInputStream());
+            JsonReader jsonReader = new JsonReader(inputStreamReader);
+            return GsonUtils.GSON.fromJson(jsonReader, StorageInfo.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -651,7 +758,11 @@ public class NodeMgr {
         }
     }
 
+<<<<<<< HEAD
     private void getHelperNodes(String[] args) throws AnalysisException {
+=======
+    private void getHelperNodes(String[] args) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String helpers = null;
         for (int i = 0; i < args.length; i++) {
             if (args[i].equalsIgnoreCase("-helper")) {
@@ -683,7 +794,11 @@ public class NodeMgr {
                      * In this case, some errors have caused users to be troubled.
                      * So here directly exit the program and inform the user to avoid unnecessary trouble.
                      */
+<<<<<<< HEAD
                     throw new AnalysisException(
+=======
+                    throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             "Do not specify the helper node to FE itself. "
                                     + "Please specify it to the existing running Leader or Follower FE");
                 }
@@ -709,7 +824,11 @@ public class NodeMgr {
                 System.exit(-1);
             }
         } catch (UnknownHostException e) {
+<<<<<<< HEAD
             LOG.error(e);
+=======
+            LOG.error(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.exit(-1);
         }
         LOG.debug("get self node: {}", selfNode);
@@ -730,7 +849,11 @@ public class NodeMgr {
      * frontend log is deleted because of checkpoint.
      */
     public void checkCurrentNodeExist() {
+<<<<<<< HEAD
         if (Config.bdbje_reset_election_group.equals("true")) {
+=======
+        if (Config.bdbje_reset_election_group) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
 
@@ -746,7 +869,12 @@ public class NodeMgr {
     }
 
     private boolean getVersionFileFromHelper(Pair<String, Integer> helperNode) throws IOException {
+<<<<<<< HEAD
         String url = "http://" + helperNode.first + ":" + Config.http_port + "/version";
+=======
+        String url = "http://" + NetUtils.getHostPortInAccessibleFormat(
+                helperNode.first, Config.http_port) + "/version";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.info("Downloading version file from {}", url);
         try {
             File dir = new File(this.imageDir);
@@ -766,6 +894,7 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
+<<<<<<< HEAD
         long localImageVersion = 0;
         String dirStr = this.imageDir + subDir;
         Storage storage = new Storage(dirStr);
@@ -785,6 +914,33 @@ public class NodeMgr {
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
                     dirStr, localImageVersion, version, helperNode);
+=======
+        String dirStr = this.imageDir + subDir;
+        ImageLoader imageLoader = new ImageLoader(dirStr);
+        long localImageVersion = imageLoader.getImageJournalId();
+
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
+        URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
+        StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
+        long remoteImageVersion = remoteStorageInfo.getImageJournalId();
+        if (remoteImageVersion > localImageVersion) {
+            String url = "http://" + accessibleHostPort + "/image?"
+                    + "version=" + remoteImageVersion
+                    + "&subdir=" + subDir
+                    + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
+            LOG.info("start to download image.{} version:{}, from {}", remoteImageVersion,
+                    remoteStorageInfo.getImageFormatVersion(), url);
+            File dir;
+            if (remoteStorageInfo.getImageFormatVersion() == ImageFormatVersion.v1) {
+                dir = new File(dirStr);
+            } else {
+                dir = new File(dirStr, remoteStorageInfo.getImageFormatVersion().toString());
+            }
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteImageVersion), dir);
+        } else {
+            LOG.info("skip download image for {}, current version {} >= version {} from {}",
+                    dirStr, localImageVersion, remoteImageVersion, helperNode);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -875,7 +1031,11 @@ public class NodeMgr {
     }
 
     public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
+<<<<<<< HEAD
         if (host.equals(selfNode.first) && port == selfNode.second &&
+=======
+        if (NetUtils.isSameIP(host, selfNode.first) && port == selfNode.second &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.LEADER) {
             throw new DdlException("can not drop current master node.");
         }
@@ -886,10 +1046,19 @@ public class NodeMgr {
         try {
             fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
+<<<<<<< HEAD
                 throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
             }
             if (fe.getRole() != role) {
                 throw new DdlException(role.toString() + " does not exist[" + host + ":" + port + "]");
+=======
+                throw new DdlException("frontend does not exist[" +
+                        NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
+            }
+            if (fe.getRole() != role) {
+                throw new DdlException(role.toString() + " does not exist[" +
+                        NetUtils.getHostPortInAccessibleFormat(host, port) + "]");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             frontends.remove(fe.getNodeName());
             removedFrontends.add(fe.getNodeName());
@@ -906,11 +1075,27 @@ public class NodeMgr {
             unlock();
 
             if (fe != null) {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+=======
+                dropFrontendHook(fe);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
 
+<<<<<<< HEAD
+=======
+    private void dropFrontendHook(Frontend fe) {
+        GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+
+        GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        if (RunMode.isSharedDataMode()) {
+            StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void replayAddFrontend(Frontend fe) {
         tryLock(true);
         try {
@@ -1003,7 +1188,11 @@ public class NodeMgr {
 
     public Frontend unprotectCheckFeExist(String host, int port) {
         for (Frontend fe : frontends.values()) {
+<<<<<<< HEAD
             if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
+=======
+            if (fe.getEditLogPort() == port && NetUtils.isSameIP(fe.getHost(), host)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return fe;
             }
         }
@@ -1057,7 +1246,11 @@ public class NodeMgr {
                 continue;
             }
             // target, cur has same ip
+<<<<<<< HEAD
             if (targetPair.first.equals(curPair.first)) {
+=======
+            if (NetUtils.isSameIP(targetPair.first, curPair.first)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return fe;
             }
             // target, cur has same fqdn and both of them are not equal ""
@@ -1072,6 +1265,13 @@ public class NodeMgr {
         return frontends.get(name);
     }
 
+<<<<<<< HEAD
+=======
+    public Frontend getSelfFe() {
+        return frontends.get(nodeName);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getFollowerCnt() {
         int cnt = 0;
         for (Frontend fe : frontends.values()) {
@@ -1086,10 +1286,13 @@ public class NodeMgr {
         return this.clusterId;
     }
 
+<<<<<<< HEAD
     public void setClusterId(int clusterId) {
         this.clusterId = clusterId;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getToken() {
         return token;
     }
@@ -1152,6 +1355,7 @@ public class NodeMgr {
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
 
+<<<<<<< HEAD
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         setFrontendConfig(stmt.getConfig().getMap());
 
@@ -1159,11 +1363,19 @@ public class NodeMgr {
         int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
                 + Config.thrift_rpc_timeout_ms;
         StringBuilder errMsg = new StringBuilder();
+=======
+    public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
+        List<QueryStatisticsInfo> statisticsItems = Lists.newArrayList();
+        TGetQueryStatisticsRequest request = new TGetQueryStatisticsRequest();
+
+        List<Frontend> allFrontends = getAllFrontends();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(getSelfNode().first)) {
                 continue;
             }
 
+<<<<<<< HEAD
             TSetConfigRequest request = new TSetConfigRequest();
             request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
             request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
@@ -1189,6 +1401,81 @@ public class NodeMgr {
         if (errMsg.length() > 0) {
             ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
         }
+=======
+            try {
+                TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.getQueryStatistics(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost());
+                } else if (response.isSetQueryStatistics_infos()) {
+                    response.getQueryStatistics_infos().stream()
+                            .map(QueryStatisticsInfo::fromThrift)
+                            .forEach(statisticsItems::add);
+                }
+            } catch (Exception e) {
+                LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost(), e);
+            }
+        }
+
+        return statisticsItems;
+    }
+
+    public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            setFrontendConfig(stmt.getConfig().getMap());
+            List<Frontend> allFrontends = getFrontends(null);
+            int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
+            StringBuilder errMsg = new StringBuilder();
+            for (Frontend fe : allFrontends) {
+                if (fe.getHost().equals(getSelfNode().first)) {
+                    continue;
+                }
+                errMsg.append(callFrontNodeSetConfig(stmt, fe, timeout, errMsg));
+            }
+            if (errMsg.length() > 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+            }
+        } else {
+            Pair<String, Integer> leaderIpAndRpcPort = getLeaderIpAndRpcPort();
+            Frontend fe = new Frontend(FrontendNodeType.LEADER, "leader", leaderIpAndRpcPort.first,
+                    leaderIpAndRpcPort.second);
+            StringBuilder errMsg =
+                    callFrontNodeSetConfig(stmt, fe, Config.thrift_rpc_timeout_ms, new StringBuilder());
+            if (errMsg.length() > 0) {
+                ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
+            }
+        }
+
+    }
+
+    private StringBuilder callFrontNodeSetConfig(AdminSetConfigStmt stmt, Frontend fe, int timeout, StringBuilder errMsg) {
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
+        request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
+        try {
+            TSetConfigResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                    timeout,
+                    client -> client.setConfig(request));
+            TStatus status = response.getStatus();
+            if (status.getStatus_code() != TStatusCode.OK) {
+                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
+                if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
+                    errMsg.append(String.join(",", status.getError_msgs()));
+                }
+                errMsg.append(";");
+            }
+        } catch (Exception e) {
+            LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
+            errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+        }
+        return errMsg;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setFrontendConfig(Map<String, String> configs) throws DdlException {
@@ -1205,6 +1492,7 @@ public class NodeMgr {
         return frontends;
     }
 
+<<<<<<< HEAD
     public long loadBrokers(DataInputStream dis, long checksum) throws IOException {
         int count = dis.readInt();
         checksum ^= count;
@@ -1268,6 +1556,23 @@ public class NodeMgr {
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.NODE_MGR, 1);
+=======
+    public void resetFrontends() {
+        frontends.clear();
+        Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+        frontends.put(self.getNodeName(), self);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
+    }
+
+    public void replayResetFrontends(Frontend frontend) {
+        frontends.clear();
+        frontends.put(frontend.getNodeName(), frontend);
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.NODE_MGR, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer.writeJson(this);
         writer.close();
     }
@@ -1289,7 +1594,10 @@ public class NodeMgr {
         }
 
         systemInfo = nodeMgr.systemInfo;
+<<<<<<< HEAD
         systemInfoMap.put(clusterId, systemInfo);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         brokerMgr = nodeMgr.brokerMgr;
     }
 

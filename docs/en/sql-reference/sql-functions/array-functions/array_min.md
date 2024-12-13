@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_min
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the minimum value of all data in an ARRAY and return this result.
 

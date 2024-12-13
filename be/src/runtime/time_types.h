@@ -217,6 +217,12 @@ public:
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
+<<<<<<< HEAD
+=======
+    template <TimeUnit UNIT>
+    static Timestamp sub(Timestamp timestamp, int count);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <bool use_iso8601_format = false>
     static std::string to_string(Timestamp timestamp);
 
@@ -236,7 +242,11 @@ public:
     // MIN_DATE | 0
     static const Timestamp MIN_TIMESTAMP = (1892325482100162560LL);
 
+<<<<<<< HEAD
     // seconds from 1970.01.01
+=======
+    // seconds since julian date epoch to 1970.01.01
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static const Timestamp UNIX_EPOCH_SECONDS = (210866803200LL);
 };
 
@@ -398,6 +408,14 @@ Timestamp timestamp::add(Timestamp timestamp, int count) {
     }
 }
 
+<<<<<<< HEAD
+=======
+template <TimeUnit UNIT>
+Timestamp timestamp::sub(Timestamp timestamp, int count) {
+    return timestamp::add<UNIT>(timestamp, -count);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 double timestamp::time_to_literal(double time) {
     uint64_t t = time;
     uint64_t hour = t / 3600;

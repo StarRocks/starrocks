@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_filter
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns values from an array that matches the given filter.
 

@@ -1,7 +1,10 @@
 -- name: test_iceberg_v2
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 /*
  CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_orc_unpartitioned_table` (
@@ -66,6 +69,10 @@ select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_part
 select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table group by k1,k3 having count(1) > 1;
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /*
  CREATE TABLE `hive_catalog`.`iceberg_ci_db`.`iceberg_v2_parquet_unpartitioned_table` (
   `k1` INT NOT NULL,
@@ -129,7 +136,13 @@ select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_
 select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table group by k1,k3 having count(1) > 1;
 -- result:
 -- !result
+<<<<<<< HEAD
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
 []
+=======
+
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result

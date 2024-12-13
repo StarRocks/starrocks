@@ -26,7 +26,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.RoutineLoadDesc;
@@ -162,6 +167,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
             .add(TASK_CONSUME_SECOND)
             .add(TASK_TIMEOUT_SECOND)
+<<<<<<< HEAD
+=======
+            .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -470,7 +479,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
     }
 
+<<<<<<< HEAD
     public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws UserException {
+=======
+    public static RoutineLoadDesc buildLoadDesc(List<ParseNode> loadPropertyList) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (loadPropertyList == null) {
             return null;
         }
@@ -520,7 +533,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 partitionNames);
     }
 
+<<<<<<< HEAD
     public void checkJobProperties() throws UserException {
+=======
+    public void checkJobProperties() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Optional<String> optional = jobProperties.keySet().stream().filter(
                 entity -> !PROPERTIES_SET.contains(entity)).findFirst();
         if (optional.isPresent()) {
@@ -542,10 +559,17 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             try {
                 maxFilterRatio = Double.valueOf(maxFilterRatioStr);
             } catch (NumberFormatException exception) {
+<<<<<<< HEAD
                 throw new UserException("Incorrect format of max_filter_ratio", exception);
             }
             if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
                 throw new UserException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
+=======
+                throw new StarRocksException("Incorrect format of max_filter_ratio", exception);
+            }
+            if (maxFilterRatio < 0.0 || maxFilterRatio > 1.0) {
+                throw new StarRocksException(MAX_FILTER_RATIO_PROPERTY + " must between 0.0 and 1.0.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -591,7 +615,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 format = "avro";
                 jsonPaths = jobProperties.get(JSONPATHS);
             } else {
+<<<<<<< HEAD
                 throw new UserException("Format type is invalid. format=`" + format + "`");
+=======
+                throw new StarRocksException("Format type is invalid. format=`" + format + "`");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else {
             format = "csv"; // default csv
@@ -615,16 +643,27 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             try {
                 taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
+=======
+                throw new StarRocksException(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             String taskTimeoutSecondStr = jobProperties.get(TASK_TIMEOUT_SECOND);
             try {
                 taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
             }
             if (taskConsumeSecond >= taskTimeoutSecond) {
                 throw new UserException("task_timeout_second must be larger than task_consume_second");
+=======
+                throw new StarRocksException(e.getMessage());
+            }
+            if (taskConsumeSecond >= taskTimeoutSecond) {
+                throw new StarRocksException("task_timeout_second must be larger than task_consume_second");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else if (jobProperties.containsKey(TASK_CONSUME_SECOND) || jobProperties.containsKey(TASK_TIMEOUT_SECOND)) {
             if (jobProperties.containsKey(TASK_CONSUME_SECOND)) {
@@ -632,7 +671,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 try {
                     taskConsumeSecond = Long.parseLong(taskConsumeSecondStr);
                 } catch (NumberFormatException e) {
+<<<<<<< HEAD
                     throw new UserException(e.getMessage());
+=======
+                    throw new StarRocksException(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 taskTimeoutSecond = taskConsumeSecond * TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
             }
@@ -641,7 +684,11 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 try {
                     taskTimeoutSecond = Long.parseLong(taskTimeoutSecondStr);
                 } catch (NumberFormatException e) {
+<<<<<<< HEAD
                     throw new UserException(e.getMessage());
+=======
+                    throw new StarRocksException(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 taskConsumeSecond = taskTimeoutSecond / TASK_TIMEOUT_SECOND_TASK_CONSUME_SECOND_RATIO;
             }

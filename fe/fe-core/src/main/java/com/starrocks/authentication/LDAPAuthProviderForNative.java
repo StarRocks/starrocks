@@ -16,8 +16,13 @@ package com.starrocks.authentication;
 import com.google.common.base.Strings;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.mysql.security.LdapSecurity;
+=======
+import com.starrocks.mysql.security.LdapSecurity;
+import com.starrocks.sql.ast.UserAuthOption;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.nio.charset.StandardCharsets;
@@ -27,11 +32,21 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
     public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_LDAP_SIMPLE.name();
 
     @Override
+<<<<<<< HEAD
     public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity,
                                                           String password, String textForAuthPlugin) {
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         info.setTextForAuthPlugin(textForAuthPlugin);
+=======
+    public UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption)
+            throws AuthenticationException {
+        UserAuthenticationInfo info = new UserAuthenticationInfo();
+        info.setAuthPlugin(PLUGIN_NAME);
+        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
+        info.setOrigUserHost(userIdentity.getUser(), userIdentity.getHost());
+        info.setTextForAuthPlugin(userAuthOption == null ? null : userAuthOption.getAuthString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return info;
     }
 
@@ -54,6 +69,7 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
             }
         }
     }
+<<<<<<< HEAD
 
     @Override
     public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
@@ -65,4 +81,6 @@ public class LDAPAuthProviderForNative implements AuthenticationProvider {
         ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
         return ret;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

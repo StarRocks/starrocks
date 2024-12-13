@@ -40,6 +40,7 @@ import com.starrocks.thrift.TJoinOp;
 import java.util.Set;
 
 public enum JoinOperator {
+<<<<<<< HEAD
     INNER_JOIN("INNER JOIN", TJoinOp.INNER_JOIN),
     LEFT_OUTER_JOIN("LEFT OUTER JOIN", TJoinOp.LEFT_OUTER_JOIN),
 
@@ -54,6 +55,21 @@ public enum JoinOperator {
     // NOT IN subqueries. It can have a single equality join conjunct
     // that returns TRUE when the rhs is NULL.
     NULL_AWARE_LEFT_ANTI_JOIN("NULL AWARE LEFT ANTI JOIN",
+=======
+    INNER_JOIN("INNER JOIN", "⋈", TJoinOp.INNER_JOIN),
+    LEFT_OUTER_JOIN("LEFT OUTER JOIN", "⟕", TJoinOp.LEFT_OUTER_JOIN),
+
+    LEFT_SEMI_JOIN("LEFT SEMI JOIN", "⋉", TJoinOp.LEFT_SEMI_JOIN),
+    LEFT_ANTI_JOIN("LEFT ANTI JOIN", "◁", TJoinOp.LEFT_ANTI_JOIN),
+    RIGHT_SEMI_JOIN("RIGHT SEMI JOIN", "⋊", TJoinOp.RIGHT_SEMI_JOIN),
+    RIGHT_ANTI_JOIN("RIGHT ANTI JOIN", "▷", TJoinOp.RIGHT_ANTI_JOIN),
+    RIGHT_OUTER_JOIN("RIGHT OUTER JOIN", "⟖", TJoinOp.RIGHT_OUTER_JOIN),
+    FULL_OUTER_JOIN("FULL OUTER JOIN", "⟗", TJoinOp.FULL_OUTER_JOIN),
+    CROSS_JOIN("CROSS JOIN", "×", TJoinOp.CROSS_JOIN), // Variant of the LEFT ANTI JOIN that is used for the equal of
+    // NOT IN subqueries. It can have a single equality join conjunct
+    // that returns TRUE when the rhs is NULL.
+    NULL_AWARE_LEFT_ANTI_JOIN("NULL AWARE LEFT ANTI JOIN", "▷*",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TJoinOp.NULL_AWARE_LEFT_ANTI_JOIN);
 
     public static final String HINT_BUCKET = "BUCKET";
@@ -65,10 +81,19 @@ public enum JoinOperator {
     public static final String HINT_UNREORDER = "UNREORDER";
 
     private final String description;
+<<<<<<< HEAD
     private final TJoinOp thriftJoinOp;
 
     private JoinOperator(String description, TJoinOp thriftJoinOp) {
         this.description = description;
+=======
+    private final String algebra;
+    private final TJoinOp thriftJoinOp;
+
+    JoinOperator(String description, String algebra, TJoinOp thriftJoinOp) {
+        this.description = description;
+        this.algebra = algebra;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.thriftJoinOp = thriftJoinOp;
     }
 
@@ -77,6 +102,13 @@ public enum JoinOperator {
         return description;
     }
 
+<<<<<<< HEAD
+=======
+    public String toAlgebra() {
+        return algebra;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TJoinOp toThrift() {
         return thriftJoinOp;
     }

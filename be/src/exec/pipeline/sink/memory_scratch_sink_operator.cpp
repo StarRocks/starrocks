@@ -15,6 +15,10 @@
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
 #include "exec/pipeline/pipeline_driver_executor.h"
+<<<<<<< HEAD
+=======
+#include "exec/workgroup/work_group.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -47,7 +51,12 @@ bool MemoryScratchSinkOperator::is_finished() const {
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+<<<<<<< HEAD
         state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+=======
+        state->fragment_ctx()->workgroup()->executors()->driver_executor()->report_audit_statistics(
+                state->query_ctx(), state->fragment_ctx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }

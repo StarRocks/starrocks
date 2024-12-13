@@ -15,7 +15,11 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.common.Reference;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
@@ -24,6 +28,10 @@ import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.RowBatch;
 import com.starrocks.qe.SimpleScheduler;
+<<<<<<< HEAD
+=======
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.FrontendServiceVersion;
@@ -115,9 +123,15 @@ public class GetNextTest extends SchedulerTestBase {
             }
         });
 
+<<<<<<< HEAD
         SimpleScheduler.removeFromBlacklist(BACKEND1_ID);
         SimpleScheduler.removeFromBlacklist(backend2.getId());
         SimpleScheduler.removeFromBlacklist(backend3.getId());
+=======
+        SimpleScheduler.removeFromBlocklist(BACKEND1_ID);
+        SimpleScheduler.removeFromBlocklist(backend2.getId());
+        SimpleScheduler.removeFromBlocklist(backend3.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler = startScheduling(sql);
@@ -159,16 +173,26 @@ public class GetNextTest extends SchedulerTestBase {
             }
         });
 
+<<<<<<< HEAD
         SimpleScheduler.removeFromBlacklist(BACKEND1_ID);
         SimpleScheduler.removeFromBlacklist(backend2.getId());
         SimpleScheduler.removeFromBlacklist(backend3.getId());
+=======
+        SimpleScheduler.removeFromBlocklist(BACKEND1_ID);
+        SimpleScheduler.removeFromBlocklist(backend2.getId());
+        SimpleScheduler.removeFromBlocklist(backend3.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String sql = "select count(1) from lineitem";
         DefaultCoordinator scheduler;
 
         fetchDataResultStatusCode.setRef(TStatusCode.INTERNAL_ERROR);
         scheduler = startScheduling(sql);
+<<<<<<< HEAD
         Assert.assertThrows("Internal_error", UserException.class, scheduler::getNext);
+=======
+        Assert.assertThrows("Internal_error", StarRocksException.class, scheduler::getNext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         fetchDataResultStatusCode.setRef(TStatusCode.THRIFT_RPC_ERROR);
         scheduler = startScheduling(sql);
@@ -247,7 +271,11 @@ public class GetNextTest extends SchedulerTestBase {
 
         scheduler.cancel("Cancelled");
 
+<<<<<<< HEAD
         Assert.assertThrows("Cancelled", UserException.class, scheduler::getNext);
+=======
+        Assert.assertThrows("Cancelled", StarRocksException.class, scheduler::getNext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertFalse(scheduler.isDone());
         Assert.assertTrue(scheduler.getExecStatus().isCancelled());
@@ -292,7 +320,11 @@ public class GetNextTest extends SchedulerTestBase {
         }
         TResultBatch resultBatch = new TResultBatch(rows, false, 0);
 
+<<<<<<< HEAD
         TSerializer serializer = new TSerializer();
+=======
+        TSerializer serializer = ConfigurableSerDesFactory.getTSerializer();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return serializer.serialize(resultBatch);
     }
 

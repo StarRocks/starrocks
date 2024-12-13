@@ -14,6 +14,11 @@
 
 #include "agent/agent_task.h"
 
+<<<<<<< HEAD
+=======
+#include <fmt/format.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "agent/agent_common.h"
 #include "agent/finish_task.h"
 #include "agent/task_signatures_manager.h"
@@ -39,6 +44,10 @@
 #include "storage/task/engine_storage_migration_task.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+<<<<<<< HEAD
+=======
+#include "testutil/sync_point.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -128,7 +137,11 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
         LOG(WARNING) << alter_msg_head << "alter failed. signature: " << signature;
         error_msgs.emplace_back("alter failed");
         error_msgs.emplace_back("status: " + print_agent_status(status));
+<<<<<<< HEAD
         error_msgs.emplace_back(sc_status.get_error_msg());
+=======
+        error_msgs.emplace_back(sc_status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         task_status.__set_status_code(TStatusCode::RUNTIME_ERROR);
     }
 
@@ -204,7 +217,11 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
         if (!st.ok()) {
             LOG(WARNING) << "drop table failed! signature: " << agent_task_req->signature;
             error_msgs.emplace_back("drop table failed!");
+<<<<<<< HEAD
             error_msgs.emplace_back("drop tablet " + st.get_error_msg());
+=======
+            error_msgs.emplace_back(fmt::format("drop tablet {}", st.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             status_code = TStatusCode::RUNTIME_ERROR;
         }
         // if tablet is dropped by fe, then the related txn should also be removed
@@ -224,10 +241,33 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
 
     auto tablet_type = create_tablet_req.tablet_type;
     Status create_status;
+<<<<<<< HEAD
     if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
         create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
     } else {
         create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
+=======
+
+    if (create_tablet_req.__isset.timeout_ms && create_tablet_req.timeout_ms > 0) {
+        if (agent_task_req->isset.recv_time) {
+            int64_t current_time = time(nullptr);
+            TEST_SYNC_POINT_CALLBACK("AgentTask::run_create_tablet_task::time", &current_time);
+            int64_t elapsed_seconds = std::difftime(current_time, agent_task_req->recv_time);
+            if (elapsed_seconds * 1000 > create_tablet_req.timeout_ms) {
+                create_status =
+                        Status::TimedOut(fmt::format("the task waits too long in the queue. "
+                                                     "timeout: {} ms, elapsed: {} ms",
+                                                     create_tablet_req.timeout_ms, elapsed_seconds * 1000));
+            }
+        }
+    }
+    if (create_status.ok()) {
+        if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
+            create_status = exec_env->lake_tablet_manager()->create_tablet(create_tablet_req);
+        } else {
+            create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (!create_status.ok()) {
         LOG(WARNING) << "create table failed. status: " << create_status.to_string()
@@ -236,7 +276,11 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
         if (tablet_type == TTabletType::TABLET_TYPE_LAKE) {
             error_msgs.emplace_back(create_status.to_string(false));
         } else {
+<<<<<<< HEAD
             error_msgs.emplace_back("create tablet " + create_status.get_error_msg());
+=======
+            error_msgs.emplace_back(fmt::format("create tablet failed. {}", create_status.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     } else if (create_tablet_req.tablet_type != TTabletType::TABLET_TYPE_LAKE) {
         g_report_version.fetch_add(1, std::memory_order_relaxed);
@@ -356,7 +400,11 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "local tablet migration failed. status: " << res
                              << ", signature: " << agent_task_req->signature;
+<<<<<<< HEAD
                 error_msgs.emplace_back("local tablet migration failed. error message: " + res.get_error_msg());
+=======
+                error_msgs.emplace_back(fmt::format("local tablet migration failed. error message: {}", res.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 LOG(INFO) << "local tablet migration succeeded. status: " << res
                           << ", signature: " << agent_task_req->signature;
@@ -535,7 +583,11 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     for (auto tablet_id : compaction_req.tablet_ids) {
         EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
+<<<<<<< HEAD
         StorageEngine::instance()->execute_task(&engine_task);
+=======
+        (void)StorageEngine::instance()->execute_task(&engine_task);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     task_status.__set_status_code(status_code);
@@ -619,10 +671,15 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
             if (schema_version <= ori_tablet_schema->schema_version()) {
                 continue;
             }
+<<<<<<< HEAD
             TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>();
             new_schema->copy_from(ori_tablet_schema);
             st = new_schema->build_current_tablet_schema(schema_id, schema_version, pcolumn_param, ori_tablet_schema);
             if (!st.ok()) {
+=======
+            auto ret = TabletSchema::create(*ori_tablet_schema, schema_id, schema_version, pcolumn_param);
+            if (!ret.ok()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 status_code = TStatusCode::RUNTIME_ERROR;
                 std::string msg =
                         strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
@@ -631,8 +688,13 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
                 error_tablet_ids.push_back(tablet_id);
                 continue;
             }
+<<<<<<< HEAD
             tablet->update_max_version_schema(new_schema);
             VLOG(1) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
+=======
+            tablet->update_max_version_schema(ret.value());
+            VLOG(2) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     << " to " << schema_version;
         }
     }
@@ -668,8 +730,13 @@ void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_r
     std::vector<std::string> error_msgs;
     if (!status.ok()) {
         status_code = TStatusCode::RUNTIME_ERROR;
+<<<<<<< HEAD
         LOG(WARNING) << "Fail to upload job id=" << upload_request.job_id << " msg=" << status.get_error_msg();
         error_msgs.push_back(status.get_error_msg());
+=======
+        LOG(WARNING) << "Fail to upload job id=" << upload_request.job_id << " msg=" << status.message();
+        error_msgs.emplace_back(status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     TStatus task_status;
@@ -705,8 +772,13 @@ void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_ta
 
     if (!status.ok()) {
         status_code = TStatusCode::RUNTIME_ERROR;
+<<<<<<< HEAD
         LOG(WARNING) << "Fail to download job id=" << download_request.job_id << " msg=" << status.get_error_msg();
         error_msgs.push_back(status.get_error_msg());
+=======
+        LOG(WARNING) << "Fail to download job id=" << download_request.job_id << " msg=" << status.message();
+        error_msgs.emplace_back(status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     task_status.__set_status_code(status_code);
@@ -758,8 +830,13 @@ void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& age
                 status_code = TStatusCode::RUNTIME_ERROR;
                 LOG(WARNING) << "Fail to make snapshot tablet_id" << snapshot_request.tablet_id
                              << " schema_hash=" << snapshot_request.schema_hash
+<<<<<<< HEAD
                              << " version=" << snapshot_request.version << ", list file failed, " << st.get_error_msg();
                 error_msgs.push_back("make_snapshot failed. list file failed: " + st.get_error_msg());
+=======
+                             << " version=" << snapshot_request.version << ", list file failed, " << st.message();
+                error_msgs.push_back(fmt::format("make_snapshot failed. list file failed: {}", st.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -821,8 +898,13 @@ AgentStatus move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::st
     }
 
     if (!status.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "Fail to move job id=" << job_id << ", " << status.get_error_msg();
         error_msgs->push_back(status.get_error_msg());
+=======
+        LOG(WARNING) << "Fail to move job id=" << job_id << ", " << status.message();
+        error_msgs->emplace_back(status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return STARROCKS_INTERNAL_ERROR;
     }
 
@@ -871,7 +953,11 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
         auto res = handler.process_update_tablet_meta(update_tablet_meta_req);
         if (!res.ok()) {
             // TODO explict the error message and errorCode
+<<<<<<< HEAD
             error_msgs.emplace_back(res.get_error_msg());
+=======
+            error_msgs.emplace_back(res.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             status_code = TStatusCode::RUNTIME_ERROR;
         }
         unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);

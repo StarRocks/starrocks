@@ -17,7 +17,10 @@ package com.starrocks.connector.hive;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -26,6 +29,10 @@ import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.metastore.MetastoreTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -106,6 +113,15 @@ public class HiveMetastore implements IHiveMetastore {
         client.dropTable(dbName, tableName);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public MetastoreTable getMetastoreTable(String dbName, String tableName) {
+        org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
+        return HiveMetastoreApiConverter.toMetastoreTable(table);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Table getTable(String dbName, String tableName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
         StorageDescriptor sd = table.getSd();
@@ -113,20 +129,35 @@ public class HiveMetastore implements IHiveMetastore {
             throw new StarRocksConnectorException("Table is missing storage descriptor");
         }
 
+<<<<<<< HEAD
         if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
             validateHiveTableType(table.getTableType());
             if (AcidUtils.isFullAcidTable(table)) {
                 throw new StarRocksConnectorException(
                         String.format("%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName,
                                 tableName));
+=======
+        if (HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
+            return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
+        } else if (HiveMetastoreApiConverter.isKuduTable(table.getSd().getInputFormat())) {
+            return HiveMetastoreApiConverter.toKuduTable(table, catalogName);
+        } else {
+            validateHiveTableType(table.getTableType());
+            if (AcidUtils.isFullAcidTable(table)) {
+                throw new StarRocksConnectorException(String.format(
+                        "%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName, tableName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
             } else {
                 return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
             }
+<<<<<<< HEAD
         } else {
             return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -149,8 +180,13 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public boolean partitionExists(Table table, List<String> partitionValues) {
         HiveTable hiveTable = (HiveTable) table;
+<<<<<<< HEAD
         String dbName = hiveTable.getDbName();
         String tableName = hiveTable.getTableName();
+=======
+        String dbName = hiveTable.getCatalogDBName();
+        String tableName = hiveTable.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (metastoreType == MetastoreType.GLUE && hiveTable.hasBooleanTypePartitionColumn()) {
             List<String> allPartitionNames = client.getPartitionKeys(dbName, tableName);
             String hivePartitionName = toHivePartitionName(hiveTable.getPartitionColumnNames(), partitionValues);
@@ -290,11 +326,19 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
+<<<<<<< HEAD
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         String dbName = hmsTbl.getDbName();
         String tblName = hmsTbl.getTableName();
         List<String> dataColumns = hmsTbl.getDataColumnNames();
         Map<String, Partition> partitions = getPartitionsByNames(hmsTbl.getDbName(), hmsTbl.getTableName(), partitionNames);
+=======
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
+        List<String> dataColumns = table.getDataColumnNames();
+        Map<String, Partition> partitions =
+                getPartitionsByNames(table.getCatalogDBName(), table.getCatalogTableName(), partitionNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, HiveCommonStats> partitionCommonStats = partitions.entrySet().stream()
                 .collect(toImmutableMap(Map.Entry::getKey, entry -> toHiveCommonStats(entry.getValue().getParameters())));

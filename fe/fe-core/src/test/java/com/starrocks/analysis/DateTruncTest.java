@@ -18,6 +18,11 @@ package com.starrocks.analysis;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -36,7 +41,12 @@ public class DateTruncTest {
     public void testTruncAnalyze() throws Exception {
         String sql1 =
                 "SELECT date_trunc('century', '2020-11-03 23:41:37')";
+<<<<<<< HEAD
         StmtExecutor stmtExecutor1 = new StmtExecutor(ctx, sql1);
+=======
+        StatementBase statement = SqlParser.parseSingleStatement(sql1, ctx.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor1 = new StmtExecutor(ctx, statement);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         stmtExecutor1.execute();
     }
 }

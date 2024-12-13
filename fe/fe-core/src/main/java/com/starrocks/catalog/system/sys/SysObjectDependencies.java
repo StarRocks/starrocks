@@ -14,6 +14,10 @@
 
 package com.starrocks.catalog.system.sys;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -22,10 +26,19 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TObjectDependencyItem;
 import com.starrocks.thrift.TObjectDependencyReq;
@@ -73,6 +86,7 @@ public class SysObjectDependencies {
         }
 
         // list dependencies of mv
+<<<<<<< HEAD
         Collection<Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             db.readLock();
@@ -80,6 +94,16 @@ public class SysObjectDependencies {
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             try {
                 for (Table table : db.getTables()) {
+=======
+        Locker locker = new Locker();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
+        for (Database db : CollectionUtils.emptyIfNull(dbs)) {
+            String catalog = Optional.ofNullable(db.getCatalogName())
+                    .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // If it is not a materialized view, we do not need to verify permissions
                     if (!table.isMaterializedView()) {
                         continue;
@@ -100,6 +124,7 @@ public class SysObjectDependencies {
                         item.setCatalog(catalog);
                         item.setObject_type(mv.getType().toString());
 
+<<<<<<< HEAD
                         Optional<Table> refTable = refObj.mayGetTable();
                         item.setRef_object_id(refObj.getTableId());
                         item.setRef_database(refObj.getDbName());
@@ -108,6 +133,16 @@ public class SysObjectDependencies {
                         // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
                         // BaseTableInfo, so we use the source-of-truth information
                         if (!refTable.isPresent()) {
+=======
+                        item.setRef_object_id(refObj.getTableId());
+                        item.setRef_database(refObj.getDbName());
+                        item.setRef_catalog(refObj.getCatalogName());
+                        Optional<Table> refTable = MvUtils.getTableWithIdentifier(refObj);
+                        item.setRef_object_type(getRefObjectType(refTable, mv.getName()));
+                        // If the ref table is dropped/swapped/renamed, the actual info would be inconsistent with
+                        // BaseTableInfo, so we use the source-of-truth information
+                        if (refTable.isEmpty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             item.setRef_object_name(refObj.getTableName());
                         } else {
                             item.setRef_object_name(refTable.get().getName());
@@ -117,7 +152,11 @@ public class SysObjectDependencies {
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -127,6 +166,7 @@ public class SysObjectDependencies {
     /**
      * We may not be able to obtain the base table information when external catalog is unavailable
      *
+<<<<<<< HEAD
      * @param refObj Base tables for materialized views
      * @param mvName materialized view name
      * @return base table type
@@ -136,6 +176,16 @@ public class SysObjectDependencies {
         try {
             refObjType = refObj.mayGetTable()
                     .map(x -> x.getType().toString())
+=======
+     * @param refTable Base table for materialized views
+     * @param mvName materialized view name
+     * @return base table type
+     */
+    private static String getRefObjectType(Optional<Table> refTable, String mvName) {
+        String refObjType = "UNKNOWN";
+        try {
+            refObjType = refTable.map(x -> x.getType().toString())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .orElse("UNKNOWN");
         } catch (Exception e) {
             LOG.error("can not get table type error, mv name : {}, error-msg : {}",

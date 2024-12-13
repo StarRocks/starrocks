@@ -59,11 +59,14 @@ public class PartitionFunctionChecker {
             return false;
         }
         String fmt = ((StringLiteral) fnExpr.getChild(0)).getValue();
+<<<<<<< HEAD
         if (fmt.equalsIgnoreCase("week")) {
             throw new SemanticException("The function date_trunc used by the materialized view for partition" +
                     " does not support week formatting", expr.getPos());
         }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Expr child1 = fnExpr.getChild(1);
         if (child1 instanceof SlotRef) {
             SlotRef slotRef = (SlotRef) child1;

@@ -95,21 +95,34 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 默认情况下，StarRocks 会周期性自动采集表的全量统计信息。默认检查更新时间为 5 分钟一次，如果发现数据的更新比例满足条件，会自动触发采集。**全量采集可能会消耗大量的系统资源**，如果您不希望使用自动全量采集，可以设置 FE 配置项 `enable_collect_full_statistic` 为 `false`，系统会停止自动全量采集，根据您创建的自定义任务进行定制化采集。
 
+<<<<<<< HEAD
 ### 自动全量采集 (Auto Full Collection)
+=======
+### 自动采集 (Auto Collection)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 对于基础统计信息，StarRocks 默认自动进行全表全量统计信息采集，无需人工操作。对于从未采集过统计信息的表，会在一个调度周期内自动进行统计信息采集。对于已经采集过统计信息的表，StarRocks 会自动更新表的总行数以及修改的行数，将这些信息定期持久化下来，作为是否触发自动采集的判断条件。
 
 从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。
 
+<<<<<<< HEAD
 在调度周期内，触发新的自动采集任务需要满足下面的条件：
 
 - `enable_statistic_collect`设置为true
+=======
+在调度周期内，触发新的自动采集任务的条件：
+
+- 上次统计信息采集之后，该表是否发生过数据变更。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 采集落在配置的自动采集时间段内（默认为全天采集，可进行修改）。
 - 最新一次统计信息采集任务的更新时间早于分区数据更新的时间。
 - 该表的统计信息健康度（`statistic_auto_collect_ratio`）低于配置阈值。
 
+<<<<<<< HEAD
   *需要注意的是如果某张表的数据变更后，手动触发了对它的抽样采集任务会使得第采样任务的更新时间晚于数据更新时间，不会在这一个调度周期内生成该表的全量采集任务。*
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 > 健康度计算公式：
 >
 > 1. 当更新分区数量小于 10个时：1 - (上次统计信息采集后的更新行数/总行数)
@@ -118,7 +131,11 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 同时，StarRocks 对于不同更新频率、不同大小的表，做了详细的配置策略。
 
+<<<<<<< HEAD
 - 对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过 `statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
+=======
+- 对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过`statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - 对于数据量较大的表，StarRocks 按照以下策略限制：
 
@@ -130,6 +147,11 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
   - 当采集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
 
+<<<<<<< HEAD
+=======
+  - 采集任务只会对分区更新时间晚于上次采集任务时间的分区进行采集，未发生修改的分区不进行采集。
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 :::tip
 
 需要注意的是如果某张表的数据变更后，手动触发了对它的抽样采集任务会使得采样任务的更新时间晚于数据更新时间，不会在这一个调度周期内生成该表的全量采集任务。
@@ -528,12 +550,28 @@ partition_name:
 语法：
 
 ```sql
+<<<<<<< HEAD
 ANALYZE [FULL] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
 [PROPERTIES(property [,property])]
 ```
 
 示例：
+=======
+-- 手动全量采集
+ANALYZE [FULL] TABLE tbl_name (col_name [,col_name])
+[WITH SYNC | ASYNC MODE]
+[PROPERTIES(property [,property])]
+
+-- 手动直方图采集（自 v3.3.0 起）
+ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
+[WITH SYNC | ASYNC MODE]
+[WITH N BUCKETS]
+[PROPERTIES (property [,property])]
+```
+
+以下示例以手动全量采集为例：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```sql
 ANALYZE TABLE ex_hive_tbl(k1);

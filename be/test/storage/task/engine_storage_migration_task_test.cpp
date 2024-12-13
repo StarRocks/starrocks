@@ -17,10 +17,17 @@
 #include <gtest/gtest.h>
 
 #include "butil/file_util.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+=======
+#include "common/config.h"
+#include "exec/pipeline/query_context.h"
+#include "fs/fs_util.h"
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
@@ -129,6 +136,24 @@ public:
 
     static void init() {
         config::enable_event_based_compaction_framework = false;
+<<<<<<< HEAD
+=======
+        config::enable_transparent_data_encryption = true;
+        // add encryption keys
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+        auto val_st = root_encryption_key->generate_key();
+        EXPECT_TRUE(val_st.ok());
+        std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+        encryption_key->set_id(2);
+        KeyCache::instance().add_key(root_encryption_key);
+        KeyCache::instance().add_key(encryption_key);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         /*
             create duplicated key tablet
         */
@@ -273,11 +298,18 @@ public:
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+        DescriptorTbl* tbl = nullptr;
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -306,11 +338,18 @@ public:
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+        DescriptorTbl* tbl = nullptr;
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -655,11 +694,17 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* global_env = starrocks::GlobalEnv::GetInstance();
+<<<<<<< HEAD
     auto st = global_env->init();
     st.permit_unchecked_error();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     st = exec_env->init(paths);
     st.permit_unchecked_error();
+=======
+    (void)global_env->init();
+    auto* exec_env = starrocks::ExecEnv::GetInstance();
+    (void)exec_env->init(paths);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int r = RUN_ALL_TESTS();
 
     sleep(10);
@@ -667,7 +712,10 @@ int main(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     starrocks::fs::remove_all(storage_root.value());
+<<<<<<< HEAD
     starrocks::TEST_clear_all_columns_this_thread();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // delete engine
     engine->stop();
     delete engine;

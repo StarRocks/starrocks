@@ -29,7 +29,11 @@ public:
 };
 
 TEST_F(ByteBufferTest, normal) {
+<<<<<<< HEAD
     auto buf = ByteBuffer::allocate(4);
+=======
+    auto buf = ByteBuffer::allocate_with_tracker(4).value();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(0, buf->pos);
     ASSERT_EQ(4, buf->limit);
     ASSERT_EQ(4, buf->capacity);

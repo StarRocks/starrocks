@@ -18,6 +18,10 @@ import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.IcebergMetadataScanNode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
@@ -49,25 +53,50 @@ public class BackendSelectorFactory {
                                          ExecutionFragment execFragment,
                                          WorkerProvider workerProvider,
                                          ConnectContext connectContext,
+<<<<<<< HEAD
                                          Set<Integer> destReplicatedScanIds) {
         // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
         List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
+=======
+                                         Set<Integer> destReplicatedScanIds,
+                                         boolean useIncrementalScanRanges) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
+
+        // The parameters of getScanRangeLocations may ignore, It doesn't take effect.
+        int maxScanRangeLength = 0;
+        if (useIncrementalScanRanges) {
+            maxScanRangeLength = sessionVariable.getConnectorIncrementalScanRangeNumber();
+        }
+
+        List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(maxScanRangeLength);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (locations == null) {
             return new NoopBackendSelector();
         }
 
+<<<<<<< HEAD
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scanNode instanceof SchemaScanNode) {
             return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);
         } else if (scanNode instanceof HdfsScanNode || scanNode instanceof IcebergScanNode ||
                 scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                 scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode
+<<<<<<< HEAD
                 || scanNode instanceof OdpsScanNode) {
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
                     sessionVariable.getHDFSBackendSelectorScanRangeShuffle());
+=======
+                || scanNode instanceof OdpsScanNode || scanNode instanceof IcebergMetadataScanNode) {
+            return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
+                    sessionVariable.getForceScheduleLocal(),
+                    sessionVariable.getHDFSBackendSelectorScanRangeShuffle(), useIncrementalScanRanges);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             boolean hasColocate = execFragment.isColocated();
             boolean hasBucket = execFragment.isLocalBucketShuffleJoin();

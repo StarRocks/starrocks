@@ -25,10 +25,19 @@ public enum OperatorType {
     LOGICAL_HIVE_SCAN,
     LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
+<<<<<<< HEAD
+=======
+    LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LOGICAL_HUDI_SCAN,
     LOGICAL_DELTALAKE_SCAN,
     LOGICAL_PAIMON_SCAN,
     LOGICAL_ODPS_SCAN,
+<<<<<<< HEAD
+=======
+    LOGICAL_ICEBERG_METADATA_SCAN,
+    LOGICAL_KUDU_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
@@ -68,10 +77,19 @@ public enum OperatorType {
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,
+<<<<<<< HEAD
+=======
+    PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,
     PHYSICAL_ODPS_SCAN,
+<<<<<<< HEAD
+=======
+    PHYSICAL_ICEBERG_METADATA_SCAN,
+    PHYSICAL_KUDU_SCAN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     PHYSICAL_SCHEMA_SCAN,
     PHYSICAL_MYSQL_SCAN,
     PHYSICAL_META_SCAN,
@@ -142,4 +160,9 @@ public enum OperatorType {
     //  /  \
     // table table
     PATTERN_MULTIJOIN,
+<<<<<<< HEAD
+=======
+    DICTIONARY_GET,
+    MATCH_EXPR
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

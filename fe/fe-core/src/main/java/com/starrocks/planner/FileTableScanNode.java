@@ -21,7 +21,11 @@ import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
+<<<<<<< HEAD
 import com.starrocks.connector.RemoteScanRangeLocations;
+=======
+import com.starrocks.connector.hive.RemoteFileInputFormat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.sql.common.ErrorType;
@@ -85,7 +89,11 @@ public class FileTableScanNode extends ScanNode {
 
             THdfsScanRange hdfsScanRange = new THdfsScanRange();
             hdfsScanRange.setRelative_path(file.getFileName());
+<<<<<<< HEAD
 	    // If `fullPath` is set, we just pass it down directly. Otherwise we try to concatenate the `fileName`
+=======
+            // If `fullPath` is set, we just pass it down directly. Otherwise we try to concatenate the `fileName`
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // and `tableLocation` to get the full path.
             if (file.getFullPath() != null) {
                 hdfsScanRange.setFull_path(file.getFullPath());
@@ -100,8 +108,14 @@ public class FileTableScanNode extends ScanNode {
             hdfsScanRange.setLength(blockDesc.getLength());
             hdfsScanRange.setFile_length(file.getLength());
             hdfsScanRange.setModification_time(file.getModificationTime());
+<<<<<<< HEAD
             hdfsScanRange.setFile_format(fileTable.getFileFormat().toThrift());
             if (RemoteScanRangeLocations.isTextFormat(hdfsScanRange.getFile_format())) {
+=======
+            RemoteFileInputFormat fileFormat = fileTable.getFileFormat();
+            hdfsScanRange.setFile_format(fileFormat.toThrift());
+            if (fileFormat.isTextFormat()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 hdfsScanRange.setText_file_desc(file.getTextFileFormatDesc().toThrift());
             }
 
@@ -150,6 +164,11 @@ public class FileTableScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
+<<<<<<< HEAD
+=======
+            HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
@@ -163,11 +182,14 @@ public class FileTableScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return scanRangeLocationsList.size();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HDFS_SCAN_NODE;
         THdfsScanNode tHdfsScanNode = new THdfsScanNode();
@@ -183,6 +205,10 @@ public class FileTableScanNode extends ScanNode {
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
+<<<<<<< HEAD
+=======
+        HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

@@ -254,8 +254,14 @@ public class SparkEtlJob {
         try {
             new SparkEtlJob(args[0]).run();
         } catch (Exception e) {
+<<<<<<< HEAD
             System.err.println("spark etl job run failed");
             LOG.warn(e);
+=======
+            String msg = "spark etl job run failed";
+            System.err.println(msg);
+            LOG.warn(msg, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.exit(-1);
         }
     }

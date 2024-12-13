@@ -5,7 +5,11 @@ sidebar_position: 0.9
 
 # CAST
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts an input into the specified type. For example, `cast (input as BIGINT)` converts the input into a BIGINT value.
 

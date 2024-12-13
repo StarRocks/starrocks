@@ -70,8 +70,12 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     if (node_info == nullptr) {
         return Status::InternalError(strings::Substitute("set_config fail: be $0 not found", be_id));
     }
+<<<<<<< HEAD
     doris::PBackendService_Stub* stub =
             ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+=======
+    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (stub == nullptr) {
         return Status::InternalError(strings::Substitute("set_config fail to get brpc stub for $0:$1", node_info->host,
                                                          node_info->brpc_port));

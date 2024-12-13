@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multi_distinct_count
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 `expr` 中去除重复值后的行数，功能等同于 COUNT(DISTINCT expr)。
 

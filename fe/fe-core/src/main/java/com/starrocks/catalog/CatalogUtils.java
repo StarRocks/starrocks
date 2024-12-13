@@ -24,6 +24,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -56,7 +60,11 @@ public class CatalogUtils {
 
     // check table exist
     public static void checkTableExist(Database db, String tableName) throws DdlException {
+<<<<<<< HEAD
         Table table = db.getTable(tableName);
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
         }
@@ -71,7 +79,12 @@ public class CatalogUtils {
 
     // check table state
     public static void checkTableState(OlapTable olapTable, String tableName) throws DdlException {
+<<<<<<< HEAD
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+=======
+        if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                && olapTable.getState() != OlapTable.OlapTableState.OPTIMIZE) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw InvalidOlapTableStateException.of(olapTable.getState(), tableName);
         }
     }
@@ -113,12 +126,18 @@ public class CatalogUtils {
     }
 
     // Used to temporarily disable some command on lake table and remove later.
+<<<<<<< HEAD
     public static void checkIsLakeTable(String dbName, String tableName) throws AnalysisException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+    public static void checkIsLakeTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return;
         }
 
+<<<<<<< HEAD
         db.readLock();
         try {
             Table table = db.getTable(tableName);
@@ -130,6 +149,14 @@ public class CatalogUtils {
             }
         } finally {
             db.readUnlock();
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            return;
+        }
+        if (table.isCloudNativeTable()) {
+            throw new SemanticException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -200,8 +227,13 @@ public class CatalogUtils {
     }
 
     public static void checkTempPartitionConflict(List<Partition> partitionList,
+<<<<<<< HEAD
                                                List<Partition> tempPartitionList,
                                                ListPartitionInfo listPartitionInfo) throws DdlException {
+=======
+                                                  List<Partition> tempPartitionList,
+                                                  ListPartitionInfo listPartitionInfo) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
         Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
         Map<Long, List<LiteralExpr>> newListMap = new HashMap<>(listMap);
@@ -285,7 +317,11 @@ public class CatalogUtils {
                     }
                 }
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
+<<<<<<< HEAD
                 int partitionColSize = listPartitionInfo.getPartitionColumns().size();
+=======
+                int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
                 checkItemValuesValid(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
                         multiItemListPartitionDesc);
@@ -378,20 +414,34 @@ public class CatalogUtils {
     }
 
     public static int calPhysicalPartitionBucketNum() {
+<<<<<<< HEAD
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+=======
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
+
+        if (RunMode.isSharedDataMode()) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return divisibleBucketNum(backendNum);
     }
 
     public static int calBucketNumAccordingToBackends() {
+<<<<<<< HEAD
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
 
         if (RunMode.isSharedDataMode()) {
             backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+=======
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
+
+        if (RunMode.isSharedDataMode()) {
+            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // When POC, the backends is not greater than three most of the time.
@@ -428,7 +478,11 @@ public class CatalogUtils {
         List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
         boolean dataImported = true;
         for (Partition partition : partitions) {
+<<<<<<< HEAD
             if (partition.getVisibleVersion() == 1) {
+=======
+            if (partition.getDefaultPhysicalPartition().getVisibleVersion() == 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 dataImported = false;
                 break;
             }

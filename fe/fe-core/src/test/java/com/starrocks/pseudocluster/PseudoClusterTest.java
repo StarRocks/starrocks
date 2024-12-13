@@ -20,12 +20,25 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
+<<<<<<< HEAD
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.storagevolume.StorageVolume;
@@ -41,6 +54,12 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class PseudoClusterTest {
     @BeforeClass
@@ -115,7 +134,11 @@ public class PseudoClusterTest {
             stmt.execute("prepare stmt1 from select * from test where pk = ?");
             stmt.execute("prepare stmt3 from select 1");
             stmt.execute("set @i = 1");
+<<<<<<< HEAD
             stmt.executeUpdate("execute stmt1 using @i");
+=======
+            stmt.execute("execute stmt1 using @i");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt3");
             stmt.execute("select * from test where pk = ?", 1);
@@ -123,7 +146,11 @@ public class PseudoClusterTest {
             {
                 SQLException e = Assert.assertThrows(SQLException.class,
                         () -> stmt.execute("prepare stmt2 from insert overwrite test values (1,2)"));
+<<<<<<< HEAD
                 Assert.assertEquals("Getting analyzing error. Detail message: This command is not " +
+=======
+                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "supported in the prepared statement protocol yet.", e.getMessage());
                 Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
                 Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
@@ -131,7 +158,11 @@ public class PseudoClusterTest {
             {
                 SQLException e = Assert.assertThrows(SQLException.class,
                         () -> stmt.execute("prepare stmt2 from ALTER USER 'root'@'%' IDENTIFIED BY 'XXXXX' "));
+<<<<<<< HEAD
                 Assert.assertEquals("Getting analyzing error. Detail message: This command is not " +
+=======
+                Assert.assertEquals("(conn=1) Getting analyzing error. Detail message: This command is not " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "supported in the prepared statement protocol yet.", e.getMessage());
                 Assert.assertEquals(ErrorCode.ERR_UNSUPPORTED_PS.getCode(), e.getErrorCode());
                 Assert.assertTrue(e.getMessage().contains(ErrorCode.ERR_UNSUPPORTED_PS.formatErrorMsg()));
@@ -161,7 +192,11 @@ public class PseudoClusterTest {
             stmt.execute("prepare stmt1 from select * from test where pk = ?");
             stmt.execute("prepare stmt3 from select 1");
             stmt.execute("set @i = 1");
+<<<<<<< HEAD
             stmt.executeUpdate("execute stmt1 using @i");
+=======
+            stmt.execute("execute stmt1 using @i");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt3");
             stmt.execute("select * from test where pk = ?", 1);
@@ -237,6 +272,7 @@ public class PseudoClusterTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
+<<<<<<< HEAD
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
                 return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
@@ -245,6 +281,27 @@ public class PseudoClusterTest {
             public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 return pathInfo;
             }
+=======
+            public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
+            }
+
+            @Mock
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
+                return pathInfo;
+            }
+
+            @Mock
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+                // the worker id is a random number
+                return new ArrayList<>(Arrays.asList(10001L));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         };
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
@@ -259,6 +316,70 @@ public class PseudoClusterTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions, long warehouseId)
+                    throws DdlException {
+                return;
+            }
+        };
+
+        /*
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+
+        new MockUp<Cluster>() {
+            @Mock
+            public List<Long> getComputeNodeIds() {
+                return Lists.newArrayList(1L);
+            }
+        };
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+        };
+
+        new MockUp<ComputeNode>() {
+            @Mock
+            public boolean isAlive() {
+                return true;
+            }
+        };
+
+         */
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {

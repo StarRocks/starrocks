@@ -17,6 +17,10 @@ package com.starrocks.credential;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.connector.odps.OdpsProperties;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.logging.log4j.LogManager;

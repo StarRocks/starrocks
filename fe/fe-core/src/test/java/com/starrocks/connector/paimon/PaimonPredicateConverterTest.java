@@ -249,7 +249,11 @@ public class PaimonPredicateConverterTest {
     @Test
     public void testBinaryString() {
         ConstantOperator value = ConstantOperator.createVarchar("ttt");
+<<<<<<< HEAD
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);;
+=======
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F1, value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Predicate result = CONVERTER.convert(op);
         Assert.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate = (LeafPredicate) result;

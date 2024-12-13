@@ -14,15 +14,21 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.List;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -91,7 +97,10 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery4_1() {
+<<<<<<< HEAD
         setTracLogModule("MV");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         runFileUnitTest("materialized-view/ssb/q4-1");
     }
 
@@ -132,6 +141,7 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
         PlanTestBase.assertContains(plan, "lineorder_flat_mv");
         connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
     }
+<<<<<<< HEAD
 
     @Test
     public void testNestedMVRewriteWithSSB() {
@@ -161,4 +171,6 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
         });
         connectContext.getSessionVariable().setQueryIncludingMVNames("");
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

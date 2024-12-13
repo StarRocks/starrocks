@@ -21,18 +21,28 @@ namespace starrocks::pipeline {
 
 // Used for PassthroughExchanger.
 // The input chunk is most likely full, so we don't merge it to avoid copying chunk data.
+<<<<<<< HEAD
 Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
+=======
+void LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk) {
+    std::lock_guard<std::mutex> l(_chunk_lock);
+    if (_is_finished) {
+        return;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     size_t memory_usage = chunk->memory_usage();
     size_t num_rows = chunk->num_rows();
     _local_memory_usage += memory_usage;
     _full_chunk_queue.emplace(std::move(chunk));
     _memory_manager->update_memory_usage(memory_usage, num_rows);
+<<<<<<< HEAD
 
     return Status::OK();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Used for PartitionExchanger.
@@ -55,10 +65,15 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_ptr<std::vector<uint32_t>>& indexes,
                                               uint32_t from, uint32_t size, Columns& partition_columns,
                                               const std::vector<ExprContext*>& partition_expr_ctxs,
                                               size_t memory_usage) {
+=======
+Status LocalExchangeSourceOperator::add_chunk(const std::vector<std::string>& partition_key,
+                                              std::unique_ptr<Chunk> chunk) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::lock_guard<std::mutex> l(_chunk_lock);
     if (_is_finished) {
         return Status::OK();
@@ -66,6 +81,7 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
 
     // unpack chunk's const column, since Chunk#append_selective cannot be const column
     chunk->unpack_and_duplicate_const_columns();
+<<<<<<< HEAD
 
     auto partition_key = std::make_shared<PartitionKey>(std::make_shared<Columns>(partition_columns), (*indexes)[0]);
     auto partition_entry = _partitions.find(partition_key);
@@ -96,6 +112,17 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, const std::shared_
     _local_memory_usage += memory_usage;
     _memory_manager->update_memory_usage(memory_usage, size);
 
+=======
+    auto memory_usage = chunk->memory_usage();
+    auto num_rows = chunk->num_rows();
+
+    _partition_key2partial_chunks[partition_key].queue.push(std::move(chunk));
+    _partition_key2partial_chunks[partition_key].num_rows += num_rows;
+    _partition_key2partial_chunks[partition_key].memory_usage += memory_usage;
+
+    _local_memory_usage += memory_usage;
+    _memory_manager->update_memory_usage(memory_usage, num_rows);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -114,8 +141,12 @@ bool LocalExchangeSourceOperator::has_output() const {
     std::lock_guard<std::mutex> l(_chunk_lock);
 
     return !_full_chunk_queue.empty() || _partition_rows_num >= _factory->runtime_state()->chunk_size() ||
+<<<<<<< HEAD
            _key_partition_max_rows() >= _factory->runtime_state()->chunk_size() ||
            (_is_finished && (_partition_rows_num > 0 || _key_partition_max_rows() > 0)) || _local_buffer_almost_full();
+=======
+           _key_partition_max_rows() > 0 || (_is_finished && _partition_rows_num > 0) || _local_buffer_almost_full();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
@@ -126,7 +157,11 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     // clear _partition_chunk_queue
     { [[maybe_unused]] typeof(_partition_chunk_queue) tmp = std::move(_partition_chunk_queue); }
     // clear _key_partition_pending_chunks
+<<<<<<< HEAD
     { [[maybe_unused]] typeof(_partitions) tmp = std::move(_partitions); }
+=======
+    { [[maybe_unused]] typeof(_partition_key2partial_chunks) tmp = std::move(_partition_key2partial_chunks); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Subtract the number of rows of buffered chunks from row_count of _memory_manager and make it unblocked.
     _memory_manager->update_memory_usage(-_local_memory_usage, -_partition_rows_num);
     _partition_rows_num = 0;
@@ -209,13 +244,18 @@ ChunkPtr LocalExchangeSourceOperator::_pull_shuffle_chunk(RuntimeState* state) {
 }
 
 ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* state) {
+<<<<<<< HEAD
     std::vector<PartitionChunk> selected_partition_chunks;
+=======
+    std::vector<ChunkPtr> selected_partition_chunks;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t num_rows = 0;
     size_t memory_usage = 0;
 
     {
         std::lock_guard<std::mutex> l(_chunk_lock);
 
+<<<<<<< HEAD
         PendingPartitionChunks& pendingPartitionChunks = _max_row_partition_chunks();
 
         DCHECK(!pendingPartitionChunks.partition_chunk_queue.empty());
@@ -231,17 +271,41 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
 
         pendingPartitionChunks.partition_row_nums -= num_rows;
         pendingPartitionChunks.memory_usage -= memory_usage;
+=======
+        PartialChunks& partial_chunks = _max_row_partition_chunks();
+        DCHECK(!partial_chunks.queue.empty());
+
+        while (!partial_chunks.queue.empty() &&
+               num_rows + partial_chunks.queue.front()->num_rows() <= state->chunk_size()) {
+            num_rows += partial_chunks.queue.front()->num_rows();
+            memory_usage += partial_chunks.queue.front()->memory_usage();
+
+            selected_partition_chunks.push_back(std::move(partial_chunks.queue.front()));
+            partial_chunks.queue.pop();
+        }
+
+        partial_chunks.num_rows -= num_rows;
+        partial_chunks.memory_usage -= memory_usage;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _local_memory_usage -= memory_usage;
         _memory_manager->update_memory_usage(-memory_usage, -num_rows);
     }
 
     // Unlock during merging partition chunks into a full chunk.
+<<<<<<< HEAD
     ChunkPtr chunk = selected_partition_chunks[0].chunk->clone_empty_with_slot();
     chunk->reserve(num_rows);
     for (const auto& partition_chunk : selected_partition_chunks) {
         // NOTE: unpack column if `partition_chunk.chunk` constains const column
         chunk->append_selective(*partition_chunk.chunk, partition_chunk.indexes->data(), partition_chunk.from,
                                 partition_chunk.size);
+=======
+    ChunkPtr chunk = selected_partition_chunks[0]->clone_empty_with_slot();
+    chunk->reserve(num_rows);
+    for (const auto& partition_chunk : selected_partition_chunks) {
+        // NOTE: unpack column if `partition_chunk.chunk` constains const column
+        chunk->append(*partition_chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return chunk;
@@ -249,18 +313,29 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
 
 int64_t LocalExchangeSourceOperator::_key_partition_max_rows() const {
     int64_t max_rows = 0;
+<<<<<<< HEAD
     for (const auto& partition : _partitions) {
         max_rows = std::max(partition.second.partition_row_nums, max_rows);
+=======
+    for (const auto& partition : _partition_key2partial_chunks) {
+        max_rows = std::max(partition.second.num_rows, max_rows);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return max_rows;
 }
 
+<<<<<<< HEAD
 LocalExchangeSourceOperator::PendingPartitionChunks& LocalExchangeSourceOperator::_max_row_partition_chunks() {
     using it_type = decltype(_partitions)::value_type;
     auto max_it = std::max_element(_partitions.begin(), _partitions.end(), [](const it_type& lhs, const it_type& rhs) {
         return lhs.second.partition_row_nums < rhs.second.partition_row_nums;
     });
+=======
+LocalExchangeSourceOperator::PartialChunks& LocalExchangeSourceOperator::_max_row_partition_chunks() {
+    auto max_it = std::max_element(_partition_key2partial_chunks.begin(), _partition_key2partial_chunks.end(),
+                                   [](auto& lhs, auto& rhs) { return lhs.second.num_rows < rhs.second.num_rows; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return max_it->second;
 }

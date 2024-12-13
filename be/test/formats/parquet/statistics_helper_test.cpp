@@ -59,7 +59,11 @@ TEST_F(StatisticsHelperTest, TestInFilterInt) {
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctxs);
     EXPECT_EQ(ctxs.size(), 1);
 
+<<<<<<< HEAD
     std::vector<bool> selected(min_values.size(), true);
+=======
+    Filter selected(min_values.size(), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctxs[0], &field, timezone, selected);
     ASSERT_OK(st);
     ASSERT_TRUE(selected[0]);
@@ -82,7 +86,11 @@ TEST_F(StatisticsHelperTest, TestInFilterString) {
         ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctxs);
         EXPECT_EQ(ctxs.size(), 1);
 
+<<<<<<< HEAD
         std::vector<bool> selected(min_values.size(), true);
+=======
+        Filter selected(min_values.size(), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctxs[0], &field, timezone,
                                                               selected);
         ASSERT_OK(st);
@@ -98,7 +106,11 @@ TEST_F(StatisticsHelperTest, TestInFilterString) {
         ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctxs);
         EXPECT_EQ(ctxs.size(), 1);
 
+<<<<<<< HEAD
         std::vector<bool> selected(min_values.size(), true);
+=======
+        Filter selected(min_values.size(), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctxs[0], &field, timezone,
                                                               selected);
         ASSERT_OK(st);
@@ -128,7 +140,11 @@ TEST_F(StatisticsHelperTest, TestInFilterDate) {
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctxs);
     EXPECT_EQ(ctxs.size(), 1);
 
+<<<<<<< HEAD
     std::vector<bool> selected(min_values.size(), true);
+=======
+    Filter selected(min_values.size(), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctxs[0], &field, timezone, selected);
     ASSERT_OK(st);
     ASSERT_TRUE(selected[0]);
@@ -163,7 +179,11 @@ TEST_F(StatisticsHelperTest, TestInFilterDatetime) {
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctxs);
     EXPECT_EQ(ctxs.size(), 1);
 
+<<<<<<< HEAD
     std::vector<bool> selected(min_values.size(), true);
+=======
+    Filter selected(min_values.size(), true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto st = StatisticsHelper::in_filter_on_min_max_stat(min_values, max_values, ctxs[0], &field, timezone, selected);
     ASSERT_OK(st);
     ASSERT_TRUE(selected[0]);

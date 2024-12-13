@@ -34,14 +34,20 @@
 
 package com.starrocks.persist.gson;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.Type;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils.HiddenAnnotationExclusionStrategy;
@@ -50,8 +56,11 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -60,7 +69,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.lang.reflect.Field;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 
 /*
@@ -303,6 +315,7 @@ public class GsonDerivedClassSerializationTest {
         Assert.assertEquals("C", classA.tagA);
         Assert.assertEquals(null, classA.postTagA);
     }
+<<<<<<< HEAD
 
     @Test
     public void testDeserializeExpressionRangePartitionInfoV2() throws Exception {
@@ -323,4 +336,6 @@ public class GsonDerivedClassSerializationTest {
             Assert.fail(e.getMessage());
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

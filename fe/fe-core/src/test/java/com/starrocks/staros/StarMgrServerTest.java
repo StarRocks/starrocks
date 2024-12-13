@@ -67,7 +67,11 @@ public class StarMgrServerTest {
         server.getJournalSystem().setReplayId(1L);
         Assert.assertEquals(1L, server.getReplayId());
 
+<<<<<<< HEAD
         new MockUp<BDBJEJournalSystem>() {
+=======
+        new MockUp<StarOSBDBJEJournalSystem>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public void replayTo(long journalId) throws StarException {
             }
@@ -76,9 +80,15 @@ public class StarMgrServerTest {
                 return 0;
             }
         };
+<<<<<<< HEAD
         Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L));
 
         new MockUp<BDBJEJournalSystem>() {
+=======
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 0L);
+
+        new MockUp<StarOSBDBJEJournalSystem>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public void replayTo(long journalId) throws StarException {
             }
@@ -87,6 +97,10 @@ public class StarMgrServerTest {
                 return 1;
             }
         };
+<<<<<<< HEAD
         Assert.assertTrue(server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L));
+=======
+        server.replayAndGenerateImage(tempFolder.getRoot().getPath(), 1L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

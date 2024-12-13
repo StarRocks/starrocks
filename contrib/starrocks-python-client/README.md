@@ -27,6 +27,7 @@ starrocks://<User>:<Password>@<Host>:<Port>/<Catalog>.<Database>
 ```
 
 ## Example
+<<<<<<< HEAD
 It is recommended to use python 3.x to connect to the StarRocks database, eg:
 ```
 from sqlalchemy import create_engine
@@ -37,4 +38,43 @@ engine = create_engine('starrocks://root:xxx@localhost:9030/hive_catalog.hive_db
 connection = engine.connect()
 
 rows = connection.execute(text("SELECT * FROM hive_table")).fetchall()
+=======
+Python connector supports only Python 3 and SQLAlchemy 2:
+```
+from sqlalchemy import create_engine, Integer, insert
+from sqlalchemy.schema import Table, MetaData, Column
+from sqlalchemy.sql.expression import select, text
+
+engine = create_engine('starrocks://root:xxx@localhost:9030/hive_catalog.hive_db')
+
+### Querying data
+with engine.connect() as connection:
+    rows = connection.execute(text("SELECT * FROM hive_table")).fetchall()
+    print(rows)
+
+
+### DDL Operation
+meta = MetaData()
+tbl = Table(
+    'table1',
+    meta,
+    Column("id", Integer),
+    starrocks_engine='OLAP',
+    starrocks_comment='table comment',
+    starrocks_properties=(
+        ("storage_medium", "SSD"),
+        ("storage_cooldown_time", "2025-06-04 00:00:00"),
+        ("replication_num", "1")
+    ))
+
+meta.create_all(engine)
+
+### Insert data
+stmt = insert(tbl).values(id=1)
+stmt.compile()
+with engine.connect() as connection:
+    connection.execute(stmt)
+    rows = connection.execute(tbl.select()).fetchall()
+    print(rows)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```

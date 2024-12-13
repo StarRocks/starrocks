@@ -39,7 +39,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,6 +65,7 @@ public class DomainResolver extends FrontendDaemon {
     // this is only available in BAIDU, for resolving BNS
     private static final String BNS_RESOLVER_TOOLS_PATH = "/usr/bin/get_instance_by_service";
 
+<<<<<<< HEAD
     private Auth auth;
     private AuthenticationMgr authenticationManager;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -75,6 +79,13 @@ public class DomainResolver extends FrontendDaemon {
     public DomainResolver(AuthenticationMgr authenticationManager) {
         super("domain resolver", 10L * 1000);
         this.auth = null;
+=======
+    private AuthenticationMgr authenticationManager;
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    public DomainResolver(AuthenticationMgr authenticationManager) {
+        super("domain resolver", 10L * 1000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.authenticationManager = authenticationManager;
     }
 
@@ -85,7 +96,10 @@ public class DomainResolver extends FrontendDaemon {
     public void setAuthenticationManager(AuthenticationMgr manager) {
         lock.writeLock().lock();
         try {
+<<<<<<< HEAD
             this.auth = null;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.authenticationManager = manager;
         } finally {
             lock.writeLock().unlock();
@@ -99,12 +113,16 @@ public class DomainResolver extends FrontendDaemon {
         try {
             // domain names
             Set<String> allDomains;
+<<<<<<< HEAD
             if (auth != null) {
                 allDomains = Sets.newHashSet();
                 auth.getAllDomains(allDomains);
             } else {
                 allDomains = authenticationManager.getAllHostnames();
             }
+=======
+            allDomains = authenticationManager.getAllHostnames();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // resolve domain name
             Map<String, Set<String>> resolvedIPsMap = Maps.newHashMap();
@@ -120,11 +138,15 @@ public class DomainResolver extends FrontendDaemon {
             }
 
             // refresh user priv table by resolved IPs
+<<<<<<< HEAD
             if (auth != null) {
                 auth.refreshUserPrivEntriesByResolvedIPs(resolvedIPsMap);
             } else {
                 authenticationManager.setHostnameToIpSet(resolvedIPsMap);
             }
+=======
+            authenticationManager.setHostnameToIpSet(resolvedIPsMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             lock.readLock().unlock();
         }
@@ -208,7 +230,11 @@ public class DomainResolver extends FrontendDaemon {
                     bufferedReader.close();
                 }
             } catch (IOException e) {
+<<<<<<< HEAD
                 LOG.error("Close bufferedReader error! " + e);
+=======
+                LOG.error("Close bufferedReader error! ", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }

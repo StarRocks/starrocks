@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_empty
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Constructs a PERCENTILE value, which is used to fill in null values for data loading using [Stream Load](../../../loading/StreamLoad.md) or [INSERT INTO](../../../loading/InsertInto.md).
 

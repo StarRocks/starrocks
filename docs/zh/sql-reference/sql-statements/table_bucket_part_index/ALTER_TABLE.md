@@ -9,7 +9,11 @@ displayed_sidebar: docs
 
 该语句用于修改已有表，包括：
 
+<<<<<<< HEAD
 - [修改表名、分区名、索引名](#rename-对名称进行修改)
+=======
+- [修改表名、分区名、索引名、列名](#rename-对名称进行修改)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - [修改表注释](#修改表的注释31-版本起)
 - [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
 - [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
@@ -35,7 +39,11 @@ alter_clause1[, alter_clause2, ...]
 
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
+<<<<<<< HEAD
 - rename: 修改表名，rollup index 名称，修改 partition 名称。
+=======
+- rename: 修改表名、rollup index 名、partition 名或列名（从 3.3.2 版本开始支持）。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - comment: 修改表的注释。**从 3.1 版本开始支持。**
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
@@ -48,7 +56,10 @@ alter_clause1[, alter_clause2, ...]
 ## 使用限制和注意事项
 
 - partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
+<<<<<<< HEAD
 - 当前还不支持修改列名。
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 当前还不支持修改列注释。
 - 每张表仅支持一个进行中的 Schema Change 操作。不能对同一张表同时执行两条 Schema Change 命令。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](SHOW_ALTER.md)。
@@ -82,6 +93,25 @@ ALTER TABLE [<db_name>.]<tbl_name>
 RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```
 
+<<<<<<< HEAD
+=======
+#### 修改列名（RENAME COLUMN）
+
+自 v3.3.2 起，StarRocks 支持修改列名。
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+RENAME COLUMN <old_col_name> [ TO ] <new_col_name>
+```
+
+:::note
+
+- 在将某列由 A 重命名为 B 后，不支持继续增加 A 列。
+- 在列名变更后，基于该列创建的物化视图将不再生效，您需要根据新的列名重新创建。
+
+:::
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### 修改表的注释（3.1 版本起）
 
 语法：
@@ -96,7 +126,11 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 
 ### 操作 partition 相关语法
 
+<<<<<<< HEAD
 #### 增加分区 (ADD PARTITION)
+=======
+#### 增加分区 (ADD PARTITION(S))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 增加分区时支持使用 Range 分区和 List 分区。不支持增加表达式分区。
 
@@ -190,6 +224,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
     );
     ```
 
+<<<<<<< HEAD
 #### 删除分区 (DROP PARTITION)
 
 语法：
@@ -208,6 +243,43 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE];
 1. 使用分区方式的表至少要保留一个分区。
 2. 执行 DROP PARTITION 一段时间内（默认 1 天），可以通过 RECOVER 语句恢复被删除的分区。详见 [RECOVER](../backup_restore/RECOVER.md) 语句。
 3. 如果执行 DROP PARTITION FORCE，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
+=======
+#### 删除分区 (DROP PARTITION(S))
+
+删除单个分区：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
+```
+
+批量删除分区（自 v3.3.1 起支持）：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP [ TEMPORARY ] PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] 
+
+partion_name_list ::= ( <partition_name> [, ... ] )
+
+multi_range_partitions ::=
+    { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
+    | START ("<start_integer_value>") END ("<end_integer_value>") EVERY ( <granularity> ) } -- 即使 START、END 所指定的分区列值为整数，也需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
+```
+
+关于 `multi_range_partitions` 的说明：
+
+- `multi_range_partitions` 仅适用于 Range 分区。
+- 其中涉及的参数与 [增加分区 ADD PARTITION(S)](#增加分区-add-partitions) 中的相同。
+- 仅支持基于单个分区键的分区。
+
+:::note
+
+- 分区表需要至少要保留一个分区。
+- 如果未指定 FORCE 关键字，您可以通过 [RECOVER](../backup_restore/RECOVER.md) 语句恢复一定时间范围内（默认 1 天）删除的分区。
+- 如果指定了 FORCE 关键字，则系统不会检查该分区是否存在未完成的事务，分区将直接被删除并且不能被恢复，一般不建议执行此操作。
+
+:::
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #### 增加临时分区 (ADD TEMPORARY PARTITION)
 
@@ -482,6 +554,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
     - FLOAT 转换成 DOUBLE。
     - INT 转换成 DATE (如果 INT 类型数据不合法则转换失败，原始数据不变。)
 
+<<<<<<< HEAD
 6. 不支持从 NULL 转为 NOT NULL。
 
 #### 对指定 index 的列进行重新排序
@@ -502,6 +575,13 @@ ORDER BY (column_name1, column_name2, ...)
 
 #### 修改主键表中组成排序键的列
 <!--支持版本-->
+=======
+#### 修改排序键
+
+自 3.0 版本起，支持修改主键表的排序键。自 3.3 版本起，支持修改明细表、聚合表和更新表的排序键。
+
+明细表和主键表中排序键可以为任意列的排序组合，聚合表和更新表中排序键必须包含所有 key 列，但是列的顺序无需与 key 列保持一致。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 语法：
 
@@ -513,9 +593,15 @@ order_desc ::=
     ORDER BY <column_name> [, <column_name> ...]
 ```
 
+<<<<<<< HEAD
 示例：
 
 假设原表为主键表，排序键与主键耦合  `dt,order_id`。
+=======
+示例：修改主键表中的排序键
+
+假设原表为主键表，排序键与主键耦合 `dt,order_id`。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 create table orders (
@@ -727,6 +813,11 @@ StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，�
 
 3.1 版本之后，增加了一个 SQL 接口，用户可以通过执行 SQL 命令来手动进行 Compaction，可以指定表、单个或多个分区进行 Compaction。
 
+<<<<<<< HEAD
+=======
+存算分离集群自 v3.3.0 起支持该功能。
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 > **说明**
 >
 > 自 v3.2.13 版本起支持通过 [`base_compaction_forbidden_time_ranges`](./CREATE_TABLE.md#禁止-base-compaction) 属性在特定时段禁止 Base Compaction。

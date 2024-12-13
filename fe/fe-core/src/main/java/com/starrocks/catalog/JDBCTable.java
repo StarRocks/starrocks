@@ -16,13 +16,19 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -33,9 +39,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.net.URI;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -88,6 +97,10 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getResourceName() {
         return resourceName;
     }
@@ -97,11 +110,21 @@ public class JDBCTable extends Table {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
         return dbName;
     }
 
     public String getJdbcTable() {
+=======
+    @Override
+    public String getCatalogDBName() {
+        return dbName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return jdbcTable;
     }
 
@@ -254,6 +277,7 @@ public class JDBCTable extends Table {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -273,6 +297,8 @@ public class JDBCTable extends Table {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isSupported() {
         return true;
     }
@@ -301,6 +327,13 @@ public class JDBCTable extends Table {
         UNKNOWN,
         MYSQL,
         POSTGRES,
+<<<<<<< HEAD
         ORACLE;
+=======
+        ORACLE,
+        MARIADB,
+
+        CLICKHOUSE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

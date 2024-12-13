@@ -684,6 +684,7 @@ public:
 
     void TearDown() override {
         if (_tablet2) {
+<<<<<<< HEAD
             auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id());
             st.permit_unchecked_error();
             _tablet2.reset();
@@ -691,6 +692,13 @@ public:
         if (_tablet) {
             auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             st.permit_unchecked_error();
+=======
+            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet2->tablet_id());
+            _tablet2.reset();
+        }
+        if (_tablet) {
+            (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _tablet.reset();
         }
         config::enable_pk_size_tiered_compaction_strategy = true;

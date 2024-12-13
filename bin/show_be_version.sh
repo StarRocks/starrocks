@@ -31,6 +31,9 @@ else
     fi
 fi
 
+<<<<<<< HEAD
 export_cachelib_lib_path
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ${STARROCKS_HOME}/lib/starrocks_be --version

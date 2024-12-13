@@ -15,13 +15,22 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+=======
+import com.staros.proto.ShardInfo;
+import com.starrocks.catalog.MaterializedIndex;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -31,8 +40,14 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.Warehouse;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,6 +56,11 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -50,6 +70,7 @@ public class Utils {
     private Utils() {
     }
 
+<<<<<<< HEAD
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
@@ -84,16 +105,54 @@ public class Utils {
     public static Map<Long, List<Long>> groupTabletID(Collection<Partition> partitions,
                                                       MaterializedIndex.IndexExtState indexState)
             throws NoAliveBackendException {
+=======
+    public static Long chooseNodeId(ShardInfo shardInfo) {
+        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
+        if (!ids.isEmpty()) {
+            return ids.iterator().next();
+        }
+        try {
+            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .getNodeSelector().seqChooseBackendOrComputeId();
+        } catch (StarRocksException e) {
+            return null;
+        }
+    }
+
+    public static ComputeNode chooseNode(ShardInfo shardInfo) {
+        Long nodeId = chooseNodeId(shardInfo);
+        if (nodeId == null) {
+            return null;
+        }
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+    }
+
+    public static Map<Long, List<Long>> groupTabletID(Collection<Partition> partitions,
+                                                      MaterializedIndex.IndexExtState indexState,
+                                                      long warehouseId)
+            throws NoAliveBackendException {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<Long, List<Long>> groupMap = new HashMap<>();
         for (Partition partition : partitions) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(indexState)) {
                     for (Tablet tablet : index.getTablets()) {
+<<<<<<< HEAD
                         Long beId = chooseBackend((LakeTablet) tablet);
                         if (beId == null) {
                             throw new NoAliveBackendException("no alive backend");
                         }
                         groupMap.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+=======
+                        ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(
+                                warehouseId, (LakeTablet) tablet);
+                        if (computeNode == null) {
+                            throw new NoAliveBackendException("no alive backend");
+                        }
+                        groupMap.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
@@ -102,19 +161,31 @@ public class Utils {
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+<<<<<<< HEAD
             long newVersion) throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null);
+=======
+                                      long newVersion, long warehouseId)
+            throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, null, warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                            long baseVersion, long newVersion,
                                            Map<Long, Double> compactionScores,
+<<<<<<< HEAD
                                            Map<ComputeNode, List<Long>> nodeToTablets)
+=======
+                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                           long warehouseId)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws NoAliveBackendException, RpcException {
         if (nodeToTablets == null) {
             nodeToTablets = new HashMap<>();
         }
 
+<<<<<<< HEAD
         for (Tablet tablet : tablets) {
             ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
             if (node == null) {
@@ -125,6 +196,30 @@ public class Utils {
 
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         List<ComputeNode> backendList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+=======
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.warehouseExists(warehouseId)) {
+            LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+        }
+
+        for (Tablet tablet : tablets) {
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            if (computeNode == null) {
+                LOG.warn("No alive node in warehouse for handle publish version request, try to use background warehouse");
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
+                        (LakeTablet) tablet);
+                if (computeNode == null) {
+                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+                }
+            }
+            nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
+        }
+
+        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+        List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
@@ -137,7 +232,11 @@ public class Utils {
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
+<<<<<<< HEAD
             backendList.add(node);
+=======
+            nodeList.add(node);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         for (int i = 0; i < responseList.size(); i++) {
@@ -151,11 +250,16 @@ public class Utils {
                     compactionScores.putAll(response.compactionScores);
                 }
             } catch (Exception e) {
+<<<<<<< HEAD
                 throw new RpcException(backendList.get(i).getHost(), e.getMessage());
+=======
+                throw new RpcException(nodeList.get(i).getHost(), e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
 
+<<<<<<< HEAD
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
                                       Map<Long, Double> compactionScores)
             throws NoAliveBackendException, RpcException {
@@ -181,13 +285,59 @@ public class Utils {
                 throw new NoAliveBackendException("No alive node for handle publish version request");
             }
             nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
+=======
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, Map<Long, Double> compactionScores,
+                                      long warehouseId)
+            throws NoAliveBackendException, RpcException {
+        List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
+        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, warehouseId);
+    }
+
+    public static void publishLogVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long version, long warehouseId)
+            throws NoAliveBackendException, RpcException {
+        List<TxnInfoPB> txnInfos = new ArrayList<>();
+        txnInfos.add(txnInfo);
+        List<Long> versions = new ArrayList<>();
+        versions.add(version);
+        publishLogVersionBatch(tablets, txnInfos, versions, warehouseId);
+    }
+
+    public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txns, List<Long> versions,
+                                              long warehouseId)
+            throws NoAliveBackendException, RpcException {
+        Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (!warehouseManager.warehouseExists(warehouseId)) {
+            LOG.warn("publish log version operation should be successful even if the warehouse is not exist, " +
+                    "and switch the warehouse id from {} to {}", warehouseId, warehouseManager.getBackgroundWarehouse().getId());
+            warehouseId = warehouseManager.getBackgroundWarehouse().getId();
+        }
+
+        for (Tablet tablet : tablets) {
+            ComputeNode computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
+            if (computeNode == null) {
+                LOG.warn("no alive node in warehouse for handle publish log version request, try to use background warehouse");
+                computeNode = warehouseManager.getComputeNodeAssignedToTablet(warehouseManager.getBackgroundWarehouse().getId(),
+                        (LakeTablet) tablet);
+                if (computeNode == null) {
+                    throw new NoAliveBackendException("No alive node for handle publish version request in background warehouse");
+                }
+            }
+            nodeToTablets.computeIfAbsent(computeNode, k -> Lists.newArrayList()).add(tablet.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             PublishLogVersionBatchRequest request = new PublishLogVersionBatchRequest();
             request.tabletIds = entry.getValue();
+<<<<<<< HEAD
             request.txnIds = txnIds;
+=======
+            request.txnInfos = txns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             request.versions = versions;
 
             ComputeNode node = entry.getKey();
@@ -209,4 +359,17 @@ public class Utils {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static Optional<Long> getWarehouseIdByNodeId(SystemInfoService systemInfo, long nodeId) {
+        ComputeNode node = systemInfo.getBackendOrComputeNode(nodeId);
+        if (node == null) {
+            LOG.warn("failed to get warehouse id by node id: {}", nodeId);
+            return Optional.empty();
+        }
+
+        return Optional.of(node.getWarehouseId());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

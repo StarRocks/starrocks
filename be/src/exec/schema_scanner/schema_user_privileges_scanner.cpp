@@ -22,10 +22,17 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaUserPrivilegesScanner::_s_user_privs_columns[] = {
         //   name,       type,          size
+<<<<<<< HEAD
         {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
         {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaUserPrivilegesScanner::SchemaUserPrivilegesScanner()

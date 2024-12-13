@@ -25,6 +25,10 @@ import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.kudu.KuduConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -36,9 +40,17 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+<<<<<<< HEAD
 import static com.starrocks.catalog.Table.TableType.PAIMON;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+=======
+import static com.starrocks.catalog.Table.TableType.KUDU;
+import static com.starrocks.catalog.Table.TableType.PAIMON;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.kudu.KuduConnector.KUDU_CATALOG_TYPE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.connector.paimon.PaimonConnector.PAIMON_CATALOG_TYPE;
 import static com.starrocks.connector.paimon.PaimonConnector.PAIMON_CATALOG_WAREHOUSE;
 
@@ -58,6 +70,10 @@ public class UnifiedConnector implements Connector {
         derivedProperties.put(HIVE_METASTORE_TYPE, metastoreType);
         derivedProperties.put(ICEBERG_CATALOG_TYPE, metastoreType);
         derivedProperties.put(PAIMON_CATALOG_TYPE, metastoreType);
+<<<<<<< HEAD
+=======
+        derivedProperties.put(KUDU_CATALOG_TYPE, metastoreType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ConnectorContext derivedContext = new ConnectorContext(context.getCatalogName(), context.getType(),
                 derivedProperties.build());
@@ -67,7 +83,12 @@ public class UnifiedConnector implements Connector {
         builder.put(HIVE, new HiveConnector(derivedContext))
                 .put(ICEBERG, new IcebergConnector(derivedContext))
                 .put(HUDI, new HudiConnector(derivedContext))
+<<<<<<< HEAD
                 .put(DELTALAKE, new DeltaLakeConnector(derivedContext));
+=======
+                .put(DELTALAKE, new DeltaLakeConnector(derivedContext))
+                .put(KUDU, new KuduConnector(derivedContext));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         boolean containsPaimon = null != context.getProperties().get(PAIMON_CATALOG_WAREHOUSE);
         if (containsPaimon) {
             builder.put(PAIMON, new PaimonConnector(derivedContext));

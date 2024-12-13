@@ -23,11 +23,18 @@ static void delete_cache_entry(const CacheKey& key, void* value) {
     delete cache_value;
 }
 
+<<<<<<< HEAD
 Status CacheManager::populate(const std::string& key, const CacheValue& value) {
     auto* cache_value = new CacheValue(value);
     auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
     DeferOp defer([this, handle]() { _cache.release(handle); });
     return handle != nullptr ? Status::OK() : Status::InternalError("Insert failure");
+=======
+void CacheManager::populate(const std::string& key, const CacheValue& value) {
+    auto* cache_value = new CacheValue(value);
+    auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
+    _cache.release(handle);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 StatusOr<CacheValue> CacheManager::probe(const std::string& key) {

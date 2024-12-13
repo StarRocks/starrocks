@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Distance_Sphere
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算地球两点之间的球面距离，单位是「米」。
 

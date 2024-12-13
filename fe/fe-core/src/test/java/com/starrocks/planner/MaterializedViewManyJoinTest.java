@@ -18,7 +18,10 @@ import com.google.common.base.Stopwatch;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
+<<<<<<< HEAD
 import org.junit.jupiter.api.BeforeEach;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -36,7 +39,11 @@ import java.util.stream.Stream;
 public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
 
     @BeforeAll
+<<<<<<< HEAD
     public static void beforeAll() throws Exception {
+=======
+    public static void beforeClass() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         starRocksAssert.withTable(
@@ -80,6 +87,7 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
         }
     }
 
+<<<<<<< HEAD
     @BeforeEach
     public void setUp() {
         super.setUp();
@@ -88,6 +96,11 @@ public class MaterializedViewManyJoinTest extends MaterializedViewTestBase {
     @ParameterizedTest(name = "{index}-{0}")
     @MethodSource("generateManyJoinArguments")
     @Timeout(5)
+=======
+    @ParameterizedTest(name = "{index}-{0}")
+    @MethodSource("generateManyJoinArguments")
+    @Timeout(30)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testManyJoins(String name, String mvQuery, String query, boolean expectHitMv) throws Exception {
         LOG.info("create mv {}", mvQuery);
         String mvName = "mv_manyjoin";

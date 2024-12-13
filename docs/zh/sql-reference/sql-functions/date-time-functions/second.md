@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # second
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获得日期中的秒的信息，返回值范围 0~59。
 

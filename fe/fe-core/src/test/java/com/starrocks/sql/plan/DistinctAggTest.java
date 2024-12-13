@@ -54,6 +54,10 @@ public class DistinctAggTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:EXCHANGE");
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     void testDistinctConstant() throws Exception {
         String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
@@ -148,6 +152,16 @@ public class DistinctAggTest extends PlanTestBase {
                 "6:AGGREGATE (update finalize)\n" +
                         "  |  output: array_agg(1: v1, 1: v1, 5: expr), sum(7: sum)\n" +
                         "  |  group by: 3: v3, 4: abs, 8: GROUPING_ID"));
+<<<<<<< HEAD
+=======
+
+        argumentsList.add(Arguments.of("select array_agg_distinct(v1 order by 1, v3), sum(v2) from t0 " +
+                        "group by rollup(v3, abs(v1 + v2))",
+                "6:AGGREGATE (update finalize)\n" +
+                        "  |  output: array_agg(1: v1, 1: v1, 5: expr), sum(7: sum)\n" +
+                        "  |  group by: 3: v3, 4: abs, 8: GROUPING_ID"));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         argumentsList.add(Arguments.of("select /*+set_var(new_planner_agg_stage = 2) */" +
                         " array_agg(distinct v1 order by 1, v3), sum(v2) from t0 " +
                         "group by rollup(v3, abs(v1 + v2))",
@@ -155,6 +169,16 @@ public class DistinctAggTest extends PlanTestBase {
                         "  |  output: array_agg(1: v1, 1: v1, 5: expr), sum(7: sum)\n" +
                         "  |  group by: 3: v3, 4: abs, 8: GROUPING_ID"));
 
+<<<<<<< HEAD
+=======
+        argumentsList.add(Arguments.of("select /*+set_var(new_planner_agg_stage = 2) */" +
+                        " array_agg_distinct(v1 order by 1, v3), sum(v2) from t0 " +
+                        "group by rollup(v3, abs(v1 + v2))",
+                "6:AGGREGATE (update finalize)\n" +
+                        "  |  output: array_agg(1: v1, 1: v1, 5: expr), sum(7: sum)\n" +
+                        "  |  group by: 3: v3, 4: abs, 8: GROUPING_ID"));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         argumentsList.add(Arguments.of("select group_concat(distinct v1 order by 1, v3), sum(v2) from t0 " +
                         "group by rollup(v3, abs(v1 + v2))",
                 "6:AGGREGATE (update finalize)\n" +

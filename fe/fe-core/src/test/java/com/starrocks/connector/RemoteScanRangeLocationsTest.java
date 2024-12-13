@@ -15,13 +15,22 @@
 package com.starrocks.connector;
 
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DefaultCoordinator;
+=======
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
+<<<<<<< HEAD
 import com.starrocks.thrift.TScanRangeLocations;
+=======
+import com.starrocks.thrift.TScanRangeParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -35,6 +44,10 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+        AnalyzeTestUtil.setConnectContext(connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         connectContext.getSessionVariable().setConnectorMaxSplitSize(512 * 1024 * 1024);
     }
@@ -57,8 +70,12 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
             // which is not suitable for backend split, then it will fall back to fe split.
             // 2 * 1G / 64MB = 32
             Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+<<<<<<< HEAD
             List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
                     .get(new PlanNodeId(0)).getScanRangeLocations(100);
+=======
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(32, scanRangeLocations.size());
         }
         {
@@ -69,16 +86,24 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
             connectContext.getSessionVariable().setConnectorHugeFileSize(512 * 1024 * 1024);
             connectContext.getSessionVariable().setConnectorMaxSplitSize(64 * 1024 * 1024);
             Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+<<<<<<< HEAD
             List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
                     .get(new PlanNodeId(0)).getScanRangeLocations(100);
+=======
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(4, scanRangeLocations.size());
         }
         {
             connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(false);
             connectContext.getSessionVariable().setConnectorMaxSplitSize(512 * 1024 * 1024);
             Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+<<<<<<< HEAD
             List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
                     .get(new PlanNodeId(0)).getScanRangeLocations(100);
+=======
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(4, scanRangeLocations.size());
             scanRangeLocations.sort((o1, o2) -> {
                 THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
@@ -103,8 +128,12 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
 
         String executeSql = "select * from hive0.file_split_db.file_split_tbl;";
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+<<<<<<< HEAD
         List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
                 .get(new PlanNodeId(0)).getScanRangeLocations(100);
+=======
+        List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(8, scanRangeLocations.size());
 
         scanRangeLocations.sort((o1, o2) -> {
@@ -132,4 +161,7 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
         }
     }
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

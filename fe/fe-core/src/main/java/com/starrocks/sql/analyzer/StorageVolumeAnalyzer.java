@@ -36,7 +36,11 @@ public class StorageVolumeAnalyzer {
         new StorageVolumeAnalyzer.StorageVolumeAnalyzerVisitor().visit(stmt, session);
     }
 
+<<<<<<< HEAD
     static class StorageVolumeAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class StorageVolumeAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

@@ -35,8 +35,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AlterRoutineLoadAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -44,8 +47,11 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import mockit.Expectations;
 import mockit.Mocked;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -63,6 +69,7 @@ public class AlterRoutineLoadStmtTest {
 
     private static ConnectContext connectContext;
 
+<<<<<<< HEAD
     @Mocked
     private Auth auth;
 
@@ -85,6 +92,11 @@ public class AlterRoutineLoadStmtTest {
                 result = true;
             }
         };
+=======
+    @Before
+    public void setUp() throws IOException {
+        connectContext = UtFrameUtils.createDefaultCtx();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

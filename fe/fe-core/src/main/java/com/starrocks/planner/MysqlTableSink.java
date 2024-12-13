@@ -53,8 +53,13 @@ public class MysqlTableSink extends DataSink {
         port = Integer.parseInt(mysqlTable.getPort());
         user = mysqlTable.getUserName();
         passwd = mysqlTable.getPasswd();
+<<<<<<< HEAD
         db = mysqlTable.getMysqlDatabaseName();
         tbl = mysqlTable.getMysqlTableName();
+=======
+        db = mysqlTable.getCatalogDBName();
+        tbl = mysqlTable.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

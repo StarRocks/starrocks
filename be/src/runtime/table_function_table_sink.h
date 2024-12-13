@@ -14,7 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "common/logging.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/data_sink.h"
 
 namespace starrocks {
@@ -41,6 +44,12 @@ public:
 
     std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
 
+<<<<<<< HEAD
+=======
+    Status decompose_to_pipeline(pipeline::OpFactories prev_operators, const TDataSink& thrift_sink,
+                                 pipeline::PipelineBuilderContext* context) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     ObjectPool* _pool;
     const std::vector<TExpr>& _t_output_expr;

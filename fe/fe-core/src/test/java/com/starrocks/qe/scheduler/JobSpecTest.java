@@ -17,19 +17,39 @@ package com.starrocks.qe.scheduler;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
+=======
+import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.ResourceGroupMgr;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.DebugUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
+<<<<<<< HEAD
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
+=======
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryStatisticsItem;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.scheduler.dag.JobSpec;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.BackendResourceStat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
@@ -53,6 +73,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+<<<<<<< HEAD
+=======
+import static org.assertj.core.api.Assertions.assertThat;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class JobSpecTest extends SchedulerTestBase {
     private static final TWorkGroup QUERY_RESOURCE_GROUP = new TWorkGroup();
     private static final TWorkGroup LOAD_RESOURCE_GROUP = new TWorkGroup();
@@ -66,6 +91,12 @@ public class JobSpecTest extends SchedulerTestBase {
 
     private boolean prevEnablePipelineLoad;
 
+<<<<<<< HEAD
+=======
+    /**
+     * Mock {@link ResourceGroupMgr#chooseResourceGroup(ConnectContext, ResourceGroupClassifier.QueryType, Set)}.
+     */
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @BeforeClass
     public static void beforeClass() throws Exception {
         SchedulerTestBase.beforeClass();
@@ -111,6 +142,15 @@ public class JobSpecTest extends SchedulerTestBase {
                 connectContext, fragments, scanNodes, descTable.toThrift());
         JobSpec jobSpec = coordinator.getJobSpec();
 
+<<<<<<< HEAD
+=======
+        QeProcessorImpl.INSTANCE.registerQuery(queryId, new QeProcessorImpl.QueryInfo(connectContext, sql, coordinator));
+        Map<String, QueryStatisticsItem> queryStatistics = QeProcessorImpl.INSTANCE.getQueryStatistics();
+        assertThat(queryStatistics).hasSize(1);
+        assertThat(queryStatistics.get(DebugUtil.printId(queryId)).getResourceGroupName())
+                .isEqualTo(QUERY_RESOURCE_GROUP.getName());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Check created jobSpec.
         Assert.assertEquals(queryId, jobSpec.getQueryId());
         Assert.assertEquals(lastQueryId.toString(), jobSpec.getQueryGlobals().getLast_query_id());
@@ -126,6 +166,63 @@ public class JobSpecTest extends SchedulerTestBase {
         Assert.assertEquals(LOAD_RESOURCE_GROUP, jobSpec.getResourceGroup());
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Mock {@link ResourceGroupMgr#chooseResourceGroup(ConnectContext, ResourceGroupClassifier.QueryType, Set)}.
+     */
+    @Test
+    public void testQueryResourceGroup() throws Exception {
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(BACKEND1_ID, 16);
+        GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
+
+        new MockUp<ResourceGroupMgr>() {
+            @Mock
+            public TWorkGroup chooseResourceGroup(ConnectContext ctx, ResourceGroupClassifier.QueryType queryType,
+                                                  Set<Long> databases) {
+                return null;
+            }
+        };
+
+        // Prepare input arguments.
+        String sql = "select * from lineitem";
+        ExecPlan execPlan = getExecPlan(sql);
+
+        TUniqueId queryId = new TUniqueId(2, 3);
+        connectContext.setExecutionId(queryId);
+        UUID lastQueryId = new UUID(4L, 5L);
+        connectContext.setLastQueryId(lastQueryId);
+        DescriptorTable descTable = new DescriptorTable();
+        List<PlanFragment> fragments = execPlan.getFragments();
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+
+        // Check created jobSpec.
+        {
+            DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
+                    connectContext, fragments, scanNodes, descTable.toThrift());
+            JobSpec jobSpec = coordinator.getJobSpec();
+
+            TWorkGroup group = jobSpec.getResourceGroup();
+            assertThat(group.getName()).isEqualTo(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+            assertThat(group.getId()).isEqualTo(ResourceGroup.DEFAULT_WG_ID);
+        }
+
+        // Check created jobSpec.
+        {
+            connectContext.getSessionVariable().setResourceGroup(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
+
+            DefaultCoordinator coordinator = COORDINATOR_FACTORY.createQueryScheduler(
+                    connectContext, fragments, scanNodes, descTable.toThrift());
+            JobSpec jobSpec = coordinator.getJobSpec();
+
+            // Check created jobSpec.
+            TWorkGroup group = jobSpec.getResourceGroup();
+            assertThat(group.getName()).isEqualTo(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
+            assertThat(group.getId()).isEqualTo(ResourceGroup.DEFAULT_MV_WG_ID);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testFromMVMaintenanceJobSpec() throws Exception {
         // Prepare input arguments.
@@ -311,7 +408,11 @@ public class JobSpecTest extends SchedulerTestBase {
         DefaultCoordinator coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
+<<<<<<< HEAD
                 execMemLimit);
+=======
+                execMemLimit, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.
@@ -334,7 +435,11 @@ public class JobSpecTest extends SchedulerTestBase {
         coordinator = COORDINATOR_FACTORY.createBrokerExportScheduler(
                 loadJobId, queryId, descTable, fragments, scanNodes, timezone, startTime,
                 sessionVariables,
+<<<<<<< HEAD
                 execMemLimit);
+=======
+                execMemLimit, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         jobSpec = coordinator.getJobSpec();
 
         Assert.assertEquals(TCompressionType.LZ4, jobSpec.getQueryOptions().getLoad_transmission_compression_type());

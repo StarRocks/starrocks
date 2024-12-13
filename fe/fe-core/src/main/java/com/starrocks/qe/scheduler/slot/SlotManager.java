@@ -14,12 +14,21 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Queues;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
 import com.starrocks.qe.GlobalVariable;
+<<<<<<< HEAD
 import com.starrocks.rpc.FrontendServiceProxy;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -33,6 +42,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.Collection;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,8 +53,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+<<<<<<< HEAD
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -89,12 +105,18 @@ public class SlotManager {
     private static final int MAX_PENDING_REQUESTS = 1_000_000;
 
     /**
+<<<<<<< HEAD
      * All the data members except {@code requests} and {@link #slots} are only accessed by the thread {@link #requestWorker}.
+=======
+     * All the data members except {@code requests} and {@link SlotTracker#getSlots()} by {@link #slotTracker} are only accessed
+     * by the thread {@link #requestWorker}.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Others outside can do nothing, but add a request to {@code requests} or retrieve a view of all the running and queued
      * slots.
      */
     private final BlockingQueue<Runnable> requests = Queues.newLinkedBlockingDeque(MAX_PENDING_REQUESTS);
     private final RequestWorker requestWorker = new RequestWorker();
+<<<<<<< HEAD
     private final AtomicBoolean started = new AtomicBoolean();
 
     private final Executor responseExecutor = Executors.newFixedThreadPool(Config.slot_manager_response_thread_pool_size,
@@ -111,6 +133,46 @@ public class SlotManager {
         this.slotRequestQueue = new SlotRequestQueue(resourceUsageMonitor::isGlobalResourceOverloaded,
                 resourceUsageMonitor::isGroupResourceOverloaded);
         this.allocatedSlots = new AllocatedSlots();
+=======
+
+    private final AtomicBoolean started = new AtomicBoolean();
+    private final Executor responseExecutor = Executors.newFixedThreadPool(Config.slot_manager_response_thread_pool_size,
+            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("slot-mgr-res-%d").build());
+
+    private final Map<String, Set<TUniqueId>> requestFeNameToSlotIds = new HashMap<>();
+
+    private final SlotSelectionStrategy slotSelectionStrategy;
+
+    /**
+     * The lifecycle of a slot is managed by the slot tracker.
+     *
+     * <pre>{@code
+     * CREATED -(1)-> REQUIRED -(2)-> ALLOCATED -(3)-> RELEASED
+     *                  │                                  ▲
+     *                  └─────────────────(3)──────────────┘
+     * }</pre>
+     *
+     * <ul>
+     * <li> (1) {@link SlotTracker#requireSlot}: the slot is into required state and is waiting for allocation.
+     * <li> (2) {@link SlotSelectionStrategy#peakSlotsToAllocate}: select proper slots to allocate,
+     * {@link SlotTracker#allocateSlot}: the slot is into allocated state and the related query is notified to be started.
+     * <li> (3) {@link SlotTracker#releaseSlot}: the slot is released and will be removed from the slot tracker.
+     * </ul>
+     */
+    private final SlotTracker slotTracker;
+
+    public SlotManager(ResourceUsageMonitor resourceUsageMonitor) {
+        resourceUsageMonitor.registerResourceAvailableListener(this::notifyResourceUsageAvailable);
+
+        if (Config.enable_query_queue_v2) {
+            this.slotSelectionStrategy = new SlotSelectionStrategyV2();
+        } else {
+            this.slotSelectionStrategy = new DefaultSlotSelectionStrategy(
+                    resourceUsageMonitor::isGlobalResourceOverloaded, resourceUsageMonitor::isGroupResourceOverloaded);
+        }
+
+        this.slotTracker = new SlotTracker(ImmutableList.of(slotSelectionStrategy, new SlotListenerForPipelineDriverAllocator()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void start() {
@@ -142,11 +204,19 @@ public class SlotManager {
     }
 
     public List<LogicalSlot> getSlots() {
+<<<<<<< HEAD
         return new ArrayList<>(slots.values());
     }
 
     private void handleRequireSlotTask(LogicalSlot slot) {
         Frontend frontend = GlobalStateMgr.getCurrentState().getFeByName(slot.getRequestFeName());
+=======
+        return new ArrayList<>(slotTracker.getSlots());
+    }
+
+    private void handleRequireSlotTask(LogicalSlot slot) {
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(slot.getRequestFeName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (frontend == null) {
             slot.onCancel();
             LOG.warn("[Slot] SlotManager receives a slot requirement with unknown FE [slot={}]", slot);
@@ -156,17 +226,26 @@ public class SlotManager {
             slot.onCancel();
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Collections.singletonList(String.format("FeStartTime is not the latest [val=%s] [latest=%s]",
+<<<<<<< HEAD
                             slot.getFeStartTimeMs(), frontend.getStartTime())));
+=======
+                    slot.getFeStartTimeMs(), frontend.getStartTime())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             finishSlotRequirementToEndpoint(slot, status);
             LOG.warn("[Slot] SlotManager receives a slot requirement with old FeStartTime [slot={}] [newFeStartMs={}]",
                     slot, frontend.getStartTime());
             return;
         }
 
+<<<<<<< HEAD
         boolean ok = slotRequestQueue.addPendingSlot(slot);
         if (ok) {
             slot.onRequire();
             slots.put(slot.getSlotId(), slot);
+=======
+        boolean ok = slotTracker.requireSlot(slot);
+        if (ok) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             requestFeNameToSlotIds.computeIfAbsent(slot.getRequestFeName(), k -> new HashSet<>())
                     .add(slot.getSlotId());
         } else {
@@ -181,6 +260,7 @@ public class SlotManager {
     }
 
     private void handleReleaseSlotTask(TUniqueId slotId) {
+<<<<<<< HEAD
         LogicalSlot slot = slotRequestQueue.removePendingSlot(slotId);
         if (slot == null) {
             slot = allocatedSlots.releaseSlot(slotId);
@@ -188,6 +268,10 @@ public class SlotManager {
         if (slot != null) {
             slot.onRelease();
             slots.remove(slot.getSlotId());
+=======
+        LogicalSlot slot = slotTracker.releaseSlot(slotId);
+        if (slot != null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Set<TUniqueId> slotIds = requestFeNameToSlotIds.get(slot.getRequestFeName());
             if (slotIds != null) {
                 slotIds.remove(slotId);
@@ -216,7 +300,11 @@ public class SlotManager {
                 "and its pending and allocated slots with less startMs will be released", feName, startMs);
 
         slotIds.stream().filter(slotId -> {
+<<<<<<< HEAD
             LogicalSlot slot = slots.get(slotId);
+=======
+            LogicalSlot slot = slotTracker.getSlot(slotId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (slot == null) {
                 return false;
             }
@@ -231,7 +319,11 @@ public class SlotManager {
             request.setSlot_id(slot.getSlotId());
             request.setPipeline_dop(slot.getPipelineDop());
 
+<<<<<<< HEAD
             Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(slot.getRequestFeName());
+=======
+            Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(slot.getRequestFeName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (fe == null) {
                 LOG.warn("[Slot] try to send finishSlotRequirement RPC to the unknown frontend [slot={}]", slot);
                 releaseSlotAsync(slot.getSlotId());
@@ -240,9 +332,16 @@ public class SlotManager {
 
             TNetworkAddress feEndpoint = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
             try {
+<<<<<<< HEAD
                 TFinishSlotRequirementResponse res =
                         FrontendServiceProxy.call(feEndpoint, Config.thrift_rpc_timeout_ms,
                                 Config.thrift_rpc_retry_times, client -> client.finishSlotRequirement(request));
+=======
+                TFinishSlotRequirementResponse res = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        feEndpoint,
+                        client -> client.finishSlotRequirement(request));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 TStatus resStatus = res.getStatus();
                 if (resStatus.getStatus_code() != TStatusCode.OK) {
                     LOG.warn("[Slot] failed to finish slot requirement [slot={}] [err={}]", slot, resStatus);
@@ -259,12 +358,35 @@ public class SlotManager {
         });
     }
 
+<<<<<<< HEAD
+=======
+    private static class SlotListenerForPipelineDriverAllocator implements SlotTracker.Listener {
+        private final PipelineDriverAllocator pipelineDriverAllocator = new PipelineDriverAllocator();
+
+        @Override
+        public void onRequireSlot(LogicalSlot slot) {
+            // Do nothing.
+        }
+
+        @Override
+        public void onAllocateSlot(LogicalSlot slot) {
+            pipelineDriverAllocator.allocate(slot);
+        }
+
+        @Override
+        public void onReleaseSlot(LogicalSlot slot) {
+            pipelineDriverAllocator.release(slot);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private class RequestWorker extends Thread {
         public RequestWorker() {
             super("slot-mgr-req");
         }
 
         private boolean schedule() {
+<<<<<<< HEAD
             List<LogicalSlot> expiredSlots = allocatedSlots.peakExpiredSlots();
             if (!expiredSlots.isEmpty()) {
                 LOG.warn("[Slot] expired allocated slots [{}]", expiredSlots);
@@ -274,6 +396,11 @@ public class SlotManager {
             expiredSlots = slotRequestQueue.peakExpiredSlots();
             if (!expiredSlots.isEmpty()) {
                 LOG.warn("[Slot] expired pending slots [{}]", expiredSlots);
+=======
+            List<LogicalSlot> expiredSlots = slotTracker.peakExpiredSlots();
+            if (!expiredSlots.isEmpty()) {
+                LOG.warn("[Slot] expired slots [{}]", expiredSlots);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             expiredSlots.forEach(slot -> handleReleaseSlotTask(slot.getSlotId()));
 
@@ -281,15 +408,23 @@ public class SlotManager {
         }
 
         private boolean tryAllocateSlots() {
+<<<<<<< HEAD
             List<LogicalSlot> slotsToAllocate = slotRequestQueue.peakSlotsToAllocate(allocatedSlots);
+=======
+            Collection<LogicalSlot> slotsToAllocate = slotSelectionStrategy.peakSlotsToAllocate(slotTracker);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             slotsToAllocate.forEach(this::allocateSlot);
             return !slotsToAllocate.isEmpty();
         }
 
         private void allocateSlot(LogicalSlot slot) {
             slot.onAllocate();
+<<<<<<< HEAD
             slotRequestQueue.removePendingSlot(slot.getSlotId());
             allocatedSlots.allocateSlot(slot);
+=======
+            slotTracker.allocateSlot(slot);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             finishSlotRequirementToEndpoint(slot, new TStatus(TStatusCode.OK));
         }
 
@@ -301,7 +436,11 @@ public class SlotManager {
 
                 try {
                     newTask = null;
+<<<<<<< HEAD
                     long minExpiredTimeMs = allocatedSlots.getMinExpiredTimeMs();
+=======
+                    long minExpiredTimeMs = slotTracker.getMinExpiredTimeMs();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     long nowMs = System.currentTimeMillis();
                     try {
                         if (minExpiredTimeMs == 0) {

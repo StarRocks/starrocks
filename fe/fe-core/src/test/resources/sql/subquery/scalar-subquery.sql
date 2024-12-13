@@ -27,6 +27,7 @@ PLAN FRAGMENT 1
 
   7:Project
   |  <slot 1> : 1: v1
+<<<<<<< HEAD
   |
   6:HASH JOIN
   |  join op: INNER JOIN (BROADCAST)
@@ -35,6 +36,16 @@ PLAN FRAGMENT 1
   |
   |----5:EXCHANGE
   |
+=======
+  |  
+  6:HASH JOIN
+  |  join op: INNER JOIN (BROADCAST)
+  |  colocate: false, reason: 
+  |  equal join conjunct: 2: v2 = 5: v11
+  |  
+  |----5:EXCHANGE
+  |    
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   0:OlapScanNode
      TABLE: t0
      PREAGGREGATION: ON
@@ -42,7 +53,11 @@ PLAN FRAGMENT 1
      partitions=1/1
      rollup: t0
      tabletRatio=3/3
+<<<<<<< HEAD
      tabletList=10008,10010,10012
+=======
+     tabletList=10006,10008,10010
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      cardinality=1
      avgRowSize=2.0
 
@@ -56,10 +71,17 @@ PLAN FRAGMENT 2
 
   4:SELECT
   |  predicates: 5: v11 IS NOT NULL
+<<<<<<< HEAD
   |
   3:ASSERT NUMBER OF ROWS
   |  assert number of rows: LE 1
   |
+=======
+  |  
+  3:ASSERT NUMBER OF ROWS
+  |  assert number of rows: LE 1
+  |  
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   2:EXCHANGE
 
 PLAN FRAGMENT 3
@@ -76,7 +98,11 @@ PLAN FRAGMENT 3
      partitions=1/1
      rollup: t3
      tabletRatio=3/3
+<<<<<<< HEAD
      tabletList=10035,10037,10039
+=======
+     tabletList=10046,10048,10050
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      cardinality=1
      avgRowSize=1.0
 [end]
@@ -121,6 +147,7 @@ PLAN FRAGMENT 1
 
   7:Project
   |  <slot 1> : 1: v1
+<<<<<<< HEAD
   |
   6:HASH JOIN
   |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
@@ -134,6 +161,21 @@ PLAN FRAGMENT 1
   |    |
   |    4:EXCHANGE
   |
+=======
+  |  
+  6:HASH JOIN
+  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
+  |  colocate: false, reason: 
+  |  equal join conjunct: 3: v3 = 6: v12
+  |  other join predicates: 2: v2 < 7: sum
+  |  
+  |----5:AGGREGATE (merge finalize)
+  |    |  output: sum(7: sum)
+  |    |  group by: 6: v12
+  |    |  
+  |    4:EXCHANGE
+  |    
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   1:EXCHANGE
 
 PLAN FRAGMENT 2
@@ -148,7 +190,11 @@ PLAN FRAGMENT 2
   |  STREAMING
   |  output: sum(5: v11)
   |  group by: 6: v12
+<<<<<<< HEAD
   |
+=======
+  |  
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   2:OlapScanNode
      TABLE: t3
      PREAGGREGATION: ON
@@ -156,7 +202,11 @@ PLAN FRAGMENT 2
      partitions=1/1
      rollup: t3
      tabletRatio=3/3
+<<<<<<< HEAD
      tabletList=10035,10037,10039
+=======
+     tabletList=10046,10048,10050
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      cardinality=1
      avgRowSize=2.0
 
@@ -175,7 +225,11 @@ PLAN FRAGMENT 3
      partitions=1/1
      rollup: t0
      tabletRatio=3/3
+<<<<<<< HEAD
      tabletList=10008,10010,10012
+=======
+     tabletList=10006,10008,10010
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      cardinality=1
      avgRowSize=3.0
 [end]
@@ -231,6 +285,7 @@ PLAN FRAGMENT 1
 
   9:Project
   |  <slot 1> : 1: v1
+<<<<<<< HEAD
   |
   8:HASH JOIN
   |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
@@ -245,6 +300,22 @@ PLAN FRAGMENT 1
   |    |
   |    6:EXCHANGE
   |
+=======
+  |  
+  8:HASH JOIN
+  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
+  |  colocate: false, reason: 
+  |  equal join conjunct: 3: v3 = 6: v12
+  |  equal join conjunct: 11: abs = 10: abs
+  |  other join predicates: CAST(2: v2 AS LARGEINT) < 8: sum
+  |  
+  |----7:AGGREGATE (merge finalize)
+  |    |  output: sum(8: sum)
+  |    |  group by: 6: v12, 10: abs
+  |    |  
+  |    6:EXCHANGE
+  |    
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   2:EXCHANGE
 
 PLAN FRAGMENT 2
@@ -259,12 +330,20 @@ PLAN FRAGMENT 2
   |  STREAMING
   |  output: sum(7: abs)
   |  group by: 6: v12, 10: abs
+<<<<<<< HEAD
   |
+=======
+  |  
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   4:Project
   |  <slot 6> : 6: v12
   |  <slot 7> : abs(5: v11)
   |  <slot 10> : abs(4: v10)
+<<<<<<< HEAD
   |
+=======
+  |  
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   3:OlapScanNode
      TABLE: t3
      PREAGGREGATION: ON
@@ -272,7 +351,11 @@ PLAN FRAGMENT 2
      partitions=1/1
      rollup: t3
      tabletRatio=3/3
+<<<<<<< HEAD
      tabletList=10035,10037,10039
+=======
+     tabletList=10046,10048,10050
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      cardinality=1
      avgRowSize=5.0
 
@@ -289,7 +372,11 @@ PLAN FRAGMENT 3
   |  <slot 2> : 2: v2
   |  <slot 3> : 3: v3
   |  <slot 11> : abs(1: v1)
+<<<<<<< HEAD
   |
+=======
+  |  
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   0:OlapScanNode
      TABLE: t0
      PREAGGREGATION: ON
@@ -297,7 +384,11 @@ PLAN FRAGMENT 3
      partitions=1/1
      rollup: t0
      tabletRatio=3/3
+<<<<<<< HEAD
      tabletList=10008,10010,10012
+=======
+     tabletList=10006,10008,10010
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      cardinality=1
      avgRowSize=4.0
 [end]
@@ -498,6 +589,12 @@ INNER JOIN (join-predicate [2: v2 = 4: v4] post-join-predicate [null])
 [end]
 
 /* test PushDownApplyAggFilterRule */
+<<<<<<< HEAD
+=======
+/* test PushDownApplyAggFilterRule */
+/* test PushDownApplyAggFilterRule */
+/* test PushDownApplyAggFilterRule */
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 [sql]
 select * from t0 where v1 = (select max(v5 + 1) from t1 where t0.v2 = t1.v4);
@@ -530,7 +627,12 @@ INNER JOIN (join-predicate [11: add = 10: add AND 1: v1 = 8: min] post-join-pred
         AGGREGATE ([GLOBAL] aggregate [{8: min=min(8: min)}] group by [[10: add]] having [8: min IS NOT NULL]
             EXCHANGE SHUFFLE[10]
                 AGGREGATE ([LOCAL] aggregate [{8: min=min(7: expr)}] group by [[10: add]] having [null]
+<<<<<<< HEAD
                     SCAN (columns[4: v4, 5: v5] predicate[add(4: v4, 5: v5) IS NOT NULL])
+=======
+                    PREDICATE 10: add IS NOT NULL
+                        SCAN (columns[4: v4, 5: v5] predicate[null])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 
 [sql]
@@ -578,7 +680,12 @@ select v1, (select max(v5 + 1) from t1 where t0.v2 = t1.v4 and t0.v2 + 1 = 1 and
 [result]
 RIGHT OUTER JOIN (join-predicate [4: v4 = 2: v2 AND 10: add = 11: add AND 2: v2 = 0] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{8: max=max(7: expr)}] group by [[4: v4, 10: add]] having [null]
+<<<<<<< HEAD
         SCAN (columns[4: v4, 5: v5] predicate[4: v4 = 0 AND add(4: v4, 5: v5) = 1])
+=======
+        PREDICATE 10: add = 1
+            SCAN (columns[4: v4, 5: v5] predicate[4: v4 = 0])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXCHANGE SHUFFLE[2]
         SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
@@ -605,6 +712,7 @@ INNER JOIN (join-predicate [1: v1 = 23: cast] post-join-predicate [null])
                 AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [null]
                     EXCHANGE GATHER
                         AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
+<<<<<<< HEAD
                             INNER JOIN (join-predicate [4: t1a = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
                                 SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[4: t1a IS NOT NULL AND 7: t1d IS NOT NULL])
                                 EXCHANGE SHUFFLE[22]
@@ -612,6 +720,15 @@ INNER JOIN (join-predicate [1: v1 = 23: cast] post-join-predicate [null])
                                         EXCHANGE SHUFFLE[22]
                                             AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
                                                 SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(1048576)) IS NOT NULL AND 14: v4 = 2])
+=======
+                            INNER JOIN (join-predicate [24: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
+                                SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
+                                EXCHANGE BROADCAST
+                                    AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
+                                        EXCHANGE SHUFFLE[22]
+                                            AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
+                                                SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 
 [sql]
@@ -624,6 +741,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
             AGGREGATE ([GLOBAL] aggregate [{20: min=min(20: min)}] group by [[]] having [null]
                 EXCHANGE GATHER
                     AGGREGATE ([LOCAL] aggregate [{20: min=min(6: t1c)}] group by [[]] having [null]
+<<<<<<< HEAD
                         INNER JOIN (join-predicate [4: t1a = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
                             SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[4: t1a IS NOT NULL AND 7: t1d IS NOT NULL])
                             EXCHANGE SHUFFLE[22]
@@ -631,6 +749,15 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
                                     EXCHANGE SHUFFLE[22]
                                         AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
                                             SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as varchar(1048576)) IS NOT NULL AND 14: v4 = 2])
+=======
+                        INNER JOIN (join-predicate [23: cast = 22: cast AND 7: t1d = 18: max] post-join-predicate [null])
+                            SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[cast(4: t1a as double) IS NOT NULL AND 7: t1d IS NOT NULL])
+                            EXCHANGE BROADCAST
+                                AGGREGATE ([GLOBAL] aggregate [{18: max=max(18: max)}] group by [[22: cast]] having [18: max IS NOT NULL]
+                                    EXCHANGE SHUFFLE[22]
+                                        AGGREGATE ([LOCAL] aggregate [{18: max=max(17: expr)}] group by [[22: cast]] having [null]
+                                            SCAN (columns[14: v4, 15: v5] predicate[cast(14: v4 as double) IS NOT NULL AND 14: v4 = 2])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 
 [sql]
@@ -702,8 +829,11 @@ LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(23: expr, 1,
                     SCAN (columns[12: t1c, 13: t1d] predicate[null])
 [end]
 
+<<<<<<< HEAD
 /* test ScalarApply2JoinRule */
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [sql]
 select * from t0 where 1 = (select v5 + 1 from t1 where t0.v2 = t1.v4);
 [result]
@@ -817,7 +947,12 @@ select v1, (select v5 + 1 from t1 where t0.v2 = t1.v4 and t0.v2 + 1 = 1 and t0.v
 [result]
 RIGHT OUTER JOIN (join-predicate [4: v4 = 2: v2 AND 9: add = 13: add AND 2: v2 = 0] post-join-predicate [null])
     AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(5: v5, 1))}] group by [[4: v4, 9: add]] having [null]
+<<<<<<< HEAD
         SCAN (columns[4: v4, 5: v5] predicate[4: v4 = 0 AND add(4: v4, 5: v5) = 1])
+=======
+        PREDICATE 9: add = 1
+            SCAN (columns[4: v4, 5: v5] predicate[4: v4 = 0])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXCHANGE SHUFFLE[2]
         SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
@@ -843,12 +978,20 @@ INNER JOIN (join-predicate [1: v1 = 24: cast] post-join-predicate [null])
             ASSERT LE 1
                 EXCHANGE GATHER
                     PREDICATE 7: t1d = 18: expr
+<<<<<<< HEAD
                         RIGHT OUTER JOIN (join-predicate [20: cast = 4: t1a] post-join-predicate [null])
+=======
+                        RIGHT OUTER JOIN (join-predicate [20: cast = 25: cast] post-join-predicate [null])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             AGGREGATE ([GLOBAL] aggregate [{21: countRows=count(21: countRows), 22: anyValue=any_value(22: anyValue)}] group by [[20: cast]] having [null]
                                 EXCHANGE SHUFFLE[20]
                                     AGGREGATE ([LOCAL] aggregate [{21: countRows=count(1), 22: anyValue=any_value(add(14: v4, 15: v5))}] group by [[20: cast]] having [null]
                                         SCAN (columns[14: v4, 15: v5] predicate[14: v4 = 2])
+<<<<<<< HEAD
                             EXCHANGE SHUFFLE[4]
+=======
+                            EXCHANGE SHUFFLE[25]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[null])
 [end]
 
@@ -861,12 +1004,20 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
         ASSERT LE 1
             EXCHANGE GATHER
                 PREDICATE 7: t1d = 18: expr
+<<<<<<< HEAD
                     RIGHT OUTER JOIN (join-predicate [20: cast = 4: t1a] post-join-predicate [null])
+=======
+                    RIGHT OUTER JOIN (join-predicate [20: cast = 24: cast] post-join-predicate [null])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         AGGREGATE ([GLOBAL] aggregate [{21: countRows=count(21: countRows), 22: anyValue=any_value(22: anyValue)}] group by [[20: cast]] having [null]
                             EXCHANGE SHUFFLE[20]
                                 AGGREGATE ([LOCAL] aggregate [{21: countRows=count(1), 22: anyValue=any_value(add(14: v4, 15: v5))}] group by [[20: cast]] having [null]
                                     SCAN (columns[14: v4, 15: v5] predicate[14: v4 = 2])
+<<<<<<< HEAD
                         EXCHANGE SHUFFLE[4]
+=======
+                        EXCHANGE SHUFFLE[24]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             SCAN (columns[4: t1a, 6: t1c, 7: t1d] predicate[null])
 [end]
 
@@ -925,4 +1076,9 @@ PREDICATE add(1: v1, 5: v5) <=> 21: expr
                 EXCHANGE SHUFFLE[22]
                     AGGREGATE ([LOCAL] aggregate [{23: countRows=count(1), 24: anyValue=any_value(subtract(13: t1d, 1))}] group by [[22: expr]] having [null]
                         SCAN (columns[12: t1c, 13: t1d] predicate[null])
+<<<<<<< HEAD
 [end]
+=======
+[end]
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

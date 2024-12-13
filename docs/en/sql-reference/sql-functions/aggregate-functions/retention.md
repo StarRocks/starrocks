@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # retention
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the user retention rate within a specified period of time. This function accepts 1 to 31 conditions and evaluates whether each condition is true. If the condition evaluates to true, 1 is returned. Otherwise, 0 is returned. It eventually returns an array of 0 and 1. You can calculate the user retention rate based on this data.
 

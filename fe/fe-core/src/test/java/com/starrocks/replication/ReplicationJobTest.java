@@ -73,6 +73,7 @@ public class ReplicationJobTest {
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
 
+<<<<<<< HEAD
         db = GlobalStateMgr.getCurrentState().getDb("test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
@@ -82,6 +83,18 @@ public class ReplicationJobTest {
                 AnalyzeTestUtil.getConnectContext());
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         table = (OlapTable) db.getTable("single_partition_duplicate_key");
+=======
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
+                    "distributed by hash(key1) buckets 1\n" +
+                    "properties('replication_num' = '1'); ";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
+                    AnalyzeTestUtil.getConnectContext());
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "single_partition_duplicate_key");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();
@@ -97,20 +110,39 @@ public class ReplicationJobTest {
 
     @Before
     public void setUp() throws Exception {
+<<<<<<< HEAD
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(100);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentSystemInfo());
+=======
+        partition.getDefaultPhysicalPartition().updateVersionForRestore(10);
+        srcPartition.getDefaultPhysicalPartition().updateVersionForRestore(100);
+        partition.getDefaultPhysicalPartition().setDataVersion(8);
+        partition.getDefaultPhysicalPartition().setNextDataVersion(9);
+        srcPartition.getDefaultPhysicalPartition().setDataVersion(98);
+        srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
+
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testJobId() {
         ReplicationJob jobWithoutId = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo());
         Assert.assertFalse(jobWithoutId.getJobId().isEmpty());
         ReplicationJob jobWithId = new ReplicationJob("fake_id", "test_token", db.getId(), table, srcTable,
                 GlobalStateMgr.getCurrentSystemInfo());
+=======
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        Assert.assertFalse(jobWithoutId.getJobId().isEmpty());
+        ReplicationJob jobWithId = new ReplicationJob("fake_id", "test_token", db.getId(), table, srcTable,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("fake_id", jobWithId.getJobId());
     }
 
@@ -136,7 +168,11 @@ public class ReplicationJobTest {
             job.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
 
             Deencapsulation.invoke(new LeaderImpl(), "finishRemoteSnapshotTask",
+<<<<<<< HEAD
                     (RemoteSnapshotTask) task, request);
+=======
+                        (RemoteSnapshotTask) task, request);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ((RemoteSnapshotTask) task).toThrift();
             task.toString();
         }
@@ -150,7 +186,11 @@ public class ReplicationJobTest {
             job.finishReplicateSnapshotTask((ReplicateSnapshotTask) task, request);
 
             Deencapsulation.invoke(new LeaderImpl(), "finishReplicateSnapshotTask",
+<<<<<<< HEAD
                     (ReplicateSnapshotTask) task, request);
+=======
+                        (ReplicateSnapshotTask) task, request);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ((ReplicateSnapshotTask) task).toThrift();
             task.toString();
         }
@@ -158,7 +198,14 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
+<<<<<<< HEAD
         Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
+=======
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
+                srcPartition.getDefaultPhysicalPartition().getDataVersion());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -315,13 +362,23 @@ public class ReplicationJobTest {
         Partition partition = table.getPartitions().iterator().next();
         Partition srcPartition = srcTable.getPartitions().iterator().next();
         partitionInfo.partition_id = partition.getId();
+<<<<<<< HEAD
         partitionInfo.src_version = srcPartition.getVisibleVersion();
+=======
+        partitionInfo.src_version = srcPartition.getDefaultPhysicalPartition().getVisibleVersion();
+        partitionInfo.src_version_epoch = srcPartition.getDefaultPhysicalPartition().getVersionEpoch();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         request.partition_replication_infos.put(partitionInfo.partition_id, partitionInfo);
 
         partitionInfo.index_replication_infos = new HashMap<Long, TIndexReplicationInfo>();
         TIndexReplicationInfo indexInfo = new TIndexReplicationInfo();
+<<<<<<< HEAD
         MaterializedIndex index = partition.getBaseIndex();
         MaterializedIndex srcIndex = srcPartition.getBaseIndex();
+=======
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getBaseIndex();
+        MaterializedIndex srcIndex = srcPartition.getDefaultPhysicalPartition().getBaseIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         indexInfo.index_id = index.getId();
         indexInfo.src_schema_hash = srcTable.getSchemaHashByIndexId(srcIndex.getId());
         partitionInfo.index_replication_infos.put(indexInfo.index_id, indexInfo);
@@ -340,7 +397,11 @@ public class ReplicationJobTest {
             tabletInfo.replica_replication_infos = new ArrayList<TReplicaReplicationInfo>();
             TReplicaReplicationInfo replicaInfo = new TReplicaReplicationInfo();
             Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator()
+<<<<<<< HEAD
                     .next();
+=======
+                        .next();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             replicaInfo.src_backend = new TBackend(backend.getHost(), backend.getBePort(), backend.getHttpPort());
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }

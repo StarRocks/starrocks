@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Objects;
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -56,11 +57,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+=======
+import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.transaction.TransactionType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Internal representation of partition-related metadata.
  */
+<<<<<<< HEAD
 public class Partition extends MetaObject implements PhysicalPartition, Writable {
+=======
+public class Partition extends MetaObject implements GsonPostProcessable {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(Partition.class);
 
     public static final long PARTITION_INIT_VERSION = 1L;
@@ -76,6 +96,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     @SerializedName(value = "id")
     private long id;
 
+<<<<<<< HEAD
     private long beforeRestoreId;
 
     @SerializedName(value = "name")
@@ -84,12 +105,266 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private PartitionState state;
     @SerializedName(value = "idToSubPartition")
     private Map<Long, PhysicalPartitionImpl> idToSubPartition = Maps.newHashMap();
+=======
+    @SerializedName(value = "name")
+    private String name;
+
+    @SerializedName(value = "state")
+    private PartitionState state;
+
+    @SerializedName(value = "dpid")
+    private long defaultPhysicalPartitionId;
+
+    @SerializedName(value = "idToSubPartition")
+    private Map<Long, PhysicalPartition> idToSubPartition = Maps.newHashMap();
+    private Map<String, PhysicalPartition> nameToSubPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
 
+<<<<<<< HEAD
     @SerializedName(value = "shardGroupId")
     private long shardGroupId;
+=======
+    public Partition(long id, String name, DistributionInfo distributionInfo) {
+        this.id = id;
+        this.name = name;
+        this.state = PartitionState.NORMAL;
+        this.distributionInfo = distributionInfo;
+    }
+
+    private Partition() {
+    }
+
+    public Partition(long id,
+                     long physicalPartitionId,
+                     String name,
+                     MaterializedIndex baseIndex,
+                     DistributionInfo distributionInfo) {
+        this.id = id;
+        this.name = name;
+        this.state = PartitionState.NORMAL;
+
+        this.baseIndex = baseIndex;
+
+        this.visibleVersion = PARTITION_INIT_VERSION;
+        this.visibleVersionTime = System.currentTimeMillis();
+        // PARTITION_INIT_VERSION == 1, so the first load version is 2 !!!
+        this.nextVersion = this.visibleVersion + 1;
+        this.dataVersion = this.visibleVersion;
+        this.nextDataVersion = this.nextVersion;
+        this.versionEpoch = this.nextVersionEpoch();
+        this.versionTxnType = TransactionType.TXN_NORMAL;
+        this.distributionInfo = distributionInfo;
+
+        this.defaultPhysicalPartitionId = physicalPartitionId;
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId,
+                generatePhysicalPartitionName(physicalPartitionId), id, baseIndex);
+        this.idToSubPartition.put(physicalPartitionId, physicalPartition);
+        this.nameToSubPartition.put(physicalPartition.getName(), physicalPartition);
+    }
+
+    public Partition shallowCopy() {
+        Partition partition = new Partition();
+        partition.id = this.id;
+        partition.name = this.name;
+        partition.state = this.state;
+        partition.baseIndex = this.baseIndex;
+        partition.idToVisibleRollupIndex = Maps.newHashMap(this.idToVisibleRollupIndex);
+        partition.idToShadowIndex = Maps.newHashMap(this.idToShadowIndex);
+        partition.visibleVersion = this.visibleVersion;
+        partition.visibleVersionTime = this.visibleVersionTime;
+        partition.nextVersion = this.nextVersion;
+        partition.dataVersion = this.dataVersion;
+        partition.nextDataVersion = this.nextDataVersion;
+        partition.versionEpoch = this.versionEpoch;
+        partition.versionTxnType = this.versionTxnType;
+        partition.distributionInfo = this.distributionInfo;
+        partition.shardGroupId = this.shardGroupId;
+        partition.defaultPhysicalPartitionId = this.defaultPhysicalPartitionId;
+        partition.idToSubPartition = Maps.newHashMap(this.idToSubPartition);
+        partition.nameToSubPartition = Maps.newHashMap(this.nameToSubPartition);
+        return partition;
+    }
+
+    public void setIdForRestore(long id) {
+        this.id = id;
+    }
+
+    public long getId() {
+        return this.id;
+    }
+
+    public void setName(String newName) {
+        this.name = newName;
+    }
+
+    public String getName() {
+        return this.name;
+    }
+
+    public void setState(PartitionState state) {
+        this.state = state;
+    }
+
+    public PartitionState getState() {
+        return this.state;
+    }
+
+    public DistributionInfo getDistributionInfo() {
+        return distributionInfo;
+    }
+
+    public void setDistributionInfo(DistributionInfo distributionInfo) {
+        this.distributionInfo = distributionInfo;
+    }
+
+    public void addSubPartition(PhysicalPartition subPartition) {
+        if (idToSubPartition.size() == 0) {
+            defaultPhysicalPartitionId = subPartition.getId();
+        }
+        if (subPartition.getName() == null) {
+            subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+        }
+
+        idToSubPartition.put(subPartition.getId(), subPartition);
+        nameToSubPartition.put(subPartition.getName(), subPartition);
+    }
+
+    public void removeSubPartition(long id) {
+        PhysicalPartition subPartition = idToSubPartition.remove(id);
+        if (subPartition != null) {
+            nameToSubPartition.remove(subPartition.getName());
+        }
+    }
+
+    public Collection<PhysicalPartition> getSubPartitions() {
+        return idToSubPartition.values();
+    }
+
+    public PhysicalPartition getSubPartition(long id) {
+        return idToSubPartition.get(id);
+    }
+
+    public PhysicalPartition getSubPartition(String name) {
+        return nameToSubPartition.get(name);
+    }
+
+    public PhysicalPartition getDefaultPhysicalPartition() {
+        return idToSubPartition.get(defaultPhysicalPartitionId);
+    }
+
+    public boolean hasData() {
+        boolean hasData = false;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            hasData |= subPartition.hasStorageData();
+        }
+        return hasData;
+    }
+
+    public long getDataSize() {
+        long dataSize = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            dataSize += subPartition.storageDataSize();
+        }
+        return dataSize;
+    }
+
+    public long getRowCount() {
+        long rowCount = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            rowCount += subPartition.storageRowCount();
+        }
+
+        return rowCount;
+    }
+
+    public long getReplicaCount() {
+        long replicaCount = 0;
+        for (PhysicalPartition subPartition : getSubPartitions()) {
+            replicaCount += subPartition.storageReplicaCount();
+        }
+        return replicaCount;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id, distributionInfo);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof Partition)) {
+            return false;
+        }
+
+        Partition partition = (Partition) obj;
+        return (id == partition.id) && distributionInfo.equals(partition.distributionInfo);
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder buffer = new StringBuilder();
+        buffer.append("partition_id: ").append(id).append("; ");
+        buffer.append("name: ").append(name).append("; ");
+        buffer.append("partition_state.name: ").append(state.name()).append("; ");
+        buffer.append("distribution_info.type: ").append(distributionInfo.getType().name()).append("; ");
+        buffer.append("distribution_info: ").append(distributionInfo.toString());
+
+        return buffer.toString();
+    }
+
+    public String generatePhysicalPartitionName(long physicalPartitionId) {
+        return this.name + '_' + physicalPartitionId;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        if (dataVersion == 0) {
+            dataVersion = visibleVersion;
+        }
+        if (nextDataVersion == 0) {
+            nextDataVersion = nextVersion;
+        }
+        if (versionEpoch == 0) {
+            versionEpoch = nextVersionEpoch();
+        }
+        if (versionTxnType == null) {
+            versionTxnType = TransactionType.TXN_NORMAL;
+        }
+
+        if (defaultPhysicalPartitionId == 0) {
+            String partitionJson = GsonUtils.GSON.toJson(this);
+            PhysicalPartition physicalPartition = GsonUtils.GSON.fromJson(partitionJson, PhysicalPartition.class);
+            physicalPartition.setParentId(id);
+
+            long physicalPartitionId = id;
+            defaultPhysicalPartitionId = physicalPartitionId;
+            idToSubPartition.put(physicalPartitionId, physicalPartition);
+            nameToSubPartition.put(generatePhysicalPartitionName(physicalPartitionId), physicalPartition);
+        }
+
+        for (PhysicalPartition subPartition : idToSubPartition.values()) {
+            if (subPartition.getName() == null) {
+                subPartition.setName(generatePhysicalPartitionName(subPartition.getId()));
+            }
+            if (subPartition.getBaseIndex().getShardGroupId() == PhysicalPartition.INVALID_SHARD_GROUP_ID) {
+                subPartition.getBaseIndex().setShardGroupId(getDefaultPhysicalPartition().getShardGroupId());
+            }
+
+            nameToSubPartition.put(subPartition.getName(), subPartition);
+        }
+    }
+
+    /**************************************PhysicalPartition **********************************************/
+
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId = PhysicalPartition.INVALID_SHARD_GROUP_ID;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /* Physical Partition Member */
     @SerializedName(value = "isImmutable")
@@ -122,6 +397,7 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
     private volatile long visibleVersion;
     @SerializedName(value = "visibleVersionTime")
     private volatile long visibleVersionTime;
+<<<<<<< HEAD
     /**
      * ID of the transaction that has committed current visible version.
      * Just for tracing the txn log, no need to persist.
@@ -649,3 +925,29 @@ public class Partition extends MetaObject implements PhysicalPartition, Writable
         this.minRetainVersion = minRetainVersion;
     }
 }
+=======
+    @SerializedName(value = "nextVersion")
+    private volatile long nextVersion;
+
+    /*
+     * in shared-nothing mode, data version is always equals to visible version
+     * in shared-data mode, compactions increase visible version but not data version
+     */
+    @SerializedName(value = "dataVersion")
+    private volatile long dataVersion;
+    @SerializedName(value = "nextDataVersion")
+    private volatile long nextDataVersion;
+
+    /*
+     * if the visible version and version epoch are unchanged, the data is unchanged
+     */
+    @SerializedName(value = "versionEpoch")
+    private volatile long versionEpoch;
+    @SerializedName(value = "versionTxnType")
+    private volatile TransactionType versionTxnType;
+
+    public long nextVersionEpoch() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

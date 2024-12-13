@@ -17,6 +17,10 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -36,27 +40,46 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.PartitionsProcDir;
+<<<<<<< HEAD
 import com.starrocks.common.util.PropertyAnalyzer;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.TemporaryTableMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
+<<<<<<< HEAD
 import com.starrocks.thrift.TCompressionType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
+import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -67,10 +90,18 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
+<<<<<<< HEAD
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+=======
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class InformationSchemaDataSource {
 
@@ -83,7 +114,10 @@ public class InformationSchemaDataSource {
 
     @NotNull
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
         boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
@@ -142,23 +176,39 @@ public class InformationSchemaDataSource {
     // tables_config
     public static TGetTablesConfigResponse generateTablesConfigResponse(TGetTablesConfigRequest request)
             throws TException {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
         List<TTableConfigInfo> tList = new ArrayList<>();
 
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db != null) {
                 db.readLock();
                 try {
                     List<Table> allTables = db.getTables();
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (Table table : allTables) {
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
                                     null, dbName, table);
                         } catch (AccessDeniedException e) {
+<<<<<<< HEAD
+=======
+                            LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             continue;
                         }
 
@@ -178,7 +228,11 @@ public class InformationSchemaDataSource {
                         tList.add(tableConfigInfo);
                     }
                 } finally {
+<<<<<<< HEAD
                     db.readUnlock();
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -191,6 +245,7 @@ public class InformationSchemaDataSource {
             MaterializedView mv = (MaterializedView) table;
             return mv.getMaterializedViewPropMap();
         }
+<<<<<<< HEAD
 
         OlapTable olapTable = (OlapTable) table;
         Map<String, String> propsMap = new HashMap<>();
@@ -257,20 +312,31 @@ public class InformationSchemaDataSource {
             propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, sv);
         }
         return propsMap;
+=======
+        return table.getProperties();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
         OlapTable olapTable = (OlapTable) table;
         tableConfigInfo.setTable_engine(olapTable.getType().toString());
         tableConfigInfo.setTable_model(olapTable.getKeysType().toString());
+<<<<<<< HEAD
         // Distribution info
         DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
         String distributeKey = distributionInfo.getDistributionKey();
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Partition info
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         StringBuilder partitionKeySb = new StringBuilder();
         int idx = 0;
+<<<<<<< HEAD
         for (Column column : partitionInfo.getPartitionColumns()) {
+=======
+        for (Column column : partitionInfo.getPartitionColumns(table.getIdToColumn())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (idx != 0) {
                 partitionKeySb.append(", ");
             }
@@ -289,9 +355,18 @@ public class InformationSchemaDataSource {
         tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
                 || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEFAULT_EMPTY_STRING);
         tableConfigInfo.setPartition_key(partitionKeySb.length() > 0 ? partitionKeySb.toString() : DEFAULT_EMPTY_STRING);
+<<<<<<< HEAD
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
+=======
+
+        // Distribution info
+        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+        tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
+        tableConfigInfo.setDistribute_type(distributionInfo.getType().name());
+        tableConfigInfo.setDistribute_key(distributionInfo.getDistributionKey(olapTable.getIdToColumn()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -318,16 +393,28 @@ public class InformationSchemaDataSource {
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
         for (String dbName : result.authorizedDbs) {
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
                 continue;
             }
             List<Table> allTables = db.getTables();
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            if (db == null) {
+                continue;
+            }
+            List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Table table : allTables) {
                 try {
                     Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
                             null, dbName, table);
                 } catch (AccessDeniedException e) {
+<<<<<<< HEAD
+=======
+                    LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     continue;
                 }
                 if (!table.isNativeTableOrMaterializedView()) {
@@ -336,7 +423,12 @@ public class InformationSchemaDataSource {
                 // only olap table/mv or cloud table/mv will reach here;
                 // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
                 // partition does not trigger crash
+<<<<<<< HEAD
                 db.readLock();
+=======
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 try {
                     OlapTable olapTable = (OlapTable) table;
                     PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
@@ -363,7 +455,11 @@ public class InformationSchemaDataSource {
                         }
                     }
                 } finally {
+<<<<<<< HEAD
                     db.readUnlock();
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -385,13 +481,21 @@ public class InformationSchemaDataSource {
         partitionMetaInfo.setVisible_version_time(physicalPartition.getVisibleVersionTime() / 1000);
         // PARTITION_KEY
         partitionMetaInfo.setPartition_key(
+<<<<<<< HEAD
                 Joiner.on(", ").join(PartitionsProcDir.findPartitionColNames(partitionInfo)));
+=======
+                Joiner.on(", ").join(partitionInfo.getPartitionColumns(table.getIdToColumn())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // PARTITION_VALUE
         partitionMetaInfo.setPartition_value(
                 PartitionsProcDir.findRangeOrListValues(partitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         // DISTRIBUTION_KEY
+<<<<<<< HEAD
         partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(distributionInfo));
+=======
+        partitionMetaInfo.setDistribution_key(PartitionsProcDir.distributionKeyAsString(table, distributionInfo));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // BUCKETS
         partitionMetaInfo.setBuckets(distributionInfo.getBucketNum());
         // REPLICATION_NUM
@@ -433,11 +537,21 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setStorage_path(
                     table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
         }
+<<<<<<< HEAD
+=======
+
+        partitionMetaInfo.setData_version(physicalPartition.getDataVersion());
+        partitionMetaInfo.setVersion_epoch(physicalPartition.getVersionEpoch());
+        partitionMetaInfo.setVersion_txn_type(physicalPartition.getVersionTxnType().toThrift());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // tables
     public static TGetTablesInfoResponse generateTablesInfoResponse(TGetTablesInfoRequest request) throws TException {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TGetTablesInfoResponse response = new TGetTablesInfoResponse();
         List<TTableInfo> infos = new ArrayList<>();
 
@@ -453,17 +567,41 @@ public class InformationSchemaDataSource {
 
         for (String dbName : result.authorizedDbs) {
             Database db = metadataMgr.getDb(catalogName, dbName);
+<<<<<<< HEAD
 
             if (db != null) {
                 List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
                 for (String tableName : tableNames) {
+=======
+            if (db == null) {
+                continue;
+            }
+
+            List<BasicTable> tables = new ArrayList<>();
+            Locker locker = new Locker();
+            try {
+                locker.lockDatabase(db.getId(), LockType.READ);
+                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                for (String tableName : tableNames) {
+                    if (request.isSetTable_name()) {
+                        if (!tableName.equals(request.getTable_name())) {
+                            continue;
+                        }
+                    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     BasicTable table = null;
                     try {
                         table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
                     } catch (Exception e) {
+<<<<<<< HEAD
                         LOG.warn(e.getMessage());
                     }
 
+=======
+                        LOG.warn(e.getMessage(), e);
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (table == null) {
                         continue;
                     }
@@ -474,6 +612,7 @@ public class InformationSchemaDataSource {
                         continue;
                     }
 
+<<<<<<< HEAD
                     if (request.isSetTable_name()) {
                         if (!table.getName().equals(request.getTable_name())) {
                             continue;
@@ -524,6 +663,66 @@ public class InformationSchemaDataSource {
                         infos.add(info);
                     } finally {
                         db.readUnlock();
+=======
+                    tables.add(table);
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.READ);
+            }
+
+            for (BasicTable table : tables) {
+                Locker tableLocker = new Locker();
+                try {
+                    if (table.isNativeTableOrMaterializedView()) {
+                        tableLocker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(((OlapTable) table).getId()),
+                                LockType.READ);
+                    }
+
+                    TTableInfo info = new TTableInfo();
+
+                    // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
+                    // the catalog name is always `def`
+                    info.setTable_catalog(DEF);
+                    info.setTable_schema(dbName);
+                    info.setTable_name(table.getName());
+                    info.setTable_type(table.getMysqlType());
+                    info.setEngine(table.getEngine());
+                    info.setVersion(DEFAULT_EMPTY_NUM);
+                    // TABLE_ROWS (depend on the table type)
+                    // AVG_ROW_LENGTH (depend on the table type)
+                    // DATA_LENGTH (depend on the table type)
+                    info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                    info.setIndex_length(DEFAULT_EMPTY_NUM);
+                    info.setData_free(DEFAULT_EMPTY_NUM);
+                    info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                    info.setCreate_time(table.getCreateTime());
+                    // UPDATE_TIME (depend on the table type)
+                    info.setCheck_time(table.getLastCheckTime() / 1000);
+                    info.setTable_collation(UTF8_GENERAL_CI);
+                    info.setChecksum(DEFAULT_EMPTY_NUM);
+                    info.setTable_comment(table.getComment());
+
+                    if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        // OLAP (done)
+                        // OLAP_EXTERNAL (done)
+                        // MATERIALIZED_VIEW (done)
+                        // LAKE (done)
+                        // LAKE_MATERIALIZED_VIEW (done)
+                        genNormalTableInfo(table, info);
+                    } else {
+                        // SCHEMA (use default)
+                        // INLINE_VIEW (use default)
+                        // VIEW (use default)
+                        // BROKER (use default)
+                        // EXTERNAL TABLE (use default)
+                        genDefaultConfigInfo(info);
+                    }
+                    infos.add(info);
+                } finally {
+                    if (table.isNativeTableOrMaterializedView()) {
+                        tableLocker.unLockTablesWithIntensiveDbLock(db.getId(),
+                                Lists.newArrayList(((OlapTable) table).getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
@@ -532,6 +731,91 @@ public class InformationSchemaDataSource {
         return response;
     }
 
+<<<<<<< HEAD
+=======
+    public static TGetTemporaryTablesInfoResponse generateTemporaryTablesInfoResponse(TGetTemporaryTablesInfoRequest request)
+            throws TException {
+        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+        TAuthInfo authInfo = request.getAuth_info();
+        AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        if (authInfo.isSetCatalog_name()) {
+            catalogName = authInfo.getCatalog_name();
+        }
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        Set<Long> requiredDbIds = new HashSet<>();
+        for (String dbName : result.authorizedDbs) {
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            if (db != null) {
+                requiredDbIds.add(db.getId());
+            }
+        }
+
+        com.google.common.collect.Table<Long, Long, UUID> allTables = temporaryTableMgr.getAllTemporaryTables(requiredDbIds);
+
+        List<TTableInfo> tableInfos = new ArrayList<>();
+        for (Long databaseId : allTables.rowKeySet()) {
+            Database db = metadataMgr.getDb(databaseId);
+            if (db != null) {
+                Map<Long, UUID> tableMap = allTables.row(databaseId);
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    for (Map.Entry<Long, UUID> entry : tableMap.entrySet()) {
+                        UUID sessionId = entry.getValue();
+                        Long tableId = entry.getKey();
+                        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                        if (table != null) {
+                            TTableInfo info = new TTableInfo();
+
+                            // the catalog name is always `def`
+                            info.setTable_catalog(DEF);
+                            info.setTable_schema(db.getFullName());
+                            info.setTable_name(table.getName());
+                            info.setTable_type(table.getMysqlType());
+                            info.setEngine(table.getEngine());
+                            info.setVersion(DEFAULT_EMPTY_NUM);
+                            // TABLE_ROWS (depend on the table type)
+                            // AVG_ROW_LENGTH (depend on the table type)
+                            // DATA_LENGTH (depend on the table type)
+                            info.setMax_data_length(DEFAULT_EMPTY_NUM);
+                            info.setIndex_length(DEFAULT_EMPTY_NUM);
+                            info.setData_free(DEFAULT_EMPTY_NUM);
+                            info.setAuto_increment(DEFAULT_EMPTY_NUM);
+                            info.setCreate_time(table.getCreateTime());
+                            // UPDATE_TIME (depend on the table type)
+                            info.setCheck_time(table.getLastCheckTime() / 1000);
+                            info.setTable_collation(UTF8_GENERAL_CI);
+                            info.setChecksum(DEFAULT_EMPTY_NUM);
+                            info.setTable_comment(table.getComment());
+                            info.setSession_id(sessionId.toString());
+                            info.setTable_id(table.getId());
+                            genNormalTableInfo(table, info);
+                            tableInfos.add(info);
+                            if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                                break;
+                            }
+                        }
+                    }
+                    if (request.isSetLimit() && tableInfos.size() >= request.getLimit()) {
+                        break;
+                    }
+                } finally {
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+                }
+            }
+        }
+
+        TGetTemporaryTablesInfoResponse response = new TGetTemporaryTablesInfoResponse();
+        response.setTables_infos(tableInfos);
+        return response;
+    }
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;

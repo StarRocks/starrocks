@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
@@ -22,17 +23,45 @@ import org.junit.Test;
 
 public class TPCHPlanTest extends PlanTestBase {
     @BeforeClass
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.FeConstants;
+import com.starrocks.planner.TpchSQL;
+import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.server.GlobalStateMgr;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+public class TPCHPlanTest extends PlanTestBase {
+    @BeforeAll
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.DOUBLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testJoin() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+=======
+        OlapTable table1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(table1, 10000);
         runFileUnitTest("optimized-plan/join");
         setTableStatistics(table1, 0);
@@ -50,7 +79,10 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testInSubquery() {
+<<<<<<< HEAD
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         runFileUnitTest("subquery/in-subquery");
     }
 
@@ -94,6 +126,7 @@ public class TPCHPlanTest extends PlanTestBase {
         runFileUnitTest("optimized-plan/lateral");
     }
 
+<<<<<<< HEAD
     @Test
     public void testTPCH1() {
         runFileUnitTest("tpch/q1");
@@ -204,5 +237,25 @@ public class TPCHPlanTest extends PlanTestBase {
     @Test
     public void testTPCH22() {
         runFileUnitTest("tpch/q22");
+=======
+    @ParameterizedTest(name = "Tpch.{0}")
+    @MethodSource("tpchSource")
+    public void testTPCH(String name, String sql, String resultFile) {
+        if ("q16".equals(name)) {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+            runFileUnitTest(sql, resultFile);
+            connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        } else {
+            runFileUnitTest(sql, resultFile);
+        }
+    }
+
+    private static Stream<Arguments> tpchSource() {
+        List<Arguments> cases = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), "tpch/" + entry.getKey()));
+        }
+        return cases.stream();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

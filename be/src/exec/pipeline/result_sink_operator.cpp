@@ -14,11 +14,22 @@
 
 #include "exec/pipeline/result_sink_operator.h"
 
+<<<<<<< HEAD
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/customized_result_writer.h"
 #include "runtime/http_result_writer.h"
+=======
+#include <arrow/type.h>
+
+#include "exprs/expr.h"
+#include "runtime/arrow_result_writer.h"
+#include "runtime/buffer_control_block.h"
+#include "runtime/customized_result_writer.h"
+#include "runtime/http_result_writer.h"
+#include "runtime/metadata_result_writer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
@@ -31,12 +42,18 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     // Create profile
+<<<<<<< HEAD
     _profile = std::make_unique<RuntimeProfile>("result sink");
     _unique_metrics->add_child(_profile.get(), true, nullptr);
+=======
+    _unique_metrics->add_info_string("SinkType", to_string(_sink_type));
+    auto profile = _unique_metrics.get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Create writer based on sink type
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
+<<<<<<< HEAD
         _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format,
                                                       _profile.get());
         break;
@@ -48,13 +65,35 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
         break;
     case TResultSinkType::HTTP_PROTOCAL:
         _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get(), _format_type);
+=======
+        _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _is_binary_format, profile);
+        break;
+    case TResultSinkType::STATISTIC:
+        _writer = std::make_shared<StatisticResultWriter>(_sender.get(), _output_expr_ctxs, profile);
+        break;
+    case TResultSinkType::VARIABLE:
+        _writer = std::make_shared<VariableResultWriter>(_sender.get(), _output_expr_ctxs, profile);
+        break;
+    case TResultSinkType::HTTP_PROTOCAL:
+        _writer = std::make_shared<HttpResultWriter>(_sender.get(), _output_expr_ctxs, profile, _format_type);
+        break;
+    case TResultSinkType::METADATA_ICEBERG:
+        _writer = std::make_shared<MetadataResultWriter>(_sender.get(), _output_expr_ctxs, profile, _sink_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         break;
     case TResultSinkType::CUSTOMIZED:
         // CustomizedResultWriter is a general-purposed result writer that used by FE to executing internal
         // query, the result is serialized in packed binary format. FE can parse the result row into object
         // via ORM(Object-Relation Mapping) mechanism. In the future, all the internal queries should be
         // unified to adopt this result sink type.
+<<<<<<< HEAD
         _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+=======
+        _writer = std::make_shared<CustomizedResultWriter>(_sender.get(), _output_expr_ctxs, profile);
+        break;
+    case TResultSinkType::ARROW_FLIGHT_PROTOCAL:
+        _writer = std::make_shared<ArrowResultWriter>(_sender.get(), _output_expr_ctxs, profile, _row_desc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -88,12 +127,20 @@ void ResultSinkOperator::close(RuntimeState* state) {
             if (!st.ok() && final_status.ok()) {
                 final_status = st;
             }
+<<<<<<< HEAD
             _sender->close(final_status);
         }
 
         st = state->exec_env()->result_mgr()->cancel_at_time(
                 time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
         st.permit_unchecked_error();
+=======
+            WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
+        }
+
+        (void)state->exec_env()->result_mgr()->cancel_at_time(
+                time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Operator::close(state);
@@ -105,8 +152,12 @@ StatusOr<ChunkPtr> ResultSinkOperator::pull_chunk(RuntimeState* state) {
 
 Status ResultSinkOperator::set_cancelled(RuntimeState* state) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+<<<<<<< HEAD
 
     _fetch_data_result.clear();
+=======
+    _writer->cancel();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -116,6 +167,7 @@ bool ResultSinkOperator::need_input() const {
     if (is_finished()) {
         return false;
     }
+<<<<<<< HEAD
     if (_fetch_data_result.empty()) {
         return true;
     }
@@ -127,6 +179,10 @@ bool ResultSinkOperator::need_input() const {
         _last_error = status.status();
         return true;
     }
+=======
+
+    return !_writer->is_full();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
@@ -142,6 +198,7 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     if (!_last_error.ok()) {
         return _last_error;
     }
+<<<<<<< HEAD
     DCHECK(_fetch_data_result.empty());
 
     auto status = _writer->process_chunk(chunk.get());
@@ -151,11 +208,21 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     } else {
         return status.status();
     }
+=======
+
+    return _writer->add_to_write_buffer(chunk.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), 1024, &_sender));
+=======
+    auto dop = state->query_options().pipeline_dop;
+    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
+                                                                   std::min(dop << 1, 1024), &_sender));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
 
@@ -166,6 +233,13 @@ Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ResultSinkOperatorFactory::close(RuntimeState* state) {
+<<<<<<< HEAD
+=======
+    if (_sender != nullptr) {
+        WARN_IF_ERROR(_sender->close(_fragment_ctx->final_status()), "close sender failed");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Expr::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
 }

@@ -23,6 +23,11 @@ import java.lang.reflect.Field;
  */
 public final class Platform {
 
+<<<<<<< HEAD
+=======
+    public static final String UT_KEY = "starrocks.fe.test";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Unsafe _UNSAFE;
 
     public static final int BOOLEAN_ARRAY_OFFSET;
@@ -96,8 +101,12 @@ public final class Platform {
     }
 
     public static boolean isTesting() {
+<<<<<<< HEAD
         return System.getProperties().containsKey("starrocks.fe.test") &&
                 System.getProperty("starrocks.fe.test").equals("1");
+=======
+        return System.getProperties().containsKey(UT_KEY) && Boolean.parseBoolean(System.getProperty(UT_KEY));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void freeMemory(long address) {

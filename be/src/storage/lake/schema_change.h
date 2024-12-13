@@ -36,8 +36,13 @@ public:
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
 
+<<<<<<< HEAD
     // for update tablet meta
     Status process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request);
+=======
+    Status process_update_tablet_meta(const TUpdateTabletMetaInfoReq& request);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DISALLOW_COPY_AND_MOVE(SchemaChangeHandler);
 
 private:

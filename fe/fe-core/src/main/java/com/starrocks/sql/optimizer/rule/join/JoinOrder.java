@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.join;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
@@ -349,7 +352,11 @@ public abstract class JoinOrder {
                     if (allChildColumns.containsAll(valueUseColumns)) {
                         // depend on two children, must rewrite to origin expression
                         ReplaceColumnRefRewriter rewriter =
+<<<<<<< HEAD
                                 new ReplaceColumnRefRewriter(ImmutableMap.of(entry.getKey(), entry.getValue()));
+=======
+                                new ReplaceColumnRefRewriter(Map.of(entry.getKey(), entry.getValue()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         predicate = rewriter.rewrite(predicate);
                         onPredicates.set(i, predicate);
                     } else {
@@ -371,7 +378,11 @@ public abstract class JoinOrder {
 
         UKFKConstraints.JoinProperty joinProperty = null;
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+<<<<<<< HEAD
         if (sessionVariable.isEnableUKFKOpt()) {
+=======
+        if (sessionVariable.isEnableUKFKJoinReorder()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             UKFKConstraintsCollector.collectColumnConstraints(leftExprInfo.expr);
             UKFKConstraintsCollector.collectColumnConstraints(rightExprInfo.expr);
             UKFKConstraints constraint = UKFKConstraintsCollector.buildJoinColumnConstraint(newJoin,

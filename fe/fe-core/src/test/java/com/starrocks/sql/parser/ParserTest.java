@@ -58,6 +58,18 @@ import static org.junit.Assert.fail;
 class ParserTest {
 
     @Test
+<<<<<<< HEAD
+=======
+    void test() {
+        String sql = "alter plan advisor add " +
+                "select count(*) from customer join " +
+                "(select * from skew_tbl where c_custkey_skew = 100) t on abs(c_custkey) = c_custkey_skew;";
+        SqlParser.parse(sql, new SessionVariable());
+        System.out.println();
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void tokensExceedLimitTest() {
         String sql = "select 1";
         SessionVariable sessionVariable = new SessionVariable();
@@ -71,6 +83,7 @@ class ParserTest {
     }
 
     @Test
+<<<<<<< HEAD
     void test() {
         String sql = "@`a` = 1";
         SessionVariable sessionVariable = new SessionVariable();
@@ -80,6 +93,8 @@ class ParserTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void sqlParseErrorInfoTest() {
         String sql = "select 1 form tbl";
         SessionVariable sessionVariable = new SessionVariable();
@@ -99,6 +114,7 @@ class ParserTest {
     @Test
     void sqlParseTemporalQueriesTest() {
         String[] temporalQueries = new String[] {
+<<<<<<< HEAD
                 // DoltDB temporal query syntax
                 // https://docs.dolthub.com/sql-reference/version-control/querying-history
                 "SELECT * FROM t AS OF 'kfvpgcf8pkd6blnkvv8e0kle8j6lug7a';",
@@ -113,6 +129,15 @@ class ParserTest {
                 "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
                 "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
                 "SELECT * FROM t FOR SYSTEM_TIME ALL;",
+=======
+                // MariaDB temporal query syntax
+                // https://mariadb.com/kb/en/system-versioned-tables/
+                "SELECT * FROM t FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06';",
+                "SELECT * FROM t FOR SYSTEM_TIME BETWEEN (NOW() - INTERVAL 1 YEAR) AND NOW();",
+                "SELECT * FROM t FOR SYSTEM_TIME FROM '2016-01-01 00:00:00' TO '2017-01-01 00:00:00';",
+                "SELECT * FROM t FOR SYSTEM_TIME ALL;",
+                "SELECT * FROM t FOR VERSION AS OF 123345456321;",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         };
 
         for (String query : temporalQueries) {
@@ -403,6 +428,7 @@ class ParserTest {
 
     @Test
     void testWrongVariableName() {
+<<<<<<< HEAD
         String res = VariableMgr.findSimilarVarNames("disable_coloce_join");
         assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
 
@@ -413,6 +439,19 @@ class ParserTest {
         assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
 
         res = VariableMgr.findSimilarVarNames("disable_joinreorder");
+=======
+        VariableMgr variableMgr = new VariableMgr();
+        String res = variableMgr.findSimilarVarNames("disable_coloce_join");
+        assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
+
+        res = variableMgr.findSimilarVarNames("SQL_AUTO_NULL");
+        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'spill_storage_volume'}");
+
+        res = variableMgr.findSimilarVarNames("pipeline");
+        assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");
+
+        res = variableMgr.findSimilarVarNames("disable_joinreorder");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertContains(res, "{'disable_join_reorder', 'disable_colocate_join'");
     }
 
@@ -460,6 +499,44 @@ class ParserTest {
         Assert.assertTrue(timeOfLL > timeOfSLL);
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    void testPivot() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from t pivot (sum(v1) for v2 in (1, 2, 3))");
+        sqls.add("select * from t pivot (sum(v1) as s1 for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+        sqls.add("select * from t " +
+                "pivot (sum(v1) as s1, count(v2) as c1, avg(v3) as c3 " +
+                "for (v2, v3) in ((1, 2) as 'a', (3,4) as b, (5,6) as 'c'))");
+
+
+        List<String> expects = Lists.newArrayList();
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1)\n" +
+                "FOR v2 IN (1, 2, 3)\n" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1\n" +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                ")");
+        expects.add("SELECT *\n" +
+                "FROM `t` PIVOT (sum(v1) AS s1, count(v2) AS c1, avg(v3) AS c3\n" +
+                "FOR (v2, v3) IN ((1, 2) AS a, (3, 4) AS b, (5, 6) AS c)\n" +
+                ")");
+        for (String sql : sqls) {
+            try {
+                StatementBase stmt = SqlParser.parse(sql, new SessionVariable()).get(0);
+                String newSql = AstToSQLBuilder.toSQL(stmt);
+                assertEquals(expects.get(sqls.indexOf(sql)), newSql);
+            } catch (Exception e) {
+                e.printStackTrace();
+                fail("sql should success. errMsg: " + e.getMessage());
+            }
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
         sqls.add("select current_role()");
@@ -549,4 +626,11 @@ class ParserTest {
                 "the most similar input is {a legal identifier}."));
         return arguments.stream();
     }
+<<<<<<< HEAD
 }
+=======
+
+}
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

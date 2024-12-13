@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Y
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 当 point 是一个合法的 POINT 类型时，返回对应的 Y 坐标值。
 

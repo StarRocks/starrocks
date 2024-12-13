@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     n_name,
@@ -23,6 +24,8 @@ group by
     n_name
 order by
     revenue desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [planCount]
 8
 [plan-1]

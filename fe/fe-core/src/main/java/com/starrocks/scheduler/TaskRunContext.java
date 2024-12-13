@@ -29,6 +29,10 @@ public class TaskRunContext {
     Constants.TaskType type;
     TaskRunStatus status;
     ExecuteOption executeOption;
+<<<<<<< HEAD
+=======
+    String taskRunId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TaskRun taskRun;
 
     public TaskRunContext() {
@@ -44,6 +48,10 @@ public class TaskRunContext {
         this.type = context.type;
         this.status = context.status;
         this.executeOption = context.executeOption;
+<<<<<<< HEAD
+=======
+        this.taskRunId = context.taskRunId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.taskRun = context.taskRun;
     }
 
@@ -119,6 +127,17 @@ public class TaskRunContext {
         this.executeOption = executeOption;
     }
 
+<<<<<<< HEAD
+=======
+    public String getTaskRunId() {
+        return taskRunId;
+    }
+
+    public void setTaskRunId(String uuid) {
+        this.taskRunId = uuid;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TaskRun getTaskRun() {
         return taskRun;
     }

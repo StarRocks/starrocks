@@ -72,6 +72,10 @@ size_t ArrayColumn::byte_size(size_t idx) const {
 }
 
 void ArrayColumn::reserve(size_t n) {
+<<<<<<< HEAD
+=======
+    _elements->reserve(n);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _offsets->reserve(n + 1);
 }
 

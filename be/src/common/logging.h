@@ -71,9 +71,15 @@
 
 // Define VLOG levels.  We want display per-row info less than per-file which
 // is less than per-query.  For now per-connection is the same as per-query.
+<<<<<<< HEAD
 #define VLOG_CONNECTION VLOG(1)
 #define VLOG_RPC VLOG(8)
 #define VLOG_QUERY VLOG(1)
+=======
+#define VLOG_CONNECTION VLOG(2)
+#define VLOG_RPC VLOG(8)
+#define VLOG_QUERY VLOG(2)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define VLOG_FILE VLOG(2)
 #define VLOG_OPERATOR VLOG(3)
 #define VLOG_ROW VLOG(10)

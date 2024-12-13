@@ -50,7 +50,11 @@ public class QueryDetailQueueTest extends PlanTestBase {
         QueryDetail startQueryDetail = new QueryDetail("219a2d5443c542d4-8fc938db37c892e3", false, 1, "127.0.0.1",
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "testDb", "select * from table1 limit 1",
+<<<<<<< HEAD
                 "root", "");
+=======
+                "root", "", "default_catalog");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         startQueryDetail.setScanRows(100);
         startQueryDetail.setScanBytes(10001);
         startQueryDetail.setReturnRows(1);
@@ -63,6 +67,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
 
         Gson gson = new Gson();
         String jsonString = gson.toJson(queryDetails);
+<<<<<<< HEAD
         String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + ","
                 + "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\","
                 + "\"isQuery\":false,"
@@ -79,6 +84,31 @@ public class QueryDetailQueueTest extends PlanTestBase {
                 + "\"memCostBytes\":100003,"
                 + "\"spillBytes\":-1"
                 + "}]";
+=======
+        String queryDetailString = "[{\"eventTime\":" + startQueryDetail.getEventTime() + "," +
+                "\"queryId\":\"219a2d5443c542d4-8fc938db37c892e3\"," +
+                "\"isQuery\":false," +
+                "\"remoteIP\":\"127.0.0.1\"," +
+                "\"connId\":1," +
+                "\"startTime\":" + startQueryDetail.getStartTime() + "," +
+                "\"endTime\":-1," +
+                "\"latency\":-1," +
+                "\"pendingTime\":-1," +
+                "\"netTime\":-1," +
+                "\"netComputeTime\":-1," +
+                "\"state\":\"RUNNING\"," +
+                "\"database\":\"testDb\"," +
+                "\"sql\":\"select * from table1 limit 1\"," +
+                "\"user\":\"root\"," +
+                "\"scanRows\":100," +
+                "\"scanBytes\":10001," +
+                "\"returnRows\":1," +
+                "\"cpuCostNs\":1002," +
+                "\"memCostBytes\":100003," +
+                "\"spillBytes\":-1," +
+                "\"warehouse\":\"default_warehouse\"," +
+                "\"catalog\":\"default_catalog\"}]";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());

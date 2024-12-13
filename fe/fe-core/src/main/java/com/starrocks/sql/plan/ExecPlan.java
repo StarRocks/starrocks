@@ -21,6 +21,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.ExecGroup;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
@@ -30,7 +34,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+=======
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
@@ -56,8 +66,18 @@ public class ExecPlan {
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
     private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
+<<<<<<< HEAD
 
     private volatile ProfilingExecPlan profilingPlan;
+=======
+    private List<ExecGroup> execGroups = new ArrayList<>();
+
+    private volatile ProfilingExecPlan profilingPlan;
+    private LogicalPlan logicalPlan;
+    private ColumnRefFactory columnRefFactory;
+
+    private List<Integer> collectExecStatsIds;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @VisibleForTesting
     public ExecPlan() {
@@ -145,7 +165,20 @@ public class ExecPlan {
         return outputColumns;
     }
 
+<<<<<<< HEAD
     public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+=======
+    public void setExecGroups(List<ExecGroup> execGroups) {
+        this.execGroups = execGroups;
+    }
+
+    public List<ExecGroup> getExecGroups() {
+        return this.execGroups;
+    }
+
+    public void recordPlanNodeId2OptExpression(int id, OptExpression optExpression) {
+        optExpression.getOp().setPlanNodeId(id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         optExpressions.put(id, optExpression);
     }
 
@@ -230,4 +263,31 @@ public class ExecPlan {
         }
         return getExplainString(tlevel);
     }
+<<<<<<< HEAD
+=======
+
+    public LogicalPlan getLogicalPlan() {
+        return logicalPlan;
+    }
+
+    public void setLogicalPlan(LogicalPlan logicalPlan) {
+        this.logicalPlan = logicalPlan;
+    }
+
+    public ColumnRefFactory getColumnRefFactory() {
+        return columnRefFactory;
+    }
+
+    public void setColumnRefFactory(ColumnRefFactory columnRefFactory) {
+        this.columnRefFactory = columnRefFactory;
+    }
+
+    public List<Integer> getCollectExecStatsIds() {
+        return collectExecStatsIds;
+    }
+
+    public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
+        this.collectExecStatsIds = collectExecStatsIds;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

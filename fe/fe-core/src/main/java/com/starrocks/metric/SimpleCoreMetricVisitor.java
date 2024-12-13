@@ -151,9 +151,17 @@ public class SimpleCoreMetricVisitor extends MetricVisitor {
 
     @Override
     public void getNodeInfo() {
+<<<<<<< HEAD
         long feDeadNum = GlobalStateMgr.getCurrentState().getFrontends(null).stream().filter(f -> !f.isAlive()).count();
         long beDeadNum =
                 GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values().stream().filter(b -> !b.isAlive())
+=======
+        long feDeadNum = GlobalStateMgr.getCurrentState().getNodeMgr()
+                .getFrontends(null).stream().filter(f -> !f.isAlive()).count();
+        long beDeadNum =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values().stream()
+                        .filter(b -> !b.isAlive())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .count();
         long brokerDeadNum =
                 GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)

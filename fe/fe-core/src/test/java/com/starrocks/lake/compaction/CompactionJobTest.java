@@ -16,7 +16,10 @@ package com.starrocks.lake.compaction;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PhysicalPartition;
+<<<<<<< HEAD
 import com.starrocks.catalog.PhysicalPartitionImpl;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.proto.CompactStat;
 import mockit.Mock;
@@ -34,7 +37,11 @@ public class CompactionJobTest {
     public void testGetResult() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
+<<<<<<< HEAD
         PhysicalPartition partition = new PhysicalPartitionImpl(0, 1, 2, null);
+=======
+        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
 
         Assert.assertTrue(job.getAllowPartialSuccess());
@@ -79,7 +86,11 @@ public class CompactionJobTest {
     public void testBuildTabletCommitInfo() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
+<<<<<<< HEAD
         PhysicalPartition partition = new PhysicalPartitionImpl(0, 1, 2, null);
+=======
+        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CompactionJob job = new CompactionJob(db, table, partition, 10010, false);
         assertDoesNotThrow(() -> {
             job.buildTabletCommitInfo();
@@ -90,7 +101,11 @@ public class CompactionJobTest {
     public void testGetExecutionProfile() {
         Database db = new Database();
         Table table = new Table(Table.TableType.CLOUD_NATIVE);
+<<<<<<< HEAD
         PhysicalPartition partition = new PhysicalPartitionImpl(0, 1, 2, null);
+=======
+        PhysicalPartition partition = new PhysicalPartition(0, "", 1, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CompactionJob job = new CompactionJob(db, table, partition, 10010, true);
 
         Assert.assertTrue(job.getExecutionProfile().isEmpty());

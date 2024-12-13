@@ -47,9 +47,16 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTransactionStatus;
 import mockit.Mock;
@@ -90,7 +97,11 @@ public class DatabaseTransactionMgrTest {
 
     @Before
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
+<<<<<<< HEAD
             InvocationTargetException, NoSuchMethodException, SecurityException, UserException {
+=======
+            InvocationTargetException, NoSuchMethodException, SecurityException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.label_keep_max_second = 10;
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
@@ -105,7 +116,11 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId = addTransactionToTransactionMgr();
     }
 
+<<<<<<< HEAD
     public void prepareCommittedTransaction() throws UserException {
+=======
+    public void prepareCommittedTransaction() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long transactionId1 = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
                         Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -133,7 +148,11 @@ public class DatabaseTransactionMgrTest {
 
     }
 
+<<<<<<< HEAD
     public Map<String, Long> addTransactionToTransactionMgr() throws UserException {
+=======
+    public Map<String, Long> addTransactionToTransactionMgr() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
@@ -265,7 +284,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(8, masterDbTransMgr.getTransactionNum());
@@ -303,7 +326,22 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAbortTransaction() throws UserException {
+=======
+    public void testAbortTransactionWithAttachment() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        expectedEx.expect(StarRocksException.class);
+        expectedEx.expectMessage("transaction not found");
+        TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
+        masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", txnCommitAttachment);
+    }
+
+    @Test
+    public void testAbortTransaction() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
@@ -325,7 +363,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransactionTableRemove() throws UserException {
+=======
+    public void testFinishTransactionTableRemove() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         prepareCommittedTransaction();
         new MockUp<Database>() {
             @Mock
@@ -344,7 +386,11 @@ public class DatabaseTransactionMgrTest {
 
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransactionPartitionRemove() throws UserException {
+=======
+    public void testFinishTransactionPartitionRemove() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         prepareCommittedTransaction();
         new MockUp<OlapTable>() {
             @Mock
@@ -361,18 +407,30 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
     }
     @Test
+<<<<<<< HEAD
     public void testAbortTransactionWithNotFoundException() throws UserException {
+=======
+    public void testAbortTransactionWithNotFoundException() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+<<<<<<< HEAD
         expectedEx.expect(UserException.class);
+=======
+        expectedEx.expect(StarRocksException.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         expectedEx.expectMessage("transaction not found");
         masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", null);
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTransactionIdByCoordinateBe() throws UserException {
+=======
+    public void testGetTransactionIdByCoordinateBe() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         List<Pair<Long, Long>> transactionInfoList = masterDbTransMgr.getTransactionIdByCoordinateBe("be1", 10);
@@ -429,7 +487,11 @@ public class DatabaseTransactionMgrTest {
         List<Comparable> tableTransInfo = tableTransInfos.get(0);
         assertEquals(2, tableTransInfo.size());
         assertEquals(2L, tableTransInfo.get(0));
+<<<<<<< HEAD
         assertEquals("3", tableTransInfo.get(1));
+=======
+        assertEquals("103", tableTransInfo.get(1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -442,7 +504,11 @@ public class DatabaseTransactionMgrTest {
         assertEquals(1, partitionTransInfos.size());
         List<Comparable> partitionTransInfo = partitionTransInfos.get(0);
         assertEquals(2, partitionTransInfo.size());
+<<<<<<< HEAD
         assertEquals(3L, partitionTransInfo.get(0));
+=======
+        assertEquals(103L, partitionTransInfo.get(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertEquals(13L, partitionTransInfo.get(1));
     }
 
@@ -469,7 +535,11 @@ public class DatabaseTransactionMgrTest {
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
         ExceptionChecker.expectThrowsNoException(
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
+<<<<<<< HEAD
         ExceptionChecker.expectThrows(BeginTransactionException.class,
+=======
+        ExceptionChecker.expectThrows(RunningTxnExceedException.class,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
     }
 
@@ -503,7 +573,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransactionBatch() throws UserException {
+=======
+    public void testFinishTransactionBatch() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
@@ -539,7 +613,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPublishVersionMissing() throws UserException {
+=======
+    public void testPublishVersionMissing() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);

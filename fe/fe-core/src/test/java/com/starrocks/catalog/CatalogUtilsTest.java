@@ -39,6 +39,12 @@ public class CatalogUtilsTest {
     @Mock
     private Partition partition;
 
+<<<<<<< HEAD
+=======
+    @Mock
+    private PhysicalPartition physicalPartition;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setUp() {
         MockitoAnnotations.openMocks(this);
@@ -61,7 +67,12 @@ public class CatalogUtilsTest {
         partitions.add(partition);
         when(olapTable.getPartitions()).thenReturn(partitions);
         when(olapTable.getRecentPartitions(anyInt())).thenReturn(partitions);
+<<<<<<< HEAD
         when(partition.getVisibleVersion()).thenReturn(2L);
+=======
+        when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
+        when(physicalPartition.getVisibleVersion()).thenReturn(2L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         when(partition.getDataSize()).thenReturn(2L * FeConstants.AUTO_DISTRIBUTION_UNIT);
 
         int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true);

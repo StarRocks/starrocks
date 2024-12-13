@@ -19,6 +19,10 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.TransactionType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -39,10 +43,16 @@ public class PhysicalPartitionImplTest {
 
     @Test
     public void testPhysicalPartition() throws Exception {
+<<<<<<< HEAD
         PhysicalPartitionImpl p = new PhysicalPartitionImpl(1, 1, 0, new MaterializedIndex());
         Assert.assertEquals(1, p.getId());
         Assert.assertEquals(1, p.getParentId());
         Assert.assertEquals(0, p.getShardGroupId());
+=======
+        PhysicalPartition p = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        Assert.assertEquals(1, p.getId());
+        Assert.assertEquals(1, p.getParentId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(p.isImmutable());
         p.setImmutable(true);
         Assert.assertTrue(p.isImmutable());
@@ -68,6 +78,16 @@ public class PhysicalPartitionImplTest {
         Assert.assertEquals(6, p.getNextVersion());
         Assert.assertEquals(5, p.getCommittedVersion());
 
+<<<<<<< HEAD
+=======
+        p.setDataVersion(5);
+        Assert.assertEquals(5, p.getDataVersion());
+
+        p.setNextDataVersion(6);
+        Assert.assertEquals(6, p.getNextDataVersion());
+        Assert.assertEquals(5, p.getCommittedDataVersion());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         p.createRollupIndex(new MaterializedIndex(1));
         p.createRollupIndex(new MaterializedIndex(2, IndexState.SHADOW));
 
@@ -97,9 +117,15 @@ public class PhysicalPartitionImplTest {
         Assert.assertTrue(p.visualiseShadowIndex(3, true));
 
         Assert.assertTrue(p.equals(p));
+<<<<<<< HEAD
         Assert.assertFalse(p.equals(new Partition(0, "", null, null)));
 
         PhysicalPartitionImpl p2 = new PhysicalPartitionImpl(1, 1, 0, new MaterializedIndex());
+=======
+        Assert.assertFalse(p.equals(new Partition(0, 11, "", null, null)));
+
+        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(p.equals(p2));
         p2.setBaseIndex(new MaterializedIndex(1));
 
@@ -122,12 +148,30 @@ public class PhysicalPartitionImplTest {
         Assert.assertEquals(1, p.getMinRetainVersion());
         p.setLastVacuumTime(1);
         Assert.assertEquals(1, p.getLastVacuumTime());
+<<<<<<< HEAD
+=======
+
+        p.setDataVersion(0);
+        p.setNextDataVersion(0);
+        p.setVersionEpoch(0);
+        p.setVersionTxnType(null);
+        p.gsonPostProcess();
+        Assert.assertEquals(p.getDataVersion(), p.getVisibleVersion());
+        Assert.assertEquals(p.getNextDataVersion(), p.getNextVersion());
+        Assert.assertTrue(p.getVersionEpoch() > 0);
+        Assert.assertEquals(p.getVersionTxnType(), TransactionType.TXN_NORMAL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testPhysicalPartitionEqual() throws Exception {
+<<<<<<< HEAD
         PhysicalPartitionImpl p1 = new PhysicalPartitionImpl(1, 1, 0, new MaterializedIndex());
         PhysicalPartitionImpl p2 = new PhysicalPartitionImpl(1, 1, 0, new MaterializedIndex());
+=======
+        PhysicalPartition p1 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+        PhysicalPartition p2 = new PhysicalPartition(1, "", 1, new MaterializedIndex());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(p1.equals(p2));
 
         p1.createRollupIndex(new MaterializedIndex());

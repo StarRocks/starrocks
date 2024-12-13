@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_union
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the bitmap union of a set of values after grouping. Common usage scenarios include calculating PV and UV.
 

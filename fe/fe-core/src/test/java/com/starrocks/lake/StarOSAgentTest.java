@@ -39,7 +39,11 @@ import com.staros.proto.WorkerState;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
@@ -53,8 +57,15 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class StarOSAgentTest {
     private StarOSAgent starosAgent;
@@ -215,8 +226,13 @@ public class StarOSAgentTest {
         starosAgent.addWorker(5, workerHost, 0);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
+<<<<<<< HEAD
         starosAgent.removeWorker(workerHost);
         Assert.assertEquals(-1, starosAgent.getWorkerIdByBackendId(5));
+=======
+        starosAgent.removeWorker(workerHost, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assert.assertEquals(-1, starosAgent.getWorkerIdByNodeId(5));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -235,7 +251,11 @@ public class StarOSAgentTest {
         long backendId = 5;
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(backendId, workerHost, 0);
+<<<<<<< HEAD
         Assert.assertEquals(workerId1, starosAgent.getWorkerIdByBackendId(backendId));
+=======
+        Assert.assertEquals(workerId1, starosAgent.getWorkerIdByNodeId(backendId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         final String workerHost2 = "127.0.0.1:8091";
         new Expectations() {
@@ -250,7 +270,11 @@ public class StarOSAgentTest {
             }
         };
         starosAgent.addWorker(backendId, workerHost2, 0);
+<<<<<<< HEAD
         Assert.assertEquals(workerId2, starosAgent.getWorkerIdByBackendId(backendId));
+=======
+        Assert.assertEquals(workerId2, starosAgent.getWorkerIdByNodeId(backendId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -271,7 +295,11 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(5, workerHost, 0);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
+<<<<<<< HEAD
         Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
+=======
+        Assert.assertEquals(6, starosAgent.getWorkerIdByNodeId(5));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -304,7 +332,11 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to get worker id from starMgr.",
+<<<<<<< HEAD
                 () -> starosAgent.removeWorker("127.0.0.1:8090"));
+=======
+                () -> starosAgent.removeWorker("127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -312,7 +344,11 @@ public class StarOSAgentTest {
                 minTimes = 0;
                 result = 10;
 
+<<<<<<< HEAD
                 client.removeWorker("1", 10);
+=======
+                client.removeWorker("1", 10, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }
@@ -320,7 +356,11 @@ public class StarOSAgentTest {
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to remove worker.",
+<<<<<<< HEAD
                 () -> starosAgent.removeWorker("127.0.0.1:8090"));
+=======
+                () -> starosAgent.removeWorker("127.0.0.1:8090", StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -355,11 +395,21 @@ public class StarOSAgentTest {
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test create shard group
+<<<<<<< HEAD
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(0, 0, 1));
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
         Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 333));
+=======
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(0, 0, 1, 1));
+        // test create shards
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        Assert.assertEquals(Lists.newArrayList(10L, 11L),
+                starosAgent.createShards(2, pathInfo, cacheInfo, 333, null,
+                Collections.EMPTY_MAP, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // list shard group
         List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
@@ -384,7 +434,11 @@ public class StarOSAgentTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetBackendByShard() throws StarClientException, UserException {
+=======
+    public void testGetBackendByShard() throws StarClientException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ReplicaInfo replica1 = ReplicaInfo.newBuilder()
                 .setReplicaRole(ReplicaRole.PRIMARY)
                 .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
@@ -402,13 +456,25 @@ public class StarOSAgentTest {
         ShardInfo shard = ShardInfo.newBuilder().setShardId(10L).addAllReplicaInfo(replicas).build();
         List<ShardInfo> shards = Lists.newArrayList(shard);
 
+<<<<<<< HEAD
         new MockUp<GlobalStateMgr>() {
             @Mock
             public SystemInfoService getCurrentSystemInfo() {
+=======
+        /*
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public SystemInfoService getCurrentState().getNodeMgr().getClusterInfo() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return service;
             }
         };
 
+<<<<<<< HEAD
+=======
+         */
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<SystemInfoService>() {
             @Mock
             public long getBackendIdWithStarletPort(String host, int starletPort) {
@@ -437,6 +503,7 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
+<<<<<<< HEAD
         Map<Long, Long> workerToBackend = Maps.newHashMap();
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
@@ -450,11 +517,30 @@ public class StarOSAgentTest {
         workerToBackend.put(2L, 10002L);
         workerToBackend.put(3L, 10003L);
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+=======
+        Map<Long, Long> workerToNode = Maps.newHashMap();
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "Failed to get primary backend. shard id: 10",
+                () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
+
+        Assert.assertEquals(Sets.newHashSet(), getBackendIdsByShard(10L, 0));
+
+        workerToNode.put(1L, 10001L);
+        workerToNode.put(2L, 10002L);
+        workerToNode.put(3L, 10003L);
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
         Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
+<<<<<<< HEAD
                 starosAgent.getBackendIdsByShard(10L, 0));
+=======
+                getBackendIdsByShard(10L, 0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -481,7 +567,11 @@ public class StarOSAgentTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetWorkers() throws StarClientException, UserException {
+=======
+    public void testGetWorkers() throws StarClientException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String serviceId = "1";
         Deencapsulation.setField(starosAgent, "serviceId", serviceId);
 
@@ -703,7 +793,11 @@ public class StarOSAgentTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testListDefaultWorkerGroupIpPort() throws StarClientException, DdlException, UserException {
+=======
+    public void testListDefaultWorkerGroupIpPort() throws StarClientException, DdlException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new MockUp<StarClient>() {
             @Mock
             public List<WorkerGroupDetailInfo> listWorkerGroup(String serviceId, List<Long> groupIds, boolean include) {
@@ -716,11 +810,22 @@ public class StarOSAgentTest {
                 return Lists.newArrayList(group);
             }
         };
+<<<<<<< HEAD
         List<String> addresses = starosAgent.listDefaultWorkerGroupIpPort();
+=======
+        List<String> addresses = starosAgent.listWorkerGroupIpPort(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("127.0.0.1:8090", addresses.get(0));
         Assert.assertEquals("127.0.0.2:8091", addresses.get(1));
     }
 
+<<<<<<< HEAD
+=======
+    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
+        return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testListShard() throws StarClientException, DdlException {
         ShardInfo shardInfo = ShardInfo.newBuilder().setShardId(1000L).build();

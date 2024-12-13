@@ -30,6 +30,10 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Time;
 import java.sql.Timestamp;
+<<<<<<< HEAD
+=======
+import java.time.LocalDate;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -40,7 +44,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class JDBCScanner {
     private String driverLocation;
     private HikariDataSource dataSource;
@@ -54,7 +61,10 @@ public class JDBCScanner {
     private int resultNumRows = 0;
     ClassLoader classLoader;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public JDBCScanner(String driverLocation, JDBCScanContext scanContext) {
         this.driverLocation = driverLocation;
         this.scanContext = scanContext;
@@ -64,9 +74,13 @@ public class JDBCScanner {
         String cacheKey = computeCacheKey(scanContext.getUser(), scanContext.getPassword(), scanContext.getJdbcURL());
         URL driverURL = new File(driverLocation).toURI().toURL();
         DataSourceCache.DataSourceCacheItem cacheItem = DataSourceCache.getInstance().getSource(cacheKey, () -> {
+<<<<<<< HEAD
             ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {
                     driverURL,
             });
+=======
+            ClassLoader classLoader = URLClassLoader.newInstance(new URL[] {driverURL});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Thread.currentThread().setContextClassLoader(classLoader);
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
@@ -88,7 +102,12 @@ public class JDBCScanner {
 
         connection = dataSource.getConnection();
         connection.setAutoCommit(false);
+<<<<<<< HEAD
         statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+=======
+        statement = connection.prepareStatement(scanContext.getSql(), ResultSet.TYPE_FORWARD_ONLY,
+                ResultSet.CONCUR_READ_ONLY);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scanContext.getDriverClassName().toLowerCase(Locale.ROOT).contains("mysql")) {
             statement.setFetchSize(Integer.MIN_VALUE);
         } else {
@@ -122,6 +141,7 @@ public class JDBCScanner {
         return username + "/" + password + "/" + jdbcUrl;
     }
 
+<<<<<<< HEAD
     private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET =  new HashSet<>(Arrays.asList(
             Boolean.class,
             Short.class,
@@ -137,12 +157,25 @@ public class JDBCScanner {
             Time.class,
             String.class
     ));
+=======
+    private static final Set<Class<?>> GENERAL_JDBC_CLASS_SET = new HashSet<>(
+            Arrays.asList(Boolean.class, Byte.class, Short.class, Integer.class, Long.class, Float.class, Double.class,
+                    BigInteger.class, BigDecimal.class, java.sql.Date.class, Timestamp.class, LocalDate.class,
+                    LocalDateTime.class, Time.class, String.class));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private boolean isGeneralJDBCClassType(Class<?> clazz) {
         return GENERAL_JDBC_CLASS_SET.contains(clazz);
     }
 
     private static final Map<String, Class> ENGINE_SPECIFIC_CLASS_MAPPING = new HashMap<String, Class>() {{
+<<<<<<< HEAD
+=======
+            put("com.clickhouse.data.value.UnsignedByte", Short.class);
+            put("com.clickhouse.data.value.UnsignedShort", Integer.class);
+            put("com.clickhouse.data.value.UnsignedInteger", Long.class);
+            put("com.clickhouse.data.value.UnsignedLong", BigInteger.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             put("oracle.jdbc.OracleBlob", Blob.class);
         }};
 
@@ -194,8 +227,17 @@ public class JDBCScanner {
                     // if both sides are String, assign value directly to avoid additional calls to getString
                     dataColumn[resultNumRows] = resultObject;
                 } else if (!(dataColumn instanceof String[])) {
+<<<<<<< HEAD
                     // for other general class type, assign value directly
                     dataColumn[resultNumRows] = resultObject;
+=======
+                    if (dataColumn instanceof BigInteger[] && resultObject instanceof Number) {
+                        dataColumn[resultNumRows] = new BigInteger(resultObject.toString());
+                    } else {
+                        // for other general class type, assign value directly
+                        dataColumn[resultNumRows] = resultObject;
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     // for non-general class type, use string representation
                     dataColumn[resultNumRows] = resultSet.getString(i + 1);
@@ -210,7 +252,10 @@ public class JDBCScanner {
         return resultNumRows;
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void close() throws Exception {
         if (resultSet != null) {
             resultSet.close();

@@ -145,6 +145,11 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
         // in acquiring _lock.
         // TODO: Rethink the lifecycle of DataStreamRecvr to distinguish
         // errors from receiver-initiated teardowns.
+<<<<<<< HEAD
+=======
+        VLOG_QUERY << request.sender_id() << " sender transmits chunks to a non-existing receiver fragment "
+                   << print_id(request.finst_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 
@@ -168,7 +173,11 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id) {
+=======
+void DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, PlanNodeId node_id) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_ptr<DataStreamRecvr> target_recvr;
     VLOG_QUERY << "deregister_recvr(): fragment_instance_id=" << fragment_instance_id << ", node=" << node_id;
     uint32_t bucket = get_bucket(fragment_instance_id);
@@ -194,12 +203,18 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
     // cancel_stream maybe take a long time, so we handle it out of lock.
     if (target_recvr) {
         target_recvr->cancel_stream();
+<<<<<<< HEAD
         return Status::OK();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else {
         std::stringstream err;
         err << "unknown row receiver id: fragment_instance_id=" << fragment_instance_id << " node_id=" << node_id;
         LOG(ERROR) << err.str();
+<<<<<<< HEAD
         return Status::InternalError(err.str());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

@@ -18,6 +18,10 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+<<<<<<< HEAD
+=======
+#include "gutil/strings/substitute.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -25,6 +29,11 @@ class ConstColumn final : public ColumnFactory<Column, ConstColumn> {
     friend class ColumnFactory<Column, ConstColumn>;
 
 public:
+<<<<<<< HEAD
+=======
+    using ValueType = void;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     explicit ConstColumn(ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
 
@@ -110,7 +119,11 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool append_nulls(size_t count) override {
         DCHECK_GT(count, 0);
@@ -126,8 +139,11 @@ public:
         }
     }
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override { return false; }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override {
@@ -252,6 +268,7 @@ public:
         return ss.str();
     }
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override {
         RETURN_IF_UNLIKELY(_data->capacity_limit_reached(msg), true);
         if (_size > Column::MAX_CAPACITY_LIMIT) {
@@ -261,6 +278,15 @@ public:
             return true;
         }
         return false;
+=======
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_data->capacity_limit_reached());
+        if (_size > Column::MAX_CAPACITY_LIMIT) {
+            return Status::CapacityLimitExceed(strings::Substitute("Row count of const column reach limit: $0",
+                                                                   std::to_string(Column::MAX_CAPACITY_LIMIT)));
+        }
+        return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void check_or_die() const override;

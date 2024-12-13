@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -23,6 +24,24 @@ import org.junit.Test;
 public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @BeforeClass
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
+import com.starrocks.planner.TpchSQL;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
+
+    @BeforeAll
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
@@ -33,11 +52,16 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
     }
 
+<<<<<<< HEAD
     @AfterClass
+=======
+    @AfterAll
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void afterClass() {
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
     }
 
+<<<<<<< HEAD
     @Test
     public void testTPCH1() {
         runFileUnitTest("tpchcost/q1");
@@ -146,5 +170,19 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testTPCH22() {
         runFileUnitTest("tpchcost/q22");
+=======
+    @ParameterizedTest(name = "Tpch.{0}")
+    @MethodSource("tpchSource")
+    public void testTPCH(String name, String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile);
+    }
+
+    private static Stream<Arguments> tpchSource() {
+        List<Arguments> cases = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), "tpchcost/" + entry.getKey()));
+        }
+        return cases.stream();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

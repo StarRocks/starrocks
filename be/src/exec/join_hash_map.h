@@ -14,6 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include "util/runtime_profile.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define JOIN_HASH_MAP_H
 
 #include <gen_cpp/PlanNodes_types.h>
@@ -94,17 +98,26 @@ struct JoinKeyDesc {
 struct HashTableSlotDescriptor {
     SlotDescriptor* slot;
     bool need_output;
+<<<<<<< HEAD
+=======
+    bool need_lazy_materialize = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 struct JoinHashTableItems {
     //TODO: memory continues problem?
     ChunkPtr build_chunk = nullptr;
     Columns key_columns;
+<<<<<<< HEAD
     Buffer<HashTableSlotDescriptor> build_slots;
     Buffer<HashTableSlotDescriptor> probe_slots;
     Buffer<TupleId> output_build_tuple_ids;
     Buffer<TupleId> output_probe_tuple_ids;
     const RowDescriptor* row_desc;
+=======
+    std::vector<HashTableSlotDescriptor> build_slots;
+    std::vector<HashTableSlotDescriptor> probe_slots;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // A hash value is the bucket index of the hash map. "JoinHashTableItems.first" is the
     // buckets of the hash map, and it holds the index of the first key value saved in each bucket,
     // while other keys can be found by following the indices saved in
@@ -119,9 +132,18 @@ struct JoinHashTableItems {
     uint32_t bucket_size = 0;
     uint32_t row_count = 0; // real row count
     size_t build_column_count = 0;
+<<<<<<< HEAD
     size_t probe_column_count = 0;
     bool with_other_conjunct = false;
     bool need_create_tuple_columns = true;
+=======
+    size_t output_build_column_count = 0;
+    size_t lazy_output_build_column_count = 0;
+    size_t probe_column_count = 0;
+    size_t output_probe_column_count = 0;
+    size_t lazy_output_probe_column_count = 0;
+    bool with_other_conjunct = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool left_to_nullable = false;
     bool right_to_nullable = false;
     bool has_large_column = false;
@@ -129,6 +151,10 @@ struct JoinHashTableItems {
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
     bool mor_reader_mode = false;
+<<<<<<< HEAD
+=======
+    bool enable_late_materialization = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -159,13 +185,23 @@ struct HashTableProbeState {
     //TODO: memory release
     Buffer<uint8_t> is_nulls;
     Buffer<uint32_t> buckets;
+<<<<<<< HEAD
     Buffer<uint32_t> build_index;
     Buffer<uint32_t> probe_index;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Buffer<uint32_t> next;
     Buffer<Slice> probe_slice;
     Buffer<uint8_t>* null_array = nullptr;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
+<<<<<<< HEAD
+=======
+    ColumnPtr build_index_column;
+    ColumnPtr probe_index_column;
+    Buffer<uint32_t>& build_index;
+    Buffer<uint32_t>& probe_index;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // when exec right join
     // record the build items is matched or not
@@ -181,24 +217,42 @@ struct HashTableProbeState {
     // 1: all match one
     JoinMatchFlag match_flag = JoinMatchFlag::NORMAL; // all match one
 
+<<<<<<< HEAD
     // true: generated chunk has null build tuple.
     // e.g. left join and there is not matched row in build table
     bool has_null_build_tuple = false;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool has_remain = false;
     // When one-to-many, one probe may not be able to probe all the data,
     // cur_probe_index records the position of the last probe
     uint32_t cur_probe_index = 0;
+<<<<<<< HEAD
+=======
+    uint32_t cur_build_index = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     uint32_t cur_row_match_count = 0;
 
     std::unique_ptr<MemPool> probe_pool = nullptr;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+<<<<<<< HEAD
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
 
     HashTableProbeState() = default;
+=======
+    RuntimeProfile::Counter* output_build_column_timer = nullptr;
+    RuntimeProfile::Counter* probe_counter = nullptr;
+
+    HashTableProbeState()
+            : build_index_column(UInt32Column::create()),
+              probe_index_column(UInt32Column::create()),
+              build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
+              probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     struct ProbeCoroutine {
         struct ProbePromise {
@@ -229,27 +283,49 @@ struct HashTableProbeState {
     HashTableProbeState(const HashTableProbeState& rhs)
             : is_nulls(rhs.is_nulls),
               buckets(rhs.buckets),
+<<<<<<< HEAD
               build_index(rhs.build_index),
               probe_index(rhs.probe_index),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               next(rhs.next),
               probe_slice(rhs.probe_slice),
               null_array(rhs.null_array),
               probe_key_column(rhs.probe_key_column == nullptr ? nullptr : rhs.probe_key_column->clone()),
               key_columns(rhs.key_columns),
+<<<<<<< HEAD
+=======
+              build_index_column(rhs.build_index_column == nullptr ? UInt32Column::create_mutable()
+                                                                   : rhs.build_index_column->clone()),
+              probe_index_column(rhs.probe_index_column == nullptr ? UInt32Column::create_mutable()
+                                                                   : rhs.probe_index_column->clone()),
+              build_index(down_cast<UInt32Column*>(build_index_column.get())->get_data()),
+              probe_index(down_cast<UInt32Column*>(probe_index_column.get())->get_data()),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               build_match_index(rhs.build_match_index),
               probe_match_index(rhs.probe_match_index),
               probe_match_filter(rhs.probe_match_filter),
               count(rhs.count),
               probe_row_count(rhs.probe_row_count),
               match_flag(rhs.match_flag),
+<<<<<<< HEAD
               has_null_build_tuple(rhs.has_null_build_tuple),
               has_remain(rhs.has_remain),
               cur_probe_index(rhs.cur_probe_index),
+=======
+              has_remain(rhs.has_remain),
+              cur_probe_index(rhs.cur_probe_index),
+              cur_build_index(rhs.cur_build_index),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               cur_row_match_count(rhs.cur_row_match_count),
               probe_pool(rhs.probe_pool == nullptr ? nullptr : std::make_unique<MemPool>()),
               search_ht_timer(rhs.search_ht_timer),
               output_probe_column_timer(rhs.output_probe_column_timer),
+<<<<<<< HEAD
               output_tuple_column_timer(rhs.output_tuple_column_timer) {}
+=======
+              probe_counter(rhs.probe_counter) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Disable copy assignment.
     HashTableProbeState& operator=(const HashTableProbeState& rhs) = delete;
@@ -269,9 +345,15 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
+<<<<<<< HEAD
     bool need_create_tuple_columns = true;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
+=======
+    bool enable_late_materialization = false;
+    bool enable_partition_hash_join = false;
+    TJoinOp::type join_type = TJoinOp::INNER_JOIN;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
     std::set<SlotId> build_output_slots;
@@ -282,7 +364,11 @@ struct HashTableParam {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+<<<<<<< HEAD
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+=======
+    RuntimeProfile::Counter* probe_counter = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool mor_reader_mode = false;
 };
 
@@ -326,7 +412,11 @@ public:
     const static uint32_t MAX_BUCKET_SIZE = 1 << 31;
 
     static uint32_t calc_bucket_size(uint32_t size) {
+<<<<<<< HEAD
         size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 7;
+=======
+        size_t expect_bucket_size = static_cast<size_t>(size) + (size - 1) / 4;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Limit the maximum hash table bucket size.
         if (expect_bucket_size >= MAX_BUCKET_SIZE) {
             return MAX_BUCKET_SIZE;
@@ -518,22 +608,41 @@ public:
     explicit JoinHashMapForEmpty(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
             : _table_items(table_items), _probe_state(probe_state) {}
 
+<<<<<<< HEAD
     void build_prepare(RuntimeState* state) { return; }
     void probe_prepare(RuntimeState* state) { return; }
     void build(RuntimeState* state) { return; }
+=======
+    void build_prepare(RuntimeState* state) {}
+    void probe_prepare(RuntimeState* state) {}
+    void build(RuntimeState* state) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain) {
         DCHECK_EQ(0, _table_items->row_count);
         *has_remain = false;
+<<<<<<< HEAD
+=======
+        _probe_state->match_flag = JoinMatchFlag::ALL_MATCH_ONE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         switch (_table_items->join_type) {
         case TJoinOp::FULL_OUTER_JOIN:
         case TJoinOp::LEFT_ANTI_JOIN:
         case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
         case TJoinOp::LEFT_OUTER_JOIN: {
             _probe_state->count = (*probe_chunk)->num_rows();
+<<<<<<< HEAD
             _probe_output(probe_chunk, chunk);
             _build_output(chunk);
             _probe_state->count = 0;
+=======
+            _probe_output<false>(probe_chunk, chunk);
+            _build_output<false>(chunk);
+
+            if (_table_items->enable_late_materialization) {
+                _probe_index_output(chunk);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             break;
         }
         default: {
@@ -550,13 +659,33 @@ public:
         return;
     }
 
+<<<<<<< HEAD
 private:
+=======
+    template <bool is_remain>
+    void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk) {
+        if ((*result_chunk)->num_rows() < _probe_state->count) {
+            _probe_state->match_flag = JoinMatchFlag::NORMAL;
+            _probe_state->count = (*result_chunk)->num_rows();
+        }
+
+        (*result_chunk)->remove_column_by_slot_id(Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+
+        _probe_output<true>(probe_chunk, result_chunk);
+        _build_output<true>(result_chunk);
+        _probe_state->count = 0;
+    }
+
+private:
+    template <bool is_lazy>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_probe_column_timer);
         bool to_nullable = _table_items->left_to_nullable;
         for (size_t i = 0; i < _table_items->probe_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
+<<<<<<< HEAD
             auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
             if (hash_table_slot.need_output) {
                 if (to_nullable && !column->is_nullable()) {
@@ -576,17 +705,62 @@ private:
             }
         }
     }
+=======
+
+            bool output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
+            if (output) {
+                auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+                if (!column->is_nullable()) {
+                    _copy_probe_column(&column, chunk, slot, to_nullable);
+                } else {
+                    _copy_probe_nullable_column(&column, chunk, slot);
+                }
+            }
+        }
+    }
+
+    void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable) {
+        if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
+            if (to_nullable) {
+                ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create(_probe_state->count));
+                (*chunk)->append_column(std::move(dest_column), slot->id());
+            } else {
+                (*chunk)->append_column(*src_column, slot->id());
+            }
+        } else {
+            ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
+            dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+            (*chunk)->append_column(std::move(dest_column), slot->id());
+        }
+    }
+
+    void _copy_probe_nullable_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot) {
+        if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
+            (*chunk)->append_column(*src_column, slot->id());
+        } else {
+            ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+            dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+            (*chunk)->append_column(std::move(dest_column), slot->id());
+        }
+    }
+
+    template <bool is_lazy>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
 
         if (_table_items->mor_reader_mode) {
             return;
         }
+<<<<<<< HEAD
         bool to_nullable = _table_items->right_to_nullable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;
+<<<<<<< HEAD
             ColumnPtr& column = _table_items->build_chunk->columns()[i];
             if (hash_table_slot.need_output) {
                 // always output nulls.
@@ -599,10 +773,28 @@ private:
                         ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
                 default_column->append_default(_probe_state->count);
                 (*chunk)->append_column(std::move(default_column), slot->id());
+=======
+
+            bool output = is_lazy ? hash_table_slot.need_lazy_materialize : hash_table_slot.need_output;
+            if (output) {
+                ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+                dest_column->append_nulls(_probe_state->count);
+                (*chunk)->append_column(std::move(dest_column), slot->id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
 
+<<<<<<< HEAD
+=======
+    void _probe_index_output(ChunkPtr* chunk) {
+        _probe_state->probe_index_column->resize(_probe_state->count);
+        auto* col = down_cast<UInt32Column*>(_probe_state->probe_index_column.get());
+        std::iota(col->get_data().begin(), col->get_data().end(), 0);
+        (*chunk)->append_column(_probe_state->probe_index_column, Chunk::HASH_JOIN_PROBE_INDEX_SLOT_ID);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     JoinHashTableItems* _table_items = nullptr;
     HashTableProbeState* _probe_state = nullptr;
 };
@@ -622,6 +814,7 @@ public:
     void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                bool* has_remain);
     void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain);
+<<<<<<< HEAD
 
 private:
     void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
@@ -630,6 +823,19 @@ private:
 
     void _build_output(ChunkPtr* chunk);
     void _build_tuple_output(ChunkPtr* chunk);
+=======
+    template <bool is_remain>
+    void lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
+
+private:
+    template <bool is_lazy>
+    void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk);
+    template <bool is_lazy>
+    void _probe_null_output(ChunkPtr* chunk, size_t count);
+
+    template <bool is_lazy>
+    void _build_output(ChunkPtr* chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _build_default_output(ChunkPtr* chunk, size_t count);
 
     void _copy_probe_column(ColumnPtr* src_column, ChunkPtr* chunk, const SlotDescriptor* slot, bool to_nullable);
@@ -640,6 +846,12 @@ private:
 
     void _copy_build_nullable_column(const ColumnPtr& src_column, ChunkPtr* chunk, const SlotDescriptor* slot);
 
+<<<<<<< HEAD
+=======
+    void _probe_index_output(ChunkPtr* chunk);
+    void _build_index_output(ChunkPtr* chunk);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _search_ht(RuntimeState* state, ChunkPtr* probe_chunk);
     void _search_ht_remain(RuntimeState* state);
 
@@ -766,13 +978,18 @@ public:
     // and the different probe state from this.
     JoinHashTable clone_readable_table();
     void set_probe_profile(RuntimeProfile::Counter* search_ht_timer, RuntimeProfile::Counter* output_probe_column_timer,
+<<<<<<< HEAD
                            RuntimeProfile::Counter* output_tuple_column_timer,
                            RuntimeProfile::Counter* output_build_column_timer);
+=======
+                           RuntimeProfile::Counter* output_build_column_timer, RuntimeProfile::Counter* probe_counter);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void create(const HashTableParam& param);
     void close();
 
     Status build(RuntimeState* state);
+<<<<<<< HEAD
     Status reset_probe_state(RuntimeState* state);
     Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
@@ -789,10 +1006,43 @@ public:
     size_t get_bucket_size() const { return _table_items->bucket_size; }
     float get_keys_per_bucket() const;
     void remove_duplicate_index(Filter* filter);
+=======
+    void reset_probe_state(RuntimeState* state);
+    Status probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk, bool* eos);
+    Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
+    template <bool is_remain>
+    Status lazy_output(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* result_chunk);
+
+    void append_chunk(const ChunkPtr& chunk, const Columns& key_columns);
+    void merge_ht(const JoinHashTable& ht);
+    // convert input column to spill schema order
+    ChunkPtr convert_to_spill_schema(const ChunkPtr& chunk) const;
+
+    const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
+    Columns& get_key_columns() { return _table_items->key_columns; }
+    const Columns& get_key_columns() const { return _table_items->key_columns; }
+    uint32_t get_row_count() const { return _table_items->row_count; }
+    size_t get_probe_column_count() const { return _table_items->probe_column_count; }
+    size_t get_output_probe_column_count() const { return _table_items->output_probe_column_count; }
+    size_t get_build_column_count() const { return _table_items->build_column_count; }
+    size_t get_output_build_column_count() const { return _table_items->output_build_column_count; }
+    size_t get_bucket_size() const { return _table_items->bucket_size; }
+    float get_keys_per_bucket() const;
+    void remove_duplicate_index(Filter* filter);
+    JoinHashTableItems* table_items() const { return _table_items.get(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int64_t mem_usage() const;
 
 private:
+<<<<<<< HEAD
+=======
+    void _init_probe_column(const HashTableParam& param);
+    void _init_build_column(const HashTableParam& param);
+    void _init_mor_reader();
+    void _init_join_keys();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     JoinHashMapType _choose_join_hash_map();
     static size_t _get_size_of_fixed_and_contiguous_type(LogicalType data_type);
 
@@ -828,7 +1078,10 @@ private:
     std::unique_ptr<JoinHashMapForFixedSizeKey(TYPE_LARGEINT)> _fixed128 = nullptr;
 
     JoinHashMapType _hash_map_type = JoinHashMapType::empty;
+<<<<<<< HEAD
     bool _need_create_tuple_columns = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::shared_ptr<JoinHashTableItems> _table_items;
     std::unique_ptr<HashTableProbeState> _probe_state = std::make_unique<HashTableProbeState>();

@@ -80,8 +80,12 @@ Status FileScanner::init_expr_ctx() {
         _src_slot_descriptors.emplace_back(it->second);
     }
 
+<<<<<<< HEAD
     _row_desc = std::make_unique<RowDescriptor>(_state->desc_tbl(), std::vector<TupleId>{_params.src_tuple_id},
                                                 std::vector<bool>{false});
+=======
+    _row_desc = std::make_unique<RowDescriptor>(_state->desc_tbl(), std::vector<TupleId>{_params.src_tuple_id});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // destination
     _dest_tuple_desc = _state->desc_tbl().get_tuple_descriptor(_params.dest_tuple_id);
@@ -285,11 +289,15 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             range_desc.load_id.printTo(ss);
             return Status::InternalError(std::string(ss.str()));
         }
+<<<<<<< HEAD
         bool non_blocking_read = false;
         if (params.__isset.non_blocking_read) {
             non_blocking_read = params.non_blocking_read;
         }
         auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe), non_blocking_read);
+=======
+        auto stream = std::make_shared<StreamLoadPipeInputStream>(std::move(pipe));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         src_file = std::make_shared<SequentialFile>(std::move(stream), "stream-load-pipe");
         break;
     }
@@ -357,7 +365,12 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
 }
 
+<<<<<<< HEAD
 void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input, std::vector<SlotDescriptor>* output) {
+=======
+void FileScanner::merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                               std::vector<SlotDescriptor>* output) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (output == nullptr) {
         return;
     }
@@ -429,6 +442,13 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
             p_scanner = std::make_unique<ORCScanner>(state, &profile, sample_range, &counter, true);
             break;
 
+<<<<<<< HEAD
+=======
+        case TFileFormatType::FORMAT_CSV_PLAIN:
+            p_scanner = std::make_unique<CSVScanner>(state, &profile, sample_range, &counter, true);
+            break;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         default:
             auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
             LOG(WARNING) << err_msg;
@@ -472,6 +492,11 @@ Status FileScanner::sample_schema(RuntimeState* state, const TBrokerScanRange& s
         if (++sample_file_count > max_sample_file_count) break;
     }
 
+<<<<<<< HEAD
+=======
+    if (schemas.empty()) return Status::InvalidArgument("get an empty schema");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     merge_schema(schemas, schema);
 
     return Status::OK();

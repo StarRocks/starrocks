@@ -36,7 +36,10 @@ public class ShowProcesslistStmt extends ShowStmt {
                     .addColumn(new Column("State", ScalarType.createVarchar(64)))
                     .addColumn(new Column("Info", ScalarType.createVarchar(32 * 1024)))
                     .addColumn(new Column("IsPending", ScalarType.createVarchar(16)))
+<<<<<<< HEAD
                     .addColumn(new Column("Warehouse", ScalarType.createVarchar(20)))
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .build();
     private final boolean isShowFull;
     private final String forUser;

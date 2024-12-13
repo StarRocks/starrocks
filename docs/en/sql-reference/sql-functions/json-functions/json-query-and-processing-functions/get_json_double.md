@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_double
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 This function analyzes and gets the floating point value from a specified path in json string. json_path must start with `$` and use `.` as the path separator.
 

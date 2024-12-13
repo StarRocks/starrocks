@@ -142,7 +142,11 @@ public class ShowMetaInfoAction extends RestBaseAction {
             try {
                 master = haProtocol.getLeader();
             } catch (Exception e) {
+<<<<<<< HEAD
                 // this may happen when majority of FOLLOWERS are down and no MASTER right now.
+=======
+                // this may happen when the majority of FOLLOWERS are down and no MASTER right now.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.warn("failed to get leader: {}", e.getMessage());
             }
             if (master != null) {
@@ -178,13 +182,18 @@ public class ShowMetaInfoAction extends RestBaseAction {
             long lastCheckpointTime = storage.getCurrentImageFile().lastModified();
             feInfo.put("last_checkpoint_time", String.valueOf(lastCheckpointTime));
         } catch (IOException e) {
+<<<<<<< HEAD
             LOG.warn(e.getMessage());
+=======
+            LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return feInfo;
     }
 
     public Map<String, Long> getDataSize(boolean singleReplica) {
         Map<String, Long> result = new HashMap<String, Long>();
+<<<<<<< HEAD
         List<String> dbNames = GlobalStateMgr.getCurrentState().getDbNames();
 
         for (int i = 0; i < dbNames.size(); i++) {
@@ -193,6 +202,16 @@ public class ShowMetaInfoAction extends RestBaseAction {
 
             long totalSize = 0;
             List<Table> tables = db.getTables();
+=======
+        List<String> dbNames = GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames();
+
+        for (int i = 0; i < dbNames.size(); i++) {
+            String dbName = dbNames.get(i);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+
+            long totalSize = 0;
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (int j = 0; j < tables.size(); j++) {
                 Table table = tables.get(j);
                 if (table.isNativeTableOrMaterializedView()) {

@@ -145,6 +145,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select col_decimal128p20s3 * 3.14 from db1.decimal_table";
         String expectString =
                 "TExpr(nodes:[TExprNode(node_type:ARITHMETIC_EXPR, type:TTypeDesc(types:[TTypeNode(type:SCALAR," +
+<<<<<<< HEAD
                         " scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), opcode:MULTIPLY, num_children:2, " +
                         "output_scale:-1, output_column:-1, has_nullable_child:true, is_nullable:true, is_monotonic:true), " +
                         "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:" +
@@ -154,6 +155,18 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                         "(type:DECIMAL128, precision:3, scale:2))]), num_children:0, decimal_literal:TDecimalLiteral(value:3.14, " +
                         "integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), output_scale:-1, has_nullable_child:false, " +
                         "is_nullable:false, is_monotonic:true)])})";
+=======
+                        " scalar_type:TScalarType(type:DECIMAL128, precision:23, scale:5))]), " +
+                        "opcode:MULTIPLY, num_children:2, output_scale:-1, output_column:-1, has_nullable_child:true, " +
+                        "is_nullable:true, is_monotonic:true, is_index_only_filter:false), " +
+                        "TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                        "scalar_type:TScalarType(type:DECIMAL128, precision:20, scale:3))]), num_children:0, " +
+                        "slot_ref:TSlotRef(slot_id:5, tuple_id:0), output_scale:-1, output_column:-1," +
+                        " has_nullable_child:false, is_nullable:true, is_monotonic:true, is_index_only_filter:false)," +
+                        " TExprNode(node_type:DECIMAL_LITERAL, type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DECIMAL128, precision:3, scale:2))])," +
+                        " num_children:0, decimal_literal:TDecimalLiteral(value:3.14, integer_value:3A 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00), " +
+                        "output_scale:-1, has_nullable_child:false, is_nullable:false, is_monotonic:true, is_index_only_filter:false)])})";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String plan = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(plan.contains(expectString));
     }
@@ -181,9 +194,14 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
     public void testDecimalBinaryPredicate() throws Exception {
         String sql = "select col_decimal64p13s0 > -9.223372E+18 from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+<<<<<<< HEAD
         String snippet = "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DECIMAL128(19,0)) " +
                 "> -9223372000000000000";
         Assert.assertTrue(plan.contains(snippet));
+=======
+        String snippet = "[3: col_decimal64p13s0, DECIMAL64(13,0), false] > -9223372000000000000";
+        Assert.assertTrue(plan, plan.contains(snippet));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -200,7 +218,20 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select * from db1.decimal_table where col_decimal64p13s0 between -9.223372E+18 and 9.223372E+18";
         String plan = UtFrameUtils.getFragmentPlan(ctx, sql);
         String snippet =
+<<<<<<< HEAD
                 "PREDICATES: CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) >= -9223372000000000000, CAST(3: col_decimal64p13s0 AS DECIMAL128(19,0)) <= 9223372000000000000";
+=======
+                "3: col_decimal64p13s0 >= -9223372000000000000, 3: col_decimal64p13s0 <= 9223372000000000000";
+        Assert.assertTrue(plan, plan.contains(snippet));
+    }
+
+    @Test
+    public void testDecimal2() throws Exception {
+        String sql = "select cast(9.223372E+18 as decimal(13,1))";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        String snippet = "constant exprs: \n" +
+                "         NULL";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(plan, plan.contains(snippet));
     }
 

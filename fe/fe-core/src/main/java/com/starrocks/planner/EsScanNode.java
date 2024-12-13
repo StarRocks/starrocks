@@ -35,7 +35,10 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.HashMultimap;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableSet;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -44,11 +47,19 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
 import com.starrocks.connector.elasticsearch.QueryConverter;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -90,18 +101,25 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.init(analyzer);
 
         assignNodes();
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return shardScanRanges.size();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return shardScanRanges;
     }
@@ -111,7 +129,11 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -170,7 +192,11 @@ public class EsScanNode extends ScanNode {
         msg.es_scan_node = esScanNode;
     }
 
+<<<<<<< HEAD
     public void assignNodes() throws UserException {
+=======
+    public void assignNodes() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         nodeMap = HashMultimap.create();
         nodeList = Lists.newArrayList();
 
@@ -178,7 +204,15 @@ public class EsScanNode extends ScanNode {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         if (RunMode.isSharedDataMode()) {
             WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+<<<<<<< HEAD
             ImmutableSet<Long> computeNodeIds = warehouseManager.getComputeNodesFromWarehouse().keySet();
+=======
+            String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            if (ConnectContext.get() != null) {
+                warehouseName = ConnectContext.get().getCurrentWarehouseName();
+            }
+            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             nodes = computeNodeIds.stream()
                     .map(id -> systemInfoService.getBackendOrComputeNode(id)).collect(Collectors.toList());
         } else {
@@ -191,7 +225,11 @@ public class EsScanNode extends ScanNode {
             }
         }
         if (nodeMap.isEmpty()) {
+<<<<<<< HEAD
             throw new UserException("No Alive backends or compute nodes");
+=======
+            throw new StarRocksException("No Alive backends or compute nodes");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

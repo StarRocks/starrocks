@@ -21,12 +21,17 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class Rowset;
+=======
+class BaseRowset;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class Segment;
 
 // It represents a specific rowid range on the segment with `segment_id` of the rowset with `rowset_id`.
 struct RowidRangeOption {
 public:
+<<<<<<< HEAD
     RowidRangeOption() = default;
 
     void add(const Rowset* rowset, const Segment* segment, SparseRangePtr rowid_range);
@@ -36,6 +41,23 @@ public:
 
 public:
     using SetgmentRowidRangeMap = std::unordered_map<uint64_t, SparseRangePtr>;
+=======
+    struct SegmentSplit {
+        SparseRangePtr row_id_range;
+        bool is_first_split_of_segment;
+    };
+
+    RowidRangeOption() = default;
+
+    void add(const BaseRowset* rowset, const Segment* segment, SparseRangePtr rowid_range,
+             bool is_first_split_of_segment);
+
+    bool contains_rowset(const BaseRowset* rowset) const;
+    SegmentSplit get_segment_rowid_range(const BaseRowset* rowset, const Segment* segment);
+
+public:
+    using SetgmentRowidRangeMap = std::unordered_map<uint64_t, SegmentSplit>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     using RowsetRowidRangeMap = std::map<RowsetId, SetgmentRowidRangeMap>;
 
     RowsetRowidRangeMap rowid_range_per_segment_per_rowset;

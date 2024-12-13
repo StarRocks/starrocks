@@ -36,12 +36,33 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.enable_os_page_cache = !options.enable_direct_io;
     opt.scheduler_thread_ratio_per_cpu = options.scheduler_threads_per_cpu;
     opt.max_flying_memory_mb = options.max_flying_memory_mb;
+<<<<<<< HEAD
     _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
     opt.cache_adaptor = _cache_adaptor.get();
     // Disable TTL module temporarily
     opt.ttl_check_interval_ms = 0;
     opt.instance_name = "dla_cache";
     _enable_tiered_cache = options.enable_tiered_cache;
+=======
+    opt.inline_cache_count_limit = options.inline_item_count_limit;
+    opt.alloc_mem_threshold = 100;
+    opt.evict_touch_mem_probalility = 10;
+    opt.evict_touch_disk_probalility = 10;
+    _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
+    opt.cache_adaptor = _cache_adaptor.get();
+    if (options.enable_datacache_persistence) {
+        opt.durability_type = starcache::DurabilityType::ROCKSDB;
+    }
+    opt.instance_name = "default_cache";
+
+    if (options.eviction_policy == "slru") {
+        opt.lru_segment_ratios = {35, 65};
+    }
+    opt.lru_segment_freq_bits = 0;
+
+    _enable_tiered_cache = options.enable_tiered_cache;
+    _enable_datacache_persistence = options.enable_datacache_persistence;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));
 }
@@ -52,13 +73,25 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     }
 
     starcache::WriteOptions opts;
+<<<<<<< HEAD
+=======
+    opts.priority = options->priority;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
     opts.async = options->async;
     opts.keep_alive = options->allow_zero_copy;
     opts.callback = options->callback;
+<<<<<<< HEAD
     opts.mode = _enable_tiered_cache ? starcache::WriteOptions::WriteMode::WRITE_BACK
                                      : starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+=======
+    if (!_enable_datacache_persistence && _enable_tiered_cache) {
+        opts.mode = starcache::WriteOptions::WriteMode::WRITE_BACK;
+    } else {
+        opts.mode = starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     opts.evict_probability = options->evict_probability;
     Status st;
     {
@@ -126,13 +159,25 @@ Status StarCacheWrapper::read_object(const std::string& key, DataCacheHandle* ha
     return st;
 }
 
+<<<<<<< HEAD
+=======
+bool StarCacheWrapper::exist(const std::string& key) const {
+    return _cache->exist(key);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status StarCacheWrapper::update_mem_quota(size_t quota_bytes) {
     return to_status(_cache->update_mem_quota(quota_bytes));
+=======
+Status StarCacheWrapper::update_mem_quota(size_t quota_bytes, bool flush_to_disk) {
+    return to_status(_cache->update_mem_quota(quota_bytes, flush_to_disk));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status StarCacheWrapper::update_disk_spaces(const std::vector<DirSpace>& spaces) {
@@ -170,6 +215,10 @@ void StarCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
 }
 
 Status StarCacheWrapper::shutdown() {
+<<<<<<< HEAD
+=======
+    // TODO: starcache implement shutdown to release memory
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 

@@ -57,7 +57,11 @@ public:
 
     void set_status(Status status) { _status = std::move(status); }
 
+<<<<<<< HEAD
     const Status& status() const { return _status; }
+=======
+    [[nodiscard]] const Status& status() const { return _status; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     virtual void on_new_params(){};

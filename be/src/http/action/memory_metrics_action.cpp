@@ -49,7 +49,10 @@ void MemoryMetricsAction::handle(HttpRequest* req) {
                                                        "bloom_filter_index",
                                                        "compaction",
                                                        "schema_change",
+<<<<<<< HEAD
                                                        "column_pool",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                        "page_cache",
                                                        "datacache",
                                                        "update",

@@ -19,6 +19,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TableCommitInfo;
@@ -86,7 +91,11 @@ public interface MVRepairHandler {
         }
 
         for (TableCommitInfo tableCommitInfo : transactionState.getIdToTableCommitInfos().values()) {
+<<<<<<< HEAD
             Table table = db.getTable(tableCommitInfo.getTableId());
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableCommitInfo.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null || !(table instanceof OlapTable) || table.getRelatedMaterializedViews().isEmpty()) {
                 continue;
             }
@@ -95,10 +104,18 @@ public interface MVRepairHandler {
             Map<Long, PartitionCommitInfo> partitionCommitInfos = tableCommitInfo.getIdToPartitionCommitInfo();
             List<PartitionRepairInfo> partitionRepairInfos = Lists.newArrayListWithCapacity(partitionCommitInfos.size());
 
+<<<<<<< HEAD
             db.readLock();
             try {
                 for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
                     long partitionId = partitionCommitInfo.getPartitionId();
+=======
+            Locker locker = new Locker();
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+            try {
+                for (PartitionCommitInfo partitionCommitInfo : partitionCommitInfos.values()) {
+                    long partitionId = partitionCommitInfo.getPhysicalPartitionId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Partition partition = olapTable.getPartition(partitionId);
                     if (partition == null || olapTable.isTempPartition(partitionId)) {
                         continue;
@@ -112,7 +129,11 @@ public interface MVRepairHandler {
                     partitionRepairInfos.add(partitionRepairInfo);
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (partitionRepairInfos.isEmpty()) {

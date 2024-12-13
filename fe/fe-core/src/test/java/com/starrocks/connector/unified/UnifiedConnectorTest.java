@@ -48,6 +48,12 @@ public class UnifiedConnectorTest {
         properties.put("unified.metastore.type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         properties.put("paimon.catalog.warehouse", "file:///tmp/");
+<<<<<<< HEAD
+=======
+        properties.put("kudu.master", "localhost:7051");
+        properties.put("kudu.schema-emulation.enabled", "true");
+        properties.put("kudu.schema-emulation.prefix", "impala::");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectorContext context = new ConnectorContext("unified_catalog", "unified", properties);
         CatalogConnector catalogConnector = ConnectorFactory.createConnector(context, false);
         ConnectorMetadata metadata = catalogConnector.getMetadata();
@@ -68,6 +74,12 @@ public class UnifiedConnectorTest {
         properties.put("unified.metastore.type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         properties.put("paimon.catalog.warehouse", "file:///tmp/");
+<<<<<<< HEAD
+=======
+        properties.put("kudu.master", "localhost:7051");
+        properties.put("kudu.schema-emulation.enabled", "true");
+        properties.put("kudu.schema-emulation.prefix", "impala::");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectorContext context = new ConnectorContext("unified_catalog", "unified", properties);
         UnifiedConnector unifiedConnector = new UnifiedConnector(context);
         ConnectorMetadata metadata = unifiedConnector.getMetadata();

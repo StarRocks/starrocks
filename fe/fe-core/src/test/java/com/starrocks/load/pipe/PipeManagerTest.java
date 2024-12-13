@@ -18,9 +18,15 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
@@ -30,6 +36,10 @@ import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
@@ -45,7 +55,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.PipeAnalyzer;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -65,6 +78,11 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -130,7 +148,11 @@ public class PipeManagerTest {
 
     @After
     public void after() {
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
     }
@@ -197,6 +219,7 @@ public class PipeManagerTest {
         // not exists
         String sql = "create pipe p_warehouse properties('warehouse' = 'w1') " +
                 "as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
+<<<<<<< HEAD
         Exception e = Assert.assertThrows(AnalysisException.class, () -> createPipe(sql));
         Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter w1.", e.getMessage());
 
@@ -210,6 +233,16 @@ public class PipeManagerTest {
             @Mock
             public boolean warehouseExists(String warehouseName) {
                 return true;
+=======
+        Exception e = Assert.assertThrows(ErrorReportException.class, () -> createPipe(sql));
+        Assert.assertEquals("Warehouse name: w1 not exist.", e.getMessage());
+
+        // mock the warehouse
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(1000L, "w1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -232,7 +265,11 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -241,11 +278,19 @@ public class PipeManagerTest {
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         pm.getRepo().save(image1.getDataOutputStream());
 
         // restore from image
         PipeManager pm1 = new PipeManager();
         SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+=======
+        pm.getRepo().save(image1.getImageWriter());
+
+        // restore from image
+        PipeManager pm1 = new PipeManager();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm1.getRepo().load(reader);
         reader.close();
         Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
@@ -259,11 +304,19 @@ public class PipeManagerTest {
         AlterPipeStmt alterPipeStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterPipeStmt);
         UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         pm.getRepo().save(image2.getDataOutputStream());
 
         // restore and check
         PipeManager pm2 = new PipeManager();
         reader = new SRMetaBlockReader(image2.getDataInputStream());
+=======
+        pm.getRepo().save(image2.getImageWriter());
+
+        // restore and check
+        PipeManager pm2 = new PipeManager();
+        reader = new SRMetaBlockReaderV2(image2.getJsonReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm2.getRepo().load(reader);
         reader.close();
         Assert.assertEquals(pm.getPipesUnlock(), pm2.getPipesUnlock());
@@ -342,10 +395,17 @@ public class PipeManagerTest {
             private int count = 0;
 
             @Mock
+<<<<<<< HEAD
             public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws UserException {
                 count++;
                 if (count <= errorCount) {
                     throw new UserException("network connection error");
+=======
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc) throws StarRocksException {
+                count++;
+                if (count <= errorCount) {
+                    throw new StarRocksException("network connection error");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     List<FileStatus> res = new ArrayList<>();
                     res.add(new FileStatus(1024, false, 1, 1, 1, new Path("file1")));
@@ -816,7 +876,11 @@ public class PipeManagerTest {
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
         pipe = getPipe("p_crud");
+<<<<<<< HEAD
         Assert.assertEquals("{\"auto_ingest\":\"false\",\"BATCH_SIZE\":\"10GB\"}", pipe.getPropertiesJson());
+=======
+        Assert.assertEquals("{\"auto_ingest\":\"false\",\"batch_size\":\"10GB\"}", pipe.getPropertiesJson());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // drop
         sql = "drop pipe p_crud";
@@ -838,7 +902,11 @@ public class PipeManagerTest {
         sql = "create pipe p_crud1 as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
         Assert.assertEquals(0, pm.getPipesUnlock().size());
     }
@@ -860,8 +928,12 @@ public class PipeManagerTest {
         // show
         String sql = "show pipes";
         ShowPipeStmt showPipeStmt = (ShowPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(ctx, showPipeStmt);
         ShowResultSet result = showExecutor.execute();
+=======
+        ShowResultSet result = ShowExecutor.execute(showPipeStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(
                 Arrays.asList("show_1", "RUNNING", "pipe_test_db.tbl1",
                         "{\"loadedFiles\":0,\"loadedBytes\":0,\"loadingFiles\":0}", null),
@@ -874,8 +946,12 @@ public class PipeManagerTest {
         // desc
         sql = "desc pipe show_1";
         DescPipeStmt descPipeStmt = (DescPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+<<<<<<< HEAD
         showExecutor = new ShowExecutor(ctx, descPipeStmt);
         result = showExecutor.execute();
+=======
+        result = ShowExecutor.execute(descPipeStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(
                 Arrays.asList("show_1", "FILE", "pipe_test_db.tbl1", "FILE_SOURCE(path=fake://pipe)",
                         "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')", ""),
@@ -962,18 +1038,30 @@ public class PipeManagerTest {
     public void testTaskProperties() throws Exception {
         mockRepoExecutor();
         String pipeName = "p_task_properties";
+<<<<<<< HEAD
         createPipe("create pipe p_task_properties properties('task.query_timeout'='20') " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         Pipe pipe = getPipe(pipeName);
         Assert.assertEquals("{\"task.query_timeout\":\"20\"}", pipe.getPropertiesJson());
         Assert.assertEquals(ImmutableMap.of("query_timeout", "20"), pipe.getTaskProperties());
+=======
+        createPipe("create pipe p_task_properties properties('task.insert_timeout'='20') " +
+                " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
+        Pipe pipe = getPipe(pipeName);
+        Assert.assertEquals("{\"task.insert_timeout\":\"20\"}", pipe.getPropertiesJson());
+        Assert.assertEquals(ImmutableMap.of("insert_timeout", "20"), pipe.getTaskProperties());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         dropPipe(pipeName);
 
         // default task execution variables
         createPipe("create pipe p_task_properties " +
                 " as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')");
         pipe = getPipe(pipeName);
+<<<<<<< HEAD
         Assert.assertEquals(ImmutableMap.of("query_timeout", "3600"), pipe.getTaskProperties());
+=======
+        Assert.assertEquals(ImmutableMap.of(), pipe.getTaskProperties());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1035,7 +1123,11 @@ public class PipeManagerTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         long dbId = ctx.getGlobalStateMgr().getDb(PIPE_TEST_DB).getId();
+=======
+        long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
@@ -1043,7 +1135,11 @@ public class PipeManagerTest {
                 "create pipe p_crash as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         createPipe(sql);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         pm.getRepo().save(image1.getDataOutputStream());
+=======
+        pm.getRepo().save(image1.getImageWriter());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // loading file and crash
         String name = "p_crash";
@@ -1057,7 +1153,11 @@ public class PipeManagerTest {
         {
             PipeManager pm1 = new PipeManager();
             FileListRepo repo = pipe.getPipeSource().getFileListRepo();
+<<<<<<< HEAD
             SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+=======
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             pm1.getRepo().load(reader);
             reader.close();
             Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
@@ -1084,7 +1184,11 @@ public class PipeManagerTest {
             };
 
             PipeManager pm1 = new PipeManager();
+<<<<<<< HEAD
             SRMetaBlockReader reader = new SRMetaBlockReader(image1.getDataInputStream());
+=======
+            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image1.getJsonReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             pm1.getRepo().load(reader);
             reader.close();
             Assert.assertEquals(pm.getPipesUnlock(), pm1.getPipesUnlock());
@@ -1111,4 +1215,8 @@ public class PipeManagerTest {
         String plan = UtFrameUtils.getFragmentPlan(newCtx, sql);
         Assert.assertTrue(plan.contains("name"));
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

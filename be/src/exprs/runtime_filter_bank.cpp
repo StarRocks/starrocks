@@ -14,6 +14,10 @@
 
 #include "exprs/runtime_filter_bank.h"
 
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <thread>
 
 #include "column/column.h"
@@ -21,7 +25,13 @@
 #include "exprs/dictmapping_expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
+<<<<<<< HEAD
 #include "exprs/runtime_filter.h"
+=======
+#include "exprs/min_max_predicate.h"
+#include "exprs/runtime_filter.h"
+#include "exprs/runtime_filter_layout.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/RuntimeFilter_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
@@ -153,6 +163,23 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const std::vector<ColumnPtr>& columns, LogicalType type,
+                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+    for (const auto& column : columns) {
+        RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null));
+    }
+    return Status::OK();
+}
+
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
+                                                      LogicalType type, JoinRuntimeFilter* filter,
+                                                      size_t column_offset) {
+    return fill_runtime_bloom_filter(param.columns, type, filter, column_offset, param.eq_null);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool,
                                                                                       ExprContext* conjunct,
                                                                                       Chunk* chunk) {
@@ -207,12 +234,19 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;
     _has_remote_targets = desc.has_remote_targets;
+<<<<<<< HEAD
     _join_mode = desc.build_join_mode;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (desc.__isset.runtime_filter_merge_nodes) {
         _merge_nodes = desc.runtime_filter_merge_nodes;
     }
     _has_consumer = false;
+<<<<<<< HEAD
+=======
+    _join_mode = desc.build_join_mode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (desc.__isset.plan_node_id_to_target_expr && desc.plan_node_id_to_target_expr.size() != 0) {
         _has_consumer = true;
     }
@@ -228,7 +262,11 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.broadcast_grf_destinations) {
         _broadcast_grf_destinations = desc.broadcast_grf_destinations;
     }
+<<<<<<< HEAD
 
+=======
+    WithLayoutMixin::init(desc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
 }
@@ -242,6 +280,10 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     _join_mode = desc.build_join_mode;
     _is_topn_filter = desc.__isset.filter_type && desc.filter_type == TRuntimeFilterBuildType::TOPN_FILTER;
     _skip_wait = _is_topn_filter;
+<<<<<<< HEAD
+=======
+    _is_group_colocate_rf = desc.__isset.build_from_group_execution && desc.build_from_group_execution;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool not_found = true;
     if (desc.__isset.plan_node_id_to_target_expr) {
@@ -252,9 +294,13 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         }
     }
 
+<<<<<<< HEAD
     if (desc.__isset.bucketseq_to_instance) {
         _bucketseq_to_partition = desc.bucketseq_to_instance;
     }
+=======
+    WithLayoutMixin::init(desc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (desc.__isset.plan_node_id_to_partition_by_exprs) {
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_partition_by_exprs.find(node_id);
@@ -277,7 +323,11 @@ Status RuntimeFilterProbeDescriptor::init(int32_t filter_id, ExprContext* probe_
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescriptor& row_desc, RuntimeProfile* p) {
+=======
+Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, RuntimeProfile* p) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->prepare(state));
     }
@@ -316,8 +366,13 @@ void RuntimeFilterProbeDescriptor::replace_probe_expr_ctx(RuntimeState* state, c
     _probe_expr_ctx->close(state);
     // create new probe expr and open it.
     _probe_expr_ctx = state->obj_pool()->add(new ExprContext(new_probe_expr_ctx->root()));
+<<<<<<< HEAD
     _probe_expr_ctx->prepare(state);
     _probe_expr_ctx->open(state);
+=======
+    WARN_IF_ERROR(_probe_expr_ctx->prepare(state), "prepare probe expr failed");
+    WARN_IF_ERROR(_probe_expr_ctx->open(state), "open probe expr failed");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::string RuntimeFilterProbeDescriptor::debug_string() const {
@@ -350,13 +405,21 @@ RuntimeFilterProbeCollector::RuntimeFilterProbeCollector(RuntimeFilterProbeColle
           _eval_context(that._eval_context),
           _plan_node_id(that._plan_node_id) {}
 
+<<<<<<< HEAD
 Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescriptor& row_desc,
                                             RuntimeProfile* profile) {
+=======
+Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, RuntimeProfile* profile) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _runtime_profile = profile;
     _runtime_state = state;
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
+<<<<<<< HEAD
         RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, profile));
+=======
+        RETURN_IF_ERROR(rf_desc->prepare(state, profile));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (state != nullptr) {
         const TQueryOptions& options = state->query_options();
@@ -400,14 +463,21 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
     for (auto& kv : seletivity_map) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+<<<<<<< HEAD
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
         auto* ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
+<<<<<<< HEAD
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         compute_hash_values(chunk, column.get(), rf_desc, eval_context);
         filter->evaluate(column.get(), &eval_context.running_context);
 
@@ -434,7 +504,11 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
     // without computing each rf's selectivity
     for (auto kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+<<<<<<< HEAD
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
@@ -545,14 +619,22 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
                                                       RuntimeBloomFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
     SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
+<<<<<<< HEAD
     const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+    const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(filter);
     if (filter->num_hash_partitions() == 0) {
         return;
     }
 
     if (rf_desc->partition_by_expr_contexts()->empty()) {
+<<<<<<< HEAD
         filter->compute_hash({column}, &eval_context.running_context);
+=======
+        filter->compute_partition_index(rf_desc->layout(), {column}, &eval_context.running_context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else {
         // Used to hold generated columns
         std::vector<ColumnPtr> column_holders;
@@ -562,7 +644,11 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
             partition_by_columns.push_back(partition_column.get());
             column_holders.emplace_back(std::move(partition_column));
         }
+<<<<<<< HEAD
         filter->compute_hash(partition_by_columns, &eval_context.running_context);
+=======
+        filter->compute_partition_index(rf_desc->layout(), partition_by_columns, &eval_context.running_context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -578,7 +664,11 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     seletivity_map.clear();
     for (auto& kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+<<<<<<< HEAD
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
@@ -588,7 +678,10 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
         auto ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
         // for colocate grf
+<<<<<<< HEAD
         eval_context.running_context.bucketseq_to_partition = rf_desc->bucketseq_to_partition();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         compute_hash_values(chunk, column.get(), rf_desc, eval_context);
         // true count is not accummulated, it is evaluated for each RF respectively
         filter->evaluate(column.get(), &eval_context.running_context);
@@ -691,6 +784,10 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
     _descriptors[desc->filter_id()] = desc;
 }
 
+<<<<<<< HEAD
+=======
+// only used in non-pipeline mode
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     if (_descriptors.empty()) return;
 
@@ -712,7 +809,11 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     while (wait_time >= 0 && !wait_list.empty()) {
         auto it = wait_list.begin();
         while (it != wait_list.end()) {
+<<<<<<< HEAD
             auto* rf = (*it)->runtime_filter();
+=======
+            auto* rf = (*it)->runtime_filter(-1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // find runtime filter in cache.
             if (rf == nullptr) {
                 JoinRuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(
@@ -740,7 +841,11 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
         for (const auto& it : _descriptors) {
             auto* rf = it.second;
             int filter_id = rf->filter_id();
+<<<<<<< HEAD
             bool ready = (rf->runtime_filter() != nullptr);
+=======
+            bool ready = (rf->runtime_filter(-1) != nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             VLOG_FILE << "RuntimeFilterCollector::wait start. filter_id = " << filter_id
                       << ", plan_node_id = " << _plan_node_id
                       << ", finst_id = " << _runtime_state->fragment_instance_id()
@@ -765,6 +870,7 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     }
 }
 
+<<<<<<< HEAD
 // ========================================================
 template <LogicalType Type>
 class MinMaxPredicate : public Expr {
@@ -872,6 +978,12 @@ void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotI
                                                          const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
     *min_max_predicate = nullptr;
     if (filter == nullptr || filter->has_null()) return;
+=======
+void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
+                                                         const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
+    *min_max_predicate = nullptr;
+    if (filter == nullptr) return;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
     auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
     *min_max_predicate = res;

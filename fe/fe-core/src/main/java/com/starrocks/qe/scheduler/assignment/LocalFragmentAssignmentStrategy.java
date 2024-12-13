@@ -16,13 +16,22 @@ package com.starrocks.qe.scheduler.assignment;
 
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.BackendSelector;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.FragmentScanRangeAssignment;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
@@ -32,6 +41,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -52,16 +65,33 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
     private final Set<Integer> replicatedScanIds = Sets.newHashSet();
 
+<<<<<<< HEAD
     public LocalFragmentAssignmentStrategy(ConnectContext connectContext, WorkerProvider workerProvider, boolean usePipeline,
                                            boolean isLoadType) {
+=======
+    private final boolean useIncrementalScanRanges;
+
+    public LocalFragmentAssignmentStrategy(ConnectContext connectContext, WorkerProvider workerProvider,
+                                           boolean usePipeline,
+                                           boolean isLoadType,
+                                           boolean useIncrementalScanRanges) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.connectContext = connectContext;
         this.workerProvider = workerProvider;
         this.usePipeline = usePipeline;
         this.isLoadType = isLoadType;
+<<<<<<< HEAD
     }
 
     @Override
     public void assignFragmentToWorker(ExecutionFragment execFragment) throws UserException {
+=======
+        this.useIncrementalScanRanges = useIncrementalScanRanges;
+    }
+
+    @Override
+    public void assignFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ScanNode scanNode : execFragment.getScanNodes()) {
             assignScanRangesToWorker(execFragment, scanNode);
         }
@@ -78,9 +108,15 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         }
     }
 
+<<<<<<< HEAD
     private void assignScanRangesToWorker(ExecutionFragment execFragment, ScanNode scanNode) throws UserException {
         BackendSelector backendSelector = BackendSelectorFactory.create(
                 scanNode, isLoadType, execFragment, workerProvider, connectContext, replicatedScanIds);
+=======
+    private void assignScanRangesToWorker(ExecutionFragment execFragment, ScanNode scanNode) throws StarRocksException {
+        BackendSelector backendSelector = BackendSelectorFactory.create(
+                scanNode, isLoadType, execFragment, workerProvider, connectContext, replicatedScanIds, useIncrementalScanRanges);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         backendSelector.computeScanRangeAssignment();
 
@@ -164,11 +200,21 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
             fragment.disablePhysicalPropertyOptimize();
         }
 
+<<<<<<< HEAD
+=======
+        long bucketScanRows = bucketScanRows(bucketSeqToScanRange);
+        int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
+        long instanceAvgScanRows = bucketScanRows / Math.max(1, workerIdToBucketSeqs.size() * expectedInstanceNum);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
             ComputeNode worker = workerProvider.getWorkerById(workerId);
 
             // 2. split how many scanRange one instance should scan
+<<<<<<< HEAD
             int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<List<Integer>> bucketSeqsPerInstance = ListUtil.splitBySize(bucketSeqsOfWorker, expectedInstanceNum);
 
             // 3.construct instanceExecParam add the scanRange should be scanned by instance
@@ -176,7 +222,12 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                 FragmentInstance instance = new FragmentInstance(worker, execFragment);
                 execFragment.addInstance(instance);
 
+<<<<<<< HEAD
                 // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly when they are in different buckets
+=======
+                // record each instance replicate scan id in set, to avoid add replicate scan range repeatedly
+                // when they are in different buckets
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Set<Integer> instanceReplicatedScanIds = new HashSet<>();
 
                 if (!assignPerDriverSeq) {
@@ -190,9 +241,32 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     });
                 } else {
                     int expectedDop = Math.max(1, pipelineDop);
+<<<<<<< HEAD
                     List<List<Integer>> bucketSeqsPerDriverSeq = ListUtil.splitBySize(bucketSeqsOfInstance, expectedDop);
 
                     instance.setPipelineDop(bucketSeqsPerDriverSeq.size());
+=======
+                    int expectedPhysicalDop = Math.min(expectedDop, bucketSeqsOfInstance.size());
+                    // For disable group execution logical dop == physical dop
+                    // For enable group execution logical dop >= physical dop
+                    int logicalDop = expectedPhysicalDop;
+                    if (fragment.isUseGroupExecution()) {
+                        // if fragment using group execution
+                        SessionVariable sv = ConnectContext.get().getSessionVariable();
+                        int maxDop = Math.min(sv.getGroupExecutionGroupScale() * expectedDop,
+                                sv.getGroupExecutionMaxGroups());
+                        maxDop = (int) Math.min(instanceAvgScanRows / sv.getGroupExecutionMinScanRows(), maxDop);
+                        maxDop = Math.max(maxDop, expectedDop);
+                        logicalDop = Math.min(bucketSeqsOfInstance.size(), maxDop);
+                        // Align logical dop to physical dop integer multiplier
+                        // For a bucket shuffle join, the hash table corresponding to 
+                        // the i-th probe is i % build_dop (physical dop).
+                        logicalDop = (logicalDop / expectedPhysicalDop) * expectedPhysicalDop;
+                    }
+                    List<List<Integer>> bucketSeqsPerDriverSeq = ListUtil.splitBySize(bucketSeqsOfInstance, logicalDop);
+                    instance.setPipelineDop(expectedPhysicalDop);
+                    instance.setGroupExecutionScanDop(logicalDop);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                     for (int driverSeq = 0; driverSeq < bucketSeqsPerDriverSeq.size(); driverSeq++) {
                         int finalDriverSeq = driverSeq;
@@ -217,7 +291,18 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         final int parallelExecInstanceNum = fragment.getParallelExecNum();
         final int pipelineDop = fragment.getPipelineDop();
 
+<<<<<<< HEAD
         execFragment.getScanRangeAssignment().forEach((workerId, scanRangesPerWorker) -> {
+=======
+        FragmentScanRangeAssignment assignment = execFragment.getScanRangeAssignment();
+        final Map<Long, FragmentInstance> fragmentInstanceMap = new HashMap<>();
+        if (!execFragment.getInstances().isEmpty()) {
+            for (FragmentInstance fragmentInstance : execFragment.getInstances()) {
+                fragmentInstanceMap.put(fragmentInstance.getWorkerId(), fragmentInstance);
+            }
+        }
+        assignment.forEach((workerId, scanRangesPerWorker) -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // 1. Handle normal scan node firstly
             scanRangesPerWorker.forEach((scanId, scanRangesOfNode) -> {
                 if (replicatedScanIds.contains(scanId)) {
@@ -225,21 +310,51 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                 }
 
                 int expectedInstanceNum = Math.max(1, parallelExecInstanceNum);
+<<<<<<< HEAD
                 List<List<TScanRangeParams>> scanRangesPerInstance = ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
 
                 for (List<TScanRangeParams> scanRanges : scanRangesPerInstance) {
                     FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
                     execFragment.addInstance(instance);
 
+=======
+                List<List<TScanRangeParams>> scanRangesPerInstance =
+                        ListUtil.splitBySize(scanRangesOfNode, expectedInstanceNum);
+                for (List<TScanRangeParams> scanRanges : scanRangesPerInstance) {
+                    FragmentInstance instance = null;
+                    if (useIncrementalScanRanges && !fragmentInstanceMap.isEmpty()) {
+                        instance = fragmentInstanceMap.get(workerId);
+                    } else {
+                        instance =
+                                new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
+                        execFragment.addInstance(instance);
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!enableAssignScanRangesPerDriverSeq(fragment, scanRanges)) {
                         instance.addScanRanges(scanId, scanRanges);
                         fragment.disablePhysicalPropertyOptimize();
                     } else {
+<<<<<<< HEAD
                         int expectedDop = Math.max(1, Math.min(pipelineDop, scanRanges.size()));
+=======
+                        int expectedPhysicalDop = Math.max(1, Math.min(pipelineDop, scanRanges.size()));
+                        int logicalDop = expectedPhysicalDop;
+                        if (fragment.isUseGroupExecution()) {
+                            // if fragment using group execution
+                            SessionVariable sv = ConnectContext.get().getSessionVariable();
+                            int maxDop = Math.min(sv.getGroupExecutionGroupScale() * expectedPhysicalDop,
+                                    sv.getGroupExecutionMaxGroups());
+                            maxDop = (int) Math.min(totalScanRows(scanRanges) / sv.getGroupExecutionMinScanRows(),
+                                    maxDop);
+                            maxDop = Math.max(maxDop, expectedPhysicalDop);
+                            logicalDop = Math.min(scanRanges.size(), maxDop);
+                        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         List<List<TScanRangeParams>> scanRangesPerDriverSeq;
                         if (Config.enable_schedule_insert_query_by_row_count && isLoadType
                                 && !scanRanges.isEmpty()
                                 && scanRanges.get(0).getScan_range().isSetInternal_scan_range()) {
+<<<<<<< HEAD
                             scanRangesPerDriverSeq = splitScanRangeParamByRowCount(scanRanges, expectedDop);
                         } else {
                             scanRangesPerDriverSeq = ListUtil.splitBySize(scanRanges, expectedDop);
@@ -249,6 +364,20 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                             fragment.setPipelineDop(scanRangesPerDriverSeq.size());
                         }
                         instance.setPipelineDop(scanRangesPerDriverSeq.size());
+=======
+                            scanRangesPerDriverSeq = splitScanRangeParamByRowCount(scanRanges, logicalDop);
+                        } else {
+                            scanRangesPerDriverSeq = ListUtil.splitBySize(scanRanges, logicalDop);
+                        }
+                        // Make pipeline input dop == sink dop to avoid extra local-shuffle.
+                        // TODO: Make XXXSink support group execution to further improve performance.
+                        if (fragment.isForceAssignScanRangesPerDriverSeq() &&
+                                expectedPhysicalDop != pipelineDop) {
+                            fragment.setPipelineDop(expectedPhysicalDop);
+                        }
+                        instance.setPipelineDop(expectedPhysicalDop);
+                        instance.setGroupExecutionScanDop(logicalDop);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                         for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                             instance.addScanRanges(scanId, driverSeq, scanRangesPerDriverSeq.get(driverSeq));
@@ -293,7 +422,12 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
                     minDataSize = dataSizePerGroup[i];
                 }
             }
+<<<<<<< HEAD
             dataSizePerGroup[minIndex] += Math.max(1, scanRangeParam.getScan_range().getInternal_scan_range().getRow_count());
+=======
+            dataSizePerGroup[minIndex] +=
+                    Math.max(1, scanRangeParam.getScan_range().getInternal_scan_range().getRow_count());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             result.get(minIndex).add(scanRangeParam);
         }
 
@@ -303,4 +437,21 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
 
         return result;
     }
+<<<<<<< HEAD
+=======
+
+    // collect total size for each scan range
+    private static long bucketScanRows(ColocatedBackendSelector.BucketSeqToScanRange bucketSeqToScanRange) {
+        return bucketSeqToScanRange.entrySet().stream().flatMap(entry -> entry.getValue().entrySet().stream())
+                .flatMap(item -> item.getValue().stream())
+                .map(scanRange -> scanRange.getScan_range().internal_scan_range.getRow_count())
+                .reduce(0L, Long::sum);
+    }
+
+    private static long totalScanRows(List<TScanRangeParams> scanRangeParams) {
+        return scanRangeParams.stream()
+                .map(scanRange -> scanRange.getScan_range().getInternal_scan_range().getRow_count())
+                .reduce(0L, Long::sum);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

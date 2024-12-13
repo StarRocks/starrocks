@@ -27,6 +27,11 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/base_rowset.h"
+#include "util/bthreads/single_flight.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 struct FileInfo;
@@ -42,6 +47,10 @@ class MetadataIterator;
 class UpdateManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
+<<<<<<< HEAD
+=======
+using TabletAndRowsets = std::tuple<std::shared_ptr<Tablet>, std::vector<BaseRowsetSharedPtr>>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class CompactionScheduler;
 class Metacache;
@@ -56,13 +65,24 @@ public:
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
+<<<<<<< HEAD
     explicit TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity);
+=======
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
+                           int64_t cache_capacity);
+
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~TabletManager();
 
     DISALLOW_COPY_AND_MOVE(TabletManager);
 
+<<<<<<< HEAD
     [[nodiscard]] Status create_tablet(const TCreateTabletReq& req);
+=======
+    Status create_tablet(const TCreateTabletReq& req);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
@@ -74,6 +94,7 @@ public:
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata);
 
+<<<<<<< HEAD
     StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version);
 
     StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true);
@@ -81,6 +102,17 @@ public:
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id, bool filter_tablet);
+=======
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache = true);
+
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(const std::string& path, bool fill_cache = true);
+    StatusOr<TabletMetadataPtr> get_tablet_metadata(std::shared_ptr<FileSystem> fs, const std::string& path,
+                                                    bool fill_cache = true);
+
+    TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
+
+    StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
 
@@ -102,10 +134,20 @@ public:
 
     Status put_txn_vlog(const TxnLogPtr& log, int64_t version);
 
+<<<<<<< HEAD
+=======
+    Status put_combined_txn_log(const CombinedTxnLogPB& logs);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
 
+<<<<<<< HEAD
+=======
+    StatusOr<CombinedTxnLogPtr> get_combined_txn_log(const std::string& path, bool fill_cache = true);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<TxnLogPtr> get_txn_slog(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_slog(const std::string& path, bool fill_cache = true);
@@ -114,14 +156,30 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_vlog(const std::string& path, bool fill_cache = true);
 
+<<<<<<< HEAD
 #ifdef USE_STAROS
     bool is_tablet_in_worker(int64_t tablet_id);
+=======
+    StatusOr<TabletSchemaPtr> get_output_rowset_schema(std::vector<uint32_t>& input_rowset,
+                                                       const TabletMetadata* metadata);
+
+#ifdef USE_STAROS
+#if !defined(BUILD_FORMAT_LIB)
+    bool is_tablet_in_worker(int64_t tablet_id);
+#else
+    bool is_tablet_in_worker(int64_t tablet_id) { return true; }
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #endif // USE_STAROS
 
     void prune_metacache();
 
     // TODO: remove this method
+<<<<<<< HEAD
     LocationProvider* TEST_set_location_provider(LocationProvider* value) {
+=======
+    std::shared_ptr<LocationProvider> TEST_set_location_provider(std::shared_ptr<LocationProvider> value) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto ret = _location_provider;
         _location_provider = value;
         return ret;
@@ -133,19 +191,34 @@ public:
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
+<<<<<<< HEAD
+=======
+    std::string tablet_initial_metadata_location(int64_t tablet_id) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 
+<<<<<<< HEAD
+=======
+    std::string combined_txn_log_location(int64_t tablet_id, int64_t txn_id) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
 
     std::string del_location(int64_t tablet_id, std::string_view del_name) const;
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+<<<<<<< HEAD
     const LocationProvider* location_provider() const { return _location_provider; }
+=======
+    const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+    std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     UpdateManager* update_mgr();
 
@@ -158,6 +231,11 @@ public:
 
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
+<<<<<<< HEAD
+=======
+    StatusOr<int64_t> get_tablet_num_rows(int64_t tablet_id, int64_t version);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t in_writing_data_size(int64_t tablet_id);
 
     int64_t add_in_writing_data_size(int64_t tablet_id, int64_t size);
@@ -176,6 +254,17 @@ public:
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                       const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                       TabletSchemaPtr tablet_schema);
+<<<<<<< HEAD
+=======
+    // for load segment parallel
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, const LakeIOOptions& lake_io_opts,
+                                      bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
+
+    StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
+
+    Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
+    StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version, int64_t to_version);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void stop();
 
@@ -184,6 +273,7 @@ private:
     static std::string tablet_schema_cache_key(int64_t tablet_id);
     static std::string tablet_latest_metadata_cache_key(int64_t tablet_id);
 
+<<<<<<< HEAD
     Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
     StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
     StatusOr<TabletSchemaPtr> get_tablet_schema(int64_t tablet_id, int64_t* version_hint = nullptr);
@@ -199,6 +289,28 @@ private:
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
+=======
+    StatusOr<TabletSchemaPtr> load_and_parse_schema_file(const std::string& path);
+    StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
+
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(std::shared_ptr<FileSystem> fs,
+                                                     const std::string& metadata_location, bool fill_cache);
+    Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_cache);
+    StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
+    StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
+
+    std::shared_ptr<LocationProvider> _location_provider;
+    std::unique_ptr<Metacache> _metacache;
+    std::unique_ptr<CompactionScheduler> _compaction_scheduler;
+    UpdateManager* _update_mgr = nullptr;
+
+    std::shared_mutex _meta_lock;
+    std::unordered_map<int64_t, int64_t> _tablet_in_writing_size;
+
+    bthreads::singleflight::Group<std::string, StatusOr<TabletSchemaPtr>> _schema_group;
+    bthreads::singleflight::Group<std::string, StatusOr<CombinedTxnLogPtr>> _combined_txn_log_group;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks::lake

@@ -22,11 +22,21 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaSchemataScanner::_s_columns[] = {
         //   name,       type,          size
+<<<<<<< HEAD
         {"CATALOG_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
         {"SCHEMA_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFAULT_CHARACTER_SET_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DEFAULT_COLLATION_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"SQL_PATH", TYPE_VARCHAR, sizeof(StringValue), true},
+=======
+        {"CATALOG_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"SCHEMA_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFAULT_CHARACTER_SET_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"DEFAULT_COLLATION_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"SQL_PATH", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaSchemataScanner::SchemaSchemataScanner()

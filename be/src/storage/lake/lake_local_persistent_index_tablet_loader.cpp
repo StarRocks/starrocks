@@ -64,7 +64,11 @@ Status LakeLocalPersistentIndexTabletLoader::rowset_iterator(
             return res.status();
         }
         auto& itrs = res.value();
+<<<<<<< HEAD
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+=======
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(handler(itrs, rowset->id()));
     }
 

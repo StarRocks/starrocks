@@ -14,22 +14,39 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class CreateTableAutoTabletTest {
     @BeforeClass
     public static void setUp() throws Exception {
@@ -51,6 +68,7 @@ public class CreateTableAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 "create table test_table1 (pk bigint NOT NULL, v0 string not null) primary KEY (pk) DISTRIBUTED BY HASH(pk) PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
         if (db == null) {
             return;
@@ -62,11 +80,31 @@ public class CreateTableAutoTabletTest {
             if (table == null) {
                 return;
             }
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+        if (db == null) {
+            return;
+        }
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
+        if (table == null) {
+            return;
+        }
+
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        int bucketNum = 0;
+        try {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Partition partition : table.getPartitions()) {
                 bucketNum += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         Assert.assertEquals(bucketNum, 20);
     }
@@ -86,6 +124,7 @@ public class CreateTableAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 "CREATE TABLE test_table2(" +
+<<<<<<< HEAD
                     "   pk1 bigint NOT NULL, " +
                     "   pk2 date NOT NULL, " +
                     "   v0 string NOT NULL" +
@@ -95,11 +134,26 @@ public class CreateTableAutoTabletTest {
                     " DISTRIBUTED BY HASH(pk1)" +
                     " PROPERTIES (\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
         Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+=======
+                        "   pk1 bigint NOT NULL, " +
+                        "   pk2 date NOT NULL, " +
+                        "   v0 string NOT NULL" +
+                        "  ) ENGINE=OLAP" +
+                        " PRIMARY KEY(pk1, pk2)" +
+                        " PARTITION BY RANGE(pk2) (START (\"2022-08-01\") END (\"2022-08-10\") EVERY (INTERVAL 1 day))" +
+                        " DISTRIBUTED BY HASH(pk1)" +
+                        " PROPERTIES (\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\");");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return;
         }
 
+<<<<<<< HEAD
         OlapTable table = (OlapTable) db.getTable("test_table2");
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return;
         }
@@ -108,14 +162,25 @@ public class CreateTableAutoTabletTest {
         checkTableStateToNormal(table);
 
         int bucketNum = 0;
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Partition partition = table.getPartition("p20220811");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
         }
         Assert.assertEquals(GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size(), 10);
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        }
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size(), 10);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(bucketNum, 20);
     }
 
@@ -124,6 +189,7 @@ public class CreateTableAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 " CREATE TABLE test_auto_tablets_of_dynamic_partition (" +
+<<<<<<< HEAD
                      "    k1 date," +
                      "    k2 int(11)," +
                      "    k3 smallint(6)," +
@@ -144,22 +210,57 @@ public class CreateTableAutoTabletTest {
                      "   'dynamic_partition.prefix' = 'p');");
         Thread.sleep(1000); // wait for the dynamic partition created
         Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+=======
+                        "    k1 date," +
+                        "    k2 int(11)," +
+                        "    k3 smallint(6)," +
+                        "    v1 varchar(2048)," +
+                        "    v2 datetime" +
+                        "  ) ENGINE=OLAP" +
+                        "  DUPLICATE KEY(k1, k2, k3) " +
+                        "  PARTITION BY RANGE(k1)" +
+                        "  (PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07')))" +
+                        "  DISTRIBUTED BY HASH(k2) BUCKETS 10" +
+                        "  PROPERTIES (" +
+                        "   'replication_num' = '1'," +
+                        "   'dynamic_partition.enable' = 'true'," +
+                        "   'dynamic_partition.time_unit' = 'DAY'," +
+                        "   'dynamic_partition.time_zone' = 'Asia/Shanghai'," +
+                        "   'dynamic_partition.start' = '-3'," +
+                        "   'dynamic_partition.end' = '3'," +
+                        "   'dynamic_partition.prefix' = 'p');");
+        Thread.sleep(1000); // wait for the dynamic partition created
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return;
         }
 
+<<<<<<< HEAD
         OlapTable table = (OlapTable) db.getTable("test_auto_tablets_of_dynamic_partition");
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_auto_tablets_of_dynamic_partition");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return;
         }
 
         int bucketNum = 0;
+<<<<<<< HEAD
         db.readLock();
+=======
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             List<Partition> partitions = (List<Partition>) table.getRecentPartitions(3);
             bucketNum = partitions.get(0).getDistributionInfo().getBucketNum();
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         Assert.assertEquals(bucketNum, 10);
     }
@@ -169,6 +270,7 @@ public class CreateTableAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 " CREATE TABLE test_modify_dynamic_partition_property (" +
+<<<<<<< HEAD
                      "    k1 date," +
                      "    k2 int(11)," +
                      "    k3 smallint(6)," +
@@ -190,26 +292,70 @@ public class CreateTableAutoTabletTest {
                      "   'dynamic_partition.prefix' = 'p');");
         Thread.sleep(1000); // wait for the dynamic partition created
         Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+=======
+                        "    k1 date," +
+                        "    k2 int(11)," +
+                        "    k3 smallint(6)," +
+                        "    v1 varchar(2048)," +
+                        "    v2 datetime" +
+                        "  ) ENGINE=OLAP" +
+                        "  DUPLICATE KEY(k1, k2, k3) " +
+                        "  PARTITION BY RANGE(k1)" +
+                        "  (PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07')))" +
+                        "  DISTRIBUTED BY HASH(k2) BUCKETS 10" +
+                        "  PROPERTIES (" +
+                        "   'replication_num' = '1'," +
+                        "   'dynamic_partition.enable' = 'true'," +
+                        "   'dynamic_partition.time_unit' = 'DAY'," +
+                        "   'dynamic_partition.time_zone' = 'Asia/Shanghai'," +
+                        "   'dynamic_partition.start' = '-1'," +
+                        "   'dynamic_partition.end' = '3'," +
+                        "   'dynamic_partition.buckets' = '3'," +
+                        "   'dynamic_partition.prefix' = 'p');");
+        Thread.sleep(1000); // wait for the dynamic partition created
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return;
         }
 
+<<<<<<< HEAD
         OlapTable table = (OlapTable) db.getTable("test_modify_dynamic_partition_property");
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_modify_dynamic_partition_property");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return;
         }
 
+<<<<<<< HEAD
         cluster.runSql("db_for_auto_tablets", "ALTER TABLE test_modify_dynamic_partition_property SET ('dynamic_partition.enable' = 'false')");
         cluster.runSql("db_for_auto_tablets", "ALTER TABLE test_modify_dynamic_partition_property ADD PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07'))");
         cluster.runSql("db_for_auto_tablets", "ALTER TABLE test_modify_dynamic_partition_property SET ('dynamic_partition.enable' = 'true')");
 
         int bucketNum = 0;
         db.readLock();
+=======
+        cluster.runSql("db_for_auto_tablets",
+                "ALTER TABLE test_modify_dynamic_partition_property SET ('dynamic_partition.enable' = 'false')");
+        cluster.runSql("db_for_auto_tablets",
+                "ALTER TABLE test_modify_dynamic_partition_property ADD PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07'))");
+        cluster.runSql("db_for_auto_tablets",
+                "ALTER TABLE test_modify_dynamic_partition_property SET ('dynamic_partition.enable' = 'true')");
+
+        int bucketNum = 0;
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Partition partition = table.getPartition("p20230306");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         Assert.assertEquals(bucketNum, 10);
     }
@@ -219,6 +365,7 @@ public class CreateTableAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 " CREATE TABLE colocate_partition (" +
+<<<<<<< HEAD
                      "    k1 date," +
                      "    k2 int(11)," +
                      "    k3 smallint(6)," +
@@ -233,36 +380,77 @@ public class CreateTableAutoTabletTest {
                      "   'replication_num' = '1'," +
                      "   'colocate_with' = 'g1');");
         Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+=======
+                        "    k1 date," +
+                        "    k2 int(11)," +
+                        "    k3 smallint(6)," +
+                        "    v1 varchar(2048)," +
+                        "    v2 datetime" +
+                        "  ) ENGINE=OLAP" +
+                        "  DUPLICATE KEY(k1, k2, k3) " +
+                        "  PARTITION BY RANGE(k1)" +
+                        "  (PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07')))" +
+                        "  DISTRIBUTED BY HASH(k2) BUCKETS 10" +
+                        "  PROPERTIES (" +
+                        "   'replication_num' = '1'," +
+                        "   'colocate_with' = 'g1');");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return;
         }
 
+<<<<<<< HEAD
         OlapTable table = (OlapTable) db.getTable("colocate_partition");
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "colocate_partition");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return;
         }
 
+<<<<<<< HEAD
         cluster.runSql("db_for_auto_tablets", "ALTER TABLE colocate_partition ADD PARTITION p20230312 VALUES [('2023-03-12'), ('2023-03-13'))");
         checkTableStateToNormal(table);
 
         int bucketNum = 0;
         db.readLock();
+=======
+        cluster.runSql("db_for_auto_tablets",
+                "ALTER TABLE colocate_partition ADD PARTITION p20230312 VALUES [('2023-03-12'), ('2023-03-13'))");
+        checkTableStateToNormal(table);
+
+        int bucketNum = 0;
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Partition partition = table.getPartition("p20230312");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         Assert.assertEquals(bucketNum, 10);
 
         Long dbId = db.getId();
         String fullGroupName = dbId + "_g1";
+<<<<<<< HEAD
         ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+=======
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
         Assert.assertEquals(groupSchema.getBucketsNum(), 10);
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void createBadDbName() {
         String longDbName = new String(new char[257]).replace('\0', 'a');

@@ -61,6 +61,10 @@ class LoadPathMgr;
 class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
+<<<<<<< HEAD
+=======
+class BatchWriteMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class MemTracker;
 class MetricRegistry;
 class StorageEngine;
@@ -139,8 +143,13 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+<<<<<<< HEAD
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+=======
+    MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+    MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* passthrough_mem_tracker() { return _passthrough_mem_tracker.get(); }
@@ -148,6 +157,10 @@ public:
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
+<<<<<<< HEAD
+=======
+    MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
     MemTracker* jemalloc_fragmentation_traker() { return _jemalloc_fragmentation_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
@@ -205,12 +218,21 @@ private:
     // The memory used for schema change
     std::shared_ptr<MemTracker> _schema_change_mem_tracker;
 
+<<<<<<< HEAD
     // The memory used for column pool
     std::shared_ptr<MemTracker> _column_pool_mem_tracker;
 
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
 
+=======
+    // The memory used for page cache
+    std::shared_ptr<MemTracker> _page_cache_mem_tracker;
+
+    // The memory used for jit cache
+    std::shared_ptr<MemTracker> _jit_cache_mem_tracker;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
@@ -227,6 +249,12 @@ private:
     // The memory used for datacache
     std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
+<<<<<<< HEAD
+=======
+    // The memory used for poco connection pool
+    std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 };
 
@@ -245,6 +273,7 @@ public:
     /// Returns the first created exec env instance. In a normal starrocks, this is
     /// the only instance. In test setups with multiple ExecEnv's per process,
     /// we return the most recently created instance.
+<<<<<<< HEAD
     static ExecEnv* GetInstance() {
         static ExecEnv s_exec_env;
         return &s_exec_env;
@@ -256,6 +285,16 @@ public:
     // Empty destructor because the compiler-generated one requires full
     // declarations for classes in scoped_ptrs.
     ~ExecEnv() = default;
+=======
+    static ExecEnv* GetInstance();
+
+    // only used for test
+    ExecEnv();
+
+    // Empty destructor because the compiler-generated one requires full
+    // declarations for classes in scoped_ptrs.
+    ~ExecEnv();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::string token() const;
     ExternalScanContextMgr* external_scan_context_mgr() { return _external_scan_context_mgr; }
@@ -273,16 +312,31 @@ public:
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
+<<<<<<< HEAD
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
     workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
+=======
+    ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
+    ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; }
+
+    pipeline::DriverExecutor* wg_driver_executor();
+    workgroup::ScanExecutor* scan_executor();
+    workgroup::ScanExecutor* connector_scan_executor();
+    workgroup::WorkGroupManager* workgroup_manager() { return _workgroup_manager.get(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
     PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
     ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
+<<<<<<< HEAD
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
+=======
+    ThreadPool* dictionary_cache_pool() { return _dictionary_cache_pool.get(); }
+    FragmentMgr* fragment_mgr() { return _fragment_mgr; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
     BfdParser* bfd_parser() const { return _bfd_parser; }
     BrokerMgr* broker_mgr() const { return _broker_mgr; }
@@ -292,6 +346,10 @@ public:
     SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
     StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
     TransactionMgr* transaction_mgr() { return _transaction_mgr; }
+<<<<<<< HEAD
+=======
+    BatchWriteMgr* batch_write_mgr() { return _batch_write_mgr; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
 
@@ -315,11 +373,21 @@ public:
 
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
+<<<<<<< HEAD
     int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
     lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
+=======
+    uint32_t calc_pipeline_dop(int32_t pipeline_dop) const;
+
+    uint32_t calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const;
+
+    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
+
+    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
@@ -335,6 +403,11 @@ public:
 
     ThreadPool* delete_file_thread_pool();
 
+<<<<<<< HEAD
+=======
+    void try_release_resource_before_core_dump();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
@@ -353,17 +426,29 @@ private:
     PriorityThreadPool* _thread_pool = nullptr;
     ThreadPool* _streaming_load_thread_pool = nullptr;
 
+<<<<<<< HEAD
     workgroup::ScanExecutor* _scan_executor = nullptr;
     workgroup::ScanExecutor* _connector_scan_executor = nullptr;
+=======
+    ThreadPool* _load_segment_thread_pool = nullptr;
+    ThreadPool* _load_rowset_thread_pool = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
     PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     PriorityThreadPool* _query_rpc_pool = nullptr;
     std::unique_ptr<ThreadPool> _load_rpc_pool;
+<<<<<<< HEAD
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
+=======
+    std::unique_ptr<ThreadPool> _dictionary_cache_pool;
+    FragmentMgr* _fragment_mgr = nullptr;
+    pipeline::QueryContextManager* _query_context_mgr = nullptr;
+    std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline::DriverLimiter* _driver_limiter = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
@@ -376,6 +461,10 @@ private:
     BrpcStubCache* _brpc_stub_cache = nullptr;
     StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
+<<<<<<< HEAD
+=======
+    BatchWriteMgr* _batch_write_mgr = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
@@ -392,7 +481,11 @@ private:
     ProfileReportWorker* _profile_report_worker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
+<<<<<<< HEAD
     lake::LocationProvider* _lake_location_provider = nullptr;
+=======
+    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
 

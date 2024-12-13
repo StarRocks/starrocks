@@ -261,7 +261,11 @@ static void BM_primitive(benchmark::State& state) {
         size_t totalNumRows = 0;
         while (rr->next(*batch, &pos)) {
             ColumnPtr column = ColumnHelper::create_column(c0Type, isNullable);
+<<<<<<< HEAD
             orcColumnReader->get_next(c0, column, 0, columnSize);
+=======
+            CHECK(orcColumnReader->get_next(c0, column, 0, columnSize).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DCHECK_EQ(columnSize, column->size());
             totalNumRows += columnSize;
         }
@@ -354,4 +358,8 @@ BENCHMARK_TEMPLATE(BM_primitive, NON_NULLABLE, LogicalType::TYPE_DATETIME)
 
 } // namespace starrocks
 
+<<<<<<< HEAD
 BENCHMARK_MAIN();
+=======
+BENCHMARK_MAIN();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

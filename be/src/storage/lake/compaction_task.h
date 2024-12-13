@@ -18,12 +18,20 @@
 #include <functional>
 #include <ostream>
 
+<<<<<<< HEAD
+=======
+#include "column/column_access_path.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/status.h"
 #include "compaction_task_context.h"
 #include "runtime/mem_tracker.h"
 #include "storage/lake/versioned_tablet.h"
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+class TxnLogPB;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class TxnLogPB_OpCompaction;
 } // namespace starrocks
 
@@ -39,15 +47,28 @@ public:
     using CancelFunc = std::function<Status()>;
 
     explicit CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+<<<<<<< HEAD
                             CompactionTaskContext* context);
+=======
+                            CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual ~CompactionTask() = default;
 
     virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
 
+<<<<<<< HEAD
     inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
     inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
 
     Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer, bool is_pk);
+=======
+    Status execute_index_major_compaction(TxnLogPB* txn_log);
+
+    inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
+    inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
+
+    Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     int64_t _txn_id;
@@ -55,6 +76,12 @@ protected:
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
+<<<<<<< HEAD
+=======
+    std::shared_ptr<const TabletSchema> _tablet_schema;
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks::lake

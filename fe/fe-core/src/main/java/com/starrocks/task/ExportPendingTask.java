@@ -42,6 +42,11 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+<<<<<<< HEAD
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -55,6 +60,10 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TypesConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import org.apache.thrift.TException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 
@@ -77,7 +86,11 @@ public class ExportPendingTask extends PriorityLeaderTask {
         }
 
         long dbId = job.getDbId();
+<<<<<<< HEAD
         db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, "database does not exist");
             return;
@@ -124,8 +137,14 @@ public class ExportPendingTask extends PriorityLeaderTask {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
+<<<<<<< HEAD
                 ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
                 if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
+=======
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNodeWithBePort(host, port);
+                if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkNodeAvailable(node)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return Status.CANCELLED;
                 }
 
@@ -170,6 +189,7 @@ public class ExportPendingTask extends PriorityLeaderTask {
         snapshotRequest.setTimeout(job.getTimeoutSecond());
         snapshotRequest.setPreferred_snapshot_format(TypesConstants.TPREFER_SNAPSHOT_REQ_VERSION);
 
+<<<<<<< HEAD
         AgentClient client = new AgentClient(host, port);
         TAgentResult result = client.makeSnapshot(snapshotRequest);
         if (result == null || result.getStatus().getStatus_code() != TStatusCode.OK) {
@@ -179,6 +199,28 @@ public class ExportPendingTask extends PriorityLeaderTask {
             LOG.warn("{}, export job: {}", err, job.getId());
             return new Status(TStatusCode.CANCELLED, err);
         }
+=======
+        TAgentResult result;
+        try {
+            result = ThriftRPCRequestExecutor.callNoRetry(
+                    ThriftConnectionPool.backendPool,
+                    new TNetworkAddress(host, port),
+                    client -> client.make_snapshot(snapshotRequest));
+            if (result.getStatus().getStatus_code() != TStatusCode.OK) {
+                String err = "snapshot for tablet " + internalScanRange.getTablet_id() + " failed on backend "
+                        + address + ". reason: "
+                        + result.getStatus().error_msgs;
+                LOG.warn("{}, export job: {}", err, job.getId());
+                return new Status(TStatusCode.CANCELLED, err);
+            }
+        } catch (TException e) {
+            String err = "snapshot for tablet " + internalScanRange.getTablet_id() + " failed on backend "
+                    + address + ". reason: " + e.getMessage();
+            LOG.warn("{}, export job: {}", err, job.getId());
+            return new Status(TStatusCode.CANCELLED, err);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         job.addSnapshotPath(new Pair<TNetworkAddress, String>(address, result.getSnapshot_path()));
         return Status.OK;
     }

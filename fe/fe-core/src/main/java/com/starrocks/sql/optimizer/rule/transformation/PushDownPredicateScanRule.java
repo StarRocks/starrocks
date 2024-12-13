@@ -52,6 +52,16 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PushDownPredicateScanRule PAIMON_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
+<<<<<<< HEAD
+=======
+    public static final PushDownPredicateScanRule ICEBERG_METADATA_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+
+    public static final PushDownPredicateScanRule ICEBERG_EQUALITY_DELETE_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN);
+    public static final PushDownPredicateScanRule KUDU_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_KUDU_SCAN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final PushDownPredicateScanRule SCHEMA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final PushDownPredicateScanRule ES_SCAN = new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
@@ -78,6 +88,12 @@ public class PushDownPredicateScanRule extends TransformationRule {
         OptExpression scan = input.getInputs().get(0);
         LogicalScanOperator logicalScanOperator = (LogicalScanOperator) scan.getOp();
 
+<<<<<<< HEAD
+=======
+        ScalarOperator scanPredicate = logicalScanOperator.getPredicate();
+        ScalarOperator filterPredicate = lfo.getPredicate();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
 

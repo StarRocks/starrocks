@@ -15,9 +15,13 @@
 package com.starrocks.qe;
 
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+=======
+import com.starrocks.common.Config;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksHttpException;
@@ -109,7 +113,11 @@ public class ConnectionLimitTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowProcessListForUser() throws DdlException, AnalysisException {
+=======
+    public void testShowProcessListForUser() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String sql = "show processlist for 'test'";
         ExecuteEnv.setup();
         ExecuteEnv.getInstance().getScheduler().registerConnection(createConnectContextForUser("test"));
@@ -118,8 +126,12 @@ public class ConnectionLimitTest {
                 starRocksAssert.getCtx().getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, starRocksAssert.getCtx());
         starRocksAssert.getCtx().setConnectScheduler(ExecuteEnv.getInstance().getScheduler());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
         ShowResultSet resultSet = showExecutor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(resultSet.getResultRows());
         Assert.assertEquals(1, resultSet.getResultRows().size());
         Assert.assertTrue(resultSet.getResultRows().get(0).contains("test"));

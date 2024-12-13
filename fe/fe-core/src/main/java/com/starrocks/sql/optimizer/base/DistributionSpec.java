@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.base;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.thrift.TDistributionType;
 
@@ -122,6 +123,14 @@ public class DistributionSpec {
             copy.nullStrictDisjointSet = nullStrictDisjointSet.copy();
             return copy;
         }
+=======
+import com.starrocks.thrift.TDistributionType;
+
+public class DistributionSpec {
+    protected final DistributionType type;
+    protected DistributionSpec(DistributionType type) {
+        this.type = type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @SuppressWarnings("unchecked")
@@ -129,17 +138,24 @@ public class DistributionSpec {
         return (T) this;
     }
 
+<<<<<<< HEAD
     public PropertyInfo getPropertyInfo() {
         return propertyInfo;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public DistributionType getType() {
         return type;
     }
 
     public static DistributionSpec createAnyDistributionSpec() {
+<<<<<<< HEAD
         return new AnyDistributionSpec();
+=======
+        return AnyDistributionSpec.INSTANCE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static HashDistributionSpec createHashDistributionSpec(HashDistributionDesc distributionDesc) {
@@ -163,6 +179,10 @@ public class DistributionSpec {
         BROADCAST,
         SHUFFLE,
         GATHER,
+<<<<<<< HEAD
+=======
+        ROUND_ROBIN,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ;
 
         public TDistributionType toThrift() {

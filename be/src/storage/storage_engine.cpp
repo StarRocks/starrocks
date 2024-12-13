@@ -58,6 +58,10 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+<<<<<<< HEAD
+=======
+#include "storage/dictionary_cache_manager.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
@@ -118,7 +122,12 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
+<<<<<<< HEAD
           _publish_version_manager(new PublishVersionManager()) {
+=======
+          _publish_version_manager(new PublishVersionManager()),
+          _dictionary_cache_manager(new DictionaryCacheManager()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -197,6 +206,10 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
         Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
+<<<<<<< HEAD
+=======
+        DCHECK(thread.joinable());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         thread.join();
     }
 }
@@ -286,6 +299,10 @@ Status StorageEngine::_init_store_map() {
         Thread::set_thread_name(threads.back(), "init_store_path");
     }
     for (auto& thread : threads) {
+<<<<<<< HEAD
+=======
+        DCHECK(thread.joinable());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         thread.join();
     }
 
@@ -366,7 +383,11 @@ void StorageEngine::get_all_data_dir_info(vector<DataDirInfo>* data_dir_infos, b
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& it : _store_map) {
             if (need_update) {
+<<<<<<< HEAD
                 it.second->update_capacity();
+=======
+                WARN_IF_ERROR(it.second->update_capacity(), "update available capacity failed");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             path_map.emplace(it.first, it.second->get_dir_info());
         }
@@ -449,7 +470,11 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
 
     // write cluster id into cluster_id_path if get effective cluster id success
     if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && _need_write_cluster_id) {
+<<<<<<< HEAD
         set_cluster_id(_effective_cluster_id);
+=======
+        RETURN_IF_ERROR(set_cluster_id(_effective_cluster_id));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return Status::OK();
@@ -591,8 +616,12 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
         exit(0);
     }
 
+<<<<<<< HEAD
     auto st = _tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
     st.permit_unchecked_error();
+=======
+    (void)_tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // If tablet_info_vec is not empty, means we have dropped some tablets.
     return !tablet_info_vec.empty();
 }
@@ -700,8 +729,12 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
+<<<<<<< HEAD
             auto st = StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
             st.permit_unchecked_error();
+=======
+            (void)StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
@@ -817,13 +850,21 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();
+<<<<<<< HEAD
         LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.get_error_msg();
+=======
+        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return;
     }
     st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
     t.status = st.to_string();
     if (!st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "manual compaction failed: " << st.get_error_msg() << " tablet:" << t.tablet_id;
+=======
+        LOG(WARNING) << "manual compaction failed: " << st.message() << " tablet:" << t.tablet_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return;
     }
 }
@@ -973,10 +1014,19 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     // when executing migration.
     std::shared_lock rlock(best_tablet->get_migration_lock(), std::try_to_lock);
     if (!rlock.owns_lock()) {
+<<<<<<< HEAD
         return Status::InternalError("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id());
     }
     if (Tablet::check_migrate(best_tablet)) {
         return Status::InternalError("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id());
+=======
+        return Status::InternalError(
+                fmt::format("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id()));
+    }
+    if (Tablet::check_migrate(best_tablet)) {
+        return Status::InternalError(
+                fmt::format("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     auto tablet_id = best_tablet->tablet_id();
@@ -1054,7 +1104,11 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
 
     // clear expire incremental rowset, move deleted tablet to trash
+<<<<<<< HEAD
     CHECK(_tablet_manager->start_trash_sweep().ok());
+=======
+    RETURN_IF_ERROR(_tablet_manager->start_trash_sweep());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // clean rubbish transactions
     _clean_unused_txns();
@@ -1556,8 +1610,12 @@ void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) 
         std::vector<DeltaColumnGroupKey> dcg_keys;
         dcg_keys.reserve(rowset.num_segments());
         for (auto i = 0; i < rowset.num_segments(); i++) {
+<<<<<<< HEAD
             dcg_keys.emplace_back(
                     DeltaColumnGroupKey(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i));
+=======
+            dcg_keys.emplace_back(rowset.rowset_meta()->tablet_id(), rowset.rowset_meta()->rowset_id(), i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return dcg_keys;
     }());
@@ -1601,7 +1659,11 @@ void StorageEngine::add_schedule_apply_task(int64_t tablet_id, std::chrono::stea
     LOG(INFO) << "add tablet:" << tablet_id << ", next apply time:";
     {
         std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+<<<<<<< HEAD
         _schedule_apply_tasks.emplace(std::make_pair(time_point, tablet_id));
+=======
+        _schedule_apply_tasks.emplace(time_point, tablet_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     _apply_tablet_changed_cv.notify_one();
 }

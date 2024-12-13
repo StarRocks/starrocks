@@ -39,7 +39,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
@@ -95,12 +98,15 @@ public class BackendTabletsInfo implements Writable {
         return tabletSchemaHash.isEmpty() && replicaPersistInfos.isEmpty();
     }
 
+<<<<<<< HEAD
     public static BackendTabletsInfo read(DataInput in) throws IOException {
         BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo();
         backendTabletsInfo.readFields(in);
         return backendTabletsInfo;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(backendId);
@@ -121,6 +127,7 @@ public class BackendTabletsInfo implements Writable {
         // this is for further extension
         out.writeBoolean(false);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         backendId = in.readLong();
@@ -145,4 +152,6 @@ public class BackendTabletsInfo implements Writable {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

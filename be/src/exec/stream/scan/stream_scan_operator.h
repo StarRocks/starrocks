@@ -62,7 +62,11 @@ public:
     Status set_epoch_finished(RuntimeState* state) override;
 
     Status do_prepare(RuntimeState* state) override {
+<<<<<<< HEAD
         ConnectorScanOperator::do_prepare(state);
+=======
+        RETURN_IF_ERROR(ConnectorScanOperator::do_prepare(state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
         DCHECK(_stream_epoch_manager);
         return Status::OK();
@@ -85,7 +89,11 @@ public:
 
 private:
     StatusOr<ChunkPtr> _mark_mock_data_finished();
+<<<<<<< HEAD
     void _reset_chunk_source(RuntimeState* state, int chunk_source_index);
+=======
+    Status _reset_chunk_source(RuntimeState* state, int chunk_source_index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::atomic<int32_t> _chunk_num{0};
     bool _is_epoch_start{false};
@@ -109,7 +117,11 @@ public:
 
     Status set_stream_offset(int64_t table_version, int64_t changelog_id);
     void set_epoch_limit(int64_t epoch_rows_limit, int64_t epoch_time_limit);
+<<<<<<< HEAD
     void reset_status();
+=======
+    Status reset_status();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t get_lane_owner() {
         auto [lane_owner, version] = _morsel->get_lane_owner_and_version();
         return lane_owner;

@@ -44,8 +44,13 @@ public class IcebergTableFactory extends ExternalTableFactory {
                                             Map<String, String> properties) {
         tableBuilder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
+<<<<<<< HEAD
                 .setRemoteDbName(catalogTable.getRemoteDbName())
                 .setRemoteTableName(catalogTable.getRemoteTableName())
+=======
+                .setCatalogDBName(catalogTable.getCatalogDBName())
+                .setCatalogTableName(catalogTable.getCatalogTableName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .setIcebergProperties(properties)
                 .setNativeTable(catalogTable.getNativeTable());
     }

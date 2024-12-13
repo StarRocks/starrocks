@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     o_year,
@@ -36,12 +37,18 @@ group by
     o_year
 order by
     o_year ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F22)
   DOP: 16
   INSTANCES
     INSTANCE(0-F22#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F21)
   DOP: 16
@@ -51,10 +58,17 @@ PLAN FRAGMENT 1(F21)
       BE: 10001
     INSTANCE(2-F21#1)
       DESTINATIONS: 0-F22#0
+<<<<<<< HEAD
       BE: 10003
     INSTANCE(3-F21#2)
       DESTINATIONS: 0-F22#0
       BE: 10002
+=======
+      BE: 10002
+    INSTANCE(3-F21#2)
+      DESTINATIONS: 0-F22#0
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -188,6 +202,7 @@ PLAN FRAGMENT 6(F16)
   INSTANCES
     INSTANCE(14-F16#0)
       DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
+<<<<<<< HEAD
       BE: 10001
     INSTANCE(15-F16#1)
       DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
@@ -195,6 +210,15 @@ PLAN FRAGMENT 6(F16)
     INSTANCE(16-F16#2)
       DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
       BE: 10003
+=======
+      BE: 10002
+    INSTANCE(15-F16#1)
+      DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
+      BE: 10003
+    INSTANCE(16-F16#2)
+      DESTINATIONS: 11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1,13-F03#2,11-F03#0,12-F03#1
+      BE: 10001
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 7(F14)
   DOP: 16
@@ -204,10 +228,17 @@ PLAN FRAGMENT 7(F14)
       BE: 10003
     INSTANCE(18-F14#1)
       DESTINATIONS: 14-F16#0,15-F16#1,16-F16#2
+<<<<<<< HEAD
       BE: 10002
     INSTANCE(19-F14#2)
       DESTINATIONS: 14-F16#0,15-F16#1,16-F16#2
       BE: 10001
+=======
+      BE: 10001
+    INSTANCE(19-F14#2)
+      DESTINATIONS: 14-F16#0,15-F16#1,16-F16#2
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 8(F12)
   DOP: 16
@@ -622,5 +653,9 @@ PLAN FRAGMENT 12
      tabletList=1365,1367,1369,1371,1373,1375,1377,1379,1381,1383 ...
      cardinality=1
      avgRowSize=20.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

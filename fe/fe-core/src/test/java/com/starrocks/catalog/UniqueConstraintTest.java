@@ -34,20 +34,38 @@ public class UniqueConstraintTest {
         String constraintDescs = "col1, col2  , col3 ";
         List<UniqueConstraint> results = UniqueConstraint.parse(null, null, null, constraintDescs);
         Assert.assertEquals(1, results.size());
+<<<<<<< HEAD
         Assert.assertEquals(Lists.newArrayList("col1", "col2", "col3"), results.get(0).getUniqueColumns());
+=======
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col1"), ColumnId.create("col2"), ColumnId.create("col3")),
+                results.get(0).getUniqueColumns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String constraintDescs2 = "col1, col2  , col3 ; col4, col5, col6,   col7  ; col8,;";
         List<UniqueConstraint> results2 = UniqueConstraint.parse(null, null, null, constraintDescs2);
         Assert.assertEquals(3, results2.size());
+<<<<<<< HEAD
         Assert.assertEquals(Lists.newArrayList("col1", "col2", "col3"), results2.get(0).getUniqueColumns());
         Assert.assertEquals(Lists.newArrayList("col4", "col5", "col6", "col7"), results2.get(1).getUniqueColumns());
         Assert.assertEquals(Lists.newArrayList("col8"), results2.get(2).getUniqueColumns());
+=======
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col1"), ColumnId.create("col2"), ColumnId.create("col3")),
+                results2.get(0).getUniqueColumns());
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col4"), ColumnId.create("col5"),
+                ColumnId.create("col6"), ColumnId.create("col7")), results2.get(1).getUniqueColumns());
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col8")), results2.get(2).getUniqueColumns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String constraintDescs3 =
                 "hive_catalog.db1.table1.col1, hive_catalog.db1.table1.col2, hive_catalog.db1.table1.col3;";
         List<UniqueConstraint> results3 = UniqueConstraint.parse(null, null, null, constraintDescs3);
         Assert.assertEquals(1, results3.size());
+<<<<<<< HEAD
         Assert.assertEquals(Lists.newArrayList("col1", "col2", "col3"), results.get(0).getUniqueColumns());
+=======
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col1"), ColumnId.create("col2"), ColumnId.create("col3")),
+                results.get(0).getUniqueColumns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("hive_catalog", results3.get(0).getCatalogName());
         Assert.assertEquals("db1", results3.get(0).getDbName());
         Assert.assertEquals("table1", results3.get(0).getTableName());
@@ -55,7 +73,12 @@ public class UniqueConstraintTest {
         String constraintDescs4 = "hive_catalog.db1.table1.col1, col2, col3;";
         List<UniqueConstraint> results4 = UniqueConstraint.parse(null, null, null, constraintDescs4);
         Assert.assertEquals(1, results4.size());
+<<<<<<< HEAD
         Assert.assertEquals(Lists.newArrayList("col1", "col2", "col3"), results4.get(0).getUniqueColumns());
+=======
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col1"), ColumnId.create("col2"), ColumnId.create("col3")),
+                results4.get(0).getUniqueColumns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("hive_catalog", results4.get(0).getCatalogName());
         Assert.assertEquals("db1", results4.get(0).getDbName());
         Assert.assertEquals("table1", results4.get(0).getTableName());
@@ -63,11 +86,21 @@ public class UniqueConstraintTest {
         String constraintDescs5 = "hive_catalog.db1.table1.col1, col2, col3; hive_catalog.db1.table2.col1, col2, col3;";
         List<UniqueConstraint> results5 = UniqueConstraint.parse(null, null, null, constraintDescs5);
         Assert.assertEquals(2, results5.size());
+<<<<<<< HEAD
         Assert.assertEquals(Lists.newArrayList("col1", "col2", "col3"), results5.get(0).getUniqueColumns());
         Assert.assertEquals("hive_catalog", results5.get(0).getCatalogName());
         Assert.assertEquals("db1", results5.get(0).getDbName());
         Assert.assertEquals("table1", results5.get(0).getTableName());
         Assert.assertEquals(Lists.newArrayList("col1", "col2", "col3"), results5.get(1).getUniqueColumns());
+=======
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col1"), ColumnId.create("col2"), ColumnId.create("col3")),
+                results5.get(0).getUniqueColumns());
+        Assert.assertEquals("hive_catalog", results5.get(0).getCatalogName());
+        Assert.assertEquals("db1", results5.get(0).getDbName());
+        Assert.assertEquals("table1", results5.get(0).getTableName());
+        Assert.assertEquals(Lists.newArrayList(ColumnId.create("col1"), ColumnId.create("col2"), ColumnId.create("col3")),
+                results5.get(1).getUniqueColumns());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("hive_catalog", results5.get(1).getCatalogName());
         Assert.assertEquals("db1", results5.get(1).getDbName());
         Assert.assertEquals("table2", results5.get(1).getTableName());

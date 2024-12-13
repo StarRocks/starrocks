@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_intersect
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 对于多个同类型数组，返回交集。
 

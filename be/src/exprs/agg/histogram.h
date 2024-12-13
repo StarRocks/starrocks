@@ -15,6 +15,7 @@
 #pragma once
 
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "column/object_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -32,6 +33,44 @@ public:
             : lower(lower), upper(upper), count(count), upper_repeats(upper_repeats), count_in_bucket(1) {}
     T lower;
     T upper;
+=======
+#include "column/column_viewer.h"
+#include "column/datum_convert.h"
+#include "column/nullable_column.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_traits.h"
+#include "gutil/casts.h"
+#include "storage/types.h"
+
+namespace starrocks {
+
+template <LogicalType LT>
+struct Bucket {
+    using RefType = AggDataRefType<LT>;
+    using ValueType = AggDataValueType<LT>;
+
+    Bucket() = default;
+
+    Bucket(RefType input_lower, RefType input_upper, size_t count, size_t upper_repeats)
+            : count(count), upper_repeats(upper_repeats), count_in_bucket(1) {
+        AggDataTypeTraits<LT>::assign_value(lower, input_lower);
+        AggDataTypeTraits<LT>::assign_value(upper, input_upper);
+    }
+
+    bool is_equals_to_upper(RefType value) {
+        return AggDataTypeTraits<LT>::is_equal(value, AggDataTypeTraits<LT>::get_ref(upper));
+    }
+
+    void update_upper(RefType value) { AggDataTypeTraits<LT>::assign_value(upper, value); }
+
+    Datum get_lower_datum() { return Datum(AggDataTypeTraits<LT>::get_ref(lower)); }
+    Datum get_upper_datum() { return Datum(AggDataTypeTraits<LT>::get_ref(upper)); }
+
+    ValueType lower;
+    ValueType upper;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Up to this bucket, the total value
     int64_t count;
     // the number of values that on the upper boundary
@@ -40,20 +79,36 @@ public:
     int64_t count_in_bucket;
 };
 
+<<<<<<< HEAD
 template <typename T>
 struct HistogramState {
     HistogramState() = default;
     std::vector<T> data;
+=======
+template <LogicalType LT>
+struct HistogramState {
+    HistogramState() {
+        auto data = RunTimeColumnType<LT>::create();
+        column = NullableColumn::create(data, NullColumn::create());
+    }
+
+    ColumnPtr column;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class HistogramAggregationFunction final
+<<<<<<< HEAD
         : public AggregateFunctionBatchHelper<HistogramState<T>, HistogramAggregationFunction<LT, T>> {
+=======
+        : public AggregateFunctionBatchHelper<HistogramState<LT>, HistogramAggregationFunction<LT, T>> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
+<<<<<<< HEAD
         T v;
         if (columns[0]->is_nullable()) {
             if (columns[0]->is_null(row_num)) {
@@ -67,36 +122,65 @@ public:
         }
 
         this->data(state).data.emplace_back(v);
+=======
+        CHECK(false);
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        this->data(state).column->append(*columns[0], 0, chunk_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         //Histogram aggregation function only support one stage Agg
+<<<<<<< HEAD
         DCHECK(false);
+=======
+        CHECK(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         //Histogram aggregation function only support one stage Agg
+<<<<<<< HEAD
         DCHECK(false);
+=======
+        CHECK(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void serialize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                              Column* to) const override {
         //Histogram aggregation function only support one stage Agg
+<<<<<<< HEAD
         DCHECK(false);
+=======
+        CHECK(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         //Histogram aggregation function only support one stage Agg
+<<<<<<< HEAD
         DCHECK(false);
+=======
+        CHECK(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     std::string toBucketJson(const std::string& lower, const std::string& upper, size_t count, size_t upper_repeats,
                              double sample_ratio) const {
+<<<<<<< HEAD
         return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, std::to_string((int64_t)(count * sample_ratio)),
                            std::to_string((int64_t)(upper_repeats * sample_ratio)));
+=======
+        return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, (int64_t)(count * sample_ratio),
+                           (int64_t)(upper_repeats * sample_ratio));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
@@ -104,6 +188,7 @@ public:
         auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
         [[maybe_unused]] double sample_ratio =
                 1 / ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
+<<<<<<< HEAD
         int bucket_size = this->data(state).data.size() / bucket_num;
 
         //Build bucket
@@ -129,16 +214,53 @@ public:
                         lastBucket->count++;
                         lastBucket->count_in_bucket++;
                         lastBucket->upper_repeats = 1;
+=======
+        int bucket_size = this->data(state).column->size() / bucket_num;
+
+        // Build bucket
+        std::vector<Bucket<LT>> buckets;
+        ColumnViewer<LT> viewer(this->data(state).column);
+        for (size_t i = 0; i < viewer.size(); ++i) {
+            auto v = viewer.value(i);
+            if (viewer.is_null(i)) {
+                continue;
+            }
+            if (buckets.empty()) {
+                Bucket<LT> bucket(v, v, 1, 1);
+                buckets.emplace_back(bucket);
+            } else {
+                Bucket<LT>* last_bucket = &buckets.back();
+
+                if (last_bucket->is_equals_to_upper(v)) {
+                    last_bucket->count++;
+                    last_bucket->count_in_bucket++;
+                    last_bucket->upper_repeats++;
+                } else {
+                    if (last_bucket->count_in_bucket >= bucket_size) {
+                        Bucket<LT> bucket(v, v, last_bucket->count + 1, 1);
+                        buckets.emplace_back(bucket);
+                    } else {
+                        last_bucket->update_upper(v);
+                        last_bucket->count++;
+                        last_bucket->count_in_bucket++;
+                        last_bucket->upper_repeats = 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
             }
         }
 
+<<<<<<< HEAD
+=======
+        const auto& type_desc = ctx->get_arg_type(0);
+        TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::string bucket_json;
         if (buckets.empty()) {
             bucket_json = "[]";
         } else {
             bucket_json = "[";
+<<<<<<< HEAD
             if constexpr (lt_is_largeint<LT>) {
                 for (int i = 0; i < buckets.size(); ++i) {
                     bucket_json += toBucketJson(LargeIntValue::to_string(buckets[i].lower),
@@ -174,6 +296,17 @@ public:
                                    ",";
                 }
             }
+=======
+
+            for (int i = 0; i < buckets.size(); ++i) {
+                std::string lower_str = datum_to_string(type_info.get(), buckets[i].get_lower_datum());
+                std::string upper_str = datum_to_string(type_info.get(), buckets[i].get_upper_datum());
+                bucket_json +=
+                        toBucketJson(lower_str, upper_str, buckets[i].count, buckets[i].upper_repeats, sample_ratio) +
+                        ",";
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             bucket_json[bucket_json.size() - 1] = ']';
         }
 

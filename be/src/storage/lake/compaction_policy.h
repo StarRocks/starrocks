@@ -41,17 +41,33 @@ public:
     virtual StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets);
 
     static StatusOr<CompactionPolicyPtr> create(TabletManager* tablet_mgr,
+<<<<<<< HEAD
                                                 std::shared_ptr<const TabletMetadataPB> tablet_metadata);
 
 protected:
     explicit CompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
             : _tablet_mgr(tablet_mgr), _tablet_metadata(std::move(tablet_metadata)) {
+=======
+                                                std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                                                bool force_base_compaction);
+
+protected:
+    explicit CompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
+                              bool force_base_compaction)
+            : _tablet_mgr(tablet_mgr),
+              _tablet_metadata(std::move(tablet_metadata)),
+              _force_base_compaction(force_base_compaction) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CHECK(_tablet_mgr != nullptr) << "tablet_mgr is null";
         CHECK(_tablet_metadata != nullptr) << "tablet metadata is null";
     }
 
     TabletManager* _tablet_mgr;
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;
+<<<<<<< HEAD
+=======
+    bool _force_base_compaction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata);

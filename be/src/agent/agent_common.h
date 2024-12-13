@@ -36,6 +36,10 @@ enum class TaskWorkerType {
     REPORT_DISK_STATE,
     REPORT_OLAP_TABLE,
     REPORT_WORKGROUP,
+<<<<<<< HEAD
+=======
+    REPORT_DATACACHE_METRICS,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     UPLOAD,
     DOWNLOAD,
     MAKE_SNAPSHOT,

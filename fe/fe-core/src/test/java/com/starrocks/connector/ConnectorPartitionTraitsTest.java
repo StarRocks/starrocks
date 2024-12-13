@@ -27,6 +27,10 @@ import com.starrocks.connector.partitiontraits.HivePartitionTraits;
 import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
 import com.starrocks.connector.partitiontraits.JDBCPartitionTraits;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.partitiontraits.KuduPartitionTraits;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.partitiontraits.OdpsPartitionTraits;
 import com.starrocks.connector.partitiontraits.OlapPartitionTraits;
 import com.starrocks.connector.partitiontraits.PaimonPartitionTraits;
@@ -71,6 +75,10 @@ public class ConnectorPartitionTraitsTest {
         Assert.assertTrue(new JDBCPartitionTraits().isSupportPCTRefresh());
         Assert.assertFalse(new HudiPartitionTraits().isSupportPCTRefresh());
         Assert.assertFalse(new OdpsPartitionTraits().isSupportPCTRefresh());
+<<<<<<< HEAD
+=======
+        Assert.assertFalse(new KuduPartitionTraits().isSupportPCTRefresh());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(new DeltaLakePartitionTraits().isSupportPCTRefresh());
 
         final Set<Table.TableType> supportedTableTypes = ImmutableSet.of(
@@ -104,7 +112,11 @@ public class ConnectorPartitionTraitsTest {
         HudiTable hudiTable = new HudiTable(0, "name", "hdui_catalog", "hudiDb",
                 "hudiTable",  "resource_name", "",
                 Lists.newArrayList(), Lists.newArrayList(), Lists.newArrayList(), 0,
+<<<<<<< HEAD
                 Maps.newHashMap());
+=======
+                Maps.newHashMap(), HudiTable.HudiTableType.COW);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectorPartitionTraits connectorPartitionTraits = ConnectorPartitionTraits.build(hudiTable);
         Assert.assertEquals(connectorPartitionTraits.getTableName(), "hudiTable");
     }

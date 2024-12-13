@@ -16,9 +16,16 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OptimizeClause;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.ast.OptimizeClause;
+import com.starrocks.thrift.TStorageType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,10 +46,28 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
+<<<<<<< HEAD
     public AlterJobV2 build() throws UserException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long tableId = table.getId();
         OptimizeJobV2 optimizeJob = new OptimizeJobV2(jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
         return optimizeJob;
+=======
+    public AlterJobV2 build() throws StarRocksException {
+        long tableId = table.getId();
+        if (!Config.enable_online_optimize_table || optimizeClause.getKeysDesc() != null
+                || optimizeClause.getPartitionDesc() != null || optimizeClause.getSortKeys() != null
+                || table.getStorageType() == TStorageType.COLUMN_WITH_ROW
+                || !table.enableReplicatedStorage()
+                || table.isCloudNativeTableOrMaterializedView()) {
+            OptimizeJobV2 optimizeJob = new OptimizeJobV2(jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
+            return optimizeJob;
+        } else {
+            LOG.info("Online optimize job {} is created, table: {}", jobId, table.getName());
+            OnlineOptimizeJobV2 onlineOptimizeJob = new OnlineOptimizeJobV2(
+                    jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
+            return onlineOptimizeJob;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

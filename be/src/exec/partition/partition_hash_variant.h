@@ -202,5 +202,10 @@ struct PartitionHashMapVariant {
     bool is_nullable() const;
 
     void set_passthrough();
+<<<<<<< HEAD
+=======
+
+    void set_enable_pre_agg();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 } // namespace starrocks

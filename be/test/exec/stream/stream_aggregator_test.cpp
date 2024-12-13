@@ -50,8 +50,13 @@ public:
         auto input_chunk_ptr = MakeStreamChunk<T>(input_rows.rows, input_rows.ops);
         auto chunk_size = input_chunk_ptr->num_rows();
         DCHECK_IF_ERROR(_stream_aggregator->process_chunk(input_chunk_ptr.get()));
+<<<<<<< HEAD
         DCHECK_IF_ERROR(
                 _stream_aggregator->output_changes(chunk_size, result_chunk, intermediate_chunk, detail_chunks));
+=======
+        DCHECK_IF_ERROR(_stream_aggregator->output_changes_internal(chunk_size, result_chunk, intermediate_chunk,
+                                                                    detail_chunks));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (auto& column : (*result_chunk)->columns()) {
             VLOG_ROW << "[RunBatchAndCheck] result column:" << column->debug_string();
         }

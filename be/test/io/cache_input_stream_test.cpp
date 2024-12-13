@@ -57,8 +57,11 @@ public:
         options.mem_space_size = 100 * 1024 * 1024;
 #ifdef WITH_STARCACHE
         options.engine = "starcache";
+<<<<<<< HEAD
 #else
         options.engine = "cachelib";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #endif
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
@@ -76,8 +79,16 @@ public:
         }
     }
 
+<<<<<<< HEAD
     void SetUp() override {}
     void TearDown() override {}
+=======
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
@@ -103,6 +114,12 @@ public:
     }
 
     static const int64_t block_size;
+<<<<<<< HEAD
+=======
+
+private:
+    bool _saved_enable_auto_adjust = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 const int64_t CacheInputStreamTest::block_size = 256 * 1024;

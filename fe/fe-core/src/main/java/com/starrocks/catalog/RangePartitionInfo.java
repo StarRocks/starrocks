@@ -50,6 +50,10 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,7 +62,10 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
+<<<<<<< HEAD
 import java.io.DataOutput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -69,12 +76,25 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RangePartitionInfo extends PartitionInfo {
     private static final Logger LOG = LogManager.getLogger(RangePartitionInfo.class);
 
     @SerializedName(value = "partitionColumns")
+<<<<<<< HEAD
     protected List<Column> partitionColumns = Lists.newArrayList();
+=======
+    @Deprecated // Use partitionColumnIds to get columns, this is reserved for rollback compatibility only.
+    protected List<Column> deprecatedColumns = Lists.newArrayList();
+
+    @SerializedName("colIds")
+    protected List<ColumnId> partitionColumnIds = Lists.newArrayList();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // formal partition id -> partition range
     protected Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
     // temp partition id -> partition range
@@ -99,12 +119,18 @@ public class RangePartitionInfo extends PartitionInfo {
 
     public RangePartitionInfo(List<Column> partitionColumns) {
         super(PartitionType.RANGE);
+<<<<<<< HEAD
         this.partitionColumns = Objects.requireNonNull(partitionColumns, "partitionColumns is null");
+=======
+        this.deprecatedColumns = Objects.requireNonNull(partitionColumns, "partitionColumns is null");
+        this.partitionColumnIds = partitionColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 
     public RangePartitionInfo(RangePartitionInfo other) {
         super(other.type);
+<<<<<<< HEAD
         this.partitionColumns = Lists.newArrayList(other.partitionColumns);
         this.idToRange.putAll(other.idToRange);
         this.idToTempRange.putAll(other.idToTempRange);
@@ -114,6 +140,23 @@ public class RangePartitionInfo extends PartitionInfo {
     @Override
     public List<Column> getPartitionColumns() {
         return partitionColumns;
+=======
+        this.deprecatedColumns = Lists.newArrayList(other.deprecatedColumns);
+        this.partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
+        this.idToRange.putAll(other.idToRange);
+        this.idToTempRange.putAll(other.idToTempRange);
+        this.isMultiColumnPartition = deprecatedColumns.size() > 1;
+    }
+
+    @Override
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
+        return MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);
+    }
+
+    @Override
+    public int getPartitionColumnsSize() {
+        return partitionColumnIds.size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -134,12 +177,21 @@ public class RangePartitionInfo extends PartitionInfo {
         this.addPartition(partitionId, isTemp, range, dataProperty, replicationNum, isInMemory, null);
     }
 
+<<<<<<< HEAD
     public Range<PartitionKey> checkAndCreateRange(SingleRangePartitionDesc desc, boolean isTemp) throws DdlException {
+=======
+    public Range<PartitionKey> checkAndCreateRange(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc, boolean isTemp)
+            throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Range<PartitionKey> newRange = null;
         PartitionKeyDesc partitionKeyDesc = desc.getPartitionKeyDesc();
         // check range
         try {
+<<<<<<< HEAD
             newRange = createAndCheckNewRange(partitionKeyDesc, isTemp);
+=======
+            newRange = createAndCheckNewRange(schema, partitionKeyDesc, isTemp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (AnalysisException e) {
             throw new DdlException("Invalid range value format: " + e.getMessage());
         }
@@ -149,12 +201,20 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     // create a new range and check it.
+<<<<<<< HEAD
     private Range<PartitionKey> createAndCheckNewRange(PartitionKeyDesc partKeyDesc, boolean isTemp)
+=======
+    private Range<PartitionKey> createAndCheckNewRange(Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc, boolean isTemp)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws AnalysisException, DdlException {
         Range<PartitionKey> newRange = null;
         // generate and sort the existing ranges
         List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = getSortedRangeMap(isTemp);
 
+<<<<<<< HEAD
+=======
+        List<Column> partitionColumns = getPartitionColumns(schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // create upper values for new range
         PartitionKey newRangeUpper = null;
         if (partKeyDesc.isMax()) {
@@ -173,7 +233,11 @@ public class RangePartitionInfo extends PartitionInfo {
             // check if equals to upper bound
             PartitionKey upperKey = currentRange.upperEndpoint();
             if (upperKey.compareTo(newRangeUpper) >= 0) {
+<<<<<<< HEAD
                 newRange = checkNewRange(partKeyDesc, newRangeUpper, lastRange, currentRange);
+=======
+                newRange = checkNewRange(partitionColumns, partKeyDesc, newRangeUpper, lastRange, currentRange);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             } else {
                 lastRange = currentRange;
@@ -181,13 +245,23 @@ public class RangePartitionInfo extends PartitionInfo {
         } // end for ranges
 
         if (newRange == null) /* the new range's upper value is larger than any existing ranges */ {
+<<<<<<< HEAD
             newRange = checkNewRange(partKeyDesc, newRangeUpper, lastRange, currentRange);
+=======
+            newRange = checkNewRange(partitionColumns, partKeyDesc, newRangeUpper, lastRange, currentRange);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return newRange;
     }
 
+<<<<<<< HEAD
     private Range<PartitionKey> checkNewRange(PartitionKeyDesc partKeyDesc, PartitionKey newRangeUpper,
                                               Range<PartitionKey> lastRange, Range<PartitionKey> currentRange)
+=======
+    private Range<PartitionKey> checkNewRange(List<Column> partitionColumns, PartitionKeyDesc partKeyDesc,
+                                              PartitionKey newRangeUpper, Range<PartitionKey> lastRange,
+                                              Range<PartitionKey> currentRange)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throws AnalysisException, DdlException {
         Range<PartitionKey> newRange;
         PartitionKey lowKey = null;
@@ -213,12 +287,20 @@ public class RangePartitionInfo extends PartitionInfo {
         return newRange;
     }
 
+<<<<<<< HEAD
     public Range<PartitionKey> handleNewSinglePartitionDesc(SingleRangePartitionDesc desc,
                                                             long partitionId, boolean isTemp) throws DdlException {
         Preconditions.checkArgument(desc.isAnalyzed());
         Range<PartitionKey> range;
         try {
             range = checkAndCreateRange(desc, isTemp);
+=======
+    public Range<PartitionKey> handleNewSinglePartitionDesc(Map<ColumnId, Column> schema, SingleRangePartitionDesc desc,
+                                                            long partitionId, boolean isTemp) throws DdlException {
+        Range<PartitionKey> range;
+        try {
+            range = checkAndCreateRange(schema, desc, isTemp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             setRangeInternal(partitionId, isTemp, range);
         } catch (IllegalArgumentException e) {
             // Range.closedOpen may throw this if (lower > upper)
@@ -230,10 +312,18 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
         Range<PartitionKey> range = null;
         try {
             PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
+=======
+    public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) throws DdlException {
+        Range<PartitionKey> range = null;
+        try {
+            PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(
+                    getPartitionColumns(MetaUtils.buildIdToColumn(schema)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             range = Range.closedOpen(shadowPartitionKey, shadowPartitionKey);
             setRangeInternal(partitionId, false, range);
         } catch (IllegalArgumentException e) {
@@ -246,7 +336,12 @@ public class RangePartitionInfo extends PartitionInfo {
                 new DataCacheInfo(true, false));
     }
 
+<<<<<<< HEAD
     public void handleNewRangePartitionDescs(List<Pair<Partition, PartitionDesc>> partitionList,
+=======
+    public void handleNewRangePartitionDescs(Map<ColumnId, Column> schema,
+                                             List<Pair<Partition, PartitionDesc>> partitionList,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                              Set<String> existPartitionNameSet,
                                              boolean isTemp) throws DdlException {
         try {
@@ -255,10 +350,16 @@ public class RangePartitionInfo extends PartitionInfo {
                 if (!existPartitionNameSet.contains(partition.getName())) {
                     long partitionId = partition.getId();
                     SingleRangePartitionDesc desc = (SingleRangePartitionDesc) entry.second;
+<<<<<<< HEAD
                     Preconditions.checkArgument(desc.isAnalyzed());
                     Range<PartitionKey> range;
                     try {
                         range = checkAndCreateRange((SingleRangePartitionDesc) entry.second, isTemp);
+=======
+                    Range<PartitionKey> range;
+                    try {
+                        range = checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, isTemp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         setRangeInternal(partitionId, isTemp, range);
                     } catch (IllegalArgumentException e) {
                         // Range.closedOpen may throw this if (lower > upper)
@@ -359,6 +460,32 @@ public class RangePartitionInfo extends PartitionInfo {
         return sortedList;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public List<Long> getSortedPartitions(boolean asc) {
+        Map<Long, Range<PartitionKey>> tmpMap = idToRange;
+        List<Map.Entry<Long, Range<PartitionKey>>> sortedList = Lists.newArrayList(tmpMap.entrySet());
+        sortedList.sort(asc ? RangeUtils.RANGE_MAP_ENTRY_COMPARATOR : RangeUtils.RANGE_MAP_ENTRY_COMPARATOR.reversed());
+        if (sortedList.isEmpty()) {
+            return Lists.newArrayList();
+        }
+        return sortedList.stream().map(Map.Entry::getKey).collect(Collectors.toList());
+    }
+
+    /**
+     * For RangePartition, NULL value would be put in the MIN_VALUE partition but not a real NULL.
+     * It's a little bit tricky, as that partition might contain NULL, or might not.
+     */
+    @Override
+    public Set<Long> getNullValuePartitions() {
+        return idToRange.entrySet().stream()
+                .filter(x -> x.getValue().lowerEndpoint().isMinValue())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // get a sorted range list, exclude partitions which ids are in 'excludePartitionIds'
     public List<Range<PartitionKey>> getRangeList(Set<Long> excludePartitionIds, boolean isTemp) {
         Map<Long, Range<PartitionKey>> tmpMap = idToRange;
@@ -415,12 +542,15 @@ public class RangePartitionInfo extends PartitionInfo {
         }
     }
 
+<<<<<<< HEAD
     public static PartitionInfo read(DataInput in) throws IOException {
         PartitionInfo partitionInfo = new RangePartitionInfo();
         partitionInfo.readFields(in);
         return partitionInfo;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     byte[] serializeRange(Range<PartitionKey> range) throws IOException {
         ByteArrayOutputStream stream = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(stream);
@@ -468,6 +598,7 @@ public class RangePartitionInfo extends PartitionInfo {
             }
             serializedIdToTempRange = null;
         }
+<<<<<<< HEAD
     }
 
     @Override
@@ -516,6 +647,10 @@ public class RangePartitionInfo extends PartitionInfo {
             long partitionId = in.readLong();
             Range<PartitionKey> range = RangeUtils.readRange(in);
             idToTempRange.put(partitionId, range);
+=======
+        if (partitionColumnIds == null || partitionColumnIds.size() <= 0) {
+            partitionColumnIds = deprecatedColumns.stream().map(Column::getColumnId).collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -524,7 +659,11 @@ public class RangePartitionInfo extends PartitionInfo {
         StringBuilder sb = new StringBuilder();
         sb.append("PARTITION BY RANGE(");
         int idx = 0;
+<<<<<<< HEAD
         for (Column column : partitionColumns) {
+=======
+        for (Column column : getPartitionColumns(table.getIdToColumn())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (idx != 0) {
                 sb.append(", ");
             }
@@ -576,17 +715,34 @@ public class RangePartitionInfo extends PartitionInfo {
         return sb.toString();
     }
 
+<<<<<<< HEAD
     public boolean isPartitionedBy(PrimitiveType type) {
         return partitionColumns.size() == 1 && partitionColumns.get(0).getType().getPrimitiveType() == type;
+=======
+    public boolean isPartitionedBy(Table table, PrimitiveType type) {
+        if (partitionColumnIds.size() != 1) {
+            return false;
+        }
+        Column column = getPartitionColumns(table.getIdToColumn()).get(0);
+        return column != null && column.getType().getPrimitiveType() == type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     protected Object clone() {
         RangePartitionInfo info = (RangePartitionInfo) super.clone();
+<<<<<<< HEAD
         info.partitionColumns = Lists.newArrayList(this.partitionColumns);
         info.idToRange = new ConcurrentHashMap<>(this.idToRange);
         info.idToTempRange = new ConcurrentHashMap<>(this.idToTempRange);
         info.isMultiColumnPartition = partitionColumns.size() > 1;
+=======
+        info.deprecatedColumns = Lists.newArrayList(this.deprecatedColumns);
+        info.partitionColumnIds = Lists.newArrayList(this.partitionColumnIds);
+        info.idToRange = new ConcurrentHashMap<>(this.idToRange);
+        info.idToTempRange = new ConcurrentHashMap<>(this.idToTempRange);
+        info.isMultiColumnPartition = partitionColumnIds.size() > 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return info;
     }
 
@@ -615,4 +771,7 @@ public class RangePartitionInfo extends PartitionInfo {
         }
     }
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

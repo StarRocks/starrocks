@@ -72,6 +72,10 @@ public:
     typedef typename std::set<T>::iterator iterator_type;
     ColumnValueRange();
     ColumnValueRange(std::string col_name, LogicalType type, T min, T max);
+<<<<<<< HEAD
+=======
+    ColumnValueRange(std::string col_name, LogicalType type, T type_min, T type_max, T min, T max);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
 
@@ -123,8 +127,16 @@ public:
 
     void set_index_filter_only(bool is_index_only) { _is_index_filter_only = is_index_only; }
 
+<<<<<<< HEAD
     void to_olap_filter(std::vector<TCondition>& filters);
 
+=======
+    template <bool Negative = false>
+    void to_olap_filter(std::vector<TCondition>& filters);
+
+    TCondition to_olap_not_null_filter() const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void clear();
 
 private:

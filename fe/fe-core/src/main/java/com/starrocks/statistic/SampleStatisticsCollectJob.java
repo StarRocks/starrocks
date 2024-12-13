@@ -14,15 +14,20 @@
 
 package com.starrocks.statistic;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
+=======
+import com.starrocks.catalog.Database;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.velocity.VelocityContext;
@@ -59,6 +64,18 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     protected static final String INSERT_STATISTIC_TEMPLATE =
             "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 
+=======
+import com.starrocks.statistic.sample.ColumnSampleManager;
+import com.starrocks.statistic.sample.ColumnStats;
+import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.statistic.sample.TabletSampleManager;
+
+import java.util.List;
+import java.util.Map;
+
+public class SampleStatisticsCollectJob extends StatisticsCollectJob {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public SampleStatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                       Map<String, String> properties) {
@@ -71,6 +88,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties);
     }
 
+<<<<<<< HEAD
     protected int splitColumns(long rowCount) {
         long splitSize;
         if (rowCount == 0) {
@@ -245,6 +263,51 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         return builder.substring(0, builder.length() - "UNION ALL ".length());
+=======
+    @Override
+    public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        TabletSampleManager tabletSampleManager = TabletSampleManager.init(properties, table);
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), table.getName());
+
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
+                sampleInfo);
+
+        // sample complex type column stats
+        if (!columnSampleManager.getComplexTypeStats().isEmpty()) {
+            String complexTypeColsTask = sampleInfo.generateComplexTypeColumnTask(table.getId(),
+                    db.getId(), table.getName(), db.getFullName(), columnSampleManager.getComplexTypeStats());
+            context.getSessionVariable().setExprChildrenLimit(
+                    Math.max(Config.expr_children_limit, columnSampleManager.getComplexTypeStats().size()));
+            collectStatisticSync(complexTypeColsTask, context);
+        }
+
+        List<List<ColumnStats>> columnStatsBatchList = columnSampleManager.splitPrimitiveTypeStats();
+        if (columnStatsBatchList.size() == 0) {
+            analyzeStatus.setProgress(100);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            return;
+        }
+        context.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
+
+        // sample primitive type column stats
+        int finishedTaskNum = 0;
+        int totalTaskNum = columnStatsBatchList.size();
+        double recordStagePoint = 0.2;
+        for (List<ColumnStats> columnStatsBatch : columnStatsBatchList) {
+            String primitiveTypeColsTask = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(),
+                    db.getId(), table.getName(), db.getFullName(), columnStatsBatch, tabletSampleManager);
+            context.getSessionVariable().setExprChildrenLimit(
+                    Math.max(Config.expr_children_limit, sampleInfo.getMaxSampleTabletNum()));
+            collectStatisticSync(primitiveTypeColsTask, context);
+
+            double progress = finishedTaskNum * 1.0 / totalTaskNum;
+            if (progress >= recordStagePoint) {
+                recordStagePoint += 0.2;
+                analyzeStatus.setProgress((long) Math.ceil(progress * 100));
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 }

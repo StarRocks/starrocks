@@ -75,6 +75,13 @@ JsonValue JsonValue::from_null() {
     return JsonValue(nullJsonSlice());
 }
 
+<<<<<<< HEAD
+=======
+JsonValue JsonValue::from_none() {
+    return JsonValue(noneJsonSlice());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 JsonValue JsonValue::from_int(int64_t value) {
     vpack::Builder builder;
     builder.add(vpack::Value(value));
@@ -288,6 +295,16 @@ StatusOr<Slice> JsonValue::get_string() const {
     });
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<JsonValue> JsonValue::get_obj(const std::string& key) const {
+    return callVPack<JsonValue>([this, &key]() {
+        auto ss = to_vslice().get(key);
+        return JsonValue(ss);
+    });
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool JsonValue::is_null() const {
     return to_vslice().isNull();
 }
@@ -300,6 +317,13 @@ bool JsonValue::is_null_or_none() const {
     return is_null() || is_none();
 }
 
+<<<<<<< HEAD
+=======
+bool JsonValue::is_invalid() const {
+    return binary_.empty();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 std::ostream& operator<<(std::ostream& os, const JsonValue& json) {
     return os << json.to_string_uncheck();
 }

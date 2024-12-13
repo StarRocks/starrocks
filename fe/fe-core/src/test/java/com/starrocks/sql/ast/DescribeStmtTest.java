@@ -75,7 +75,11 @@ public class DescribeStmtTest {
         String dropSQL = "drop table sales_records";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception ex) {
 
         }
@@ -86,8 +90,12 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
         ShowResultSet execute = showExecutor.execute();
+=======
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -113,8 +121,12 @@ public class DescribeStmtTest {
         String destTableSql = "desc sales_records all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
         ShowResultSet execute = showExecutor.execute();
+=======
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());
@@ -141,8 +153,12 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
         ShowResultSet execute = showExecutor.execute();
+=======
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -167,8 +183,12 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
         ShowResultSet execute = showExecutor.execute();
+=======
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -193,8 +213,12 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
         ShowResultSet execute = showExecutor.execute();
+=======
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(6, columns.size());
         Assert.assertEquals("Field", columns.get(0).getName());
@@ -219,8 +243,12 @@ public class DescribeStmtTest {
         String destTableSql = "desc store_amt_async all";
         DescribeStmt describeStmt = (DescribeStmt) UtFrameUtils.parseStmtWithNewParser(destTableSql,
                 starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, describeStmt);
         ShowResultSet execute = showExecutor.execute();
+=======
+        ShowResultSet execute = ShowExecutor.execute(describeStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Column> columns = execute.getMetaData().getColumns();
         Assert.assertEquals(8, columns.size());
         Assert.assertEquals("IndexName", columns.get(0).getName());

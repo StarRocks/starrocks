@@ -14,7 +14,12 @@
 
 package com.starrocks.credential;
 
+<<<<<<< HEAD
 import com.starrocks.credential.aws.AWSCloudCredential;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.aws.AwsCloudCredential;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -29,13 +34,23 @@ import java.util.Map;
 public class CloudConfigurationFactoryTest {
 
     @Test
+<<<<<<< HEAD
     public void testBuildCloudConfigurationForTabular() {
+=======
+    public void testBuildCloudConfigurationForVendedCredentials() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> map = new HashMap<>();
         map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
         map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
         map.put(S3FileIOProperties.SESSION_TOKEN, "token");
+<<<<<<< HEAD
         map.put(AwsClientProperties.CLIENT_REGION, "region");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
+=======
+        map.put(S3FileIOProperties.PATH_STYLE_ACCESS, "true");
+        map.put(AwsClientProperties.CLIENT_REGION, "region");
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assert.assertEquals(
@@ -43,7 +58,24 @@ public class CloudConfigurationFactoryTest {
                         "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
                         "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
                         "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+<<<<<<< HEAD
                         "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+=======
+                        "region='region', endpoint=''}, enablePathStyleAccess=true, enableSSL=true}",
+                cloudConfiguration.toConfString());
+
+        map.remove(AwsClientProperties.CLIENT_REGION);
+        map.remove(S3FileIOProperties.PATH_STYLE_ACCESS);
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(map);
+        Assert.assertNotNull(cloudConfiguration);
+        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        Assert.assertEquals(
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='us-east-1', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 cloudConfiguration.toConfString());
     }
 
@@ -120,7 +152,11 @@ public class CloudConfigurationFactoryTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAzurASLS1eCloudConfiguration() {
+=======
+    public void testAzureASLS1eCloudConfiguration() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> map = new HashMap<String, String>() {
             {
                 put(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_ENDPOINT, "XX");
@@ -171,7 +207,11 @@ public class CloudConfigurationFactoryTest {
 
     @Test
     public void testAzureADLS2ManagedIdentity() {
+<<<<<<< HEAD
         Map<String, String> map = new HashMap<String, String>() {
+=======
+        Map<String, String> map = new HashMap<>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ENDPOINT, "endpoint");
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, "client-secret");
@@ -193,7 +233,11 @@ public class CloudConfigurationFactoryTest {
 
     @Test
     public void testAzureADLS2Oauth2() {
+<<<<<<< HEAD
         Map<String, String> map = new HashMap<String, String>() {
+=======
+        Map<String, String> map = new HashMap<>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             {
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
                 put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, "client-id");
@@ -265,6 +309,33 @@ public class CloudConfigurationFactoryTest {
         Assert.assertEquals(CloudType.HDFS, cc.getCloudType());
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testTencentCloudConfiguration() {
+        Map<String, String> map = new HashMap<String, String>() {
+            {
+                put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "XX");
+                put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "YY");
+                put(CloudConfigurationConstants.TENCENT_COS_ENDPOINT, "ZZ");
+            }
+        };
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
+        Assert.assertNotNull(cc);
+        Assert.assertEquals(cc.getCloudType(), CloudType.TENCENT);
+        TCloudConfiguration tc = new TCloudConfiguration();
+        cc.toThrift(tc);
+        Assert.assertEquals(tc.getCloud_properties().get(CloudConfigurationConstants.AWS_S3_ENABLE_SSL), "true");
+        Configuration conf = new Configuration();
+        cc.applyToConfiguration(conf);
+        cc.toFileStoreInfo();
+        Assert.assertEquals(cc.toConfString(),
+                "TencentCloudConfiguration{resources='', jars='', hdpuser='', cred=TencentCloudCredential{accessKey='XX', " +
+                        "secretKey='YY', endpoint='ZZ'}}");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testDefaultCloudConfiguration() {
         Map<String, String> map = new HashMap<String, String>();
         CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(map);
@@ -281,7 +352,11 @@ public class CloudConfigurationFactoryTest {
     public void testGlueCredential() {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+<<<<<<< HEAD
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+=======
+        AwsCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(cred);
         Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
                         "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +

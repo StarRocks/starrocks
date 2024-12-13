@@ -41,7 +41,10 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.FsBroker;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
@@ -49,6 +52,10 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.logging.log4j.LogManager;
@@ -549,7 +556,11 @@ public class Repository implements Writable, GsonPostProcessable {
 
     public Status getBrokerAddress(Long beId, GlobalStateMgr globalStateMgr, List<FsBroker> brokerAddrs) {
         // get backend
+<<<<<<< HEAD
         Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+=======
+        Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (be == null) {
             return new Status(ErrCode.COMMON_ERROR, "backend " + beId + " is missing. "
                     + "failed to send upload snapshot task");
@@ -559,7 +570,11 @@ public class Repository implements Writable, GsonPostProcessable {
         FsBroker brokerAddr;
         try {
             brokerAddr = globalStateMgr.getBrokerMgr().getBroker(storage.getBrokerName(), be.getHost());
+<<<<<<< HEAD
         } catch (AnalysisException e) {
+=======
+        } catch (SemanticException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new Status(ErrCode.COMMON_ERROR, "failed to get address of broker "
                     + storage.getBrokerName() + " when try to send upload snapshot task: "
                     + e.getMessage());
@@ -584,15 +599,23 @@ public class Repository implements Writable, GsonPostProcessable {
         return info;
     }
 
+<<<<<<< HEAD
     public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp, List<String> snapshotNames)
             throws AnalysisException {
+=======
+    public List<List<String>> getSnapshotInfos(String snapshotName, String timestamp, List<String> snapshotNames) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<List<String>> snapshotInfos = Lists.newArrayList();
         if (Strings.isNullOrEmpty(snapshotName)) {
             // get all snapshot infos
             List<String> fullSnapshotNames = Lists.newArrayList();
             Status status = listSnapshots(fullSnapshotNames);
             if (!status.ok()) {
+<<<<<<< HEAD
                 throw new AnalysisException(
+=======
+                throw new SemanticException(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "Failed to list snapshot in repo: " + name + ", err: " + status.getErrMsg());
             }
 

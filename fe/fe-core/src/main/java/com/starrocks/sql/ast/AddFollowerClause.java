@@ -27,4 +27,12 @@ public class AddFollowerClause extends FrontendClause {
     public AddFollowerClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.FOLLOWER, pos);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitAddFollowerClause(this, context);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

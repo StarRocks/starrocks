@@ -16,7 +16,10 @@
 
 #include "exec/olap_scan_node.h"
 #include "storage/storage_engine.h"
+<<<<<<< HEAD
 #include "testutil/sync_point.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::pipeline {
 
@@ -42,7 +45,16 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
+=======
+
+    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    {
+        SCOPED_TIMER(capture_tablet_rowsets_timer);
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }
@@ -60,11 +72,32 @@ bool OlapScanPrepareOperator::is_finished() const {
 }
 
 StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
+<<<<<<< HEAD
     Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
 
     _morsel_queue->set_key_ranges(_ctx->key_ranges());
     _morsel_queue->set_tablets(_ctx->tablets());
     _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
+=======
+    Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters(), _driver_sequence);
+
+    _morsel_queue->set_key_ranges(_ctx->key_ranges());
+    std::vector<BaseTabletSharedPtr> tablets;
+    for (auto& tablet : _ctx->tablets()) {
+        tablets.emplace_back(tablet);
+    }
+    _morsel_queue->set_tablets(std::move(tablets));
+
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    for (auto& rowsets : _ctx->tablet_rowsets()) {
+        tablet_rowsets.emplace_back();
+        auto& rss = tablet_rowsets.back();
+        for (auto& rowset : rowsets) {
+            rss.emplace_back(rowset);
+        }
+    }
+    _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
@@ -104,6 +137,10 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
 
     DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
+<<<<<<< HEAD
+=======
+    DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));

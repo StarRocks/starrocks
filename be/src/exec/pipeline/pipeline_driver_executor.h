@@ -34,6 +34,16 @@ namespace starrocks::pipeline {
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 
+<<<<<<< HEAD
+=======
+struct DriverExecutorMetrics {
+    int64_t schedule_count;
+    int64_t driver_execution_ns;
+    int64_t driver_queue_len;
+    int64_t driver_poller_block_queue_len;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class DriverExecutor {
 public:
     DriverExecutor(std::string name) : _name(std::move(name)) {}
@@ -54,14 +64,28 @@ public:
 
     virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
 
+<<<<<<< HEAD
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
     virtual size_t activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) = 0;
+=======
+    virtual void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const = 0;
+
+    virtual size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
                               std::vector<FragmentContext*> fragment_ctxs) = 0;
 
+<<<<<<< HEAD
     virtual size_t calculate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) const = 0;
+=======
+    virtual size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const = 0;
+
+    virtual void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) = 0;
+
+    virtual DriverExecutorMetrics metrics() const = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     std::string _name;
@@ -69,7 +93,12 @@ protected:
 
 class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
 public:
+<<<<<<< HEAD
     GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
+=======
+    GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group,
+                         const CpuUtil::CpuIds& cpuids);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~GlobalDriverExecutor() override = default;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
@@ -80,6 +109,7 @@ public:
                            bool attach_profile) override;
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
 
+<<<<<<< HEAD
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
     size_t activate_parked_driver(const ImmutableDriverPredicateFunc& predicate_func) override;
@@ -87,6 +117,17 @@ public:
 
     void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) override;
 
+=======
+    void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const override;
+
+    size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) override;
+    size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const override;
+
+    void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) override;
+
+    void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
@@ -97,6 +138,11 @@ private:
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
+<<<<<<< HEAD
+=======
+    DriverExecutorMetrics metrics() const override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     // The maximum duration that a driver could stay in local_driver_queue
     static constexpr int64_t LOCAL_MAX_WAIT_TIME_SPENT_NS = 1'000'000L;

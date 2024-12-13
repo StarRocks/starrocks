@@ -12,8 +12,12 @@ Compared to other data export methods supported by StarRocks, unloading data wit
 
 > **NOTE**
 >
+<<<<<<< HEAD
 > - Please note that unloading data with INSERT INTO FILES does not support exporting data into local file systems.
 > - Currently,  INSERT INTO FILES only supports unloading data in the Parquet file format.
+=======
+> Please note that unloading data with INSERT INTO FILES does not support exporting data into local file systems.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Preparation
 

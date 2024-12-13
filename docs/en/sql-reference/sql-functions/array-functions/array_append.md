@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_append
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Adds a new element to the end of the array. Returns an array.
 

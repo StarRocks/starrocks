@@ -30,10 +30,17 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.hadoop.HadoopExt;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.qe.ConnectContext;
@@ -56,6 +63,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+<<<<<<< HEAD
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
@@ -74,6 +82,26 @@ import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_TICKET_CACHE_PATH;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
+=======
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_TICKET_CACHE_PATH;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_PASSWORD;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_USERNAME;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class StorageVolumeTest {
     private static ConnectContext connectContext;
@@ -100,9 +128,15 @@ public class StorageVolumeTest {
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
         Assert.assertTrue(s3FileStoreInfo.getCredential().hasDefaultCredential());
+<<<<<<< HEAD
         Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
         Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+=======
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+                .getRegion());
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getEndpoint());
     }
 
@@ -127,9 +161,15 @@ public class StorageVolumeTest {
         AwsSimpleCredentialInfo simpleCredentialInfo = s3FileStoreInfo.getCredential().getSimpleCredential();
         Assert.assertEquals("access_key", simpleCredentialInfo.getAccessKey());
         Assert.assertEquals("secret_key", simpleCredentialInfo.getAccessKeySecret());
+<<<<<<< HEAD
         Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
         Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+=======
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+                .getRegion());
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getEndpoint());
     }
 
@@ -150,9 +190,15 @@ public class StorageVolumeTest {
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
         Assert.assertTrue(s3FileStoreInfo.getCredential().hasProfileCredential());
+<<<<<<< HEAD
         Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
         Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+=======
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+                .getRegion());
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getEndpoint());
     }
 
@@ -179,9 +225,15 @@ public class StorageVolumeTest {
                 .getAssumeRoleCredential();
         Assert.assertEquals("iam_role_arn", assumeIamRoleCredentialInfo.getIamRoleArn());
         Assert.assertEquals("iam_role_arn", assumeIamRoleCredentialInfo.getIamRoleArn());
+<<<<<<< HEAD
         Assert.assertEquals("region", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
                 .getRegion());
         Assert.assertEquals("endpoint", ((AWSCloudConfiguration) cloudConfiguration).getAWSCloudCredential()
+=======
+        Assert.assertEquals("region", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+                .getRegion());
+        Assert.assertEquals("endpoint", ((AwsCloudConfiguration) cloudConfiguration).getAwsCloudCredential()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getEndpoint());
     }
 

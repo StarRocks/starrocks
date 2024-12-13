@@ -30,7 +30,11 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -67,20 +71,40 @@ public class PipeAnalyzer {
                     .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .build();
 
+<<<<<<< HEAD
     public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
             if (Strings.isNullOrEmpty(context.getDatabase())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
             pipeName.setDbName(context.getDatabase());
+=======
+    public static void analyzePipeName(PipeName pipeName, String defaultDbName) {
+        if (Strings.isNullOrEmpty(pipeName.getDbName())) {
+            if (Strings.isNullOrEmpty(defaultDbName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
+            pipeName.setDbName(defaultDbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         if (Strings.isNullOrEmpty(pipeName.getPipeName())) {
             throw new SemanticException("empty pipe name");
         }
+<<<<<<< HEAD
         FeNameFormat.checkCommonName("db", pipeName.getDbName());
         FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
     }
 
+=======
+        FeNameFormat.checkDbName(pipeName.getDbName());
+        FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
+    }
+
+    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+        analyzePipeName(pipeName, context.getDatabase());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static void analyzeProperties(Map<String, String> properties) {
         if (MapUtils.isEmpty(properties)) {
             return;
@@ -89,7 +113,11 @@ public class PipeAnalyzer {
             if (propertyName.toUpperCase().startsWith(TASK_VARIABLES_PREFIX)) {
                 // Task execution variable
                 String taskVariableName = StringUtils.removeStartIgnoreCase(propertyName, TASK_VARIABLES_PREFIX);
+<<<<<<< HEAD
                 if (!VariableMgr.containsVariable(taskVariableName)) {
+=======
+                if (!GlobalStateMgr.getCurrentState().getVariableMgr().containsVariable(taskVariableName)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_PROPERTY, propertyName);
                 }
                 continue;
@@ -151,11 +179,19 @@ public class PipeAnalyzer {
     }
 
     public static void analyzeWarehouseProperty(String warehouseName) {
+<<<<<<< HEAD
         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, warehouseName);
     }
 
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
         analyzePipeName(stmt.getPipeName(), context);
+=======
+        // If the warehouse does not exist, will report a runtime exception
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+    }
+
+    public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeProperties(stmt.getProperties());
         Map<String, String> properties = stmt.getProperties();
 
@@ -165,6 +201,17 @@ public class PipeAnalyzer {
         stmt.setInsertSql(insertSql);
         InsertAnalyzer.analyze(insertStmt, context);
 
+<<<<<<< HEAD
+=======
+        analyzePipeName(stmt.getPipeName(), insertStmt.getTableName().getDb());
+
+        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getTableName().getDb())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
+                    String.format("pipe's database [%s] and target table's database [%s] should be the same",
+                            stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
         if (!Strings.isNullOrEmpty(insertStmt.getLabel())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "INSERT INTO cannot with label");

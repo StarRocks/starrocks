@@ -34,6 +34,10 @@ import org.apache.logging.log4j.util.Strings;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.time.LocalDateTime;
+<<<<<<< HEAD
+=======
+import java.time.ZoneOffset;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -96,7 +100,11 @@ public class PipeFileRecord {
         } else {
             record.fileVersion = String.valueOf(file.getModificationTime());
         }
+<<<<<<< HEAD
         record.lastModified = DateUtils.fromEpochMillis(file.getModificationTime());
+=======
+        record.lastModified = DateUtils.fromEpochMillis(file.getModificationTime(), ZoneOffset.UTC);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         record.stagedTime = LocalDateTime.now();
         record.loadState = FileListRepo.PipeFileState.UNLOADED;
         return record;

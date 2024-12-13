@@ -419,13 +419,22 @@ public class ScanTest extends PlanTestBase {
     public void testMetaScanWithCount() throws Exception {
         String sql = "select count(*),count(),count(t1a),count(t1b),count(t1c) from test_all_type[_META_]";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(count_t1a), sum(count_t1a), sum(count_t1a), sum(count_t1a)\n" +
+=======
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_t1a), sum(count_t1a), sum(count_t1b), sum(count_t1c)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type\n" +
+<<<<<<< HEAD
                 "     <id 16> : count_t1a");
+=======
+                "     <id 16> : rows_t1a");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // compatibility test
         // we should keep nullable attribute of columns consistent with previous version,
         // see more detail in the description of https://github.com/StarRocks/starrocks/pull/17619
@@ -433,12 +442,19 @@ public class ScanTest extends PlanTestBase {
         sql = "select min(t1a),max(t1a),dict_merge(t1a) from test_all_type_not_null[_META_]";
         plan = getVerboseExplain(sql);
         assertContains(plan, "aggregate: " +
+<<<<<<< HEAD
                 "min[([min_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: false; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: false; result nullable: true], " +
                 "dict_merge[([dict_merge_t1a, VARCHAR, false]); args: INVALID_TYPE; " +
                 "result: VARCHAR; args nullable: false; result nullable: true]");
+=======
+                "min[([min_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // with count, all columns should be nullable
         sql = "select min(t1a),max(t1a),dict_merge(t1a),count() from test_all_type_not_null[_META_]";
@@ -447,9 +463,15 @@ public class ScanTest extends PlanTestBase {
                 "args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
+<<<<<<< HEAD
                 "dict_merge[([dict_merge_t1a, VARCHAR, true]); args: INVALID_TYPE; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
                 "sum[([count_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+=======
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; result: VARCHAR; " +
+                "args nullable: true; result nullable: true], " +
+                "sum[([rows_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "args nullable: true; result nullable: true]");
     }
 
@@ -468,7 +490,11 @@ public class ScanTest extends PlanTestBase {
         Collection<Partition> partitions = tb.getPartitions();
         acquireReplica:
         for (Partition partition : partitions) {
+<<<<<<< HEAD
             MaterializedIndex index = partition.getIndex(tb.getBaseIndexId());
+=======
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tb.getBaseIndexId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Tablet tablet : index.getTablets()) {
                 replicaId = ((LocalTablet) tablet).getImmutableReplicas().get(0).getId();
                 break acquireReplica;
@@ -531,6 +557,7 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testChangeDatePredicat() throws Exception {
         connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(true);
         // same month
@@ -606,5 +633,26 @@ public class ScanTest extends PlanTestBase {
                 "OR ((8: id_datetime >= '2013-08-01 00:00:00') " +
                 "AND (8: id_datetime <= '2013-08-11 00:00:00')))");
         connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(false);
+=======
+    public void testMetaScanPartition() throws Exception {
+        String sql = "select max(L_LINESTATUS) from lineitem_partition partitions(p1993)[_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: lineitem_partition\n" +
+                "     <id 19> : max_L_LINESTATUS\n" +
+                "     Partitions: [p1993]");
+    }
+
+    @Test
+    public void testMetaAggregate() throws Exception {
+        String sql = "select max(v1), min(v2), count(v3), count(*) from t0 [_META_];";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id 8> : max_v1\n" +
+                "     <id 9> : min_v2\n" +
+                "     <id 10> : count_v3\n" +
+                "     <id 11> : rows_v1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

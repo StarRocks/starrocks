@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_json
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a Map or Struct value into a JSON string. If the input value is NULL, NULL is returned.
 

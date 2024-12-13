@@ -14,6 +14,11 @@
 
 #include "exec/pipeline/pipeline.h"
 
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/group_execution/execution_group.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
@@ -23,6 +28,17 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD
+=======
+Pipeline::Pipeline(uint32_t id, OpFactories op_factories, ExecutionGroupRawPtr execution_group)
+        : _id(id),
+          _op_factories(std::move(op_factories)),
+          _pipeline_event(Event::create_event()),
+          _execution_group(execution_group) {
+    _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 size_t Pipeline::degree_of_parallelism() const {
     // DOP (degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
     return source_operator_factory()->degree_of_parallelism();
@@ -32,7 +48,12 @@ void Pipeline::count_down_driver(RuntimeState* state) {
     size_t num_drivers = _drivers.size();
     bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
     if (all_drivers_finished) {
+<<<<<<< HEAD
         state->fragment_ctx()->count_down_pipeline();
+=======
+        _pipeline_event->finish(state);
+        _execution_group->count_down_pipeline(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -93,9 +114,15 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
             scan_operator->set_workgroup(workgroup);
             scan_operator->set_query_ctx(query_ctx->get_shared_ptr());
             if (scan_operator->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
+<<<<<<< HEAD
                 scan_operator->set_scan_executor(state->exec_env()->connector_scan_executor());
             } else {
                 scan_operator->set_scan_executor(state->exec_env()->scan_executor());
+=======
+                scan_operator->set_scan_executor(workgroup->executors()->connector_scan_executor());
+            } else {
+                scan_operator->set_scan_executor(workgroup->executors()->scan_executor());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -106,6 +133,11 @@ void Pipeline::setup_pipeline_profile(RuntimeState* runtime_state) {
 }
 
 void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
+<<<<<<< HEAD
+=======
+    runtime_profile()->add_info_string("isGroupExecution",
+                                       _execution_group->is_colocate_exec_group() ? "true" : "false");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
     auto* dop_counter =
             ADD_COUNTER_SKIP_MERGE(runtime_profile(), "DegreeOfParallelism", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
@@ -127,7 +159,11 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
 void Pipeline::count_down_epoch_finished_driver(RuntimeState* state) {
     bool all_drivers_finished = ++_num_epoch_finished_drivers == _drivers.size();
     if (all_drivers_finished) {
+<<<<<<< HEAD
         state->fragment_ctx()->count_down_epoch_pipeline(state);
+=======
+        _execution_group->count_down_epoch_pipeline(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

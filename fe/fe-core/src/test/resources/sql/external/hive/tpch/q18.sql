@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_name,
@@ -31,6 +32,8 @@ group by
 order by
     o_totalprice desc,
     o_orderdate limit 100;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F10)
 Output Exprs:2: c_name | 1: c_custkey | 9: o_orderkey | 13: o_orderdate | 12: o_totalprice | 52: sum
@@ -190,6 +193,10 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 34: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+<<<<<<< HEAD
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 600037902
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
@@ -252,6 +259,10 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+<<<<<<< HEAD
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -268,6 +279,10 @@ TABLE: orders
 NON-PARTITION PREDICATES: 10: o_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=28.0
+<<<<<<< HEAD
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (10: o_custkey)
@@ -288,6 +303,10 @@ TABLE: lineitem
 NON-PARTITION PREDICATES: 18: l_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+<<<<<<< HEAD
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 600037902
 column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE

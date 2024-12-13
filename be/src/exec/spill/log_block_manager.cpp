@@ -14,6 +14,7 @@
 
 #include "exec/spill/log_block_manager.h"
 
+<<<<<<< HEAD
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -21,6 +22,20 @@
 #include <utility>
 
 #include "common/config.h"
+=======
+#include <fmt/core.h>
+
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+
+#include "block_manager.h"
+#include "common/config.h"
+#include "common/status.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
@@ -30,11 +45,17 @@
 #include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/raw_container.h"
+#include "util/stack_util.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/uid_util.h"
 
 namespace starrocks::spill {
 class LogBlockContainer {
 public:
+<<<<<<< HEAD
     LogBlockContainer(Dir* dir, const TUniqueId& query_id, int32_t plan_node_id, std::string plan_node_name,
                       uint64_t id)
             : _dir(dir),
@@ -42,11 +63,26 @@ public:
               _plan_node_id(plan_node_id),
               _plan_node_name(std::move(plan_node_name)),
               _id(id) {}
+=======
+    LogBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
+                      int32_t plan_node_id, std::string plan_node_name, uint64_t id, bool direct_io)
+            : _dir(std::move(dir)),
+              _query_id(query_id),
+              _fragment_instance_id(fragment_instance_id),
+              _plan_node_id(plan_node_id),
+              _plan_node_name(std::move(plan_node_name)),
+              _id(id),
+              _direct_io(direct_io) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~LogBlockContainer() {
         TRACE_SPILL_LOG << "delete spill container file: " << path();
         WARN_IF_ERROR(_dir->fs()->delete_file(path()), fmt::format("cannot delete spill container file: {}", path()));
+<<<<<<< HEAD
         _dir->dec_size(_data_size);
+=======
+        _dir->dec_size(_acquired_data_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // try to delete related dir, only the last one can success, we ignore the error
         (void)(_dir->fs()->delete_dir(parent_path()));
     }
@@ -55,7 +91,11 @@ public:
 
     Status close();
 
+<<<<<<< HEAD
     Dir* dir() const { return _dir; }
+=======
+    Dir* dir() const { return _dir.get(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int32_t plan_node_id() const { return _plan_node_id; }
     std::string plan_node_name() const { return _plan_node_name; }
 
@@ -64,12 +104,28 @@ public:
         return _writable_file->size();
     }
     std::string path() const {
+<<<<<<< HEAD
         return fmt::format("{}/{}/{}-{}-{}", _dir->dir(), print_id(_query_id), _plan_node_name, _plan_node_id, _id);
+=======
+        return fmt::format("{}/{}/{}-{}-{}-{}", _dir->dir(), print_id(_query_id), print_id(_fragment_instance_id),
+                           _plan_node_name, _plan_node_id, _id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     std::string parent_path() const { return fmt::format("{}/{}", _dir->dir(), print_id(_query_id)); }
     uint64_t id() const { return _id; }
 
+<<<<<<< HEAD
     Status ensure_preallocate(size_t length);
+=======
+    bool pre_allocate(size_t allocate_size) {
+        if (_dir->inc_size(allocate_size)) {
+            _acquired_data_size += allocate_size;
+            return true;
+        } else {
+            return false;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status append_data(const std::vector<Slice>& data, size_t total_size);
 
@@ -77,18 +133,37 @@ public:
 
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable(size_t offset, size_t length);
 
+<<<<<<< HEAD
     static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
                                                  const std::string& plan_node_name, uint64_t id);
 
 private:
     Dir* _dir;
     TUniqueId _query_id;
+=======
+    static StatusOr<LogBlockContainerPtr> create(const DirPtr& dir, const TUniqueId& query_id,
+                                                 const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+                                                 const std::string& plan_node_name, uint64_t id, bool enable_direct_io);
+
+private:
+    DirPtr _dir;
+    TUniqueId _query_id;
+    TUniqueId _fragment_instance_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int32_t _plan_node_id;
     std::string _plan_node_name;
     uint64_t _id;
     std::unique_ptr<WritableFile> _writable_file;
     bool _has_open = false;
+<<<<<<< HEAD
     size_t _data_size = 0;
+=======
+    bool _direct_io = false;
+    // real data size used in container
+    size_t _data_size = 0;
+    // acquired data size from Dir
+    size_t _acquired_data_size = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 Status LogBlockContainer::open() {
@@ -101,6 +176,10 @@ Status LogBlockContainer::open() {
     if (config::experimental_spill_skip_sync) {
         opt.sync_on_close = false;
     }
+<<<<<<< HEAD
+=======
+    opt.direct_write = _direct_io;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
     TRACE_SPILL_LOG << "create new container file: " << file_path;
     _has_open = true;
@@ -112,11 +191,16 @@ Status LogBlockContainer::close() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status LogBlockContainer::ensure_preallocate(size_t length) {
     return _writable_file->pre_allocate(length);
 }
 
 Status LogBlockContainer::append_data(const std::vector<Slice>& data, size_t total_size) {
+=======
+Status LogBlockContainer::append_data(const std::vector<Slice>& data, size_t total_size) {
+    RETURN_IF_ERROR(_writable_file->pre_allocate(total_size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(_writable_file->appendv(data.data(), data.size()));
     _data_size += total_size;
     return Status::OK();
@@ -136,15 +220,25 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readabl
     return f;
 }
 
+<<<<<<< HEAD
 StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
                                                          const std::string& plan_node_name, uint64_t id) {
     auto container = std::make_shared<LogBlockContainer>(dir, query_id, plan_node_id, plan_node_name, id);
+=======
+StatusOr<LogBlockContainerPtr> LogBlockContainer::create(const DirPtr& dir, const TUniqueId& query_id,
+                                                         const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+                                                         const std::string& plan_node_name, uint64_t id,
+                                                         bool direct_io) {
+    auto container = std::make_shared<LogBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
+                                                         plan_node_name, id, direct_io);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(container->open());
     return container;
 }
 
 class LogBlockReader final : public BlockReader {
 public:
+<<<<<<< HEAD
     LogBlockReader(const Block* block) : _block(block) {}
     ~LogBlockReader() override = default;
 
@@ -157,6 +251,15 @@ private:
     std::unique_ptr<io::InputStreamWrapper> _readable;
     size_t _offset = 0;
     size_t _length = 0;
+=======
+    LogBlockReader(const Block* block, const BlockReaderOptions& options = {}) : BlockReader(block, options) {}
+
+    ~LogBlockReader() override = default;
+
+    std::string debug_string() override { return _block->debug_string(); }
+
+    const Block* block() const override { return _block; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class LogBlock : public Block {
@@ -172,6 +275,7 @@ public:
     Status append(const std::vector<Slice>& data) override {
         size_t total_size = 0;
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
+<<<<<<< HEAD
         // try to apply for the required size from dir first, if it fails, just return an error directly.
         // if the subsequent operations fail, the applied size should be rolled back.
         if (!_container->dir()->inc_size(total_size)) {
@@ -186,12 +290,16 @@ public:
         });
         RETURN_IF_ERROR(ret = _container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(ret = _container->append_data(data, total_size));
+=======
+        RETURN_IF_ERROR(_container->append_data(data, total_size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _size += total_size;
         return Status::OK();
     }
 
     Status flush() override { return _container->flush(); }
 
+<<<<<<< HEAD
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const {
         return _container->get_readable(_offset, _size);
     }
@@ -203,11 +311,33 @@ public:
                            _size);
     }
 
+=======
+    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const override {
+        return _container->get_readable(_offset, _size);
+    }
+
+    std::shared_ptr<BlockReader> get_reader(const BlockReaderOptions& options) override {
+        return std::make_shared<LogBlockReader>(this, options);
+    }
+
+    std::string debug_string() const override {
+#ifndef BE_TEST
+        return fmt::format("LogBlock:{}[container={}, offset={}, len={}, affinity_group={}]", (void*)this,
+                           _container->path(), _offset, _size, _affinity_group);
+#else
+        return fmt::format("LogBlock[container={}]", _container->path());
+#endif
+    }
+
+    bool preallocate(size_t write_size) override { return _container->pre_allocate(write_size); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     LogBlockContainerPtr _container;
     size_t _offset{};
 };
 
+<<<<<<< HEAD
 Status LogBlockReader::read_fully(void* data, int64_t count) {
     if (_readable == nullptr) {
         auto log_block = down_cast<const LogBlock*>(_block);
@@ -228,6 +358,10 @@ Status LogBlockReader::read_fully(void* data, int64_t count) {
 }
 
 LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(std::move(query_id)) {
+=======
+LogBlockManager::LogBlockManager(const TUniqueId& query_id, DirManager* dir_mgr)
+        : _query_id(std::move(query_id)), _dir_mgr(dir_mgr) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
 }
@@ -250,13 +384,20 @@ Status LogBlockManager::open() {
 void LogBlockManager::close() {}
 
 StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opts) {
+<<<<<<< HEAD
     AcquireDirOptions acquire_dir_opts;
+=======
+    DCHECK(opts.block_size > 0) << "block size should be larger than 0";
+    AcquireDirOptions acquire_dir_opts;
+    acquire_dir_opts.data_size = opts.block_size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef BE_TEST
     ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));
 #else
     ASSIGN_OR_RETURN(auto dir, ExecEnv::GetInstance()->spill_dir_mgr()->acquire_writable_dir(acquire_dir_opts));
 #endif
 
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.plan_node_id, opts.name));
     return std::make_shared<LogBlock>(block_container, block_container->size());
 }
@@ -264,6 +405,20 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
 Status LogBlockManager::release_block(const BlockPtr& block) {
     auto log_block = down_cast<LogBlock*>(block.get());
     auto container = log_block->container();
+=======
+    ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id,
+                                                                   opts.name, opts.direct_io, opts.affinity_group));
+    auto res = std::make_shared<LogBlock>(block_container, block_container->size());
+    res->set_is_remote(dir->is_remote());
+    res->set_affinity_group(opts.affinity_group);
+    return res;
+}
+
+Status LogBlockManager::release_block(BlockPtr block) {
+    auto log_block = down_cast<LogBlock*>(block.get());
+    auto container = log_block->container();
+    auto affinity_group = block->affinity_group();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TRACE_SPILL_LOG << "release block: " << block->debug_string();
     bool is_full = container->size() >= _max_container_bytes;
     if (is_full) {
@@ -275,6 +430,7 @@ Status LogBlockManager::release_block(const BlockPtr& block) {
         TRACE_SPILL_LOG << "mark container as full: " << container->path();
         _full_containers.emplace_back(container);
     } else {
+<<<<<<< HEAD
         TRACE_SPILL_LOG << "return container to the pool: " << container->path();
         auto dir = container->dir();
         int32_t plan_node_id = container->plan_node_id();
@@ -283,10 +439,18 @@ Status LogBlockManager::release_block(const BlockPtr& block) {
         CHECK(iter != _available_containers.end());
         auto sub_iter = iter->second->find(plan_node_id);
         sub_iter->second->push(container);
+=======
+        auto dir = container->dir();
+        int32_t plan_node_id = container->plan_node_id();
+        auto iter = _available_containers.find(affinity_group);
+        CHECK(iter != _available_containers.end());
+        iter->second->find(dir)->second->find(plan_node_id)->second->push(container);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir, int32_t plan_node_id,
                                                                         const std::string& plan_node_name) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
@@ -304,6 +468,30 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir
         sub_iter = iter->second->find(plan_node_id);
     }
     auto& q = sub_iter->second;
+=======
+Status LogBlockManager::release_affinity_group(const BlockAffinityGroup affinity_group) {
+    std::lock_guard<std::mutex> l(_mutex);
+    size_t count = _available_containers.erase(affinity_group);
+    DCHECK(count == 1) << "can't find affinity_group: " << affinity_group;
+    return count == 1 ? Status::OK()
+                      : Status::InternalError(fmt::format("can't find affinity_group {}", affinity_group));
+}
+
+StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
+        const DirPtr& dir, const TUniqueId& fragment_instance_id, int32_t plan_node_id,
+        const std::string& plan_node_name, bool direct_io, BlockAffinityGroup affinity_group) {
+    TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir()
+                    << ". fragment instance: " << print_id(fragment_instance_id) << ", plan node:" << plan_node_id
+                    << ", " << plan_node_name;
+
+    std::lock_guard<std::mutex> l(_mutex);
+
+    auto avaiable_containers =
+            _available_containers.try_emplace(affinity_group, std::make_shared<DirContainerMap>()).first->second;
+    auto dir_container_map =
+            avaiable_containers->try_emplace(dir.get(), std::make_shared<PlanNodeContainerMap>()).first->second;
+    auto q = dir_container_map->try_emplace(plan_node_id, std::make_shared<ContainerQueue>()).first->second;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!q->empty()) {
         auto container = q->front();
         TRACE_SPILL_LOG << "return an existed container: " << container->path();
@@ -313,7 +501,12 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir
     uint64_t id = _next_container_id++;
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
     RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto block_container, LogBlockContainer::create(dir, _query_id, plan_node_id, plan_node_name, id));
+=======
+    ASSIGN_OR_RETURN(auto block_container, LogBlockContainer::create(dir, _query_id, fragment_instance_id, plan_node_id,
+                                                                     plan_node_name, id, direct_io));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }

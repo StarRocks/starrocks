@@ -19,9 +19,15 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.common.VectorSearchOptions;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -29,6 +35,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
@@ -56,19 +66,36 @@ public class OptimizerContext {
     private TaskContext currentTaskContext;
     private final OptimizerConfig optimizerConfig;
 
+<<<<<<< HEAD
     private Set<OlapTable> queryTables;
 
     private long updateTableId = -1;
     private boolean enableLeftRightJoinEquivalenceDerive = true;
+=======
+    private Set<OlapTable>  queryTables;
+
+    private long updateTableId = -1;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean isObtainedFromInternalStatistics = false;
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
+<<<<<<< HEAD
     private boolean isShortCircuit = false;
+=======
+    // The context for join predicate pushdown rule
+    private JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
+            new JoinPredicatePushdown.JoinPredicatePushDownContext();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
 
+<<<<<<< HEAD
+=======
+    private boolean isShortCircuit = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean inMemoPhase = false;
 
     // Is not null predicate can be derived from inner join or semi join,
@@ -81,6 +108,11 @@ public class OptimizerContext {
     // collect all LogicalOlapScanOperators in the query before any optimization
     private List<LogicalOlapScanOperator> allLogicalOlapScanOperators;
 
+<<<<<<< HEAD
+=======
+    private VectorSearchOptions vectorSearchOptions = new VectorSearchOptions();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -88,7 +120,11 @@ public class OptimizerContext {
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
+<<<<<<< HEAD
         this.sessionVariable = VariableMgr.newSessionVariable();
+=======
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.optimizerConfig = new OptimizerConfig();
         this.queryId = UUID.randomUUID();
         this.allLogicalOlapScanOperators = Collections.emptyList();
@@ -183,12 +219,17 @@ public class OptimizerContext {
         return queryMaterializationContext.getValidCandidateMVs();
     }
 
+<<<<<<< HEAD
     public void setEnableLeftRightJoinEquivalenceDerive(boolean enableLeftRightJoinEquivalenceDerive) {
         this.enableLeftRightJoinEquivalenceDerive = enableLeftRightJoinEquivalenceDerive;
     }
 
     public boolean isEnableLeftRightJoinEquivalenceDerive() {
         return enableLeftRightJoinEquivalenceDerive;
+=======
+    public JoinPredicatePushdown.JoinPredicatePushDownContext getJoinPushDownParams() {
+        return joinPredicatePushDownContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setUpdateTableId(long updateTableId) {
@@ -203,6 +244,7 @@ public class OptimizerContext {
         return optimizerTimer.elapsed(TimeUnit.MILLISECONDS);
     }
 
+<<<<<<< HEAD
     public boolean isObtainedFromInternalStatistics() {
         return isObtainedFromInternalStatistics;
     }
@@ -211,6 +253,8 @@ public class OptimizerContext {
         isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean ruleExhausted(RuleType ruleType) {
         Stopwatch watch = ruleWatchMap.computeIfAbsent(ruleType, (k) -> Stopwatch.createStarted());
         long elapsed = watch.elapsed(TimeUnit.MILLISECONDS);
@@ -219,6 +263,17 @@ public class OptimizerContext {
         return elapsed > timeLimit;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isObtainedFromInternalStatistics() {
+        return isObtainedFromInternalStatistics;
+    }
+
+    public void setObtainedFromInternalStatistics(boolean obtainedFromInternalStatistics) {
+        isObtainedFromInternalStatistics = obtainedFromInternalStatistics;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Whether reach optimizer timeout
      */
@@ -256,6 +311,7 @@ public class OptimizerContext {
                 ErrorType.INTERNAL_ERROR);
     }
 
+<<<<<<< HEAD
     public boolean isShortCircuit() {
         return isShortCircuit;
     }
@@ -264,6 +320,8 @@ public class OptimizerContext {
         isShortCircuit = shortCircuit;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setQueryMaterializationContext(QueryMaterializationContext queryMaterializationContext) {
         this.queryMaterializationContext = queryMaterializationContext;
     }
@@ -272,6 +330,17 @@ public class OptimizerContext {
         return queryMaterializationContext;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void clear() {
         if (this.queryMaterializationContext != null) {
             this.queryMaterializationContext.clear();
@@ -310,4 +379,15 @@ public class OptimizerContext {
     public List<LogicalOlapScanOperator> getAllLogicalOlapScanOperators() {
         return allLogicalOlapScanOperators;
     }
+<<<<<<< HEAD
+=======
+
+    public void setVectorSearchOptions(VectorSearchOptions vectorSearchOptions) {
+        this.vectorSearchOptions = vectorSearchOptions;
+    }
+
+    public VectorSearchOptions getVectorSearchOptions() {
+        return vectorSearchOptions;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -21,6 +21,10 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -95,10 +99,17 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k1 = tbl2.k1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+=======
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv9");
+        List<String> createTableStmt = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -123,10 +134,17 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select t2.c1, t1.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+=======
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv10");
+        List<String> createTableStmt = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
                         "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
@@ -152,10 +170,17 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+=======
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv8");
+        List<String> createTableStmt = Lists.newArrayList();
+        AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(createTableStmt.get(0),
                 "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
@@ -197,13 +222,54 @@ public class ShowCreateMaterializedViewStmtTest {
 
         MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
         List<String> createTableStmt = Lists.newArrayList();
+<<<<<<< HEAD
         GlobalStateMgr.getDdlStmt(mv, createTableStmt, null, null, false, true);
+=======
+        AstToStringBuilder.getDdlStmt(mv, createTableStmt, null, null, false, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assertions.assertTrue(createTableStmt.get(0).contains(refreshClause), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(orderBy), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(property), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(partitionBy), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(distribute), createTableStmt.get(0));
+<<<<<<< HEAD
+=======
+        Assertions.assertTrue(createTableStmt.get(0).contains(select), createTableStmt.get(0));
+    }
+
+    @Test
+    public void testMvUniqueConstraintsTableNotExist() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.tbl_constraint_test\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+
+        String createMvSql = "create materialized view mv_constraint_test " +
+                "distributed by hash(k1) buckets 10 " +
+                "refresh manual " +
+                "properties(\"unique_constraints\" = \"tbl_constraint_test.k1\", " +
+                "\"foreign_key_constraints\" = \"tbl1(k1) REFERENCES tbl_constraint_test(k1)\") " +
+                "as select tbl1.k1, tbl_constraint_test.k2 " +
+                "from tbl1 join tbl_constraint_test on tbl1.k1 = tbl_constraint_test.k1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getLocalMetastore().getDb("test").getTable("mv_constraint_test");
+        Assertions.assertEquals("k1", table.getUniqueConstraints().get(0).getUniqueColumnNames(table).get(0));
+
+        starRocksAssert.dropTable("tbl_constraint_test");
+        Assert.assertThrows(SemanticException.class, () -> table.getUniqueConstraints().get(0).getUniqueColumnNames(table));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static Stream<Arguments> genTestArguments() {
@@ -228,7 +294,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "DISTRIBUTED BY HASH(`k3`)",
                 "DISTRIBUTED BY HASH(`k3`) BUCKETS 10");
         List<String> selectList = Lists.newArrayList(
+<<<<<<< HEAD
                 "select k1 as k3, k2 from tbl1",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`",
                 "SELECT /*+SET_VAR(query_timeout='1')*/ `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`"
         );

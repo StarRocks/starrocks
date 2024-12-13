@@ -23,16 +23,29 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.CacheUpdateProcessor;
+import com.starrocks.connector.DatabaseTableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.CachingIcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -103,7 +116,11 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             for (HiveTableName cachedTableName : updateProcessor.getCachedTableNames()) {
+=======
+            for (DatabaseTableName cachedTableName : updateProcessor.getCachedTableNames()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 String dbName = cachedTableName.getDatabaseName();
                 String tableName = cachedTableName.getTableName();
                 Table table;
@@ -152,12 +169,22 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
                     registeredTableInfo.getCatalogName(), registeredTableInfo.getDbName(),
                     registeredTableInfo.getTableName());
             try {
+<<<<<<< HEAD
                 Table registeredTable = registeredTableInfo.getTable();
                 if (registeredTable == null) {
                     LOG.warn("Table {}.{}.{} not exist",  registeredTableInfo.getCatalogName(),
                             registeredTableInfo.getDbName(), registeredTableInfo.getTableName());
                     continue;
                 }
+=======
+                Optional<Table> registeredTableOpt = MvUtils.getTableWithIdentifier(registeredTableInfo);
+                if (registeredTableOpt.isEmpty()) {
+                    LOG.warn("Table {}.{}.{} not exist", registeredTableInfo.getCatalogName(),
+                            registeredTableInfo.getDbName(), registeredTableInfo.getTableName());
+                    continue;
+                }
+                Table registeredTable = registeredTableOpt.get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!registeredTable.isHiveTable()) {
                     continue;
                 }
@@ -178,23 +205,40 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         LOG.info("Start to refresh hive external table metadata in the background");
         GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
         MetadataMgr metadataMgr = gsm.getMetadataMgr();
+<<<<<<< HEAD
         List<Database> databases = gsm.getDbIds().stream()
                 .map(gsm::getDb)
+=======
+        List<Database> databases = gsm.getLocalMetastore().getDbIds().stream()
+                .map(dbId -> GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .filter(Objects::nonNull)
                 .filter(db -> !db.isSystemDatabase())
                 .collect(Collectors.toList());
         for (Database db : databases) {
+<<<<<<< HEAD
             List<HiveTable> tables = db.getTables().stream()
+=======
+            List<HiveTable> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .filter(tbl -> tbl.getType() == Table.TableType.HIVE)
                     .map(tbl -> (HiveTable) tbl)
                     .collect(Collectors.toList());
             for (HiveTable table : tables) {
                 try {
                     LOG.info("Start to refresh hive external table metadata on {}.{} of StarRocks and {}.{} of hive " +
+<<<<<<< HEAD
                             "in the background", db.getFullName(), table.getName(), table.getDbName(), table.getTableName());
                     // we didn't use db locks to prevent background tasks from affecting the query.
                     // So we need to check if the table to be refreshed exists.
                     if (db.getTable(table.getId()) != null) {
+=======
+                                    "in the background", db.getFullName(), table.getName(), table.getCatalogDBName(),
+                            table.getCatalogTableName());
+                    // we didn't use db locks to prevent background tasks from affecting the query.
+                    // So we need to check if the table to be refreshed exists.
+                    if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) != null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         metadataMgr.refreshTable(table.getCatalogName(), db.getFullName(),
                                 table, Lists.newArrayList(), false);
                     }

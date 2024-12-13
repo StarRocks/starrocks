@@ -16,6 +16,10 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Column;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -31,8 +35,11 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import mockit.Mock;
 import mockit.MockUp;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -41,7 +48,11 @@ import org.junit.BeforeClass;
 
 import java.util.List;
 import java.util.Locale;
+<<<<<<< HEAD
 import java.util.Set;
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -67,6 +78,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+<<<<<<< HEAD
+=======
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
@@ -75,6 +91,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
             m.createStatisticsTablesForTest();
         }
 
+<<<<<<< HEAD
         new MockUp<MaterializedView>() {
             /**
              * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
@@ -96,6 +113,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
         };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
     }
@@ -247,14 +266,22 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker contains(String... expects) {
+<<<<<<< HEAD
             for (String expect : expects) {
+=======
+            for (String expect: expects) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(this.rewritePlan.contains(expect));
             }
             return this;
         }
 
         public MVRewriteChecker contains(List<String> expects) {
+<<<<<<< HEAD
             for (String expect : expects) {
+=======
+            for (String expect: expects) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(this.rewritePlan.contains(expect));
             }
             return this;
@@ -312,8 +339,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
     }
 
     protected static Table getTable(String dbName, String mvName) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table);
         return table;
     }
@@ -349,11 +381,31 @@ public class MaterializedViewTestBase extends PlanTestBase {
         refreshMaterializedView(db, tableName);
     }
 
+<<<<<<< HEAD
     public String getQueryPlan(String query) {
         try {
             Pair<ExecPlan, String> planAndTrace =
                     UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
             return planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+=======
+    public static Pair<Table, Column> getRefBaseTablePartitionColumn(MaterializedView mv) {
+        Map<Table, List<Column>> result = mv.getRefBaseTablePartitionColumns();
+        Assert.assertTrue(result.size() == 1);
+        Map.Entry<Table, List<Column>> e = result.entrySet().iterator().next();
+        Assert.assertEquals(1, e.getValue().size());
+        return Pair.create(e.getKey(), e.getValue().get(0));
+    }
+
+    public String getQueryPlan(String query) {
+        return getQueryPlan(query, TExplainLevel.NORMAL);
+    }
+
+    public String getQueryPlan(String query, TExplainLevel level) {
+        try {
+            Pair<ExecPlan, String> planAndTrace =
+                    UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, traceLogModule).second;
+            return planAndTrace.first.getExplainString(level);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

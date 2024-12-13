@@ -440,6 +440,27 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
     }
 }
 
+<<<<<<< HEAD
+=======
+static uint32_t calc_update_row_cnt(const ColumnPartialUpdateState& state) {
+    uint32_t total = 0;
+    for (const auto& each : state.rss_rowid_to_update_rowid) {
+        total += each.second.size();
+    }
+    return total;
+}
+
+static uint32_t find_upt_row_id(const ColumnPartialUpdateState& state, uint64_t src_rss_id) {
+    std::map<uint64_t, uint32_t> m;
+    for (const auto& each_rss : state.rss_rowid_to_update_rowid) {
+        for (const auto& each : each_rss.second) {
+            m[(uint64_t)each_rss.first << 32 | (uint64_t)each.first] = each.second;
+        }
+    }
+    return m[src_rss_id];
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_and_check) {
     const int N = 100;
     auto tablet = create_tablet(rand(), rand());
@@ -474,10 +495,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_and_check) {
     const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
     ASSERT_EQ(parital_update_states.size(), 1);
     ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+<<<<<<< HEAD
     ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), N);
     for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
         uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
         ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.find(src_rss_rowid)->second, upt_id);
+=======
+    ASSERT_EQ(calc_update_row_cnt(parital_update_states[0]), N);
+    for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
+        uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
+        ASSERT_EQ(find_upt_row_id(parital_update_states[0], src_rss_rowid), upt_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // commit partial update
     auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
@@ -919,10 +947,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_two_rowset_and_check) {
     const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
     ASSERT_EQ(parital_update_states.size(), 1);
     ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+<<<<<<< HEAD
     ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), N);
     for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
         uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
         ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.find(src_rss_rowid)->second, upt_id);
+=======
+    ASSERT_EQ(calc_update_row_cnt(parital_update_states[0]), N);
+    for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
+        uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
+        ASSERT_EQ(find_upt_row_id(parital_update_states[0], src_rss_rowid), upt_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // commit partial update
     auto st = tablet->rowset_commit(++version, partial_rowset, 10000);

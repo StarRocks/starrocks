@@ -38,7 +38,11 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
@@ -74,7 +78,11 @@ public class RoutineLoadScheduler extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
     private void process() throws UserException {
+=======
+    private void process() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // update
         routineLoadManager.updateRoutineLoadJob();
         // get need schedule routine jobs
@@ -85,7 +93,11 @@ public class RoutineLoadScheduler extends FrontendDaemon {
         }
         for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
             RoutineLoadJob.JobState errorJobState = null;
+<<<<<<< HEAD
             UserException userException = null;
+=======
+            StarRocksException userException = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 routineLoadJob.prepare();
                 // judge nums of tasks more than max concurrent tasks of cluster
@@ -103,11 +115,19 @@ public class RoutineLoadScheduler extends FrontendDaemon {
             } catch (MetaNotFoundException e) {
                 errorJobState = RoutineLoadJob.JobState.CANCELLED;
                 userException = e;
+<<<<<<< HEAD
                 LOG.warn(userException.getMessage());
             } catch (UserException e) {
                 errorJobState = RoutineLoadJob.JobState.PAUSED;
                 userException = e;
                 LOG.warn(userException.getMessage());
+=======
+                LOG.warn(userException.getMessage(), userException);
+            } catch (StarRocksException e) {
+                errorJobState = RoutineLoadJob.JobState.PAUSED;
+                userException = e;
+                LOG.warn(userException.getMessage(), userException);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (errorJobState != null) {
@@ -121,7 +141,11 @@ public class RoutineLoadScheduler extends FrontendDaemon {
                 try {
                     ErrorReason reason = new ErrorReason(userException.getErrorCode(), userException.getMessage());
                     routineLoadJob.updateState(errorJobState, reason, false);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, routineLoadJob.getId())
                             .add("current_state", routineLoadJob.getState())
                             .add("desired_state", errorJobState)

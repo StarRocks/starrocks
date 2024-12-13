@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.persist;
 
@@ -24,12 +25,24 @@ import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
+=======
+package com.starrocks.persist;
+
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.HashMap;
 import java.util.List;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 
 public class RolePrivilegeCollectionInfo implements Writable {
@@ -38,12 +51,15 @@ public class RolePrivilegeCollectionInfo implements Writable {
     private short pluginId;
     @SerializedName(value = "v")
     private short pluginVersion;
+<<<<<<< HEAD
 
     //Deprecated attribute, can be removed in version 3.2
     @Deprecated
     @SerializedName(value = "r")
     private Map<Long, RolePrivilegeCollection> rolePrivCollectionModified;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "r2")
     private Map<Long, RolePrivilegeCollectionV2> rolePrivCollectionModifiedV2;
 
@@ -56,6 +72,7 @@ public class RolePrivilegeCollectionInfo implements Writable {
         this.pluginVersion = pluginVersion;
     }
 
+<<<<<<< HEAD
     public Map<Long, RolePrivilegeCollectionV2> getRolePrivCollectionModified() throws PrivilegeException {
         if (rolePrivCollectionModifiedV2 == null) {
             Map<Long, RolePrivilegeCollectionV2> rolePrivMap = new HashMap<>();
@@ -100,6 +117,10 @@ public class RolePrivilegeCollectionInfo implements Writable {
         } else {
             return rolePrivCollectionModifiedV2;
         }
+=======
+    public Map<Long, RolePrivilegeCollectionV2> getRolePrivCollectionModified() {
+        return rolePrivCollectionModifiedV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public short getPluginId() {

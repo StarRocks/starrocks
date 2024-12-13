@@ -23,6 +23,17 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PrivObjNotFoundException;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.TablePEntryObject;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.RemoteFile;
 import com.starrocks.backup.Repository;
@@ -42,6 +53,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.proc.ReplicasProcNode;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -49,6 +64,7 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.DbPEntryObject;
@@ -56,6 +72,8 @@ import com.starrocks.privilege.PipePEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.TablePEntryObject;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -74,6 +92,10 @@ import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.KillAnalyzeStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
@@ -123,6 +145,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+<<<<<<< HEAD
+=======
+import static org.mockito.ArgumentMatchers.eq;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class PrivilegeCheckerTest {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
@@ -133,6 +160,10 @@ public class PrivilegeCheckerTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
+=======
+        FeConstants.runningUnitTest = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
@@ -204,7 +235,11 @@ public class PrivilegeCheckerTest {
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static void mockRepository() {
@@ -253,8 +288,12 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(statement, starRocksAssert.getCtx());
         String showBackupSql = "SHOW BACKUP FROM " + dbName + ";";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         ShowResultSet set = executor.execute();
+=======
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(set.getResultRows().size() > 0);
     }
 
@@ -313,6 +352,7 @@ public class PrivilegeCheckerTest {
                 "create role test_role", starRocksAssert.getCtx()), starRocksAssert.getCtx());
     }
 
+<<<<<<< HEAD
     private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql,
                                           String expectError) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -320,6 +360,10 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
         // 1. before grant: access denied
+=======
+    private static StatementBase verify(String sql, String expectError, ConnectContext ctx) throws Exception {
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctxToTestUser();
         try {
             Authorizer.check(statement, ctx);
@@ -328,6 +372,24 @@ public class PrivilegeCheckerTest {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage(), e.getMessage().contains(expectError));
         }
+<<<<<<< HEAD
+=======
+        return statement;
+    }
+
+    private static StatementBase verifySuccess(String sql, ConnectContext ctx) throws Exception {
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ctxToTestUser();
+        Authorizer.check(statement, ctx);
+        return statement;
+    }
+
+    private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql,
+                                          String expectError) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        StatementBase statement = verify(sql, expectError, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
@@ -348,6 +410,40 @@ public class PrivilegeCheckerTest {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static void verifyGrantRevokeFail(String sql, String grantSql, String revokeSql,
+                                              String expectError1st, String expectError2nd) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        StatementBase statement = verify(sql, expectError1st, ctx);
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        ctxToTestUser();
+        try {
+            Authorizer.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(expectError2nd));
+        }
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
+
+        ctxToTestUser();
+        try {
+            Authorizer.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(expectError1st));
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static void verifyMultiGrantRevoke(String sql, List<String> grantSqls, List<String> revokeSqls,
                                                String expectError) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -445,7 +541,12 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCatalogStatement() throws Exception {
+<<<<<<< HEAD
         starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (\"type\"=\"iceberg\")");
+=======
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectContext ctx = starRocksAssert.getCtx();
 
         // Anyone can use default_catalog, but can't use other external catalog without any action on it
@@ -483,13 +584,23 @@ public class PrivilegeCheckerTest {
                 "Access denied; you need (at least one of) the DROP privilege(s)");
 
         // check show catalogs only show catalog where the user has any privilege on
+<<<<<<< HEAD
         starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (\"type\"=\"iceberg\")");
+=======
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on catalog test_ex_catalog3 to test", ctx), ctx);
         ctxToTestUser();
+<<<<<<< HEAD
         ShowResultSet res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx)).execute();
+=======
+        ShowResultSet res = ShowExecutor.execute(
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
@@ -497,6 +608,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testExternalDBAndTablePEntryObject() throws Exception {
+<<<<<<< HEAD
         starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
         DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(),
                 ImmutableList.of("test_iceberg", "*"));
@@ -511,6 +623,23 @@ public class PrivilegeCheckerTest {
         Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
         tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
                 ImmutableList.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+=======
+        starRocksAssert.withCatalog("create external catalog test_iceberg properties (" +
+                "\"type\"=\"iceberg\", \"iceberg.catalog.type\"=\"hive\")");
+        DbPEntryObject dbPEntryObject =
+                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
+        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                List.of("test_iceberg", "*", "*"));
+        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
+
+        dbPEntryObject =
+                DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "iceberg_db"));
+        Assert.assertEquals(dbPEntryObject.getUUID(), "iceberg_db");
+        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                List.of("test_iceberg", "iceberg_db", "iceberg_tbl"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(tablePEntryObject.getDatabaseUUID(), "iceberg_db");
         Assert.assertEquals(tablePEntryObject.getTableUUID(), "iceberg_tbl");
         Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
@@ -544,26 +673,46 @@ public class PrivilegeCheckerTest {
     public void testSelectCatalogTable() throws Exception {
         ctxToTestUser();
         try {
+<<<<<<< HEAD
             StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+=======
+            StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                    "select * from hive0.tpch.region", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             stmtExecutor.execute();
         } catch (AccessDeniedException e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
 
         ctxToRoot();
+<<<<<<< HEAD
         StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog hive0");
+=======
+        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                "set catalog hive0", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         stmtExecutor.execute();
         grantRevokeSqlAsRoot("grant SELECT on tpch.region to test");
         ctxToTestUser();
         try {
+<<<<<<< HEAD
             stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.region");
+=======
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                    "select * from hive0.tpch.region", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             stmtExecutor.execute();
         } catch (AccessDeniedException e) {
             Assert.assertFalse(e.getMessage().contains("Access denied;"));
         }
         ctxToRoot();
         grantRevokeSqlAsRoot("revoke SELECT on tpch.region from test");
+<<<<<<< HEAD
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+=======
+        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), SqlParser.parseSingleStatement(
+                "set catalog default_catalog", starRocksAssert.getCtx().getSessionVariable().getSqlMode()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         stmtExecutor.execute();
     }
 
@@ -704,7 +853,11 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on db1.tbl1 to test", ctx), ctx);
         ctxToTestUser();
+<<<<<<< HEAD
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+=======
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         NativeAnalyzeJob nativeAnalyzeJob = new NativeAnalyzeJob(-1, -1, Lists.newArrayList(),
                 Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
@@ -720,20 +873,33 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db3.tbl1 to test");
         try {
+<<<<<<< HEAD
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+=======
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx,
+                    nativeAnalyzeJob.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
+<<<<<<< HEAD
         new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+=======
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db3.tbl1 from test");
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         Database db1 = globalStateMgr.getDb("db1");
+=======
+        Database db1 = globalStateMgr.getLocalMetastore().getDb("db1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         nativeAnalyzeJob = new NativeAnalyzeJob(db1.getId(), -1, Lists.newArrayList(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
                 StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
@@ -746,12 +912,21 @@ public class PrivilegeCheckerTest {
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         try {
+<<<<<<< HEAD
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+=======
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx,
+                    nativeAnalyzeJob.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
+<<<<<<< HEAD
         new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+=======
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
 
@@ -768,15 +943,27 @@ public class PrivilegeCheckerTest {
         nativeAnalyzeJob.setId(4);
         analyzeManager.addAnalyzeJob(nativeAnalyzeJob);
         try {
+<<<<<<< HEAD
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+=======
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx,
+                    nativeAnalyzeJob.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+<<<<<<< HEAD
         new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         Database db2 = globalStateMgr.getDb("db2");
+=======
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, nativeAnalyzeJob.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+
+        Database db2 = globalStateMgr.getLocalMetastore().getDb("db2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tbl1 = db2.getTable("tbl1");
         nativeAnalyzeJob = new NativeAnalyzeJob(db2.getId(), tbl1.getId(), Lists.newArrayList(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
@@ -795,10 +982,17 @@ public class PrivilegeCheckerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DROP on db1.tbl1 to test", ctx), ctx);
         ctxToTestUser();
+<<<<<<< HEAD
         AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db1 = globalStateMgr.getDb("db1");
+=======
+        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db1 = globalStateMgr.getLocalMetastore().getDb("db1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table tbl1 = db1.getTable("tbl1");
 
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(1, db1.getId(), tbl1.getId(),
@@ -816,11 +1010,19 @@ public class PrivilegeCheckerTest {
 
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         analyzeManager.addAnalyzeStatus(analyzeStatus);
+<<<<<<< HEAD
         new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
         grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
 
         try {
             new StmtExecutor(ctx, "").checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+=======
+        new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+
+        try {
+            new StmtExecutor(ctx, new KillAnalyzeStmt(0L)).checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied;"));
         }
@@ -842,7 +1044,11 @@ public class PrivilegeCheckerTest {
         // can show result for stats on table that user has any privilege on
         Assert.assertNotNull(showResult);
 
+<<<<<<< HEAD
         Database db2 = globalStateMgr.getDb("db2");
+=======
+        Database db2 = globalStateMgr.getLocalMetastore().getDb("db2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tbl1 = db2.getTable("tbl1");
         analyzeStatus = new NativeAnalyzeStatus(1, db2.getId(), tbl1.getId(),
                 Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
@@ -903,6 +1109,137 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    @Ignore
+    public void testTableSelectDeleteInsertUpdateColumn() throws Exception {
+        String createTblStmtStr4 = "create table db3.tprimary(k1 varchar(32), k2 varchar(32), k3 varchar(32)," +
+                " k4 int) ENGINE=OLAP PRIMARY KEY(`k1`) distributed by hash(k1) " +
+                "buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr4);
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "true");
+        // select
+        verifyGrantRevoke(
+                "select * from db1.tbl1",
+                "grant select on db1.tbl1 to test",
+                "revoke select on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                        " COLUMN tbl1.* for this operation");
+        verifyGrantRevoke("select count(*) from db1.tbl1",
+                "grant select on db1.tbl1 to test",
+                "revoke select on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                        " COLUMN tbl1.* for this operation");
+        verifyGrantRevoke("select k3,k4 from db1.tbl1",
+                "grant select on db1.tbl1 to test",
+                "revoke select on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the SELECT " +
+                        "privilege(s) on COLUMN tbl1.k3,k4 for this operation");
+        verifyGrantRevoke("select v11 from (select k1 as v11 from db2.tbl1) t1",
+                "grant select on db2.tbl1 to test",
+                "revoke select on db2.tbl1 from test",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                        " COLUMN tbl1.k1 for this operation");
+
+        // insert
+        ConnectContext ctx = starRocksAssert.getCtx();
+        // table level insert branch
+        verifyGrantRevokeFail("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2 union all" +
+                        " select k1,k2 from db2.tbl1",
+                "grant insert on db2.tbl1 to test", "revoke insert on db2.tbl1 from test",
+                "Access denied; you need (at least one of) the INSERT privilege(s) on COLUMN tbl1.k1,k2 for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl2.k1,k2 for this operation");
+        verifyGrantRevoke("insert into db2.tbl1 (k1, k2) select k1,k2 from db2.tbl1",
+                "grant insert on db2.tbl1 to test",
+                "revoke insert on db2.tbl1 from test",
+                "Access denied; you need (at least one of) the INSERT privilege(s) on" +
+                        " COLUMN tbl1.k1,k2 for this operation");
+        // column level insert branch
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
+            verify("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2 union all select k1,k2 from db2.tbl1",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tbl2.k1,k2 for this operation", ctx);
+            verify("insert into db2.tbl1 select * from db1.tbl2 union all select k1,k2,k3,k4 from db2.tbl1",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tbl2.* for this operation", ctx);
+            verify("insert into db2.tbl1 select k1,k2,k3,k4 from db1.tbl2",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tbl2.k1,k2,k3,k4 for this operation", ctx);
+            verifySuccess("insert into db2.tbl1 (k1, k2) select k1,k2 from db2.tbl1", ctx);
+            verify("insert into db2.tbl1 (k1, k2) select k1,k2 from (select * from db2.tbl1) t",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tbl1.k3,k4 for this operation", ctx);
+        }
+
+        // update
+        // table level update branch
+        verifyGrantRevokeFail("update db3.tprimary set k2 = '2' where k2 = (select k2 from db2.tbl1 where k1='1')",
+                "grant update on db3.tprimary to test", "revoke update on db3.tprimary from test",
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on COLUMN tprimary.k2 for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        verifyGrantRevoke("update db3.tprimary set k2 = '2' where k2 = '1'",
+                "grant update on db3.tprimary to test", "revoke update on db3.tprimary from test",
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on COLUMN tprimary.k2 for this operation");
+        // column level update branch
+        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
+            authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
+            verify("update db3.tprimary set k2 = '2' where k2 = (select k2 from db2.tbl1 where k1='1')",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tbl1.k1,k2 for this operation", ctx);
+            verifySuccess("update db3.tprimary set k2 = '2' where k2 = '1'", ctx);
+            verifySuccess("update db3.tprimary set k2 = '2'", ctx);
+            verify("update db3.tprimary set k2 = k3 where k2 < (select avg(k4) from db3.tprimary)",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tprimary.k3,k4 for this operation", ctx);
+            verify("update db3.tprimary set k2 = '2' where k2 = (select k2 from (select * from db3.tprimary) t1" +
+                            " where k1='1')",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tprimary.k1,k3,k4 for this operation", ctx);
+        }
+
+        // delete
+        verifyGrantRevokeFail("delete from db3.tprimary where k1 in (select k1 from db2.tbl1 where k2='3')",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        verifyGrantRevoke("delete from db3.tprimary where k1 = '1'",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation");
+        verifyGrantRevokeFail("delete from db3.tprimary where exists" +
+                        " (select k1 from db2.tbl1 where db3.tprimary.k1=db2.tbl1.k1 and k2='3')",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        verifyGrantRevokeFail("with cte as (select k1 from db2.tbl1 where k2='3') " +
+                        "delete from db3.tprimary using cte where db3.tprimary.k1=cte.k1",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "false");
+        starRocksAssert.dropTable("db3.tprimary");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testTableCreateDrop() throws Exception {
         String createTableSql = "create table db1.tbl22(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
@@ -977,9 +1314,15 @@ public class PrivilegeCheckerTest {
 
         // check alter table: ALTER
         verifyGrantRevoke(
+<<<<<<< HEAD
                 "alter table db1.tbl1 drop partition p1",
                 "grant ALTER on db1.tbl1 to test",
                 "revoke ALTER on db1.tbl1 from test",
+=======
+                "alter table db2.tbl1 drop partition p1",
+                "grant ALTER on db2.tbl1 to test",
+                "revoke ALTER on db2.tbl1 from test",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "Access denied; you need (at least one of) the ALTER privilege(s) on TABLE tbl1 for this operation");
 
         // check cancel alter table: ALTER
@@ -1013,8 +1356,12 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("show table status from db1", ctx);
         grantRevokeSqlAsRoot("grant SELECT on db1.tbl2 to test");
         ctxToTestUser();
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) statement);
         ShowResultSet showResultSet = showExecutor.execute();
+=======
+        ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) statement, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         grantRevokeSqlAsRoot("revoke SELECT on db1.tbl2 from test");
         List<List<String>> resultRows = showResultSet.getResultRows();
         System.out.println(resultRows);
@@ -1068,8 +1415,12 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW DYNAMIC PARTITION TABLES from db1", ctx);
         grantRevokeSqlAsRoot("grant SELECT on db1.tbl1 to test");
         ctxToTestUser();
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) statement);
         ShowResultSet showResultSet = showExecutor.execute();
+=======
+        ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) statement, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         grantRevokeSqlAsRoot("revoke SELECT on db1.tbl1 from test");
         List<List<String>> resultRows = showResultSet.getResultRows();
         System.out.println(resultRows);
@@ -1344,7 +1695,12 @@ public class PrivilegeCheckerTest {
     public void testBlackListStmts() throws Exception {
         String grantSql = "grant blacklist on system to test";
         String revokeSql = "revoke blacklist on system from test";
+<<<<<<< HEAD
         String err = "Access denied; you need (at least one of) the BLACKLIST privilege(s) on SYSTEM for this operation";
+=======
+        String err =
+                "Access denied; you need (at least one of) the BLACKLIST privilege(s) on SYSTEM for this operation";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String sql = "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
@@ -1491,7 +1847,11 @@ public class PrivilegeCheckerTest {
                 "Access denied");
 
         // Test `use database` : check any privilege on any function in db
+<<<<<<< HEAD
         Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+=======
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -1632,21 +1992,34 @@ public class PrivilegeCheckerTest {
         String showTabletSql = "show tablet from db1.tbl1";
         StatementBase showTabletStmt =
                 UtFrameUtils.parseStmtWithNewParser(showTabletSql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
         try {
             executor.execute();
+=======
+        try {
+            ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Access denied"));
         }
         // show table from tbl
         // test any priv, can show tablet, but ip:port is hidden
         grantRevokeSqlAsRoot("grant SELECT on TABLE db1.tbl1 to test");
+<<<<<<< HEAD
         ShowResultSet showResultSet = executor.execute();
+=======
+        ShowResultSet showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
 
         // test OPERATE priv, can show tablet, ip:port is not hidden
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
+<<<<<<< HEAD
         showResultSet = executor.execute();
+=======
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(showResultSet.getResultRows().get(0));
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
 
@@ -1656,21 +2029,33 @@ public class PrivilegeCheckerTest {
         long tabletId = Long.parseLong(showResultSet.getResultRows().get(0).get(0));
         showTabletSql = "show tablet " + tabletId;
         showTabletStmt = UtFrameUtils.parseStmtWithNewParser(showTabletSql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
         showResultSet = executor.execute();
+=======
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(showResultSet.getResultRows().get(0));
         String detailCmd = showResultSet.getResultRows().get(0).get(9);
         System.out.println(detailCmd);
         showTabletStmt = UtFrameUtils.parseStmtWithNewParser(detailCmd, starRocksAssert.getCtx());
+<<<<<<< HEAD
         executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
         showResultSet = executor.execute();
+=======
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(showResultSet.getResultRows().get(0));
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
 
         // test OPERATE priv
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
+<<<<<<< HEAD
         executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
         showResultSet = executor.execute();
+=======
+        showResultSet = ShowExecutor.execute((ShowStmt) showTabletStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(showResultSet.getResultRows().get(0));
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
 
@@ -1679,9 +2064,16 @@ public class PrivilegeCheckerTest {
         grantRevokeSqlAsRoot("revoke SELECT on TABLE db1.tbl1 from test");
 
         // test show single tablet no priv
+<<<<<<< HEAD
         List<Replica> replicas = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
         Table table = db.getTable("tbl1");
+=======
+        List<Replica> replicas =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ReplicasProcNode replicasProcNode = new ReplicasProcNode(db, (OlapTable) table, tabletId, replicas);
         try {
             replicasProcNode.fetchResult();
@@ -1712,7 +2104,11 @@ public class PrivilegeCheckerTest {
 
         // test user has `OPERATE` privilege
         grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
+<<<<<<< HEAD
         Table table = db.getTable("tbl1");
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         tabletSchedCtx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
                 db.getId(), table.getId(), 3, 4, 1000, System.currentTimeMillis());
         result = tabletSchedCtx.checkPrivForCurrUser(testUser);
@@ -1898,7 +2294,12 @@ public class PrivilegeCheckerTest {
     @Test
     public void testSetStmt() throws Exception {
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
+<<<<<<< HEAD
         String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
+=======
+        String expectError =
+                "Access denied; you need (at least one of) the GRANT privilege(s) on SYSTEM for this operation";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         verifyNODEAndGRANT(sql, expectError);
 
         ctxToTestUser();
@@ -1913,10 +2314,18 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+<<<<<<< HEAD
     @Ignore("FIXME")
     public void testRoutineLoadStmt() throws Exception {
         // CREATE ROUTINE LOAD STMT
         String createSql = "CREATE ROUTINE LOAD db1.job_name2 ON tbl1 " +
+=======
+    public void testRoutineLoadStmt() throws Exception {
+        String jobName = "routine_load_job";
+
+        // CREATE ROUTINE LOAD STMT
+        String createSql = "CREATE ROUTINE LOAD db1." + jobName + " ON tbl1 " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "COLUMNS(c1) FROM KAFKA " +
                 "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
                 " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
@@ -1934,7 +2343,11 @@ public class PrivilegeCheckerTest {
                 return Lists.newArrayList(0, 1, 2);
             }
         };
+<<<<<<< HEAD
         String alterSql = "ALTER ROUTINE LOAD FOR db1.job_name2 PROPERTIES ( 'desired_concurrent_number' = '1')";
+=======
+        String alterSql = "ALTER ROUTINE LOAD FOR db1." + jobName + " PROPERTIES ( 'desired_concurrent_number' = '1')";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ConnectContext ctx = starRocksAssert.getCtx();
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(alterSql, starRocksAssert.getCtx());
         try {
@@ -1943,7 +2356,11 @@ public class PrivilegeCheckerTest {
         } catch (SemanticException e) {
             System.out.println(e.getMessage() + ", sql: " + alterSql);
             Assert.assertTrue(
+<<<<<<< HEAD
                     e.getMessage().contains("Routine load job [job_name2] not found when checking privilege"));
+=======
+                    e.getMessage().contains("Routine load job [" + jobName + "] not found when checking privilege"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         new MockUp<RoutineLoadMgr>() {
@@ -1961,44 +2378,69 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withRoutineLoad(createSql);
         ctxToTestUser();
         verifyGrantRevoke(
+<<<<<<< HEAD
                 "ALTER ROUTINE LOAD FOR db1.job_name1 PROPERTIES ( 'desired_concurrent_number' = '1');",
+=======
+                "ALTER ROUTINE LOAD FOR db1." + jobName + " PROPERTIES ( 'desired_concurrent_number' = '1');",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // STOP ROUTINE LOAD STMT
         verifyGrantRevoke(
+<<<<<<< HEAD
                 "STOP ROUTINE LOAD FOR db1.job_name1;",
+=======
+                "STOP ROUTINE LOAD FOR db1." + jobName + ";",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // RESUME ROUTINE LOAD STMT
         verifyGrantRevoke(
+<<<<<<< HEAD
                 "RESUME ROUTINE LOAD FOR db1.job_name1;",
+=======
+                "RESUME ROUTINE LOAD FOR db1." + jobName + ";",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // PAUSE ROUTINE LOAD STMT
         verifyGrantRevoke(
+<<<<<<< HEAD
                 "PAUSE ROUTINE LOAD FOR db1.job_name1;",
+=======
+                "PAUSE ROUTINE LOAD FOR db1." + jobName + ";",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "grant insert on db1.tbl1 to test",
                 "revoke insert on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the INSERT privilege(s) on TABLE tbl1 for this operation");
 
         // SHOW ROUTINE LOAD stmt;
+<<<<<<< HEAD
         String showRoutineLoadSql = "SHOW ROUTINE LOAD FOR db1.job_name1;";
+=======
+        String showRoutineLoadSql = "SHOW ROUTINE LOAD FOR db1." + jobName + ";";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadSql, starRocksAssert.getCtx());
         Authorizer.check(statement, ctx);
 
         // SHOW ROUTINE LOAD TASK FROM DB
+<<<<<<< HEAD
         String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = 'job_name1';";
+=======
+        String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = '" + jobName + "';";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
         Authorizer.check(statement, ctx);
     }
 
     @Test
+<<<<<<< HEAD
     @Ignore("FIXME")
     public void testRoutineLoadShowStmt() throws Exception {
         ctxToRoot();
@@ -2010,10 +2452,26 @@ public class PrivilegeCheckerTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties) {
+=======
+    public void testRoutineLoadShowStmt() throws Exception {
+        String jobName = "routine_load_show_job";
+        ctxToRoot();
+        String createSql = "CREATE ROUTINE LOAD db1." + jobName + " ON tbl1 " +
+                "COLUMNS(c1) FROM KAFKA " +
+                "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
+                " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties,
+                                                       long warehouseId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Lists.newArrayList(0, 1, 2);
             }
         };
 
+<<<<<<< HEAD
         new MockUp<RoutineLoadMgr>() {
             @Mock
             public Map<Long, Integer> getBeTasksNum() {
@@ -2033,6 +2491,16 @@ public class PrivilegeCheckerTest {
         ShowResultSet set = executor.execute();
         for (int i = 0; i < 30; i++) {
             set = executor.execute();
+=======
+        starRocksAssert.withRoutineLoad(createSql);
+
+        String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = '" + jobName + "';";
+        StatementBase statementTask =
+                UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+        for (int i = 0; i < 30; i++) {
+            set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (set.getResultRows().size() > 0) {
                 break;
             } else {
@@ -2043,16 +2511,24 @@ public class PrivilegeCheckerTest {
 
         ctxToTestUser();
         // SHOW ROUTINE LOAD TASK
+<<<<<<< HEAD
         ShowExecutor executorBeforeGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
         set = executorBeforeGrant.execute();
+=======
+        set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0, set.getResultRows().size());
         ctxToRoot();
         DDLStmtExecutor.execute(
                 UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
                 starRocksAssert.getCtx());
         ctxToTestUser();
+<<<<<<< HEAD
         ShowExecutor executorAfterGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
         set = executorAfterGrant.execute();
+=======
+        set = ShowExecutor.execute((ShowStmt) statementTask, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
@@ -2149,8 +2625,14 @@ public class PrivilegeCheckerTest {
                 "('username' = 'test_name','password' = 'pwd') " +
                 "PROPERTIES ('timeout' = '3600');";
         ctxToRoot();
+<<<<<<< HEAD
         String createTblStmtStr = "create table db1.tbl_not_exist(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
                 "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+=======
+        String createTblStmtStr =
+                "create table db1.tbl_not_exist(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                        "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withTable(createTblStmtStr);
         starRocksAssert.withLoad(createSql);
         starRocksAssert.dropTable("db1.tbl_not_exist");
@@ -2174,10 +2656,16 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withExport(createExportSql);
         String showExportSql = "SHOW EXPORT FROM db1";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showExportSql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         ShowResultSet set = executor.execute();
         for (int i = 0; i < 30; i++) {
             set = executor.execute();
+=======
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        for (int i = 0; i < 30; i++) {
+            set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (set.getResultRows().size() > 0) {
                 break;
             } else {
@@ -2189,15 +2677,23 @@ public class PrivilegeCheckerTest {
         // SHOW EXPORT STMT
         ctxToTestUser();
         showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showExportSql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor executorBeforeGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         set = executorBeforeGrant.execute();
+=======
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0, set.getResultRows().size());
         DDLStmtExecutor.execute(
                 UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
                 starRocksAssert.getCtx());
         ctxToTestUser();
+<<<<<<< HEAD
         ShowExecutor executorAfterGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         set = executorAfterGrant.execute();
+=======
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
@@ -2223,7 +2719,12 @@ public class PrivilegeCheckerTest {
         String createExportSql = "EXPORT TABLE db1.tbl1 " +
                 "TO 'hdfs://hdfs_host:port/a/b/c/' " +
                 "WITH BROKER 'broker0'";
+<<<<<<< HEAD
         String expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
+=======
+        String expectError =
+                "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         verifyGrantRevoke(
                 createExportSql,
                 "grant export on db1.tbl1 to test",
@@ -2234,7 +2735,12 @@ public class PrivilegeCheckerTest {
     @Test
     public void testRepositoryStmt() throws Exception {
         mockBroker();
+<<<<<<< HEAD
         String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+=======
+        String expectError =
+                "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String createRepoSql = "CREATE REPOSITORY `oss_repo` WITH BROKER `broker0` " +
                 "ON LOCATION 'oss://starRocks_backup' PROPERTIES ( " +
@@ -2268,7 +2774,12 @@ public class PrivilegeCheckerTest {
     @Test
     public void testBackupStmt() throws Exception {
         mockRepository();
+<<<<<<< HEAD
         String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+=======
+        String expectError =
+                "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String createBackupSql = "BACKUP SNAPSHOT db1.backup_name1 " +
                 "TO example_repo " +
                 "ON (tbl1) " +
@@ -2290,7 +2801,12 @@ public class PrivilegeCheckerTest {
         grantOrRevoke("grant repository on system to test");
         // check EXPORT privilege
         ctxToTestUser();
+<<<<<<< HEAD
         expectError = "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
+=======
+        expectError =
+                "Access denied; you need (at least one of) the EXPORT privilege(s) on TABLE tbl1 for this operation";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
@@ -2318,15 +2834,23 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         String showBackupSql = "SHOW BACKUP FROM db1;";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         ShowResultSet set = executor.execute();
+=======
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0, set.getResultRows().size());
         ctxToRoot();
         grantOrRevoke("grant export on db1.tbl1 to test");
         // user(test) has all privilege
         ctxToTestUser();
+<<<<<<< HEAD
         executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         set = executor.execute();
+=======
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(set.getResultRows().size() > 0);
         // revoke all privilege
         ctxToRoot();
@@ -2370,7 +2894,12 @@ public class PrivilegeCheckerTest {
         StatementBase statement = UtFrameUtils.parseStmtWithNewParser(restoreSql, starRocksAssert.getCtx());
 
         ctxToTestUser();
+<<<<<<< HEAD
         String expectError = "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+=======
+        String expectError =
+                "Access denied; you need (at least one of) the REPOSITORY privilege(s) on SYSTEM for this operation";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             Authorizer.check(statement, starRocksAssert.getCtx());
             Assert.fail();
@@ -2409,20 +2938,31 @@ public class PrivilegeCheckerTest {
         // db create privilege
         String createSql = "create materialized view db1.mv1 " +
                 "distributed by hash(k2)" +
+<<<<<<< HEAD
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+=======
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select k1, db1.tbl1.k2 from db1.tbl1;";
         starRocksAssert.withMaterializedView(createSql);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // test analyze on async mv
         verifyGrantRevoke(
                 "ANALYZE SAMPLE TABLE db1.mv1 WITH ASYNC MODE;",
                 "grant SELECT on materialized view db1.mv1 to test",
                 "revoke SELECT on materialized view db1.mv1 from test",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on TABLE mv1 for this operation.");
+<<<<<<< HEAD
         grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
         starRocksAssert.dropMaterializedView("db1.mv1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String grantDb = "grant create materialized view on DATABASE db1 to test";
         String revokeDb = "revoke create materialized view on DATABASE db1 from test";
@@ -2451,6 +2991,12 @@ public class PrivilegeCheckerTest {
 
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeDb, connectContext), connectContext);
         }
+<<<<<<< HEAD
+=======
+
+        grantRevokeSqlAsRoot("grant DROP on materialized view db1.mv1 to test");
+        starRocksAssert.dropMaterializedView("db1.mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -2458,7 +3004,11 @@ public class PrivilegeCheckerTest {
 
         String createSql = "create materialized view db1.mv1 " +
                 "distributed by hash(k2)" +
+<<<<<<< HEAD
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+=======
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2481,7 +3031,11 @@ public class PrivilegeCheckerTest {
         ctxToRoot();
         String createSql = "create materialized view db1.mv2 " +
                 "distributed by hash(k2)" +
+<<<<<<< HEAD
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+=======
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2510,7 +3064,11 @@ public class PrivilegeCheckerTest {
         ctxToRoot();
         String createSql = "create materialized view db1.mv3 " +
                 "distributed by hash(k2)" +
+<<<<<<< HEAD
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+=======
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2518,6 +3076,7 @@ public class PrivilegeCheckerTest {
         starRocksAssert.withMaterializedView(createSql);
         String showBackupSql = "SHOW MATERIALIZED VIEWS FROM db1;";
         StatementBase showExportSqlStmt = UtFrameUtils.parseStmtWithNewParser(showBackupSql, starRocksAssert.getCtx());
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         ShowResultSet set = executor.execute();
         Assert.assertTrue(set.getResultRows().size() > 0);
@@ -2525,12 +3084,23 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
         executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         set = executor.execute();
+=======
+        ShowResultSet set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+        Assert.assertTrue(set.getResultRows().size() > 0);
+        grantOrRevoke("grant SELECT,INSERT on db1.tbl1 to test");
+        ctxToTestUser();
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0, set.getResultRows().size());
         ctxToRoot();
         grantOrRevoke("grant refresh on materialized view db1.mv3 to test");
         ctxToTestUser();
+<<<<<<< HEAD
         executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showExportSqlStmt);
         set = executor.execute();
+=======
+        set = ShowExecutor.execute((ShowStmt) showExportSqlStmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(set.getResultRows().size() > 0);
         ctxToRoot();
         grantOrRevoke("revoke SELECT,INSERT on db1.tbl1 from test");
@@ -2545,7 +3115,11 @@ public class PrivilegeCheckerTest {
         ctxToRoot();
         String createSql = "create materialized view db1.mv4 " +
                 "distributed by hash(k2)" +
+<<<<<<< HEAD
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND) " +
+=======
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -2557,7 +3131,11 @@ public class PrivilegeCheckerTest {
 
         ctxToTestUser();
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(statement);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(
@@ -2565,17 +3143,28 @@ public class PrivilegeCheckerTest {
         }
 
         grantRevokeSqlAsRoot("grant drop on materialized view db1.mv4 to test");
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(statement);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr.getCurrentState().getAuthorizationMgr().removeInvalidObject();
         ctxToTestUser();
     }
 
     @Test
     public void testCreateFunc() throws Exception {
+<<<<<<< HEAD
 
         new MockUp<CreateFunctionStmt>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
+=======
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -2594,10 +3183,17 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCreateGlobalFunc() throws Exception {
+<<<<<<< HEAD
 
         new MockUp<CreateFunctionStmt>() {
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
+=======
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -2616,7 +3212,11 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testFunc() throws Exception {
+<<<<<<< HEAD
         Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+=======
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -2729,7 +3329,11 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowFunc() throws Exception {
 
+<<<<<<< HEAD
         Database db1 = GlobalStateMgr.getCurrentState().getDb("db1");
+=======
+        Database db1 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FunctionName fn = FunctionName.createFnName("db1.my_udf_json_get");
         Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
@@ -2793,8 +3397,14 @@ public class PrivilegeCheckerTest {
             Assert.fail();
         } catch (ErrorReportException e) {
             System.out.println(e.getMessage() + ", sql: " + selectSQL);
+<<<<<<< HEAD
             Assert.assertTrue(e.getMessage().contains("Access denied; you need (at least one of) the USAGE privilege(s) " +
                     "on GLOBAL FUNCTION my_udf_json_get(VARCHAR,VARCHAR) for this operation"));
+=======
+            Assert.assertTrue(
+                    e.getMessage().contains("Access denied; you need (at least one of) the USAGE privilege(s) " +
+                            "on GLOBAL FUNCTION my_udf_json_get(VARCHAR,VARCHAR) for this operation"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // grant usage on global function
@@ -2834,7 +3444,12 @@ public class PrivilegeCheckerTest {
 
         // grant usage on global function
         ctxToRoot();
+<<<<<<< HEAD
         grantOrRevoke("grant usage on global function my_udf_json_get(string,string), my_udf_json_get2(string,string) to test");
+=======
+        grantOrRevoke(
+                "grant usage on global function my_udf_json_get(string,string), my_udf_json_get2(string,string) to test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctxToTestUser();
 
         try {
@@ -2867,11 +3482,19 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+    public void testShowAuthentication()
+            throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
+        ctxToTestUser();
+        ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("UserIdentity", resultSet.getMetaData().getColumn(0).getName());
@@ -2882,16 +3505,24 @@ public class PrivilegeCheckerTest {
                 resultSet.getResultRows().toString());
 
         stmt = new ShowAuthenticationStmt(null, true);
+<<<<<<< HEAD
         executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null], " +
                         "['test2'@'%', No, " +
                         "MYSQL_NATIVE_PASSWORD, null], ['test'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
 
         stmt = new ShowAuthenticationStmt(UserIdentity.ROOT, false);
+<<<<<<< HEAD
         executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
         resultSet = executor.execute();
+=======
+        resultSet = ShowExecutor.execute(stmt, starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("[['root'@'%', No, MYSQL_NATIVE_PASSWORD, null]]",
                 resultSet.getResultRows().toString());
     }
@@ -3049,7 +3680,12 @@ public class PrivilegeCheckerTest {
 
         ctxToRoot();
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+<<<<<<< HEAD
                 "grant SELECT on TABLE db1.tbl1, db1.tbl2 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
+=======
+                        "grant SELECT on TABLE db1.tbl1, db1.tbl2 to test", starRocksAssert.getCtx()),
+                starRocksAssert.getCtx());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         verifyGrantRevoke(
                 "select * from db1.tbl1, db1.tbl2, db2.tbl1",
@@ -3134,7 +3770,11 @@ public class PrivilegeCheckerTest {
         ctxToRoot();
         String createSql = "create materialized view db1.mv5 " +
                 "distributed by hash(k2)" +
+<<<<<<< HEAD
                 "refresh async START('9999-12-31') EVERY(INTERVAL 1000 SECOND) " +
+=======
+                "refresh async START('9999-12-31') EVERY(INTERVAL 1000 MINUTE) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
@@ -3147,24 +3787,37 @@ public class PrivilegeCheckerTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         grantRevokeSqlAsRoot("grant select on db1.tbl1 to test");
         ctxToTestUser();
+<<<<<<< HEAD
         ShowResultSet res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+=======
+        ShowResultSet res =
+                ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(res.getResultRows());
         Assert.assertEquals(1, res.getResultRows().size());
         Assert.assertEquals("tbl1", res.getResultRows().get(0).get(0));
 
         // can show mv if we have any privilege on it
         grantRevokeSqlAsRoot("grant alter on materialized view db1.mv5 to test");
+<<<<<<< HEAD
         res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+=======
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("mv5", res.getResultRows().get(0).get(0));
 
         // can show view if we have any privilege on it
         grantRevokeSqlAsRoot("grant drop on view db1.view5 to test");
+<<<<<<< HEAD
         res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+=======
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(res.getResultRows());
         Assert.assertEquals(3, res.getResultRows().size());
         Assert.assertEquals("view5", res.getResultRows().get(2).get(0));
@@ -3192,8 +3845,13 @@ public class PrivilegeCheckerTest {
         ctxToTestUser();
 
         // test no authorization on show storage volumes
+<<<<<<< HEAD
         ShowResultSet res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show storage volumes", ctx)).execute();
+=======
+        ShowResultSet res =
+                ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show storage volumes", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0, res.getResultRows().size());
 
         // test desc storage volume
@@ -3292,16 +3950,27 @@ public class PrivilegeCheckerTest {
         // test actions use ROOT without authorize
         {
             ctxToRoot();
+<<<<<<< HEAD
             ShowResultSet res = new ShowExecutor(ctx,
                     (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+=======
+            ShowResultSet res =
+                    ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(0, res.getResultRows().size());
             // create
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
             // show
+<<<<<<< HEAD
             res = new ShowExecutor(ctx,
                     (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx)).execute();
             // desc
             new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx)).execute();
+=======
+            res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx), ctx);
+            // desc
+            ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // alter
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("alter pipe p1 set('poll_interval'='10')", ctx),
                     ctx);
@@ -3311,16 +3980,27 @@ public class PrivilegeCheckerTest {
         // test actions use user without authorize
         {
             ctxToTestUser();
+<<<<<<< HEAD
             ShowResultSet res = new ShowExecutor(ctx,
                     (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+=======
+            ShowResultSet res =
+                    ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(0, res.getResultRows().size());
             // create
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createSql, ctx), ctx);
             // show
+<<<<<<< HEAD
             res = new ShowExecutor(ctx,
                     (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx)).execute();
             // desc
             new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx)).execute();
+=======
+            res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes from db1", ctx), ctx);
+            // desc
+            ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("desc pipe p1", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // alter
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("alter pipe p1 set('poll_interval'='10')", ctx),
                     ctx);
@@ -3367,10 +4047,17 @@ public class PrivilegeCheckerTest {
 
         // test show pipes
         ShowResultSet res =
+<<<<<<< HEAD
                 new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
         Assert.assertEquals(0, res.getResultRows().size());
         starRocksAssert.ddl("grant USAGE on PIPE db1.p1 to test");
         res = new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+=======
+                ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+        Assert.assertEquals(0, res.getResultRows().size());
+        starRocksAssert.ddl("grant USAGE on PIPE db1.p1 to test");
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, res.getResultRows().size());
 
         // test show grants
@@ -3425,7 +4112,11 @@ public class PrivilegeCheckerTest {
             starRocksAssert.ddl("revoke CREATE PIPE on ALL DATABASES from test");
         }
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke USAGE on PIPE db1.p1 from test", ctx), ctx);
+<<<<<<< HEAD
         res = new ShowExecutor(ctx, (ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx)).execute();
+=======
+        res = ShowExecutor.execute((ShowStmt) UtFrameUtils.parseStmtWithNewParser("show pipes", ctx), ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0, res.getResultRows().size());
         Assert.assertEquals(ImmutableList.of(
                         ImmutableList.of("'test'@'%'", "default_catalog",
@@ -3612,11 +4303,19 @@ public class PrivilegeCheckerTest {
         try (MockedStatic<Authorizer> authorizerMockedStatic =
                 Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic
+<<<<<<< HEAD
                     .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), Mockito.eq(tableName)))
                     .thenReturn(e);
             authorizerMockedStatic
                     .when(() -> Authorizer.getColumnMaskingPolicy(
                             Mockito.any(), Mockito.eq(tableName), Mockito.any()))
+=======
+                    .when(() -> Authorizer.getRowAccessPolicy(Mockito.any(), eq(tableName)))
+                    .thenReturn(e);
+            authorizerMockedStatic
+                    .when(() -> Authorizer.getColumnMaskingPolicy(
+                            Mockito.any(), eq(tableName), Mockito.any()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .thenReturn(e2);
             authorizerMockedStatic.when(Authorizer::getInstance)
                     .thenCallRealMethod();
@@ -3627,7 +4326,13 @@ public class PrivilegeCheckerTest {
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
+<<<<<<< HEAD
 
+=======
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
+                            Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             String sql = "select * from db_for_ranger.tbl1";
 
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, context);
@@ -3642,7 +4347,12 @@ public class PrivilegeCheckerTest {
             Analyzer.analyze(stmt, context);
 
             QueryStatement queryStatement = (QueryStatement) stmt;
+<<<<<<< HEAD
             Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+=======
+            Assert.assertTrue(
+                    ((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             SubqueryRelation subqueryRelation = (SubqueryRelation) ((SelectRelation) queryStatement.getQueryRelation())
                     .getRelation();
             SelectRelation selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();
@@ -3666,7 +4376,12 @@ public class PrivilegeCheckerTest {
             }.visit(stmt);
             Analyzer.analyze(stmt, context);
             queryStatement = (QueryStatement) stmt;
+<<<<<<< HEAD
             Assert.assertTrue(((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+=======
+            Assert.assertTrue(
+                    ((SelectRelation) queryStatement.getQueryRelation()).getRelation() instanceof SubqueryRelation);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             subqueryRelation = (SubqueryRelation) ((SelectRelation) queryStatement.getQueryRelation())
                     .getRelation();
             selectRelation = (SelectRelation) subqueryRelation.getQueryStatement().getQueryRelation();

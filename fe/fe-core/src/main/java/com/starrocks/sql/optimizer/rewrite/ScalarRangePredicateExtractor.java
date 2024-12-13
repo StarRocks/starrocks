@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -34,6 +35,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+=======
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.RangeExtractor;
+import com.starrocks.sql.optimizer.property.RangeExtractor.ValueDescriptor;
+
+import java.util.HashSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -72,7 +86,11 @@ public class ScalarRangePredicateExtractor {
         Set<ScalarOperator> result = Sets.newLinkedHashSet();
         extractMap.keySet().stream().filter(k -> !onlyExtractColumnRef || k.isColumnRef())
                 .map(extractMap::get)
+<<<<<<< HEAD
                 .filter(d -> d.sourceCount > 1)
+=======
+                .filter(d -> d.getSourceCount() > 1)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(ValueDescriptor::toScalarOperator).forEach(result::addAll);
 
         List<ScalarOperator> decimalKeys =
@@ -94,7 +112,11 @@ public class ScalarRangePredicateExtractor {
         if (isOnlyOrCompound(predicate)) {
             Set<ColumnRefOperator> c = Sets.newHashSet(Utils.extractColumnRef(predicate));
             if (c.size() == extractMap.size() &&
+<<<<<<< HEAD
                     extractMap.values().stream().allMatch(v -> v instanceof MultiValuesDescriptor)) {
+=======
+                    extractMap.values().stream().allMatch(v -> v instanceof RangeExtractor.MultiValuesDescriptor)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return extractExpr;
             }
         }
@@ -114,7 +136,11 @@ public class ScalarRangePredicateExtractor {
             // wrong result.
             //
             // Components of AND/OR should be deduplicated at first to avoid this issue.
+<<<<<<< HEAD
             if (extractMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.sourceCount == cs.size())
+=======
+            if (extractMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.getSourceCount() == cs.size())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     && extractMap.size() == cf.size()) {
                 if (result.size() == conjuncts.size()) {
                     // to keep the isPushdown/isRedundant of predicate
@@ -165,6 +191,7 @@ public class ScalarRangePredicateExtractor {
         return re.apply(scalarOperator, null);
     }
 
+<<<<<<< HEAD
     private static class RangeExtractor extends ScalarOperatorVisitor<Void, Void> {
         private final Map<ScalarOperator, ValueDescriptor> descMap = Maps.newHashMap();
 
@@ -461,6 +488,8 @@ public class ScalarRangePredicateExtractor {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static boolean isOnlyAndCompound(ScalarOperator predicate) {
         if (predicate instanceof CompoundPredicateOperator) {
             CompoundPredicateOperator compoundPredicateOperator = (CompoundPredicateOperator) predicate;
@@ -487,4 +516,8 @@ public class ScalarRangePredicateExtractor {
             return true;
         }
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -22,7 +22,10 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -80,6 +83,10 @@ public class ModifyBrokerClauseTest {
     @Test
     public void testNormal() throws Exception {
         analyzeFail("ALTER SYSTEM ADD BROKER `` \"127.0.0.1:8000\"", "Broker's name can't be empty.");
+<<<<<<< HEAD
         analyzeFail("ALTER SYSTEM ADD BROKER `broker1` \"127.0.0.1\"", "BROKER host or port is wrong.");
+=======
+        analyzeFail("ALTER SYSTEM ADD BROKER `broker1` \"127.0.0.1\"", "Invalid host port");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

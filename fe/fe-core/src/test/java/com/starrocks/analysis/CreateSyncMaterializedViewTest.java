@@ -37,8 +37,11 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -53,9 +56,16 @@ import java.util.Set;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
+<<<<<<< HEAD
 public class CreateSyncMaterializedViewTest {
     private static final Logger LOG = LogManager.getLogger(CreateSyncMaterializedViewTest.class);
 
+=======
+// If you add a test in this file,
+// please add it in another file LakeSyncMaterializedViewTest too.
+// The test cases for both files are the same, but the RunMode is different.
+public class CreateSyncMaterializedViewTest {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
 
@@ -198,12 +208,21 @@ public class CreateSyncMaterializedViewTest {
                 .useDatabase("test");
         starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
         currentState = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         testDb = currentState.getDb("test");
     }
 
     private Table getTable(String dbName, String mvName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(mvName);
+=======
+        testDb = currentState.getLocalMetastore().getDb("test");
+    }
+
+    private Table getTable(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table);
         return table;
     }
@@ -221,7 +240,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         waitingRollupJobV2Finish();
         sql = "select * from sync_mv1 [_SYNC_MV_];";
@@ -241,7 +264,11 @@ public class CreateSyncMaterializedViewTest {
                 parseStmtWithNewParser(sql, connectContext);
         try {
             // aggregate_table_with_null already existed in the db
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Table [aggregate_table_with_null] already exists in the db test"));
@@ -254,7 +281,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
@@ -266,7 +297,11 @@ public class CreateSyncMaterializedViewTest {
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.fail();
         } catch (Throwable e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists in " +
@@ -281,7 +316,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from tbl1 group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         waitingRollupJobV2Finish();
         OlapTable tbl1 = (OlapTable) (getTable("test", "tbl1"));
@@ -292,7 +331,11 @@ public class CreateSyncMaterializedViewTest {
         createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.fail();
         } catch (Throwable e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view[sync_mv1] already exists " +
@@ -307,7 +350,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view UPPER_MV1 as select K1, sum(V1) from TBL1 group by K1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         waitingRollupJobV2Finish();
         {
@@ -343,7 +390,11 @@ public class CreateSyncMaterializedViewTest {
         String sql = "create materialized view lower_mv1 as select k1, sum(v1) from tbl1 group by K1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         waitingRollupJobV2Finish();
         {
@@ -374,6 +425,7 @@ public class CreateSyncMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateSynchronousMVOnLakeTable() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -391,6 +443,8 @@ public class CreateSyncMaterializedViewTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testCreateSynchronousMVOnAnotherMV() throws Exception {
         String sql = "create materialized view sync_mv1 as select k1, sum(v1) from mocked_cloud_table group by k1;";
         CreateMaterializedViewStmt createTableStmt = (CreateMaterializedViewStmt) UtFrameUtils.
@@ -399,7 +453,11 @@ public class CreateSyncMaterializedViewTest {
         // Change table type to materialized view
         Deencapsulation.setField(table, "type", Table.TableType.MATERIALIZED_VIEW);
         DdlException e = Assert.assertThrows(DdlException.class, () -> {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMetadata().createMaterializedView(createTableStmt);
+=======
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
         Assert.assertTrue(e.getMessage().contains("Do not support create synchronous materialized view(rollup) on"));
     }
@@ -541,7 +599,10 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("mv_month");
         for (Column column : columns) {
+<<<<<<< HEAD
             System.out.println(column.getAggregationType());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());
@@ -595,7 +656,10 @@ public class CreateSyncMaterializedViewTest {
         List<Column> columns = mvIndexMeta.getSchema();
         Set<String> keyColumns = ImmutableSet.of("k3", "mv_month");
         for (Column column : columns) {
+<<<<<<< HEAD
             System.out.println(column.getAggregationType());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (keyColumns.contains(column.getName())) {
                 Assert.assertTrue(column.isKey());
                 Assert.assertFalse(column.isAggregated());
@@ -642,4 +706,38 @@ public class CreateSyncMaterializedViewTest {
         }
         starRocksAssert.dropTable("t1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateMVWithAggState() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("\n" +
+                "CREATE TABLE t1 (\n" +
+                "    k1 string NOT NULL,\n" +
+                "    k2 string,\n" +
+                "    k3 DECIMAL(34,0),\n" +
+                "    k4 DATE NOT NULL,\n" +
+                "    v1 BIGINT DEFAULT \"0\"\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1,  k2, k3,  k4)\n" +
+                "DISTRIBUTED BY HASH(k4);");
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3)) as v1 from t1 group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 2)) as v1 from t1 group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 as \n" +
+                    "SELECT k1, k2, avg_union(avg_state(k3 * 4)) as v1 from t1 where k1 != 'a' group by k1, k2;");
+            starRocksAssert.dropMaterializedView("test_mv1");
+        }
+        starRocksAssert.dropTable("t1");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

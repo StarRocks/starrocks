@@ -25,7 +25,11 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -73,8 +77,12 @@ public class ShowCreateTableStmtTest {
                         " as select k1 from base");
         String sql = "show create view test_mv";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("test_mv", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE VIEW `test_mv` AS SELECT `test`.`base`.`k1`\n" +
                 "FROM `test`.`base`", resultSet.getResultRows().get(0).get(1));
@@ -115,8 +123,12 @@ public class ShowCreateTableStmtTest {
                         ");");
         String sql = "show create table test_pk_current_timestamp";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("test_pk_current_timestamp", resultSet.getResultRows().get(0).get(0));
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("datetime NOT NULL DEFAULT CURRENT_TIMESTAMP"));
     }
@@ -132,7 +144,11 @@ public class ShowCreateTableStmtTest {
                 0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
                 props, new HashMap<>(),  HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
         List<String> result = new ArrayList<>();
+<<<<<<< HEAD
         GlobalStateMgr.getDdlStmt(table, result, null, null, false, true);
+=======
+        AstToStringBuilder.getDdlStmt(table, result, null, null, false, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(result.size(), 1);
         String value = result.get(0);
         System.out.println(value);
@@ -155,8 +171,12 @@ public class ShowCreateTableStmtTest {
                         ");");
         String sql = "show create table test.aaa";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
 }

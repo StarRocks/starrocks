@@ -46,7 +46,11 @@ public class FailPointExecutor {
     public FailPointExecutor(ConnectContext connectContext, StatementBase stmt) {
         this.connectContext = connectContext;
         this.stmt = stmt;
+<<<<<<< HEAD
         clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void execute() throws Exception {

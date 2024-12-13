@@ -27,6 +27,12 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.slot.SlotProvider;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
@@ -78,12 +84,26 @@ public class JobSpec {
     private TQueryOptions queryOptions;
     private TWorkGroup resourceGroup;
 
+<<<<<<< HEAD
+=======
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private String planProtocol;
 
     private boolean enableQueue = false;
     private boolean needQueued = false;
     private boolean enableGroupLevelQueue = false;
 
+<<<<<<< HEAD
+=======
+    private boolean incrementalScanRanges = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class Factory {
         private Factory() {
         }
@@ -95,6 +115,10 @@ public class JobSpec {
                                             TQueryType queryType) {
             TQueryOptions queryOptions = context.getSessionVariable().toThrift();
             queryOptions.setQuery_type(queryType);
+<<<<<<< HEAD
+=======
+            queryOptions.setQuery_timeout(context.getExecTimeout());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
                     context.getSessionVariable().getTimeZone());
@@ -115,6 +139,10 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+<<<<<<< HEAD
+=======
+                    .warehouseId(context.getCurrentWarehouseId())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .setPlanProtocol(context.getSessionVariable().getThriftPlanProtocol())
                     .build();
         }
@@ -157,7 +185,11 @@ public class JobSpec {
                 queryGlobals.setLast_query_id(context.getLastQueryId().toString());
             }
 
+<<<<<<< HEAD
             return new JobSpec.Builder()
+=======
+            return new Builder()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .loadJobId(loadPlanner.getLoadJobId())
                     .queryId(loadPlanner.getLoadId())
                     .fragments(loadPlanner.getFragments())
@@ -169,6 +201,10 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+<<<<<<< HEAD
+=======
+                    .warehouseId(loadPlanner.getWarehouseId())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .build();
         }
 
@@ -203,6 +239,33 @@ public class JobSpec {
                     .needReport(true)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
+<<<<<<< HEAD
+=======
+                    .warehouseId(context.getCurrentWarehouseId())
+                    .commonProperties(context)
+                    .build();
+        }
+
+        public static JobSpec fromRefreshDictionaryCacheSpec(ConnectContext context,
+                                                             TUniqueId queryId,
+                                                             DescriptorTable descTable,
+                                                             List<PlanFragment> fragments,
+                                                             List<ScanNode> scanNodes) {
+            TQueryOptions queryOptions = context.getSessionVariable().toThrift();
+            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
+                    context.getSessionVariable().getTimeZone());
+
+            return new JobSpec.Builder()
+                    .queryId(queryId)
+                    .fragments(fragments)
+                    .scanNodes(scanNodes)
+                    .descTable(descTable.toThrift())
+                    .enableStreamPipeline(false)
+                    .isBlockQuery(false)
+                    .needReport(false)
+                    .queryGlobals(queryGlobals)
+                    .queryOptions(queryOptions)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .commonProperties(context)
                     .build();
         }
@@ -215,7 +278,12 @@ public class JobSpec {
                                                                String timezone,
                                                                long startTime,
                                                                Map<String, String> sessionVariables,
+<<<<<<< HEAD
                                                                long execMemLimit) {
+=======
+                                                               long execMemLimit,
+                                                               long warehouseId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TQueryOptions queryOptions = new TQueryOptions();
             setSessionVariablesToLoadQueryOptions(queryOptions, sessionVariables);
             queryOptions.setQuery_type(TQueryType.LOAD);
@@ -231,7 +299,11 @@ public class JobSpec {
 
             TQueryGlobals queryGlobals = genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
 
+<<<<<<< HEAD
             return new JobSpec.Builder()
+=======
+            return new Builder()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .loadJobId(loadJobId)
                     .queryId(queryId)
                     .fragments(fragments)
@@ -243,6 +315,10 @@ public class JobSpec {
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
+<<<<<<< HEAD
+=======
+                    .warehouseId(warehouseId)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .build();
         }
 
@@ -262,6 +338,10 @@ public class JobSpec {
                     .queryOptions(null)
                     .enablePipeline(false)
                     .resourceGroup(null)
+<<<<<<< HEAD
+=======
+                    .warehouseId(planner.getWarehouseId())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .build();
         }
 
@@ -344,6 +424,10 @@ public class JobSpec {
                 ", enableStreamPipeline=" + enableStreamPipeline +
                 ", isBlockQuery=" + isBlockQuery +
                 ", resourceGroup=" + resourceGroup +
+<<<<<<< HEAD
+=======
+                ", warehouseId=" + warehouseId +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 '}';
     }
 
@@ -451,10 +535,41 @@ public class JobSpec {
         return planProtocol;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isIncrementalScanRanges() {
+        return incrementalScanRanges;
+    }
+
+    public void setIncrementalScanRanges(boolean v) {
+        incrementalScanRanges = v;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void reset() {
         fragments.forEach(PlanFragment::reset);
     }
 
+<<<<<<< HEAD
+=======
+    public SlotProvider getSlotProvider() {
+        if (!isNeedQueued() || !isEnableQueue()) {
+            return GlobalStateMgr.getCurrentState().getLocalSlotProvider();
+        } else {
+            return GlobalStateMgr.getCurrentState().getGlobalSlotProvider();
+        }
+    }
+
+    public boolean hasOlapTableSink() {
+        for (PlanFragment fragment : fragments) {
+            if (fragment.hasOlapTableSink()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class Builder {
         private final JobSpec instance = new JobSpec();
 
@@ -535,6 +650,14 @@ public class JobSpec {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        private Builder warehouseId(long warehouseId) {
+            instance.warehouseId = warehouseId;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private Builder needReport(boolean needReport) {
             instance.needReport = needReport;
             return this;

@@ -21,7 +21,10 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Reference;
 import com.starrocks.planner.OlapScanNode;
@@ -33,7 +36,10 @@ import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TQueryPlanInfo;
+<<<<<<< HEAD
 import com.starrocks.utframe.StarRocksAssert;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -41,7 +47,10 @@ import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+<<<<<<< HEAD
 import org.junit.BeforeClass;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -53,6 +62,7 @@ import java.util.stream.Collectors;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
+<<<<<<< HEAD
 public class PlanFragmentWithCostTest extends PlanTestBase {
     private static final int NUM_TABLE2_ROWS = 10000;
     private static final int NUM_TABLE0_ROWS = 10000;
@@ -167,6 +177,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 ");");
         FeConstants.runningUnitTest = true;
     }
+=======
+public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Before
     public void before() {
@@ -181,9 +194,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testCrossJoinBroadCast() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         setTableStatistics(table2, 20000000);
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
+        setTableStatistics(table2, 20000000);
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t0, 20000000);
 
         String sql = "select t1a,v1 from test_all_type, t0";
@@ -424,9 +443,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
+=======
+        OlapTable table1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(table1, 10000);
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(table2, 5000);
         String sql = "SELECT v2,t1d from t0 join test_all_type on t0.v2 = test_all_type.t1d ;";
         String plan = getFragmentPlan(sql);
@@ -469,7 +494,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testBroadcastInnerJoinWithCommutativity() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+=======
+        OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(table, 1000);
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d ;";
         String plan = getFragmentPlan(sql);
@@ -759,9 +788,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testThriftWaitingNodeIds() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t1, 10000);
 
         String sql = "select * from t0 inner join t1 on t0.v1 = t1.v4 and t0.v2 = t1.v5 and t0.v1 = 1 and t1.v5 = 2";
@@ -774,11 +809,19 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testIntersectReorder() throws Exception {
         // check cross join generate plan without exception
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 100);
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 1000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 100);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t2, 1);
 
         String sql = "select v1 from t0 intersect select v7 from t2 intersect select v4 from t1";
@@ -802,10 +845,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testNotPushDownRuntimeFilterToSortNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10);
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t1, 1000000000L);
 
         String sql = "select t0.v1 from (select v4 from t1 order by v4 limit 1000000000) as t1x " +
@@ -837,10 +887,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
         connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000L);
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000L);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t1, 1000000000L);
 
         String sql = "select * from t0 join[shuffle] t1 on t0.v2 = t1.v5 and t0.v3 = t1.v6";
@@ -863,6 +920,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setGlobalRuntimeFilterBuildMaxSize(0);
         connectContext.getSessionVariable().setGlobalRuntimeFilterProbeMinSize(0);
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000L);
 
@@ -870,6 +928,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         setTableStatistics(t1, 10000000L);
 
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000L);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000000L);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t2, 10000000L);
 
         String sql = "select * from (select t1.v5 as v5, t0.v3 as v3 from t0 join[shuffle] t1 on t0.v2 = " +
@@ -906,6 +973,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testPushDownRuntimeFilterAcrossSetOperationNode() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
@@ -915,6 +983,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 1000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 100);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+        List<OlapTable> tables = new ArrayList<>(Arrays.asList(t0, t1, t2));
+        List<String> tabletIdsStrList = new ArrayList<>();
+        tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         ArrayList<String> plans = new ArrayList<>();
@@ -1079,12 +1158,21 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
 
+<<<<<<< HEAD
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
         List<OlapTable> tables = new ArrayList<>(Arrays.asList(t1, t2));
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0))
+=======
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+        List<OlapTable> tables = new ArrayList<>(Arrays.asList(t1, t2));
+        List<String> tabletIdsStrList = new ArrayList<>();
+        tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
+                .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         setTableStatistics(t1, 400000);
@@ -1147,10 +1235,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testOverflowFilterOnColocateJoin() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate1");
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate2");
 
         StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("colocate1");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("colocate2");
+
+        StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic((Table) any, "k1");
@@ -1178,10 +1273,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneShuffleColumns() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
         StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+
+        StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "v1");
@@ -1255,8 +1357,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testToDateToDays() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
         StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_all_type");
+        StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "id_datetime");
@@ -1277,10 +1384,17 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testMultiJoinColumnPruneShuffleColumnsAndGRF() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
         StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+
+        StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "v1");
@@ -1549,7 +1663,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
 
         boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+=======
+        boolean prevEliminateAgg = connectContext.getSessionVariable().isEnableEliminateAgg();
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        connectContext.getSessionVariable().setEnableEliminateAgg(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String sql;
         String plan;
@@ -1607,7 +1727,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             Assert.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+<<<<<<< HEAD
             assertContains(plan, "  2:Project\n" +
+=======
+            assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(4: count)\n" +
+                    "  |  group by: 4: count\n" +
+                    "  |  \n" +
+                    "  2:Project\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  <slot 4> : 4: count\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
@@ -1723,6 +1852,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  2:EXCHANGE");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
+<<<<<<< HEAD
+=======
+            connectContext.getSessionVariable().setEnableEliminateAgg(prevEliminateAgg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1996,7 +2129,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Ignore
     public void testDeepTreePredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_dict");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("test_dict");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(table2, 20000000);
 
         String sql = getSQLFile("optimized-plan/large_predicate");
@@ -2010,12 +2147,21 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testJoinUnreorder() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 10000000);
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
         setTableStatistics(t1, 10000);
 
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("t2");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 10000000);
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10000);
+
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t1, 10);
 
         String sql = "Select * " +
@@ -2057,7 +2203,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneLimit() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem_partition");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(table2, 10);
 
         new MockUp<LocalTablet>() {
@@ -2077,7 +2227,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     @Test
     public void testPruneInvalidPredicate() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+=======
+        OlapTable table2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem_partition");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(table2, 10);
 
         new MockUp<LocalTablet>() {
@@ -2115,6 +2269,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 4: max\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
@@ -2142,6 +2300,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 4> 4: max ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 4: max\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  4:PARTITION-TOP-N\n" +
@@ -2172,6 +2334,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  6:SORT\n" +
                     "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 4: max\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
@@ -2194,6 +2360,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  6:SORT\n" +
                     "  |  order by: <slot 4> 4: max ASC, <slot 2> 2: v2 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 4: max\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  5:EXCHANGE");
@@ -2220,6 +2390,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
@@ -2246,6 +2420,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1, 2: v2\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  1:PARTITION-TOP-N\n" +
@@ -2273,6 +2451,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 3: v3\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0\n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
@@ -2300,6 +2482,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  3:SORT\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 2: v2, 3: v3\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0");
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  partition by: 2: v2 , 3: v3 \n" +

@@ -52,6 +52,12 @@ void HdfsFileSystemTest::create_file_and_destroy() {
     EXPECT_TRUE(st.is_not_found());
     auto wfile = fs->new_writable_file(filepath);
     EXPECT_TRUE(wfile.ok());
+<<<<<<< HEAD
+=======
+    (*wfile)->close();
+    EXPECT_TRUE(fs->new_sequential_file(filepath).ok());
+    EXPECT_TRUE(fs->new_random_access_file(filepath).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // error injection during HDFSWritableFile::close, it is hard to simulate a sync failure with a POSIX filesystem.
     // HDFS FileSystem sync operation will fail if the file is removed from remote name node.

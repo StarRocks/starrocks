@@ -34,9 +34,12 @@
 #define SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(mem_tracker) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadSingletonCheckMemTrackerSetter(mem_tracker)
 
+<<<<<<< HEAD
 #define SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(operator) \
     auto VARNAME_LINENUM(tracker_setter) = CurrentThreadOperatorMemTrackerSetter(operator->mem_tracker())
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
 
@@ -57,7 +60,10 @@ namespace starrocks {
 class TUniqueId;
 
 inline thread_local MemTracker* tls_mem_tracker = nullptr;
+<<<<<<< HEAD
 inline thread_local MemTracker* tls_operator_mem_tracker = nullptr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline thread_local MemTracker* tls_exceed_mem_tracker = nullptr;
 // `tls_singleton_check_mem_tracker` is used when you want to separate the mem tracker and check tracker,
 // you can add a new check tracker by set up `tls_singleton_check_mem_tracker`.
@@ -69,7 +75,11 @@ class CurrentThread {
 private:
     class MemCacheManager {
     public:
+<<<<<<< HEAD
         MemCacheManager(std::function<MemTracker*()>&& loader) : _loader(std::move(loader)) {}
+=======
+        MemCacheManager() = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MemCacheManager(const MemCacheManager&) = delete;
         MemCacheManager(MemCacheManager&&) = delete;
 
@@ -84,7 +94,11 @@ private:
         }
 
         bool try_mem_consume(int64_t size) {
+<<<<<<< HEAD
             MemTracker* cur_tracker = _loader();
+=======
+            MemTracker* cur_tracker = CurrentThread::mem_tracker();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             int64_t prev_reserved = _reserved_bytes;
             size = _consume_from_reserved(size);
             _cache_size += size;
@@ -122,7 +136,11 @@ private:
         }
 
         bool try_mem_consume_with_limited_tracker(int64_t size) {
+<<<<<<< HEAD
             MemTracker* cur_tracker = _loader();
+=======
+            MemTracker* cur_tracker = CurrentThread::mem_tracker();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
@@ -172,7 +190,11 @@ private:
         }
 
         void commit(bool is_ctx_shift) {
+<<<<<<< HEAD
             MemTracker* cur_tracker = _loader();
+=======
+            MemTracker* cur_tracker = CurrentThread::mem_tracker();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (cur_tracker != nullptr) {
                 cur_tracker->consume(_cache_size);
             }
@@ -210,8 +232,11 @@ private:
 
         const static int64_t BATCH_SIZE = 2 * 1024 * 1024;
 
+<<<<<<< HEAD
         std::function<MemTracker*()> _loader;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int64_t _reserved_bytes = 0;
 
         // Allocated or delocated but not committed memory bytes, can be negative
@@ -225,6 +250,7 @@ private:
     };
 
 public:
+<<<<<<< HEAD
     CurrentThread() : _mem_cache_manager(mem_tracker), _operator_mem_cache_manager(operator_mem_tracker) {
         tls_is_thread_status_init = true;
     }
@@ -232,6 +258,12 @@ public:
 
     void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
     void operator_mem_tracker_ctx_shift() { _operator_mem_cache_manager.commit(true); }
+=======
+    CurrentThread() { tls_is_thread_status_init = true; }
+    ~CurrentThread();
+
+    void mem_tracker_ctx_shift() { _mem_cache_manager.commit(true); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void set_query_id(const starrocks::TUniqueId& query_id) { _query_id = query_id; }
     const starrocks::TUniqueId& query_id() { return _query_id; }
@@ -256,6 +288,7 @@ public:
         return prev;
     }
 
+<<<<<<< HEAD
     // Return prev memory tracker.
     starrocks::MemTracker* set_operator_mem_tracker(starrocks::MemTracker* operator_mem_tracker) {
         operator_mem_tracker_ctx_shift();
@@ -264,6 +297,8 @@ public:
         return prev;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool set_check_mem_limit(bool check) {
         bool prev_check = _check;
         _check = check;
@@ -273,7 +308,10 @@ public:
     bool check_mem_limit() { return _check; }
 
     static starrocks::MemTracker* mem_tracker();
+<<<<<<< HEAD
     static starrocks::MemTracker* operator_mem_tracker();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static starrocks::MemTracker* singleton_check_mem_tracker();
 
     static CurrentThread& current();
@@ -292,6 +330,7 @@ public:
 
     static bool is_catched() { return tls_is_catched; }
 
+<<<<<<< HEAD
     void mem_consume(int64_t size) {
         _mem_cache_manager.consume(size);
         _operator_mem_cache_manager.consume(size);
@@ -300,6 +339,12 @@ public:
     bool try_mem_consume(int64_t size) {
         if (_mem_cache_manager.try_mem_consume(size)) {
             _operator_mem_cache_manager.consume(size);
+=======
+    void mem_consume(int64_t size) { _mem_cache_manager.consume(size); }
+
+    bool try_mem_consume(int64_t size) {
+        if (_mem_cache_manager.try_mem_consume(size)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return true;
         }
         return false;
@@ -323,7 +368,10 @@ public:
             _mem_cache_manager.release_to_reserved(size);
         } else {
             _mem_cache_manager.release(size);
+<<<<<<< HEAD
             _operator_mem_cache_manager.release(size);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -360,6 +408,7 @@ public:
     int64_t get_consumed_bytes() const { return _mem_cache_manager.get_consumed_bytes(); }
 
 private:
+<<<<<<< HEAD
     // In order to record operator level memory trace while keep up high performance, we need to
     // record the normal MemTracker's tree and operator's isolated MemTracker independently.
     // `tls_operator_mem_tracker` will be updated every time when `Operator::pull_chunk` or `Operator::push_chunk`
@@ -367,6 +416,9 @@ private:
     // because operator's MemTracker, which is a dangling MemTracker(withouth parent), has no concurrency conflicts
     MemCacheManager _mem_cache_manager;
     MemCacheManager _operator_mem_cache_manager;
+=======
+    MemCacheManager _mem_cache_manager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
@@ -404,6 +456,7 @@ private:
     bool _is_same;
 };
 
+<<<<<<< HEAD
 class CurrentThreadOperatorMemTrackerSetter {
 public:
     explicit CurrentThreadOperatorMemTrackerSetter(MemTracker* new_mem_tracker) {
@@ -432,6 +485,8 @@ private:
     bool _is_same;
 };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class CurrentThreadSingletonCheckMemTrackerSetter {
 public:
     explicit CurrentThreadSingletonCheckMemTrackerSetter(MemTracker* new_tracker) {

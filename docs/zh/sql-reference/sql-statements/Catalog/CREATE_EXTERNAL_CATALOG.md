@@ -25,7 +25,11 @@ displayed_sidebar: docs
 ## 语法
 
 ```SQL
+<<<<<<< HEAD
 CREATE EXTERNAL CATALOG <catalog_name>
+=======
+CREATE EXTERNAL CATALOG [IF NOT EXISTS] <catalog_name>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [COMMENT <comment>]
 PROPERTIES ("key"="value", ...)
 ```

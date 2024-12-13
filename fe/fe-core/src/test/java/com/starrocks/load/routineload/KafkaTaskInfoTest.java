@@ -20,7 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.KafkaUtil;
 import mockit.Injectable;
 import mockit.Mock;
@@ -47,7 +51,12 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
+<<<<<<< HEAD
                                                        List<Integer> partitions) throws UserException {
+=======
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);
@@ -128,7 +137,12 @@ public class KafkaTaskInfoTest {
             @Mock
             public Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
+<<<<<<< HEAD
                                                        List<Integer> partitions) throws UserException {
+=======
+                                                       List<Integer> partitions,
+                                                       long warehouseId) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Map<Integer, Long> offsets = Maps.newHashMap();
                 offsets.put(0, 100L);
                 offsets.put(1, 100L);

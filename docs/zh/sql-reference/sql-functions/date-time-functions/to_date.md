@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_date
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 DATETIME 类型值中的日期部分。
 

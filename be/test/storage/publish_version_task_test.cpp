@@ -19,7 +19,10 @@
 #include "agent/publish_version.h"
 #include "butil/file_util.h"
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
@@ -177,12 +180,19 @@ public:
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                       .ok());
 
+<<<<<<< HEAD
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;

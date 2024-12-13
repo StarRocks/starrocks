@@ -22,7 +22,11 @@
 
 namespace starrocks::stream {
 
+<<<<<<< HEAD
 Status AggStateData::allocate_intermediate_state(size_t chunk_size, const std::vector<uint8_t>& keys_not_in_map,
+=======
+Status AggStateData::allocate_intermediate_state(size_t chunk_size, const Filter& keys_not_in_map,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                  const StateTableResult* state_result,
                                                  const Buffer<AggGroupStatePtr>& agg_group_state) const {
     DCHECK(state_result);

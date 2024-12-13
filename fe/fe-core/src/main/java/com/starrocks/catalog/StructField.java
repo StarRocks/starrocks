@@ -22,6 +22,11 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import org.apache.commons.lang3.StringUtils;
 
+<<<<<<< HEAD
+=======
+import java.util.StringJoiner;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * TODO: Support comments for struct fields. The Metastore does not properly store
  * comments of struct fields. We set comment to null to avoid compatibility issues.
@@ -40,13 +45,33 @@ public class StructField {
     @SerializedName(value = "fieldId")
     private int fieldId = -1;
 
+<<<<<<< HEAD
     public StructField() {}
 
     public StructField(String name, int fieldId, Type type, String comment) {
+=======
+    // fieldPhysicalName is used to store the physical name of the field in the storage layer.
+    // for example, the physical name of a struct field in a parquet file.
+    // used in delta lake column mapping name mode
+    @SerializedName(value = "fieldPhysicalName")
+    private String fieldPhysicalName = "";
+
+    public StructField() {}
+
+    public StructField(String name, int fieldId, Type type, String comment) {
+        this(name, fieldId, "", type, comment);
+    }
+
+    public StructField(String name, int fieldId, String fieldPhysicalName, Type type, String comment) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.name = name;
         this.type = type;
         this.comment = comment;
         this.fieldId = fieldId;
+<<<<<<< HEAD
+=======
+        this.fieldPhysicalName = fieldPhysicalName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public StructField(String name, Type type, String comment) {
@@ -94,6 +119,17 @@ public class StructField {
         return sb.toString();
     }
 
+<<<<<<< HEAD
+=======
+    public String toTypeString(int depth) {
+        String typeSql = (depth < Type.MAX_NESTING_DEPTH) ? type.toTypeString(depth) : "...";
+        StringBuilder sb = new StringBuilder();
+        sb.append(name).append(' ');
+        sb.append(typeSql);
+        return sb.toString();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Pretty prints this field with lpad number of leading spaces.
      * Calls prettyPrint(lpad) on this field's type.
@@ -122,13 +158,21 @@ public class StructField {
         field.setName(name);
         field.setComment(comment);
         field.setId(fieldId);
+<<<<<<< HEAD
+=======
+        field.setPhysical_name(fieldPhysicalName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         node.struct_fields.add(field);
         type.toThrift(container);
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hashCode(name.toLowerCase(), type);
+=======
+        return Objects.hashCode(name.toLowerCase(), type, fieldId, fieldPhysicalName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -139,12 +183,31 @@ public class StructField {
         StructField otherStructField = (StructField) other;
         // Both are named struct field
         return StringUtils.equalsIgnoreCase(name, otherStructField.name) && Objects.equal(type, otherStructField.type) &&
+<<<<<<< HEAD
                     (fieldId == otherStructField.fieldId);
+=======
+                    (fieldId == otherStructField.fieldId) && Objects.equal(fieldPhysicalName, otherStructField.fieldPhysicalName);
+    }
+
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", StructField.class.getSimpleName() + "[", "]")
+                .add("name='" + (Strings.isNullOrEmpty(name) ? "" : name) + "'")
+                .add("type=" + type)
+                .add("position=" + position)
+                .add("fieldId=" + fieldId)
+                .add("fieldPhysicalName='" + (Strings.isNullOrEmpty(fieldPhysicalName) ? "" : fieldPhysicalName) + "'")
+                .toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public StructField clone() {
+<<<<<<< HEAD
         return new StructField(name, fieldId, type.clone(), comment);
+=======
+        return new StructField(name, fieldId, fieldPhysicalName, type.clone(), comment);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public int getMaxUniqueId() {

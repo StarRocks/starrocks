@@ -172,6 +172,7 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"big_query\" level=\"ERROR\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"BigQueryFile\"/>\n" +
             "    </Logger>\n" +
+<<<<<<< HEAD
             "    <Logger name=\"org.apache.thrift\" level=\"DEBUG\"> \n" +
             "      <AppenderRef ref=\"Sys\"/>\n" +
             "    </Logger>\n" +
@@ -181,6 +182,8 @@ public class Log4jConfig extends XmlConfiguration {
             "    <Logger name=\"com.starrocks.thrift\" level=\"DEBUG\"> \n" +
             "      <AppenderRef ref=\"Sys\"/>\n" +
             "    </Logger>\n" +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             "    <Logger name=\"profile\" level=\"INFO\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"ProfileFile\"/>\n" +
             "    </Logger>\n" +

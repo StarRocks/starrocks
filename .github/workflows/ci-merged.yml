@@ -23,6 +23,7 @@ jobs:
       github.repository == 'StarRocks/starrocks' &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport') && (
+<<<<<<< HEAD
       contains(github.event.pull_request.labels.*.name, '3.2') ||
       contains(github.event.pull_request.labels.*.name, '3.1') ||
       contains(github.event.pull_request.labels.*.name, '3.0') ||
@@ -33,6 +34,45 @@ jobs:
       - name: backport branch-3.2
         if: contains(github.event.pull_request.labels.*.name, '3.2')
         uses: thollander/actions-comment-pull-request@v1
+=======
+      contains(github.event.pull_request.labels.*.name, '3.4') ||
+      contains(github.event.pull_request.labels.*.name, '3.3') ||
+      contains(github.event.pull_request.labels.*.name, '3.2') ||
+      contains(github.event.pull_request.labels.*.name, '3.1') ||
+      contains(github.event.pull_request.labels.*.name, '3.0') )
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: backport branch-3.4
+        if: contains(github.event.pull_request.labels.*.name, '3.4')
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            @Mergifyio backport branch-3.4
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, '3.4')
+        with:
+          labels: '3.4'
+
+      - name: backport branch-3.3
+        if: contains(github.event.pull_request.labels.*.name, '3.3')
+        uses: thollander/actions-comment-pull-request@v2
+        with:
+          message: |
+            @Mergifyio backport branch-3.3
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, '3.3')
+        with:
+          labels: '3.3'
+
+      - name: backport branch-3.2
+        if: contains(github.event.pull_request.labels.*.name, '3.2')
+        uses: thollander/actions-comment-pull-request@v2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         with:
           message: |
             @Mergifyio backport branch-3.2
@@ -45,7 +85,11 @@ jobs:
 
       - name: backport branch-3.1
         if: contains(github.event.pull_request.labels.*.name, '3.1')
+<<<<<<< HEAD
         uses: thollander/actions-comment-pull-request@v1
+=======
+        uses: thollander/actions-comment-pull-request@v2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         with:
           message: |
             @Mergifyio backport branch-3.1
@@ -58,7 +102,11 @@ jobs:
 
       - name: backport branch-3.0
         if: contains(github.event.pull_request.labels.*.name, '3.0')
+<<<<<<< HEAD
         uses: thollander/actions-comment-pull-request@v1
+=======
+        uses: thollander/actions-comment-pull-request@v2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         with:
           message: |
             @Mergifyio backport branch-3.0
@@ -69,6 +117,7 @@ jobs:
         with:
           labels: '3.0'
 
+<<<<<<< HEAD
       - name: backport branch-2.5
         if: contains(github.event.pull_request.labels.*.name, '2.5')
         uses: thollander/actions-comment-pull-request@v1
@@ -82,6 +131,8 @@ jobs:
         with:
           labels: '2.5'
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   thirdparty-update-image:
     runs-on: [self-hosted, normal]
     name: Thirdparty Update Image
@@ -101,7 +152,11 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
+<<<<<<< HEAD
       - uses: dorny/paths-filter@v2
+=======
+      - uses: dorny/paths-filter@v3
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         id: changes
         with:
           filters: |

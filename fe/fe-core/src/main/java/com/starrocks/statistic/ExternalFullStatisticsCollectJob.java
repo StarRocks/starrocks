@@ -71,7 +71,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             " FROM `$catalogName`.`$dbName`.`$tableName` where $partitionPredicate";
 
     private final String catalogName;
+<<<<<<< HEAD
     private final List<String> partitionNames;
+=======
+    protected List<String> partitionNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
@@ -119,7 +123,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             collectStatisticSync(sql, context);
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         flushInsertStatisticsData(context, true);

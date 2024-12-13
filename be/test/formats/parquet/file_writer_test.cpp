@@ -57,10 +57,16 @@ protected:
         }
         slot_descs.push_back({""});
 
+<<<<<<< HEAD
         TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
         Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
 
+=======
+        TupleDescriptor* tuple_desc =
+                parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
+        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = (_create_scan_range(_file_path, file_size));
         ctx->timezone = "Asia/Shanghai";
@@ -102,7 +108,12 @@ protected:
                         const std::shared_ptr<::parquet::schema::GroupNode>& schema) {
         ASSIGN_OR_ABORT(auto file, _fs.new_writable_file(_file_path));
         ASSIGN_OR_RETURN(auto properties, parquet::ParquetBuildHelper::make_properties(ParquetBuilderOptions()));
+<<<<<<< HEAD
         auto file_writer = std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs);
+=======
+        auto file_writer =
+                std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs, _runtime_state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         file_writer->init();
         auto st = file_writer->write(chunk.get());
         if (!st.ok()) {
@@ -116,7 +127,11 @@ protected:
         auto ctx = _create_scan_context(type_descs);
         ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+<<<<<<< HEAD
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), file_size, 0);
+=======
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), file_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         auto st = file_reader->init(ctx);
         if (!st.ok()) {
@@ -197,19 +212,31 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
     auto chunk = std::make_shared<Chunk>();
     {
         auto col0 = ColumnHelper::create_column(type_descs[0], true);
+<<<<<<< HEAD
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
+=======
+        std::vector<int32_t> int32_nums{-999999, 999999, 0, 1};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col0, chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(type_descs[1], true);
+<<<<<<< HEAD
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
+=======
+        std::vector<int64_t> int64_nums{-999999999999, 999999999999, 0, 1};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         count = col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col1, chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
+<<<<<<< HEAD
         std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
+=======
+        std::vector<int128_t> int128_nums{-999999999999, 999999999999, 0, 1};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col2, chunk->num_columns());
@@ -361,6 +388,7 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
         auto data_column = TimestampColumn::create();
         {
             Datum datum;
+<<<<<<< HEAD
             datum.set_timestamp(TimestampValue::create(1999, 9, 9, 0, 0, 0));
             data_column->append_datum(datum);
             datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
@@ -372,6 +400,20 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
+=======
+            datum.set_timestamp(TimestampValue::create(2023, 9, 9, 23, 59, 59));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 0, 0, 0));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1970, 1, 1, 1, 1, 1));
+            data_column->append_datum(datum);
+        }
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {0, 0, 0, 0};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         null_column->append_numbers(nulls.data(), nulls.size());
         auto nullable_column = NullableColumn::create(data_column, null_column);
         chunk->append_column(nullable_column, chunk->num_columns());

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_name,
@@ -31,6 +32,8 @@ group by
 order by
     o_totalprice desc,
     o_orderdate limit 100;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[13: o_totalprice DESC NULLS LAST, 10: o_orderdate ASC NULLS FIRST]])
     TOP-N (order by [[13: o_totalprice DESC NULLS LAST, 10: o_orderdate ASC NULLS FIRST]])

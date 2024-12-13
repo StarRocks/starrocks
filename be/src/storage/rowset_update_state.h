@@ -179,6 +179,10 @@ private:
     TabletSchemaCSPtr _tablet_schema = nullptr;
 
     // column_with_row partial update states
+<<<<<<< HEAD
+=======
+    bool _partial_update_value_column_inited = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<uint32_t> _partial_update_value_column_ids;
     // only column added by reading rowset
     Schema _partial_update_value_columns_schema;
@@ -189,7 +193,11 @@ private:
     std::vector<PartialUpdateState> _partial_update_states;
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
+<<<<<<< HEAD
     std::map<std::string, std::string> _column_to_expr_value;
+=======
+    std::map<string, string> _column_to_expr_value;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RowsetUpdateState(const RowsetUpdateState&) = delete;
     const RowsetUpdateState& operator=(const RowsetUpdateState&) = delete;

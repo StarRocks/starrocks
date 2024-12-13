@@ -45,7 +45,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
@@ -108,21 +112,32 @@ public class BrokerLoadJobTest {
                 loadStmt.getLabel();
                 minTimes = 0;
                 result = labelName;
+<<<<<<< HEAD
                 labelName.getDbName();
                 minTimes = 0;
                 result = databaseName;
                 globalStateMgr.getDb(databaseName);
                 minTimes = 0;
                 result = database;
+=======
+
+                labelName.getDbName();
+                minTimes = 0;
+                result = databaseName;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 loadStmt.getDataDescriptions();
                 minTimes = 0;
                 result = dataDescriptionList;
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
+<<<<<<< HEAD
                 database.getTable(tableName);
                 minTimes = 0;
                 result = null;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -162,7 +177,11 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
+<<<<<<< HEAD
                 globalStateMgr.getDb(databaseName);
+=======
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -171,7 +190,11 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
+<<<<<<< HEAD
                 database.getTable(tableName);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -231,7 +254,11 @@ public class BrokerLoadJobTest {
                 labelName.getLabelName();
                 minTimes = 0;
                 result = label;
+<<<<<<< HEAD
                 globalStateMgr.getDb(databaseName);
+=======
+                globalStateMgr.getLocalMetastore().getDb(databaseName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
                 loadStmt.getDataDescriptions();
@@ -240,7 +267,11 @@ public class BrokerLoadJobTest {
                 dataDescription.getTableName();
                 minTimes = 0;
                 result = tableName;
+<<<<<<< HEAD
                 database.getTable(tableName);
+=======
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = olapTable;
                 dataDescription.getPartitionNames();
@@ -296,10 +327,17 @@ public class BrokerLoadJobTest {
                 fileGroupAggInfo.getAllTableIds();
                 minTimes = 0;
                 result = Sets.newHashSet(1L);
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 database.getTable(1L);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), 1L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = table;
                 table.getName();
@@ -342,12 +380,21 @@ public class BrokerLoadJobTest {
                                          @Injectable boolean txnOperated,
                                          @Injectable String txnStatusChangeReason,
                                          @Mocked LeaderTaskExecutor leaderTaskExecutor,
+<<<<<<< HEAD
                                          @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException, UserException {
+=======
+                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException,
+            StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
+<<<<<<< HEAD
                         (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
+=======
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 leaderTaskExecutor.submit((LeaderTask) any);
                 minTimes = 0;
                 result = true;
@@ -470,7 +517,11 @@ public class BrokerLoadJobTest {
 
     @Test
     public void testTaskAbortTransactionOnTimeoutFailure(@Mocked GlobalTransactionMgr globalTransactionMgr,
+<<<<<<< HEAD
             @Injectable long taskId, @Injectable FailMsg failMsg) throws UserException {
+=======
+            @Injectable long taskId, @Injectable FailMsg failMsg) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
@@ -486,7 +537,11 @@ public class BrokerLoadJobTest {
             {
                 globalTransactionMgr.abortTransaction(anyLong, anyLong, anyString);
                 times = 1;
+<<<<<<< HEAD
                 result = new UserException("Artificial exception");
+=======
+                result = new StarRocksException("Artificial exception");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -632,7 +687,11 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = database;
             }
@@ -767,7 +826,11 @@ public class BrokerLoadJobTest {
                                        @Injectable LoadTask loadTask1,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Injectable Database database,
+<<<<<<< HEAD
                                        @Mocked GlobalTransactionMgr transactionMgr) throws UserException {
+=======
+                                       @Mocked GlobalTransactionMgr transactionMgr) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         Map<Long, LoadTask> idToTasks = Maps.newHashMap();
@@ -784,10 +847,17 @@ public class BrokerLoadJobTest {
                 attachment1.getTaskId();
                 minTimes = 0;
                 result = 1L;
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
                 globalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                globalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = transactionMgr;
                 transactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
                         (List<TabletFailInfo>) any, (TxnCommitAttachment) any);

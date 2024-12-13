@@ -26,9 +26,17 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+<<<<<<< HEAD
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
+=======
+import com.starrocks.catalog.MvUpdateInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
@@ -223,12 +231,22 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (mvRelatedCount++ > mvRewriteRelatedMVsLimit) {
                     return null;
                 }
+<<<<<<< HEAD
                 Set<String> partitionNamesToRefresh = Sets.newHashSet();
                 if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
                     logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
                             "stale partitions {}", mv.getName(), partitionNamesToRefresh);
                     continue;
                 }
+=======
+                MvUpdateInfo mvUpdateInfo = queryMaterializationContext.getOrInitMVTimelinessInfos(mv);
+                if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
+                    logMVRewrite(context, this, "MV {} cannot be used for rewrite, " +
+                            "stale partitions {}", mv.getName(), mvUpdateInfo);
+                    continue;
+                }
+                Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!partitionNamesToRefresh.isEmpty()) {
                     logMVRewrite(context, this, "Partitioned MV {} is outdated which " +
                                     "contains some partitions to be refreshed: {}, and cannot compensate it to predicate",
@@ -273,6 +291,16 @@ public class TextMatchBasedRewriteRule extends Rule {
             logMVRewrite(context, this, "MV is not active: {}", mv.getName());
             return Pair.create(false, "MV is not active");
         }
+<<<<<<< HEAD
+=======
+
+        if (!mv.isEnableRewrite()) {
+            String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
+                    mv.getTableProperty().getMvQueryRewriteSwitch();
+            logMVRewrite(context, this, message);
+            return Pair.create(false, message);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Pair.create(true, "");
     }
 

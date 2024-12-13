@@ -23,8 +23,15 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
 import io.trino.sql.tree.Explain;
 import io.trino.sql.tree.ExplainAnalyze;
+=======
+import io.trino.sql.tree.CreateTableAsSelect;
+import io.trino.sql.tree.Explain;
+import io.trino.sql.tree.ExplainAnalyze;
+import io.trino.sql.tree.Insert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.Statement;
 
@@ -38,7 +45,12 @@ public class TrinoParserUtils {
     public static StatementBase toStatement(String query, long sqlMode) {
         String trimmedQuery = query.trim();
         Statement statement = TrinoParser.parse(trimmedQuery);
+<<<<<<< HEAD
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze) {
+=======
+        if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
+                || statement instanceof CreateTableAsSelect || statement instanceof Insert) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
             throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());

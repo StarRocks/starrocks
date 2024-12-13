@@ -22,7 +22,13 @@ import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.GetRemoteFilesParams;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudType;
@@ -102,14 +108,23 @@ public class OdpsMetadataTest extends MockedBase {
         OdpsTable table = (OdpsTable) odpsMetadata.getTable("project", "tableName");
         Assert.assertTrue(table.isOdpsTable());
         Assert.assertEquals("tableName", table.getName());
+<<<<<<< HEAD
         Assert.assertEquals("project", table.getDbName());
+=======
+        Assert.assertEquals("project", table.getCatalogDBName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(table.isUnPartitioned());
         Assert.assertEquals("c1", table.getColumn("c1").getName());
     }
 
     @Test
     public void testListPartitionNames() {
+<<<<<<< HEAD
         List<String> partitionNames = odpsMetadata.listPartitionNames("project", "tableName");
+=======
+        List<String> partitionNames =
+                odpsMetadata.listPartitionNames("project", "tableName", ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(Collections.singletonList("p1=a/p2=b"), partitionNames);
     }
 
@@ -127,7 +142,11 @@ public class OdpsMetadataTest extends MockedBase {
     @Test
     public void testGetPartitions() {
         Table table = odpsMetadata.getTable("db", "tbl");
+<<<<<<< HEAD
         List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl");
+=======
+        List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<PartitionInfo> partitions = odpsMetadata.getPartitions(table, partitionNames);
         Assert.assertEquals(1, partitions.size());
         PartitionInfo partitionInfo = partitions.get(0);
@@ -149,14 +168,25 @@ public class OdpsMetadataTest extends MockedBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetRemoteFileInfos() throws AnalysisException, IOException {
+=======
+    public void testGetRemoteFiles() throws AnalysisException, IOException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table odpsTable = odpsMetadata.getTable("project", "tableName");
         PartitionKey partitionKey =
                 PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue("a"), new PartitionValue("b")),
                         odpsTable.getPartitionColumns());
+<<<<<<< HEAD
         List<RemoteFileInfo> remoteFileInfos =
                 odpsMetadata.getRemoteFileInfos(odpsTable, ImmutableList.of(partitionKey), -1, null,
                         odpsTable.getPartitionColumnNames(), -1, mockTableReadSessionBuilder);
+=======
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(odpsTable.getPartitionColumnNames())
+                .setPartitionKeys(ImmutableList.of(partitionKey)).build();
+        List<RemoteFileInfo> remoteFileInfos =
+                odpsMetadata.getRemoteFiles(odpsTable, params, mockTableReadSessionBuilder);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(1, remoteFileInfos.size());
     }
 

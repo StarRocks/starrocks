@@ -35,8 +35,13 @@
 package com.starrocks.task;
 
 
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
+=======
+import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletMetaInfo;
@@ -102,4 +107,8 @@ public abstract class TabletMetadataUpdateAgentTask extends AgentTask {
         updateTabletMetaInfoReq.setTxn_id(txnId);
         return updateTabletMetaInfoReq;
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -18,12 +18,22 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.privilege.AccessControlProvider;
@@ -40,6 +50,17 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections4.ListUtils;
 
 import java.util.List;
@@ -48,6 +69,7 @@ import java.util.Optional;
 import java.util.Set;
 
 public class Authorizer {
+<<<<<<< HEAD
     private static final AccessControlProvider INSTANCE;
 
     static {
@@ -60,6 +82,16 @@ public class Authorizer {
 
     public static AccessControlProvider getInstance() {
         return INSTANCE;
+=======
+    private final AccessControlProvider accessControlProvider;
+
+    public Authorizer(AccessControlProvider accessControlProvider) {
+        this.accessControlProvider = accessControlProvider;
+    }
+
+    public static AccessControlProvider getInstance() {
+        return GlobalStateMgr.getCurrentState().getAuthorizer().accessControlProvider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void check(StatementBase statement, ConnectContext context) {
@@ -184,12 +216,24 @@ public class Authorizer {
     }
 
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
+<<<<<<< HEAD
                                                        BasicTable basicTable) throws AccessDeniedException {
         doCheckTableLikeObject(currentUser, roleIds, dbName, basicTable, null);
+=======
+                                                       BasicTable tableBasicInfo) throws AccessDeniedException {
+        doCheckTableLikeObject(currentUser, roleIds, dbName, tableBasicInfo, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
                                                BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
+<<<<<<< HEAD
+=======
+        if (tbl == null) {
+            return;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
@@ -200,6 +244,10 @@ public class Authorizer {
             case HIVE:
             case HIVE_VIEW:
             case ICEBERG:
+<<<<<<< HEAD
+=======
+            case ICEBERG_VIEW:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case HUDI:
             case JDBC:
             case DELTALAKE:
@@ -207,11 +255,19 @@ public class Authorizer {
             case SCHEMA:
             case PAIMON:
             case ODPS:
+<<<<<<< HEAD
+=======
+            case KUDU:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
                     checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
+<<<<<<< HEAD
                     checkTableAction(currentUser, roleIds, new TableName(dbName, tbl.getName()), privilegeType);
+=======
+                    checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 break;
             case MATERIALIZED_VIEW:
@@ -419,4 +475,23 @@ public class Authorizer {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name,
+                                            PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkWarehouseAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name)
+            throws AccessDeniedException {
+        // Any user has an implicit usage permission on the default_warehouse
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(name);
+        if (warehouse.getId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                    .checkAnyActionOnWarehouse(currentUser, roleIds, name);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

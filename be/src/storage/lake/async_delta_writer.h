@@ -20,7 +20,13 @@
 #include <vector>
 
 #include "common/statusor.h"
+<<<<<<< HEAD
 #include "gutil/macros.h"
+=======
+#include "gen_cpp/olap_file.pb.h"
+#include "gutil/macros.h"
+#include "storage/lake/delta_writer_finish_mode.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 class MemTracker;
@@ -29,7 +35,12 @@ class SlotDescriptor;
 
 namespace starrocks {
 class Chunk;
+<<<<<<< HEAD
 }
+=======
+class TxnLogPB;
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::lake {
 
@@ -43,8 +54,15 @@ class AsyncDeltaWriter {
     friend class AsyncDeltaWriterBuilder;
 
 public:
+<<<<<<< HEAD
     using Ptr = std::unique_ptr<AsyncDeltaWriter>;
     using Callback = std::function<void(Status st)>;
+=======
+    using TxnLogPtr = std::shared_ptr<const TxnLogPB>;
+    using Ptr = std::unique_ptr<AsyncDeltaWriter>;
+    using Callback = std::function<void(Status st)>;
+    using FinishCallback = std::function<void(StatusOr<TxnLogPtr> res)>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 
@@ -57,7 +75,11 @@ public:
     // same Status as the first call.
     //
     // [thread-safe]
+<<<<<<< HEAD
     [[nodiscard]] Status open();
+=======
+    Status open();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // REQUIRE:
     //  - |chunk| and |indexes| must be kept alive until |cb| been invoked
@@ -78,7 +100,13 @@ public:
     // [thread-safe]
     //
     // TODO: Change signature to `Future<Status> finish()`
+<<<<<<< HEAD
     void finish(Callback cb);
+=======
+    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, cb); }
+
+    void finish(DeltaWriterFinishMode mode, FinishCallback cb);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // This method will wait for all running tasks completed.
     //
@@ -101,7 +129,11 @@ public:
 
     [[nodiscard]] bool is_immutable() const;
 
+<<<<<<< HEAD
     [[nodiscard]] Status check_immutable();
+=======
+    Status check_immutable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] int64_t last_write_ts() const;
 
@@ -174,6 +206,14 @@ public:
         return *this;
     }
 
+<<<<<<< HEAD
+=======
+    AsyncDeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     AsyncDeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
         _column_to_expr_value = column_to_expr_value;
         return *this;
@@ -193,6 +233,10 @@ private:
     MemTracker* _mem_tracker{nullptr};
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
+<<<<<<< HEAD
+=======
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 

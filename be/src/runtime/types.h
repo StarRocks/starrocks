@@ -75,8 +75,17 @@ struct TypeDescriptor {
     /// Empty for scalar types
     std::vector<TypeDescriptor> children;
 
+<<<<<<< HEAD
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
+=======
+    /// Only set if type == TYPE_STRUCT. The field logical name of each child.
+    std::vector<std::string> field_names;
+    // Only set if type == TYPE_STRUCT. The field id of each child.
+    std::vector<int32_t> field_ids;
+    // Only set if type == TYPE_STRUCT. The field physical name of each child.
+    std::vector<std::string> field_physical_names;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     TypeDescriptor() = default;
 
@@ -359,6 +368,11 @@ private:
     void to_protobuf(PTypeDesc* proto_type) const;
 };
 
+<<<<<<< HEAD
+=======
+static const TypeDescriptor TYPE_INT_DESC = TypeDescriptor(LogicalType::TYPE_INT);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();
     return os;

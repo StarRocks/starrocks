@@ -52,6 +52,16 @@ public class ExportRelativeStmtTest {
                 " WITH BROKER 'broker' (\"password\" = \"***\", \"username\" = \"test\")", stmt.toString());
         Assert.assertEquals(stmt.getPath(), "hdfs://hdfs_host:port/a/b/c/");
 
+<<<<<<< HEAD
+=======
+        // run with sync mode
+        originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
+                "WITH SYNC MODE " +
+                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+        stmt = (ExportStmt) analyzeSuccess(originStmt);
+        Assert.assertTrue(stmt.getSync());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // partition data
         originStmt = "EXPORT TABLE tp PARTITION (p1,p2) TO \"hdfs://hdfs_host:port/a/b/c/test_data_\" PROPERTIES " +
                 "(\"column_separator\"=\",\") WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";

@@ -14,12 +14,22 @@
 
 #include "formats/parquet/group_reader.h"
 
+<<<<<<< HEAD
 #include <gtest/gtest.h>
+=======
+#include <formats/parquet/scalar_column_reader.h>
+#include <gtest/gtest.h>
+#include <testutil/assert.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include <memory>
 
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
+<<<<<<< HEAD
+=======
+#include "formats/parquet/column_reader_factory.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 
@@ -35,6 +45,7 @@ public:
 
 class MockColumnReader : public ColumnReader {
 public:
+<<<<<<< HEAD
     MockColumnReader() = default;
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
@@ -46,6 +57,19 @@ public:
         }
         size_t start = 0;
         size_t num_rows = 0;
+=======
+    explicit MockColumnReader(tparquet::Type::type type) : ColumnReader(nullptr), _type(type) {}
+    ~MockColumnReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
+        size_t num_rows = static_cast<size_t>(range.span_size());
+        if (_step > 1) {
+            return Status::EndOfFile("");
+        }
+        size_t start = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_step == 0) {
             start = 0;
             num_rows = 8;
@@ -55,6 +79,7 @@ public:
         }
 
         if (_type == tparquet::Type::type::INT32) {
+<<<<<<< HEAD
             _append_int32_column(column, start, num_rows);
         } else if (_type == tparquet::Type::type::INT64) {
             _append_int64_column(column, start, num_rows);
@@ -80,10 +105,37 @@ public:
         return prepare_batch(&rows, dst);
     }
 
+=======
+            _append_int32_column(dst.get(), start, num_rows);
+        } else if (_type == tparquet::Type::type::INT64) {
+            _append_int64_column(dst.get(), start, num_rows);
+        } else if (_type == tparquet::Type::type::INT96) {
+            _append_int96_column(dst.get(), start, num_rows);
+        } else if (_type == tparquet::Type::type::BYTE_ARRAY) {
+            _append_binary_column(dst.get(), start, num_rows);
+        } else if (_type == tparquet::Type::type::FLOAT) {
+            _append_float_column(dst.get(), start, num_rows);
+        } else if (_type == tparquet::Type::type::DOUBLE) {
+            _append_double_column(dst.get(), start, num_rows);
+        }
+
+        _step++;
+        return Status::OK();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void set_need_parse_levels(bool need_parse_levels) override{};
 
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
 
+<<<<<<< HEAD
+=======
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     static void _append_int32_column(Column* column, size_t start, size_t num_rows) {
         for (int i = 0; i < num_rows; i++) {
@@ -376,6 +428,11 @@ TEST_F(GroupReaderTest, TestInit) {
 
     // init row group reader
     status = group_reader->init();
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // timezone is empty
     ASSERT_FALSE(status.ok());
     //ASSERT_TRUE(status.is_end_of_file());
@@ -417,6 +474,11 @@ TEST_F(GroupReaderTest, TestGetNext) {
 
     // init row group reader
     status = group_reader->init();
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(status.ok());
+    status = group_reader->prepare();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_FALSE(status.ok());
 
     // replace column readers
@@ -443,4 +505,45 @@ TEST_F(GroupReaderTest, TestGetNext) {
     _check_chunk(param, chunk, 8, 4);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(GroupReaderTest, ColumnReaderCreateTypeMismatch) {
+    ParquetField field;
+    field.name = "col0";
+    field.type = ColumnType::ARRAY;
+
+    TypeDescriptor col_type;
+    col_type.type = LogicalType::TYPE_VARCHAR;
+
+    ColumnReaderOptions options;
+    auto st = ColumnReaderFactory::create(options, &field, col_type, nullptr);
+    ASSERT_FALSE(st.ok()) << st;
+    std::cout << st.status().message() << "\n";
+}
+
+TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
+    auto col1 = std::make_unique<FixedValueColumnReader>(kNullDatum);
+    ASSERT_OK(col1->prepare());
+    col1->get_levels(nullptr, nullptr, nullptr);
+    col1->set_need_parse_levels(false);
+    col1->collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, true);
+    SparseRange<uint64_t> sparse_range;
+    col1->select_offset_index(sparse_range, 100);
+    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::create_varchar_type(100), true);
+    Range<uint64_t> range(0, 100);
+    ASSERT_FALSE(col1->read_range(range, nullptr, column).ok());
+
+    TypeInfoPtr type_info = get_type_info(LogicalType::TYPE_INT);
+    ColumnPredicate* is_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, true));
+    ColumnPredicate* is_not_null_predicate = _pool.add(new_column_null_predicate(type_info, 1, false));
+
+    std::vector<const ColumnPredicate*> predicates;
+    predicates.push_back(is_null_predicate);
+    predicates.push_back(is_not_null_predicate);
+
+    ASSERT_FALSE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::AND, 1, 100).value());
+    ASSERT_TRUE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::OR, 1, 100).value());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::parquet

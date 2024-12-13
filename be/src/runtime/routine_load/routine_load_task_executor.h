@@ -38,6 +38,10 @@
 #include <functional>
 #include <map>
 #include <mutex>
+<<<<<<< HEAD
+=======
+#include <string_view>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/routine_load/data_consumer_pool.h"
@@ -84,7 +88,11 @@ private:
     // execute the task
     void exec_task(StreamLoadContext* ctx, DataConsumerPool* pool, const ExecFinishCallback& cb);
 
+<<<<<<< HEAD
     void err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg);
+=======
+    void err_handler(StreamLoadContext* ctx, const Status& st, std::string_view err_msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ExecEnv* _exec_env;
     std::unique_ptr<ThreadPool> _thread_pool;

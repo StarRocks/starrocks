@@ -21,7 +21,13 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
+<<<<<<< HEAD
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
+=======
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletMetaType;
@@ -85,9 +91,16 @@ public class BinlogManager {
     public void checkAndSetBinlogAvailableVersion(Database db, OlapTable table, long tabletId, long beId) {
         lock.writeLock().lock();
         try {
+<<<<<<< HEAD
             try {
                 // check if partitions has changed
                 db.readLock();
+=======
+            Locker locker = new Locker();
+            try {
+                // check if partitions has changed
+                locker.lockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Set<Long> partitions = tableIdToPartitions.computeIfAbsent(table.getId(), key -> new HashSet<>());
                 boolean isPartitionChanged = false;
                 // if partitions is empty indicates that the tablet is
@@ -135,11 +148,19 @@ public class BinlogManager {
                     allBeIds.add(beId);
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
             }
 
             if (tableIdToReportedNum.get(table.getId()).equals(tableIdToReplicaCount.get(table.getId()))) {
                 db.writeLock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+            }
+
+            if (tableIdToReportedNum.get(table.getId()).equals(tableIdToReplicaCount.get(table.getId()))) {
+                locker.lockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 try {
                     // check again if all replicas have been reported
                     long totalReplicaCount = table.getAllPhysicalPartitions().stream().
@@ -154,7 +175,11 @@ public class BinlogManager {
                     long binlogTxnId = table.getBinlogTxnId();
                     if (binlogTxnId == INVALID) {
                         // the binlog config takes effect in all tablets of the table in BE for now
+<<<<<<< HEAD
                         Long nextTxnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().
+=======
+                        Long nextTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 getTransactionIDGenerator().getNextTransactionId();
                         table.setBinlogTxnId(binlogTxnId);
                         binlogTxnId = nextTxnId;
@@ -180,9 +205,15 @@ public class BinlogManager {
                         tableIdToPartitions.remove(table.getId());
                     }
                 } catch (AnalysisException e) {
+<<<<<<< HEAD
                     LOG.warn(e);
                 } finally {
                     db.writeUnlock();
+=======
+                    LOG.warn("Failed to execute", e);
+                } finally {
+                    locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         } finally {
@@ -223,16 +254,30 @@ public class BinlogManager {
 
 
     public boolean isBinlogAvailable(long dbId, long tableId) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             db.readLock();
             try {
                 OlapTable olapTable = (OlapTable) db.getTable(tableId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db != null) {
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion().size() != 0;
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return false;
@@ -242,16 +287,30 @@ public class BinlogManager {
     // the binlog is available
     // result : partitionId -> binlogAvailableVersion, null indicates the db or table is dropped
     public Map<Long, Long> getBinlogAvailableVersion(long dbId, long tableId) {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             db.readLock();
             try {
                 OlapTable olapTable = (OlapTable) db.getTable(tableId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db != null) {
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (olapTable != null) {
                     return olapTable.getBinlogAvailableVersion();
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return null;
@@ -261,6 +320,7 @@ public class BinlogManager {
     // result : <tableId, BinlogConfig>
     public HashMap<Long, BinlogConfig> showAllBinlog() {
         HashMap<Long, BinlogConfig> allTablesWithBinlogConfigMap = new HashMap<>();
+<<<<<<< HEAD
         List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
         for (Long dbId : allDbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -268,16 +328,34 @@ public class BinlogManager {
                 db.readLock();
                 try {
                     List<Table> tables = db.getTables();
+=======
+        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
+        for (Long dbId : allDbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db.getId(), LockType.READ);
+                try {
+                    List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (Table table : tables) {
                         if (table.isOlapTable() && ((OlapTable) table).isBinlogEnabled()) {
                             allTablesWithBinlogConfigMap.put(table.getId(), ((OlapTable) table).getCurBinlogConfig());
                         }
                     }
                 } finally {
+<<<<<<< HEAD
                     db.readUnlock();
+=======
+                    locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
         return allTablesWithBinlogConfigMap;
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

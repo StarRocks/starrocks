@@ -28,7 +28,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -123,8 +127,13 @@ public class UpdatePlanner {
                 slotDescriptor.setColumn(column);
                 slotDescriptor.setIsNullable(column.isAllowNull());
                 if (column.getType().isVarchar() &&
+<<<<<<< HEAD
                         IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
                     Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+=======
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     dict.ifPresent(
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
@@ -137,9 +146,15 @@ public class UpdatePlanner {
                     partitionIds.add(partition.getId());
                 }
                 OlapTable olapTable = (OlapTable) targetTable;
+<<<<<<< HEAD
                 DataSink dataSink =
                         new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
                                 olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
+=======
+                DataSink dataSink = new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+                        olapTable.enableReplicatedStorage(), false,
+                        olapTable.supportedAutomaticPartition(), session.getCurrentWarehouseId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (updateStmt.usePartialUpdate()) {
                     // using column mode partial update in UPDATE stmt
                     ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
@@ -155,6 +170,7 @@ public class UpdatePlanner {
                 Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
                         catalogDbTable.getDb());
                 try {
+<<<<<<< HEAD
                     olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(),
                             ConnectContext.get().getSessionVariable().getQueryTimeoutS());
                     olapTableSink.complete();
@@ -163,6 +179,15 @@ public class UpdatePlanner {
                 }
             } else if (targetTable instanceof SystemTable) {
                 DataSink dataSink = new SchemaTableSink((SystemTable) targetTable);
+=======
+                    olapTableSink.init(session.getExecutionId(), updateStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    olapTableSink.complete();
+                } catch (StarRocksException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+            } else if (targetTable instanceof SystemTable) {
+                DataSink dataSink = new SchemaTableSink((SystemTable) targetTable, ConnectContext.get().getCurrentWarehouseId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + targetTable.getClass().getName());
@@ -203,15 +228,26 @@ public class UpdatePlanner {
      * @return: new root logical plan with cast operator.
      */
     private static OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,
+<<<<<<< HEAD
                                                                       Table targetTable,
                                                                       List<String> colNames,
                                                                       List<ColumnRefOperator> outputColumns,
                                                                       OptExprBuilder root) {
+=======
+                                                                       Table targetTable,
+                                                                       List<String> colNames,
+                                                                       List<ColumnRefOperator> outputColumns,
+                                                                       OptExprBuilder root) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         Preconditions.checkState(colNames.size() == outputColumns.size(), "Column name's size %s should be equal " +
+<<<<<<< HEAD
                         "to output column refs' size %s", colNames.size(), outputColumns.size());
+=======
+                "to output column refs' size %s", colNames.size(), outputColumns.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (int columnIdx = 0; columnIdx < outputColumns.size(); ++columnIdx) {
             ColumnRefOperator outputColumn = outputColumns.get(columnIdx);

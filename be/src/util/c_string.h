@@ -15,6 +15,10 @@
 #pragma once
 
 #include <cassert>
+<<<<<<< HEAD
+=======
+#include <cstdint>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <cstring>
 #include <iostream>
 #include <string_view>

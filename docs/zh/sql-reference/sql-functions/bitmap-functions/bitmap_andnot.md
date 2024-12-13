@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_andnot
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算两个输入的 bitmap 的差集。差集是指包含所有存在于第一个集合且不存在于第二个集合的元素的集合。
 

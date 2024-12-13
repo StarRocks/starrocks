@@ -34,7 +34,11 @@ public class BasicDbStmtAnalyzer {
         new BasicDbStmtAnalyzerVisitor().analyze(statement, session);
     }
 
+<<<<<<< HEAD
     private static class BasicDbStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    private static class BasicDbStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
         }

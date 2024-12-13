@@ -14,7 +14,10 @@
 package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.BaseTableInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.HudiPartitionKey;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
@@ -23,12 +26,15 @@ import java.util.List;
 import java.util.Set;
 
 public class HudiPartitionTraits extends DefaultTraits {
+<<<<<<< HEAD
 
     @Override
     public String getDbName() {
         return ((HiveMetaStoreTable) table).getDbName();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public PartitionKey createEmptyKey() {
         return new HudiPartitionKey();
@@ -41,7 +47,11 @@ public class HudiPartitionTraits extends DefaultTraits {
 
     @Override
     public String getTableName() {
+<<<<<<< HEAD
         return ((HiveMetaStoreTable) table).getTableName();
+=======
+        return table.getCatalogTableName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

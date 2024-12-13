@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -36,6 +37,8 @@ where
   and n_name = 'ARGENTINA'
 order by
     s_name ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [planCount]
 2
 [plan-1]

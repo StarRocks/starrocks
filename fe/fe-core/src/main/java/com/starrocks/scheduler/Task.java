@@ -52,6 +52,12 @@ public class Task implements Writable {
     @SerializedName("createTime")
     private long createTime;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("catalogName")
+    private String catalogName;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName("dbName")
     private String dbName;
 
@@ -137,6 +143,17 @@ public class Task implements Writable {
         this.createTime = createTime;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalogName = catalogName;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getDbName() {
         return ClusterNamespace.getNameFromFullName(dbName);
     }

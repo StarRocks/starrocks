@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_query_profile
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the profile of a query by using its `query_id`. This function returns empty if the `query_id` does not exist or is incorrect.
 

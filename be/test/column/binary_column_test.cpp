@@ -142,7 +142,11 @@ PARALLEL_TEST(BinaryColumnTest, test_filter) {
     column->filter(filter);
     ASSERT_EQ(50, column->size());
 
+<<<<<<< HEAD
     std::vector<Slice>& slices = column->get_data();
+=======
+    const auto& slices = column->get_data();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (int i = 0; i < 50; ++i) {
         ASSERT_EQ(std::to_string(i * 2 + 1), slices[i].to_string());
@@ -153,7 +157,11 @@ PARALLEL_TEST(BinaryColumnTest, test_filter) {
 PARALLEL_TEST(BinaryColumnTest, test_append_strings) {
     std::vector<Slice> values{{"hello"}, {"starrocks"}};
     auto c1 = BinaryColumn::create();
+<<<<<<< HEAD
     ASSERT_TRUE(c1->append_strings(values));
+=======
+    ASSERT_TRUE(c1->append_strings(values.data(), values.size()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(values.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
         ASSERT_EQ(values[i], c1->get_data()[i]);
@@ -161,7 +169,11 @@ PARALLEL_TEST(BinaryColumnTest, test_append_strings) {
 
     // Nullable BinaryColumn
     auto c2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+<<<<<<< HEAD
     ASSERT_TRUE(c2->append_strings(values));
+=======
+    ASSERT_TRUE(c2->append_strings(values.data(), values.size()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(values.size(), c2->size());
     auto* c = reinterpret_cast<BinaryColumn*>(c2->mutable_data_column());
     for (size_t i = 0; i < values.size(); i++) {
@@ -219,8 +231,13 @@ PARALLEL_TEST(BinaryColumnTest, test_compare_at) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();
+<<<<<<< HEAD
     c1->append_strings(strings);
     c2->append_strings(strings);
+=======
+    c1->append_strings(strings.data(), strings.size());
+    c2->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < strings.size(); i++) {
         ASSERT_EQ(0, c1->compare_at(i, i, *c2, -1));
         ASSERT_EQ(0, c2->compare_at(i, i, *c1, -1));
@@ -317,8 +334,13 @@ PARALLEL_TEST(BinaryColumnTest, test_assign) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
     auto c2 = BinaryColumn::create();
+<<<<<<< HEAD
     c1->append_strings(strings);
     c2->append_strings(strings);
+=======
+    c1->append_strings(strings.data(), strings.size());
+    c2->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     c1->assign(c1->size(), 0);
     for (size_t i = 0; i < strings.size(); i++) {
@@ -335,7 +357,11 @@ PARALLEL_TEST(BinaryColumnTest, test_assign) {
 PARALLEL_TEST(BinaryColumnTest, test_reset_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
+<<<<<<< HEAD
     c1->append_strings(strings);
+=======
+    c1->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     c1->set_delete_state(DEL_PARTIAL_SATISFIED);
 
     c1->reset_column();
@@ -348,7 +374,11 @@ PARALLEL_TEST(BinaryColumnTest, test_reset_column) {
 PARALLEL_TEST(BinaryColumnTest, test_swap_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
     auto c1 = BinaryColumn::create();
+<<<<<<< HEAD
     c1->append_strings(strings);
+=======
+    c1->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     c1->set_delete_state(DEL_PARTIAL_SATISFIED);
 
     auto c2 = BinaryColumn::create();

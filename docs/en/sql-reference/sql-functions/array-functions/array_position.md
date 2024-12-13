@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_position
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the position of an element in an array.
 

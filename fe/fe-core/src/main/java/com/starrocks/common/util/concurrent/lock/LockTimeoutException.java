@@ -16,6 +16,7 @@ package com.starrocks.common.util.concurrent.lock;
 
 import com.google.common.base.Strings;
 
+<<<<<<< HEAD
 public class LockTimeoutException extends RuntimeException {
 
     public LockTimeoutException(String msg) {
@@ -23,3 +24,10 @@ public class LockTimeoutException extends RuntimeException {
     }
 
 }
+=======
+public class LockTimeoutException extends LockException {
+    public LockTimeoutException(String msg) {
+        super(Strings.nullToEmpty(msg));
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

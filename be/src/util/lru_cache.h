@@ -274,8 +274,11 @@ public:
     // Separate from constructor so caller can easily make an array of LRUCache
     void set_capacity(size_t capacity);
 
+<<<<<<< HEAD
     void set_charge_mode(ChargeMode charge_mode);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Like Cache methods, but with an extra "hash" parameter.
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t charge,
                           void (*deleter)(const CacheKey& key, void* value),
@@ -300,8 +303,11 @@ private:
     // Initialized before use.
     size_t _capacity{0};
 
+<<<<<<< HEAD
     ChargeMode _charge_mode;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // _mutex protects the following state.
     mutable std::mutex _mutex;
     size_t _usage{0};

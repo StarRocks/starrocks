@@ -39,6 +39,50 @@ import java.util.HashSet;
 import java.util.List;
 
 public class CatalogRecycleBinTest {
+<<<<<<< HEAD
+=======
+    private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
+                                               long time) {
+        while (recycleBin.getRecycleTableInfo(id) != null) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionClearFinished(CatalogRecycleBin recycleBin, long id,
+                                                   long time) {
+        while (recycleBin.getRecyclePartitionInfo(id) != null) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingTable(id)) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingPartition(id)) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Test
     public void testGetDb() {
@@ -77,6 +121,11 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testGetPartition() throws Exception {
+<<<<<<< HEAD
+=======
+        FakeEditLog fakeEditLog = new FakeEditLog();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CatalogRecycleBin bin = new CatalogRecycleBin();
         List<Column> columns = Lists.newArrayList(new Column("k1", ScalarType.createVarcharType(10)));
         Range<PartitionKey> range =
@@ -85,6 +134,7 @@ public class CatalogRecycleBinTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+<<<<<<< HEAD
         Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
         bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null);
         Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
@@ -92,16 +142,28 @@ public class CatalogRecycleBinTest {
 
         Partition recycledPart = bin.getPartition(1L);
         Assert.assertNull(recycledPart);
+=======
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
+        Partition partition2 = new Partition(2L, 4L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
+
+        Partition recycledPart = bin.getPartition(1L);
+        Assert.assertNotNull(recycledPart);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         recycledPart = bin.getPartition(2L);
         Assert.assertEquals(2L, recycledPart.getId());
         Assert.assertEquals(range, bin.getPartitionRange(2L));
         Assert.assertEquals(dataProperty, bin.getPartitionDataProperty(2L));
         Assert.assertEquals((short) 1, bin.getPartitionReplicationNum(2L));
         Assert.assertFalse(bin.getPartitionIsInMemory(2L));
+<<<<<<< HEAD
 
         List<Partition> partitions = bin.getPartitions(22L);
         Assert.assertEquals(1, partitions.size());
         Assert.assertEquals(2L, partitions.get(0).getId());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -114,6 +176,7 @@ public class CatalogRecycleBinTest {
                         PartitionKey.createPartitionKey(Lists.newArrayList(new PartitionValue("3")), columns),
                         BoundType.CLOSED);
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+<<<<<<< HEAD
         Partition partition = new Partition(1L, "pt", new MaterializedIndex(), null);
         bin.recyclePartition(11L, 22L, partition, range, dataProperty, (short) 1, false, null);
         Partition partition2 = new Partition(2L, "pt", new MaterializedIndex(), null);
@@ -123,6 +186,17 @@ public class CatalogRecycleBinTest {
         Assert.assertNull(recycledPart);
         recycledPart = bin.getPartition(2L);
         Assert.assertEquals(2L, recycledPart.getId());
+=======
+        Partition partition = new Partition(1L, 3L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition, range, dataProperty, (short) 1, false, null));
+        Partition partition2 = new Partition(2L, 4L, "pt", new MaterializedIndex(), null);
+        bin.recyclePartition(new RecycleRangePartitionInfo(11L, 22L, partition2, range, dataProperty, (short) 1, false, null));
+
+        PhysicalPartition recycledPart = bin.getPhysicalPartition(3L);
+        Assert.assertNotNull(recycledPart);
+        recycledPart = bin.getPhysicalPartition(4L);
+        Assert.assertEquals(4L, recycledPart.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -168,6 +242,12 @@ public class CatalogRecycleBinTest {
         bin.recycleTable(13, table3, true);
 
         bin.eraseTable(System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+<<<<<<< HEAD
+=======
+        waitPartitionClearFinished(bin, 11L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitPartitionClearFinished(bin, 12L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+        waitPartitionClearFinished(bin, 13L, System.currentTimeMillis() + Config.catalog_trash_expire_second * 1000L + 10000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(0, bin.getTables(11L).size());
         Assert.assertEquals(0, bin.getTables(12L).size());
@@ -182,6 +262,10 @@ public class CatalogRecycleBinTest {
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 6L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -217,7 +301,11 @@ public class CatalogRecycleBinTest {
         index.addTablet(tablet, tabletMeta);
 
         // Partition
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -228,7 +316,11 @@ public class CatalogRecycleBinTest {
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex();
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = invertedIndex;
             }
         };
@@ -250,12 +342,20 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testAddTabletToInvertedIndexWithLocalTabletError(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                                                             @Mocked Database db) {
+=======
+                                                                 @Mocked Database db) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
         long indexId = 4L;
         long tabletId = 5L;
+<<<<<<< HEAD
+=======
+        long physicalPartitionId = 6L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long replicaId = 10L;
         long backendId = 20L;
 
@@ -290,7 +390,11 @@ public class CatalogRecycleBinTest {
         index.addTablet(tablet, tabletMeta);
 
         // Partition
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p1", index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Table
         OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
@@ -301,7 +405,11 @@ public class CatalogRecycleBinTest {
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex();
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = invertedIndex;
             }
         };
@@ -371,7 +479,11 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.onEraseDatabase(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().onEraseDatabase(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -499,8 +611,14 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
+<<<<<<< HEAD
 
         Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table2));
+=======
+        waitPartitionClearFinished(recycleBin, table1.getId(), expireFromNow - 1000);
+
+        Assert.assertEquals(recycleBin.getTables(dbId), List.of(table2));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNull(recycleBin.getTable(dbId, table1.getId()));
         Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
 
@@ -517,6 +635,10 @@ public class CatalogRecycleBinTest {
         // 4. won't erase on expire time
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
+<<<<<<< HEAD
+=======
+        waitTableToBeDone(recycleBin, table2.getId(), expireFromNow - 1000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(recycleBin.getTable(dbId, table2.getId()), table2);
         Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
 
@@ -524,6 +646,10 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(table2.getId(), now));
         recycleBin.eraseTable(now);
+<<<<<<< HEAD
+=======
+        waitPartitionClearFinished(recycleBin, table2.getId(), now);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNull(recycleBin.getTable(dbId, table2.getId()));
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
@@ -531,9 +657,15 @@ public class CatalogRecycleBinTest {
 
     @Test
     public void testRecyclePartition(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
+<<<<<<< HEAD
         Partition p1 = new Partition(111, "uno", null, null);
         Partition p2SameName = new Partition(22, "dos", null, null);
         Partition p2 = new Partition(222, "dos", null, null);
+=======
+        Partition p1 = new Partition(111, 112, "uno", null, null);
+        Partition p2SameName = new Partition(22, 221, "dos", null, null);
+        Partition p2 = new Partition(222, 223, "dos", null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         new Expectations() {
             {
@@ -544,7 +676,11 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.onErasePartition((Partition) any);
+=======
+                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
 
                 globalStateMgr.getEditLog();
@@ -565,9 +701,16 @@ public class CatalogRecycleBinTest {
         DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
 
+<<<<<<< HEAD
         recycleBin.recyclePartition(dbId, tableId, p1, null, dataProperty, (short) 2, false, null);
         recycleBin.recyclePartition(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null);
         recycleBin.recyclePartition(dbId, tableId, p2, null, dataProperty, (short) 2, false, null);
+=======
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p1, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(
+                new RecycleRangePartitionInfo(dbId, tableId, p2SameName, null, dataProperty, (short) 2, false, null));
+        recycleBin.recyclePartition(new RecycleRangePartitionInfo(dbId, tableId, p2, null, dataProperty, (short) 2, false, null));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), p1);
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
@@ -580,8 +723,14 @@ public class CatalogRecycleBinTest {
         long expireFromNow = now - 3600 * 1000L;
         recycleBin.idToRecycleTime.put(p1.getId(), expireFromNow - 1000);
         recycleBin.erasePartition(now);
+<<<<<<< HEAD
 
         Assert.assertEquals(recycleBin.getPartition(p1.getId()), null);
+=======
+        waitPartitionClearFinished(recycleBin, p1.getId(), now);
+
+        Assert.assertNull(recycleBin.getPartition(p1.getId()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
 
         // 3. set recyle later, check if recycle now
@@ -597,6 +746,10 @@ public class CatalogRecycleBinTest {
         // 4. won't erase on expire time
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 1000);
         recycleBin.erasePartition(now);
+<<<<<<< HEAD
+=======
+        waitPartitionToBeDone(recycleBin, p2.getId(), now);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), p2);
         Assert.assertEquals(1, recycleBin.idToRecycleTime.size());
 
@@ -604,10 +757,15 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 11000);
         Assert.assertFalse(recycleBin.ensureEraseLater(p2.getId(), now));
         recycleBin.erasePartition(now);
+<<<<<<< HEAD
+=======
+        waitPartitionClearFinished(recycleBin, p2.getId(), now);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(recycleBin.getPartition(p2.getId()), null);
         Assert.assertEquals(0, recycleBin.idToRecycleTime.size());
         Assert.assertEquals(0, recycleBin.enableEraseLater.size());
     }
+<<<<<<< HEAD
 
     @Test
     public void testRecyclePartitionForLakeTable(@Mocked GlobalStateMgr globalStateMgr, @Mocked EditLog editLog) {
@@ -654,4 +812,6 @@ public class CatalogRecycleBinTest {
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p1.getId()));
         Assert.assertTrue(recycleBin.idToRecycleTime.containsKey(p2.getId()));
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

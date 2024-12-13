@@ -251,7 +251,11 @@ public class Backend extends ComputeNode {
             }
             if (allPathHashUpdated) {
                 initPathInfo = true;
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo()
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
             }
         }
@@ -321,7 +325,11 @@ public class Backend extends ComputeNode {
         if (isChanged) {
             // update disksRef
             disksRef = new ConcurrentHashMap<>(newDiskInfos);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentSystemInfo().updatePathInfo(addedDisks, removedDisks);
+=======
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updatePathInfo(addedDisks, removedDisks);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // log disk changing
             GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
         }
@@ -373,6 +381,20 @@ public class Backend extends ComputeNode {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public String getDiskRootPath(long pathHash) {
+        String rootPath = "Unknown";
+        for (DiskInfo diskInfo : disksRef.values()) {
+            if (diskInfo.getPathHash() == pathHash) {
+                rootPath = diskInfo.getRootPath();
+                break;
+            }
+        }
+        return rootPath;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setStorageMediumForAllDisks(TStorageMedium m) {
         for (DiskInfo diskInfo : disksRef.values()) {
             diskInfo.setStorageMedium(m);
@@ -476,7 +498,11 @@ public class Backend extends ComputeNode {
     @Override
     public String toString() {
         return "Backend [id=" + getId() + ", host=" + getHost() + ", heartbeatPort=" + getHeartbeatPort()
+<<<<<<< HEAD
                 + ", alive=" + getIsAlive().get() + "]";
+=======
+                + ", alive=" + getIsAlive().get() + ", status=" + getStatus() + "]";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setTabletMaxCompactionScore(long compactionScore) {

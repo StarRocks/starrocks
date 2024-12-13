@@ -126,7 +126,11 @@ struct TraceEntry;
 // This class is thread-safe.
 class Trace : public RefCountedThreadSafe<Trace> {
 public:
+<<<<<<< HEAD
     Trace();
+=======
+    Trace() = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Logs a message into the trace buffer.
     //

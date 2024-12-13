@@ -14,6 +14,11 @@
 
 #include "exec/pipeline/bucket_process_operator.h"
 
+<<<<<<< HEAD
+=======
+#include <utility>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.h"
 #include "exec/pipeline/operator.h"
@@ -160,12 +165,21 @@ SpillProcessChannelPtr get_spill_channel(const OperatorPtr& op) {
     return nullptr;
 }
 
+<<<<<<< HEAD
 BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, const BucketProcessContextFactoryPtr& context_factory,
         const OperatorFactoryPtr& factory)
         : OperatorFactory(id, "bucket_process_sink_factory", plan_node_id),
           _factory(factory),
           _ctx_factory(context_factory) {}
+=======
+BucketProcessSinkOperatorFactory::BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                                   BucketProcessContextFactoryPtr context_factory,
+                                                                   OperatorFactoryPtr factory)
+        : OperatorFactory(id, "bucket_process_sink_factory", plan_node_id),
+          _factory(std::move(factory)),
+          _ctx_factory(std::move(context_factory)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 OperatorPtr BucketProcessSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);
@@ -188,12 +202,21 @@ void BucketProcessSinkOperatorFactory::close(RuntimeState* state) {
     _factory->close(state);
 }
 
+<<<<<<< HEAD
 BucketProcessSourceOperatorFactory::BucketProcessSourceOperatorFactory(
         int32_t id, int32_t plan_node_id, const BucketProcessContextFactoryPtr& context_factory,
         const OperatorFactoryPtr& factory)
         : SourceOperatorFactory(id, "bucket_process_factory", plan_node_id),
           _factory(factory),
           _ctx_factory(context_factory) {}
+=======
+BucketProcessSourceOperatorFactory::BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                                       BucketProcessContextFactoryPtr context_factory,
+                                                                       OperatorFactoryPtr factory)
+        : SourceOperatorFactory(id, "bucket_process_factory", plan_node_id),
+          _factory(std::move(factory)),
+          _ctx_factory(std::move(context_factory)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 OperatorPtr BucketProcessSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto ctx = _ctx_factory->get_or_create(driver_sequence);

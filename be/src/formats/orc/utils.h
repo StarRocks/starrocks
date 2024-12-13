@@ -37,6 +37,7 @@ public:
     const RuntimeFilterProbeCollector* rf_collector;
 };
 
+<<<<<<< HEAD
 class DiskRange {
 public:
     DiskRange(int64_t off, int64_t len) : offset(off), length(len) {
@@ -84,6 +85,8 @@ public:
     }
 };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Hive ORC char type will pad trailing spaces.
 // https://docs.cloudera.com/documentation/enterprise/6/6.3/topics/impala_char.html
 static inline size_t remove_trailing_spaces(const char* s, size_t size) {
@@ -104,7 +107,11 @@ public:
 // orc timestamp is millseconds since unix epoch time.
 // timestamp conversion is quite tricky, because it involves timezone info,
 // and it affects how we interpret `value`. according to orc v1 spec
+<<<<<<< HEAD
 // https://orc.apache.org/specification/ORCv1/ writer timezoe  is in stripe footer.
+=======
+// https://orc.apache.org/specification/ORCv1/ writer timezone is in stripe footer.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // time conversion involves two aspects:
 // 1. timezone (UTC/GMT and local timezone)
@@ -148,6 +155,16 @@ public:
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    static void native_ts_to_orc_ts(const TimestampValue& tv, int64_t& seconds, int64_t& nanoseconds) {
+        Timestamp time = tv._timestamp & TIMESTAMP_BITS_TIME;
+        uint64_t microseconds = time % USECS_PER_SEC;
+        seconds = tv.to_unix_second();
+        nanoseconds = microseconds * 1000;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

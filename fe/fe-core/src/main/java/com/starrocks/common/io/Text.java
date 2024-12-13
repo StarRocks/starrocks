@@ -34,17 +34,26 @@
 
 package com.starrocks.common.io;
 
+<<<<<<< HEAD
 import com.google.gson.stream.JsonReader;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.meta.LimitExceededException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.ByteArrayInputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.EOFException;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.io.InputStreamReader;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -180,7 +189,11 @@ public class Text implements Writable {
             return -1; // not found
         } catch (CharacterCodingException e) {
             // can't get here
+<<<<<<< HEAD
             LOG.warn(e);
+=======
+            LOG.warn("Failed to execute find", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return -1;
         }
     }
@@ -457,6 +470,7 @@ public class Text implements Writable {
         return decode(bytes);
     }
 
+<<<<<<< HEAD
     public static JsonReader getJsonReaderWithChecksum(CheckedInputStream in) throws IOException {
         byte[] bytes = new byte[4];
         readAndCheckEof(in, bytes, 4);
@@ -466,6 +480,8 @@ public class Text implements Writable {
         return new JsonReader(new InputStreamReader(new ByteArrayInputStream(bytes), StandardCharsets.UTF_8));
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Magic numbers for UTF-8. These are the number of bytes that
      * <em>follow</em> a given lead byte. Trailing bytes have the value -1. The

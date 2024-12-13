@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableMap;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.ConnectContext;
@@ -118,10 +121,17 @@ public class SetVarTest extends PlanTestBase {
     }
 
     public static Stream<Arguments> genArguments() {
+<<<<<<< HEAD
         Map<String, String> hints1 = ImmutableMap.of("query_timeout", "10");
         Map<String, String> hints2 = ImmutableMap.of("query_timeout", "1");
         Map<String, String> hints3 = ImmutableMap.of("query_timeout", "10", "query_mem_limit", "1");
         Map<String, String> hints4 = ImmutableMap.of("a", "1", "b", "abs(1)", "c", "(SELECT max(`c1`)\n" +
+=======
+        Map<String, String> hints1 = Map.of("query_timeout", "10");
+        Map<String, String> hints2 = Map.of("query_timeout", "1");
+        Map<String, String> hints3 = Map.of("query_timeout", "10", "query_mem_limit", "1");
+        Map<String, String> hints4 = Map.of("a", "1", "b", "abs(1)", "c", "(SELECT max(`c1`)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "FROM `tbl`)");
 
         return Stream.of(
@@ -159,4 +169,17 @@ public class SetVarTest extends PlanTestBase {
         }
         return hints;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testQueryHint() throws Exception {
+        String hintSql1 = "select /*+ SET_USER_VARIABLE(@aHint= 1, @bHint = 2) */ @aHint, @bHint";
+        StatementBase stmt = SqlParser.parse(hintSql1, starRocksAssert.getCtx().getSessionVariable()).get(0);
+        StmtExecutor executor = new StmtExecutor(starRocksAssert.getCtx(), stmt);
+        executor.processQueryScopeHint();
+        Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("aHint"));
+        Assert.assertTrue(starRocksAssert.getCtx().getUserVariables().containsKey("bHint"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

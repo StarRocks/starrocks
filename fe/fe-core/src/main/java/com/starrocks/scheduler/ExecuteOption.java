@@ -18,16 +18,31 @@ package com.starrocks.scheduler;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Map;
 
 public class ExecuteOption {
 
+<<<<<<< HEAD
     private int priority = Constants.TaskRunPriority.LOWEST.value();
     private Map<String, String> taskRunProperties;
 
     @SerializedName("isMergeRedundant")
     private final boolean mergeRedundant;
+=======
+    @SerializedName("priority")
+    private int priority = Constants.TaskRunPriority.LOWEST.value();
+
+    @SerializedName("taskRunProperties")
+    private Map<String, String> taskRunProperties;
+
+    @SerializedName("isMergeRedundant")
+    private final boolean isMergeRedundant;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // indicates whether the current execution is manual
     @SerializedName("isManual")
@@ -40,12 +55,21 @@ public class ExecuteOption {
     private boolean isReplay = false;
 
     public ExecuteOption(boolean isMergeRedundant) {
+<<<<<<< HEAD
         this.mergeRedundant = isMergeRedundant;
     }
 
     public ExecuteOption(int priority, boolean mergeRedundant, Map<String, String> taskRunProperties) {
         this.priority = priority;
         this.mergeRedundant = mergeRedundant;
+=======
+        this.isMergeRedundant = isMergeRedundant;
+    }
+
+    public ExecuteOption(int priority, boolean isMergeRedundant, Map<String, String> taskRunProperties) {
+        this.priority = priority;
+        this.isMergeRedundant = isMergeRedundant;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // clone the taskRunProperties to avoid modifying the original map because `mergeProperties` may change it.
         if (taskRunProperties != null) {
             this.taskRunProperties = Maps.newHashMap(taskRunProperties);
@@ -68,9 +92,15 @@ public class ExecuteOption {
         // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
         // hanging after removing it.
         if (Config.enable_mv_refresh_sync_refresh_mergeable) {
+<<<<<<< HEAD
             return mergeRedundant;
         } else {
             return !isSync && mergeRedundant;
+=======
+            return isMergeRedundant;
+        } else {
+            return !isSync && isMergeRedundant;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -94,15 +124,58 @@ public class ExecuteOption {
         this.isSync = isSync;
     }
 
+<<<<<<< HEAD
     public void setReplay(boolean isReplay) {
         this.isReplay = isReplay;
+=======
+    public boolean isReplay() {
+        return isReplay;
+    }
+
+    public void setReplay(boolean replay) {
+        isReplay = replay;
+    }
+
+    private boolean containsKey(String key) {
+        return taskRunProperties.containsKey(key) && taskRunProperties.get(key) != null;
+    }
+
+    /**
+     * If the execute option contains the properties that need to be merged into the task run, eg: it's an internal partition
+     * refresh, needs to merge it into the newer task run.
+     * task in mv refresh
+     * @return
+     */
+    public boolean containsToMergeProperties() {
+        if (taskRunProperties == null) {
+            return false;
+        }
+        if (containsKey(TaskRun.PARTITION_START) || containsKey(TaskRun.PARTITION_END)
+                || containsKey(TaskRun.START_TASK_RUN_ID) || containsKey(TaskRun.PARTITION_VALUES)) {
+            return true;
+        }
+        return false;
+    }
+
+    public void mergeProperties(ExecuteOption option) {
+        if (option.taskRunProperties != null) {
+            if (taskRunProperties == null) {
+                taskRunProperties = Maps.newHashMap();
+            }
+            taskRunProperties.putAll(option.taskRunProperties);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return String.format("ExecuteOption{priority=%s, mergeRedundant=%s, isManual=%s, " +
                         "isSync=%s, taskRunProperties={%s}}",
                 priority, mergeRedundant, isManual, isSync, taskRunProperties
         );
+=======
+        return GsonUtils.GSON.toJson(this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

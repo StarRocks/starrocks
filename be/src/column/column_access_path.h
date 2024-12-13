@@ -14,11 +14,23 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <string>
 #include <vector>
 
 #include "common/status.h"
 #include "gen_cpp/PlanNodes_types.h"
+=======
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "column/column.h"
+#include "common/status.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "runtime/types.h"
+#include "types/logical_type.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -36,10 +48,24 @@ class RuntimeState;
  */
 class ColumnAccessPath {
 public:
+<<<<<<< HEAD
     Status init(const TColumnAccessPath& column_path, RuntimeState* state, ObjectPool* pool);
 
     // for test
     Status init(const TAccessPathType::type& type, const std::string& path, uint32_t index);
+=======
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TColumnAccessPath& column_path, RuntimeState* state,
+                                                              ObjectPool* pool);
+
+    Status init(const std::string& parent_path, const TColumnAccessPath& column_path, RuntimeState* state,
+                ObjectPool* pool);
+
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TAccessPathType::type& type,
+                                                              const std::string& path, uint32_t index,
+                                                              const std::string& prefix = "");
+    // the path doesn't contains root
+    static void insert_json_path(ColumnAccessPath* root, LogicalType type, const std::string& path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::string& path() const { return _path; }
 
@@ -49,6 +75,13 @@ public:
 
     std::vector<std::unique_ptr<ColumnAccessPath>>& children() { return _children; }
 
+<<<<<<< HEAD
+=======
+    void set_from_compaction(bool from_compaction) { _from_compaction = from_compaction; }
+
+    bool is_from_compaction() const { return _from_compaction; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_key() const { return _type == TAccessPathType::type::KEY; }
 
     bool is_offset() const { return _type == TAccessPathType::type::OFFSET; }
@@ -61,17 +94,43 @@ public:
 
     bool is_from_predicate() const { return _from_predicate; }
 
+<<<<<<< HEAD
+=======
+    const std::string& absolute_path() const { return _absolute_path; }
+
+    // flat json use this to get the type of the path
+    const TypeDescriptor& value_type() const { return _value_type; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
     StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* field, uint32_t index);
 
+<<<<<<< HEAD
     const std::string to_string() const;
 
 private:
+=======
+    ColumnAccessPath* get_child(const std::string& path);
+
+    const std::string to_string() const;
+
+    size_t leaf_size() const;
+
+    void get_all_leafs(std::vector<ColumnAccessPath*>* result);
+
+private:
+    // path type, to mark the path is KEY/OFFSET/FIELD/ALL/INDEX
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TAccessPathType::type _type;
 
     std::string _path;
 
+<<<<<<< HEAD
+=======
+    std::string _absolute_path;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // column index in storage
     // the root index is the offset of table schema
     // the FIELD index is the offset of struct schema
@@ -80,6 +139,14 @@ private:
 
     bool _from_predicate;
 
+<<<<<<< HEAD
+=======
+    bool _from_compaction = false;
+
+    // the data type of the subfield
+    TypeDescriptor _value_type;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<std::unique_ptr<ColumnAccessPath>> _children;
 };
 

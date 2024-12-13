@@ -28,6 +28,10 @@ struct BeThreadInfo {
     int64_t tid{0};
     bool idle{false};
     int64_t finished_tasks{0};
+<<<<<<< HEAD
+=======
+    int64_t num_bound_cpu_cores{0};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SchemaBeThreadsScanner : public SchemaScanner {

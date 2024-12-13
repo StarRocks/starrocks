@@ -39,7 +39,11 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 
 :::note
 
+<<<<<<< HEAD
 - 必须为主键模型表。
+=======
+- 必须为主键表。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - `__row` 列的长度不能超过 1 MB。
 - 自 3.2.4 起，列的类型新增支持 BITMAP、HLL、JSON、ARRAY、MAP 和 STRUCT。
 - 表中除了主键列外必须包含更多的列。

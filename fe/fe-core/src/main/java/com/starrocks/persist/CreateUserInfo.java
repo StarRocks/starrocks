@@ -12,13 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -26,13 +30,22 @@ import com.starrocks.privilege.ObjectTypeDeprecate;
 import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
+=======
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class CreateUserInfo implements Writable {
     @SerializedName(value = "u")
@@ -42,11 +55,14 @@ public class CreateUserInfo implements Writable {
     @SerializedName(value = "p")
     UserProperty userProperty;
 
+<<<<<<< HEAD
     //Deprecated attribute, can be removed in version 3.2
     @SerializedName(value = "c")
     @Deprecated
     UserPrivilegeCollection userPrivilegeCollection;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "c2")
     UserPrivilegeCollectionV2 userPrivilegeCollectionV2;
 
@@ -84,6 +100,7 @@ public class CreateUserInfo implements Writable {
     }
 
     public UserPrivilegeCollectionV2 getUserPrivilegeCollection() {
+<<<<<<< HEAD
         if (userPrivilegeCollectionV2 == null) {
             UserPrivilegeCollectionV2 collection = new UserPrivilegeCollectionV2();
             collection.grantRoles(userPrivilegeCollection.getAllRoles());
@@ -97,6 +114,9 @@ public class CreateUserInfo implements Writable {
         } else {
             return userPrivilegeCollectionV2;
         }
+=======
+        return userPrivilegeCollectionV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public short getPluginId() {

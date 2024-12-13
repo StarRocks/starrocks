@@ -21,6 +21,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRange;
@@ -28,10 +32,18 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
+=======
+import org.jetbrains.annotations.NotNull;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.Arrays;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 
 public class ShortCircuitTest extends PlanTestBase {
@@ -93,6 +105,31 @@ public class ShortCircuitTest extends PlanTestBase {
         String sql = "select * from tprimary where pk=20";
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+<<<<<<< HEAD
+=======
+        TScanRangeLocations scanRangeLocations = gettScanRangeLocations(10001);
+
+        DescriptorTable desc = new DescriptorTable();
+        TupleDescriptor tupleDescriptor = desc.createTupleDescriptor();
+        tupleDescriptor.setTable(getTable("tprimary"));
+
+        OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
+                "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        List<Long> selectPartitionIds = ImmutableList.of(1L);
+        scanNode.setSelectedPartitionIds(selectPartitionIds);
+
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+        coord.exec();
+
+        ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
+        Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
+    }
+
+    @NotNull
+    private static TScanRangeLocations gettScanRangeLocations(long backendId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
         TScanRange scanRange = new TScanRange();
         TInternalScanRange internalScanRange = new TInternalScanRange();
@@ -100,6 +137,7 @@ public class ShortCircuitTest extends PlanTestBase {
         internalScanRange.setTablet_id(11L);
         internalScanRange.setVersion("version_1");
         internalScanRange.setHosts(ImmutableList.of(new TNetworkAddress("127.0.0.1", 8060)));
+<<<<<<< HEAD
         scanRangeLocation.setBackend_id(1L);
         scanRange.setInternal_scan_range(internalScanRange);
         scanRangeLocations.setScan_range(scanRange);
@@ -119,6 +157,13 @@ public class ShortCircuitTest extends PlanTestBase {
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
         Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
+=======
+        scanRangeLocation.setBackend_id(backendId);
+        scanRange.setInternal_scan_range(internalScanRange);
+        scanRangeLocations.setScan_range(scanRange);
+        scanRangeLocations.setLocations(Arrays.asList(scanRangeLocation));
+        return scanRangeLocations;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -127,17 +172,30 @@ public class ShortCircuitTest extends PlanTestBase {
         String sql = "select * from tprimary where pk=20";
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+<<<<<<< HEAD
+=======
+        TScanRangeLocations scanRangeLocations = gettScanRangeLocations(10001);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         DescriptorTable desc = new DescriptorTable();
         TupleDescriptor tupleDescriptor = desc.createTupleDescriptor();
         tupleDescriptor.setTable(getTable("tprimary"));
 
         OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
+<<<<<<< HEAD
                 "OlapScanNodeForShortCircuit", ImmutableList.of());
 
         DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
                 execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
         coord.startScheduling();
+=======
+                "OlapScanNodeForShortCircuit", ImmutableList.of(scanRangeLocations),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+        coord.exec();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(coord.getNext().isEos());
     }
 
@@ -145,4 +203,8 @@ public class ShortCircuitTest extends PlanTestBase {
     public static void afterClass() {
         FeConstants.runningUnitTest = OLD_VALUE;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -27,6 +27,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.function.MetaFunctions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.utframe.StarRocksAssert;
@@ -99,42 +103,69 @@ public class MetaFunctionsTest {
 
     @Test
     public void testInspectMemory() {
+<<<<<<< HEAD
         ScalarOperatorFunctions.inspectMemory(new ConstantOperator("report", Type.VARCHAR));
+=======
+        MetaFunctions.inspectMemory(new ConstantOperator("report", Type.VARCHAR));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = SemanticException.class)
     public void testInspectMemoryFailed() {
+<<<<<<< HEAD
         ScalarOperatorFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR));
+=======
+        MetaFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testInspectMemoryDetail() {
         MemoryUsageTracker.registerMemoryTracker("Report", new ReportHandler());
         try {
+<<<<<<< HEAD
             ScalarOperatorFunctions.inspectMemoryDetail(
+=======
+            MetaFunctions.inspectMemoryDetail(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new ConstantOperator("abc", Type.VARCHAR),
                     new ConstantOperator("def", Type.VARCHAR));
             Assert.fail();
         } catch (Exception ex) {
         }
         try {
+<<<<<<< HEAD
             ScalarOperatorFunctions.inspectMemoryDetail(
+=======
+            MetaFunctions.inspectMemoryDetail(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new ConstantOperator("report", Type.VARCHAR),
                     new ConstantOperator("def", Type.VARCHAR));
             Assert.fail();
         } catch (Exception ex) {
         }
         try {
+<<<<<<< HEAD
             ScalarOperatorFunctions.inspectMemoryDetail(
+=======
+            MetaFunctions.inspectMemoryDetail(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new ConstantOperator("report", Type.VARCHAR),
                     new ConstantOperator("reportHandler.abc", Type.VARCHAR));
             Assert.fail();
         } catch (Exception ex) {
         }
+<<<<<<< HEAD
         ScalarOperatorFunctions.inspectMemoryDetail(
                 new ConstantOperator("report", Type.VARCHAR),
                 new ConstantOperator("reportHandler", Type.VARCHAR));
         ScalarOperatorFunctions.inspectMemoryDetail(
+=======
+        MetaFunctions.inspectMemoryDetail(
+                new ConstantOperator("report", Type.VARCHAR),
+                new ConstantOperator("reportHandler", Type.VARCHAR));
+        MetaFunctions.inspectMemoryDetail(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 new ConstantOperator("report", Type.VARCHAR),
                 new ConstantOperator("reportHandler.reportQueue", Type.VARCHAR));
     }
@@ -145,18 +176,30 @@ public class MetaFunctionsTest {
     public void testInspectTableAccessDeniedException() {
         connectContext.setCurrentUserIdentity(testUser);
         connectContext.setCurrentRoleIds(testUser);
+<<<<<<< HEAD
         ScalarOperatorFunctions.inspectTable(new TableName("test", "tbl1"));
+=======
+        MetaFunctions.inspectTable(new TableName("test", "tbl1"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = ErrorReportException.class)
     public void testInspectExternalTableAccessDeniedException() {
         connectContext.setCurrentUserIdentity(testUser);
         connectContext.setCurrentRoleIds(testUser);
+<<<<<<< HEAD
         ScalarOperatorFunctions.inspectTable(new TableName("test", "mysql_external_table"));
     }
 
     private String lookupString(String tableName, String key, String column) {
         ConstantOperator res = ScalarOperatorFunctions.lookupString(
+=======
+        MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
+    }
+
+    private String lookupString(String tableName, String key, String column) {
+        ConstantOperator res = MetaFunctions.lookupString(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ConstantOperator.createVarchar(tableName),
                 ConstantOperator.createVarchar(key),
                 ConstantOperator.createVarchar(column)
@@ -192,7 +235,10 @@ public class MetaFunctionsTest {
         }
         {
             starRocksAssert.withTable("create table t1(c1 string, c2 bigint auto_increment) primary key(c1) " +
+<<<<<<< HEAD
                     "distributed by hash(c1) " +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "properties('replication_num'='1')");
             Assert.assertNull(lookupString("t1", "v1", "c1"));
 
@@ -200,7 +246,11 @@ public class MetaFunctionsTest {
             new MockUp<RepoExecutor>() {
                 @Mock
                 public List<TResultBatch> executeDQL(String sql) {
+<<<<<<< HEAD
                     ScalarOperatorFunctions.LookupRecord record = new ScalarOperatorFunctions.LookupRecord();
+=======
+                    MetaFunctions.LookupRecord record = new MetaFunctions.LookupRecord();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     record.data = Lists.newArrayList("v1");
                     String json = GsonUtils.GSON.toJson(record);
 

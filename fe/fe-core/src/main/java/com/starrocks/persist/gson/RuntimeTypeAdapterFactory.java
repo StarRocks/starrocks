@@ -47,8 +47,11 @@ import com.google.gson.internal.Streams;
 import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -237,18 +240,24 @@ import java.util.Map;
  * </pre>
  */
 public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(RuntimeTypeAdapterFactory.class);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final Class<?> baseType;
     private final String typeFieldName;
     private final Map<String, Class<?>> labelToSubtype = new LinkedHashMap<String, Class<?>>();
     private final Map<Class<?>, String> subtypeToLabel = new LinkedHashMap<Class<?>, String>();
     private final boolean maintainType;
     private String defaultLabel;
+<<<<<<< HEAD
     // fallback to this label if the given label is not recognized.
     // Usually this is used for forward compatibility, to load the unrecognized subtype to a generic subtype
     // and let the caller for further processing
     private String fallbackLabel;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private RuntimeTypeAdapterFactory(Class<?> baseType, String typeFieldName, boolean maintainType) {
         if (typeFieldName == null || baseType == null) {
@@ -258,7 +267,10 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         this.typeFieldName = typeFieldName;
         this.maintainType = maintainType;
         this.defaultLabel = null;
+<<<<<<< HEAD
         this.fallbackLabel = null;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -346,6 +358,7 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         return registerSubtype(type, type.getSimpleName());
     }
 
+<<<<<<< HEAD
     /**
      * Registers {@code type} identified by {@code label}. Label is case-sensitive. Make this type as
      * the fallback type if the subtype is not recognized during deserialization.
@@ -360,6 +373,8 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
         return registerSubtype(type, this.fallbackLabel);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public <R> TypeAdapter<R> create(Gson gson, TypeToken<R> type) {
         if (type.getRawType() != baseType && !subtypeToLabel.containsKey(type.getRawType())) {
             return null;
@@ -402,6 +417,7 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
 
                 @SuppressWarnings("unchecked") // registration requires that subtype extends T
                 TypeAdapter<R> delegate = (TypeAdapter<R>) labelToDelegate.get(label);
+<<<<<<< HEAD
                 if (delegate == null && fallbackLabel != null) {
                     delegate = (TypeAdapter<R>) labelToDelegate.get(fallbackLabel);
                     if (delegate != null) {
@@ -410,6 +426,10 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
                 }
                 if (delegate == null) {
                     throw new JsonParseException("cannot deserialize " + baseType + " subtype named " + label
+=======
+                if (delegate == null) {
+                    throw new SubtypeNotFoundException(label, "cannot deserialize " + baseType + " subtype named " + label
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             + "; did you forget to register a subtype?");
                 }
                 return delegate.fromJsonTree(jsonElement);
@@ -447,4 +467,8 @@ public final class RuntimeTypeAdapterFactory<T> implements TypeAdapterFactory {
             }
         }.nullSafe();
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

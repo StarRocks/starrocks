@@ -51,10 +51,13 @@ public class OptExprBuilder {
         return expressionMapping;
     }
 
+<<<<<<< HEAD
     public Map<ScalarOperator, ColumnRefOperator> getGeneratedColumnExprOpToColumnRef() {
         return expressionMapping.getGeneratedColumnExprOpToColumnRef();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefToConstOperators() {
         if (expressionMapping == null) {
             return null;
@@ -62,6 +65,13 @@ public class OptExprBuilder {
         return expressionMapping.getColumnRefToConstOperators();
     }
 
+<<<<<<< HEAD
+=======
+    public Map<ScalarOperator, ColumnRefOperator> getGeneratedColumnExprOpToColumnRef() {
+        return expressionMapping.getGeneratedColumnExprOpToColumnRef();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setExpressionMapping(ExpressionMapping expressionMapping) {
         this.expressionMapping = expressionMapping;
     }

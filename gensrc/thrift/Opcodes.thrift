@@ -86,6 +86,10 @@ enum TExprOpcode {
     BIT_SHIFT_LEFT,
     BIT_SHIFT_RIGHT,
     BIT_SHIFT_RIGHT_LOGICAL,
+<<<<<<< HEAD
+=======
+    JIT,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Stream Operation Types

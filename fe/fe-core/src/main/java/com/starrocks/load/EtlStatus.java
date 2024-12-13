@@ -579,6 +579,20 @@ public class EtlStatus implements Writable {
             return gson.toJson(details);
         }
 
+<<<<<<< HEAD
+=======
+        public synchronized Map<String, Object> toRuntimeDetails() {
+            TreeMap<String, Object> details = Maps.newTreeMap();
+
+            details.put(LoadConstants.RUNTIME_DETAILS_FILE_SIZE, totalFileSizeB);
+            details.put(LoadConstants.RUNTIME_DETAILS_TASK_NUM, counterTbl.rowMap().size());
+            details.put(LoadConstants.RUNTIME_DETAILS_UNFINISHED_BACKENDS, unfinishedBackendIds);
+            details.put(LoadConstants.RUNTIME_DETAILS_BACKENDS, allBackendIds);
+
+            return details;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public String toJson() throws IOException {
             return GsonUtils.GSON.toJson(this);
         }

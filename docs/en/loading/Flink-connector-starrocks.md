@@ -354,6 +354,7 @@ For exactly-once, the flush only happens when a checkpoint is triggered.
 
 The Flink connector provides the following metrics to monitor loading.
 
+<<<<<<< HEAD
 | Name                     | Type    | Description                                                     |
 |--------------------------|---------|-----------------------------------------------------------------|
 | totalFlushBytes          | counter | successfully flushed bytes.                                     |
@@ -361,6 +362,15 @@ The Flink connector provides the following metrics to monitor loading.
 | totalFlushSucceededTimes | counter | number of times that the data-batch been successfully flushed.  |
 | totalFlushFailedTimes    | counter | number of times that the flushing been failed.                  |
 | totalFilteredRows        | counter | number of rows filtered which is also included in totalFlushRows.    |
+=======
+| Metric                     | Type    | Description                                                     |
+|--------------------------|---------|-----------------------------------------------------------------|
+| totalFlushBytes          | counter | successfully flushed bytes.                                     |
+| totalFlushRows           | counter | number of rows successfully flushed.                                      |
+| totalFlushSucceededTimes | counter | number of times that the data is successfully flushed.  |
+| totalFlushFailedTimes    | counter | number of times that the data fails to be flushed.                  |
+| totalFilteredRows        | counter | number of rows filtered, which is also included in totalFlushRows.    |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Examples
 

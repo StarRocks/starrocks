@@ -28,7 +28,11 @@ public class PluginAnalyzer {
         new PluginAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class PluginAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class PluginAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {

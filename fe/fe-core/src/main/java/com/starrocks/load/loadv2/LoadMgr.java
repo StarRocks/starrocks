@@ -47,9 +47,14 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TimeoutException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.EtlJobType;
@@ -58,6 +63,10 @@ import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -74,6 +83,7 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -81,6 +91,13 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+=======
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -106,7 +123,11 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
+<<<<<<< HEAD
 public class LoadMgr implements Writable, MemoryTrackable {
+=======
+public class LoadMgr implements MemoryTrackable {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
     private static final int MEMORY_JOB_SAMPLES = 10;
 
@@ -116,6 +137,12 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
+<<<<<<< HEAD
+=======
+    protected final WarehouseLoadInfoBuilder warehouseLoadInfoBuilder =
+            new WarehouseLoadInfoBuilder();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public LoadMgr(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
     }
@@ -155,7 +182,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void alterLoadJob(AlterLoadStmt stmt) throws DdlException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -197,7 +228,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
         if (!loadJob.isCompleted()) {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+=======
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -215,7 +250,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     public void recordFinishedOrCacnelledLoadJob(long jobId, EtlJobType jobType, String failMsg, String trackingUrl)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LoadJob loadJob = getLoadJob(jobId);
         if (loadJob.isTxnDone() && !Strings.isNullOrEmpty(failMsg)) {
             throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name()
@@ -233,25 +272,42 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public long registerLoadJob(String label, String dbName, long tableId, long txnId, EtlJobType jobType,
             long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout,
             Coordinator coordinator) throws UserException {
 
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
+                                               EtlJobType jobType, long createTimestamp, long estimateScanRows,
+                                               int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
+                                               Coordinator coordinator) throws StarRocksException {
+        // get db id
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("Database[" + dbName + "] does not exist");
         }
 
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
+<<<<<<< HEAD
             loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout,
                     coordinator);
+=======
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
+                    createTimestamp, type, timeout, coordinator);
+            loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
+            loadJob.setEstimateScanRow(estimateScanRows);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             loadJob.setTransactionId(txnId);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
         addLoadJob(loadJob);
+<<<<<<< HEAD
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
         return loadJob.getId();
@@ -259,6 +315,18 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
         Database db = GlobalStateMgr.getCurrentState().getDb(stmt.getDbName());
+=======
+        if (!loadJob.isCompleted()) {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        }
+        // persistent
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateLoadJob(loadJob);
+        return loadJob;
+    }
+
+    public void cancelLoadJob(CancelLoadStmt stmt) throws DdlException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(stmt.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + stmt.getDbName());
         }
@@ -299,7 +367,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
         job.unprotectReadEndOperation(operation, true);
 
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(job.id);
+=======
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(job.id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, operation.getId())
                 .add("operation", operation)
@@ -380,6 +452,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
         if (job instanceof SparkLoadJob) {
             ((SparkLoadJob) job).clearSparkLauncherLog();
         }
+<<<<<<< HEAD
+=======
+
+        warehouseLoadInfoBuilder.withRemovedJob(job);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private boolean isJobExpired(LoadJob job, long currentTimeMs) {
@@ -402,14 +479,22 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
 
         insertJobs.forEach(job -> {
+<<<<<<< HEAD
             TransactionState state = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTransactionState(
+=======
+            TransactionState state = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelTransactionState(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     job.getDbId(), job.getLabel());
             if (state == null || state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
                 try {
                     recordFinishedOrCacnelledLoadJob(
                             job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
                     LOG.warn("abort job: {}-{} since transaction status unknown", job.getLabel(), job.getId());
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.warn("failed to abort job: {}", job.getLabel(), e);
                 }
             }
@@ -481,7 +566,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
                     } catch (TimeoutException e) {
                         // timeout, retry next time
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
+<<<<<<< HEAD
                     } catch (UserException e) {
+=======
+                    } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {
@@ -496,7 +585,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
                 .forEach(job -> {
                     try {
                         ((SparkLoadJob) job).updateLoadingStatus();
+<<<<<<< HEAD
                     } catch (UserException e) {
+=======
+                    } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                     } catch (Exception e) {
@@ -658,7 +751,11 @@ public class LoadMgr implements Writable, MemoryTrackable {
 
     private Database checkDb(String dbName) throws DdlException {
         // get db
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             LOG.warn("Database {} does not exist", dbName);
             throw new DdlException("Database[" + dbName + "] does not exist");
@@ -734,6 +831,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
@@ -783,6 +881,28 @@ public class LoadMgr implements Writable, MemoryTrackable {
             }
 
             putLoadJob(loadJob);
+=======
+    public void loadLoadJobsV2JsonFormat(SRMetaBlockReader reader)
+            throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        long now = System.currentTimeMillis();
+        reader.readCollection(LoadJob.class, loadJob -> {
+            // discard expired job right away
+            if (isJobExpired(loadJob, now)) {
+                LOG.info("discard expired job: {}", loadJob);
+                return;
+            }
+
+            putLoadJob(loadJob);
+        });
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadInfoBuilder.buildFromJobs(idToLoadJob.values());
+        } finally {
+            readUnlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -797,6 +917,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         // The commit and visible txn will callback the unfinished load job.
         // Otherwise, the load job always does not be completed while the txn is visible.
         if (!loadJob.isCompleted()) {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
         }
     }
@@ -807,6 +928,18 @@ public class LoadMgr implements Writable, MemoryTrackable {
         final int cnt = 1 + loadJobs.size();
         SRMetaBlockWriter writer = new SRMetaBlockWriter(out, SRMetaBlockID.LOAD_MGR, cnt);
         writer.writeJson(loadJobs.size());
+=======
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+        }
+    }
+
+    public void saveLoadJobsV2JsonFormat(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        List<LoadJob> loadJobs = idToLoadJob.values().stream().filter(this::needSave).collect(Collectors.toList());
+        // 1 json for number of jobs, size of idToLoadJob for jobs
+        final int cnt = 1 + loadJobs.size();
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.LOAD_MGR, cnt);
+        writer.writeInt(loadJobs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (LoadJob loadJob : loadJobs) {
             writer.writeJson(loadJob);
         }

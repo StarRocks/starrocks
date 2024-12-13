@@ -46,3 +46,14 @@ Bitmap 索引适用于较高基数列的查询和多个低基数列的组合查�
 ### [Bloom filter 索引](./Bloomfilter_index.md)
 
 Bloom filter 索引适用于基数较高的列，比如 ID 列，但是存在一定的误判率。
+<<<<<<< HEAD
+=======
+
+### [N-Gram bloomfilter 索引](./Ngram_Bloom_Filter_Index.md)
+
+N-Gram bloom filter 索引是一种特殊的 Bloom filter 索引，通常用于加速 `LIKE` 查询或 `ngram_search` 和 `ngram_search_case_insensitive` 函数的运算速度。
+
+### [全文倒排索引](./inverted_index.md)
+
+全文倒排索引可以快速定位到与关键词匹配的数据行，能够加速全文检索。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

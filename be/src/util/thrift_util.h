@@ -45,6 +45,10 @@
 #include <sstream>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "common/config.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/status.h"
 
 namespace starrocks {
@@ -65,7 +69,11 @@ public:
 
     // Serializes obj into result.  Result will contain a copy of the memory.
     template <class T>
+<<<<<<< HEAD
     [[nodiscard]] Status serialize(T* obj, std::vector<uint8_t>* result) {
+=======
+    Status serialize(T* obj, std::vector<uint8_t>* result) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         uint32_t len = 0;
         uint8_t* buffer = nullptr;
         RETURN_IF_ERROR(serialize<T>(obj, &len, &buffer));
@@ -78,7 +86,11 @@ public:
     // memory returned is owned by this object and will be invalid when another object
     // is serialized.
     template <class T>
+<<<<<<< HEAD
     [[nodiscard]] Status serialize(T* obj, uint32_t* len, uint8_t** buffer) {
+=======
+    Status serialize(T* obj, uint32_t* len, uint8_t** buffer) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             _mem_buffer->resetBuffer();
             obj->write(_protocol.get());
@@ -93,7 +105,11 @@ public:
     }
 
     template <class T>
+<<<<<<< HEAD
     [[nodiscard]] Status serialize(T* obj, std::string* result) {
+=======
+    Status serialize(T* obj, std::string* result) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             _mem_buffer->resetBuffer();
             obj->write(_protocol.get());
@@ -108,7 +124,11 @@ public:
     }
 
     template <class T>
+<<<<<<< HEAD
     [[nodiscard]] Status serialize(T* obj) {
+=======
+    Status serialize(T* obj) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             _mem_buffer->resetBuffer();
             obj->write(_protocol.get());
@@ -145,13 +165,25 @@ std::shared_ptr<apache::thrift::protocol::TProtocol> create_deserialize_protocol
 // all the bytes needed to store the thrift message.  On return, len will be
 // set to the actual length of the header.
 template <class T>
+<<<<<<< HEAD
 [[nodiscard]] Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType type,
                                             T* deserialized_msg) {
+=======
+Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, TProtocolType type, T* deserialized_msg) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Deserialize msg bytes into c++ thrift msg using memory
     // transport. TMemoryBuffer is not const-safe, although we use it in
     // a const-safe way, so we have to explicitly cast away the const.
     std::shared_ptr<apache::thrift::transport::TMemoryBuffer> tmem_transport(
+<<<<<<< HEAD
             new apache::thrift::transport::TMemoryBuffer(const_cast<uint8_t*>(buf), *len));
+=======
+            new apache::thrift::transport::TMemoryBuffer(
+                    const_cast<uint8_t*>(buf), *len, apache::thrift::transport::TMemoryBuffer::MemoryPolicy::OBSERVE,
+                    std::make_shared<apache::thrift::TConfiguration>(config::thrift_max_message_size,
+                                                                     config::thrift_max_frame_size,
+                                                                     config::thrift_max_recursion_depth)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_ptr<apache::thrift::protocol::TProtocol> tproto = create_deserialize_protocol(tmem_transport, type);
 
     try {
@@ -171,8 +203,12 @@ template <class T>
 }
 
 template <class T>
+<<<<<<< HEAD
 [[nodiscard]] Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, const std::string& protocol,
                                             T* deserialized_msg) {
+=======
+Status deserialize_thrift_msg(const uint8_t* buf, uint32_t* len, const std::string& protocol, T* deserialized_msg) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (protocol == "json") {
         return deserialize_thrift_msg<T>(buf, len, TProtocolType::JSON, deserialized_msg);
     } else if (protocol == "compact") {
@@ -182,15 +218,26 @@ template <class T>
     }
 }
 
+<<<<<<< HEAD
 // Redirects all Thrift logging to VLOG(1)
+=======
+// Redirects all Thrift logging to VLOG(2)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void init_thrift_logging();
 
 // Wait for a server that is running locally to start accepting
 // connections, up to a maximum timeout
+<<<<<<< HEAD
 [[nodiscard]] Status wait_for_local_server(const ThriftServer& server, int num_retries, int retry_interval_ms);
 
 // Wait for a server to start accepting connections, up to a maximum timeout
 [[nodiscard]] Status wait_for_server(const std::string& host, int port, int num_retries, int retry_interval_ms);
+=======
+Status wait_for_local_server(const ThriftServer& server, int num_retries, int retry_interval_ms);
+
+// Wait for a server to start accepting connections, up to a maximum timeout
+Status wait_for_server(const std::string& host, int port, int num_retries, int retry_interval_ms);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // Utility method to print address as address:port
 void t_network_address_to_string(const TNetworkAddress& address, std::string* out);

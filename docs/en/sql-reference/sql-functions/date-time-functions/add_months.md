@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # add_months
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Adds a specified number of months to a given date (DATE or DATETIME). The [months_add](./months_add.md) function provides similar functionalities.
 

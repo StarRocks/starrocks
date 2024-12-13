@@ -14,24 +14,96 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <butil/macros.h>
+
+#include <cstring>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
+<<<<<<< HEAD
 #include "gen_cpp/types.pb.h"
 #include "util/raw_container.h"
 
 namespace starrocks::spill {
 class ChunkBuilder;
+=======
+#include "exec/spill/data_stream.h"
+#include "exec/spill/spill_fwd.h"
+#include "gutil/macros.h"
+#include "util/raw_container.h"
+
+namespace starrocks::spill {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 enum class SerdeType {
     BY_COLUMN,
 };
 
+<<<<<<< HEAD
 struct SerdeContext {
     std::string serialize_buffer;
 };
 class Spiller;
+=======
+struct AlignedBuffer {
+    static constexpr int PAGE_SIZE = 4096;
+    AlignedBuffer() = default;
+
+    ~AlignedBuffer() noexcept {
+        if (_data) {
+            free(_data);
+            _data = nullptr;
+        }
+    }
+
+    DISALLOW_COPY(AlignedBuffer);
+    AlignedBuffer(AlignedBuffer&& other) noexcept : _data(other._data), _capacity(other._capacity), _size(other._size) {
+        other._data = nullptr;
+    }
+    AlignedBuffer& operator=(AlignedBuffer&& other) noexcept {
+        if (this != &other) {
+            std::swap(_data, other._data);
+            std::swap(_capacity, other._capacity);
+            std::swap(_size, other._size);
+        }
+        return *this;
+    }
+
+    uint8_t* data() const { return (uint8_t*)_data; }
+
+    void resize(size_t size) {
+        if (_capacity < size) {
+            void* new_data = nullptr;
+            if (UNLIKELY(posix_memalign(&new_data, PAGE_SIZE, size) != 0)) {
+                throw ::std::bad_alloc();
+            }
+            if (_data != nullptr) {
+                memcpy(new_data, _data, _size);
+                free(_data);
+            }
+            _data = new_data;
+            _capacity = size;
+        }
+        _size = size;
+    }
+
+    size_t size() const { return _size; }
+
+private:
+    void* _data = nullptr;
+    size_t _capacity{};
+    size_t _size{};
+};
+
+struct SerdeContext {
+    raw::RawString serialize_buffer;
+};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Serde is used to serialize and deserialize spilled data.
 class Serde;
 using SerdePtr = std::shared_ptr<Serde>;
@@ -42,12 +114,23 @@ public:
 
     virtual Status prepare() = 0;
     // serialize chunk and append the serialized data into block
+<<<<<<< HEAD
     virtual Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
+=======
+    virtual Status serialize(RuntimeState* state, SerdeContext& ctx, const ChunkPtr& chunk,
+                             const SpillOutputDataStreamPtr& output, bool aligned) = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // deserialize data from block, return the chunk after deserialized
     virtual StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) = 0;
 
     static StatusOr<SerdePtr> create_serde(Spiller* parent);
 
+<<<<<<< HEAD
+=======
+    Spiller* parent() const { return _parent; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     Spiller* _parent = nullptr;
 };

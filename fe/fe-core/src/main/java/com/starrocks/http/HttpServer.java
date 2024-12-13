@@ -38,7 +38,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
+<<<<<<< HEAD
 import com.starrocks.http.action.HelpAction;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
 import com.starrocks.http.action.QueryAction;
@@ -86,12 +89,20 @@ import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
+<<<<<<< HEAD
+=======
+import com.starrocks.http.rest.StreamLoadMetaAction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
+<<<<<<< HEAD
+=======
+import com.starrocks.http.rest.v2.TablePartitionAction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.GaugeMetricImpl;
@@ -149,6 +160,10 @@ public class HttpServer {
     private void registerActions() throws IllegalArgException {
         // add rest action
         LoadAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        StreamLoadMetaAction.registerAction(controller);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TransactionLoadAction.registerAction(controller);
         GetLoadInfoAction.registerAction(controller);
         SetConfigAction.registerAction(controller);
@@ -167,7 +182,10 @@ public class HttpServer {
         QueryProfileAction.registerAction(controller);
         SessionAction.registerAction(controller);
         VariableAction.registerAction(controller);
+<<<<<<< HEAD
         HelpAction.registerAction(controller);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StaticResourceAction.registerAction(controller);
         HaAction.registerAction(controller);
 
@@ -215,6 +233,11 @@ public class HttpServer {
         // external usage
         TableRowCountAction.registerAction(controller);
         TableSchemaAction.registerAction(controller);
+<<<<<<< HEAD
+=======
+        com.starrocks.http.rest.v2.TableSchemaAction.registerAction(controller);
+        TablePartitionAction.registerAction(controller);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
@@ -231,7 +254,12 @@ public class HttpServer {
             ch.pipeline().addLast(new HttpServerCodec(
                             Config.http_max_initial_line_length,
                             Config.http_max_header_size,
+<<<<<<< HEAD
                             Config.http_max_chunk_size))
+=======
+                            Config.http_max_chunk_size,
+                            Config.enable_http_validate_headers))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
                     .addLast(new ChunkedWriteHandler())
                     // add content compressor
@@ -304,7 +332,11 @@ public class HttpServer {
         httpWorkersNum.setValue(0L);
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
+<<<<<<< HEAD
         GaugeMetric<Long> pendingTasks = new GaugeMetric<Long>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
+=======
+        GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "the number of tasks that are pending for processing in the queues of http workers") {
             @Override
             public Long getValue() {

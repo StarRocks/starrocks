@@ -72,6 +72,15 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
+<<<<<<< HEAD
+=======
+            if (struct_field.__isset.id && struct_field.id != -1) {
+                field_ids.emplace_back(struct_field.id);
+            }
+            if (struct_field.__isset.physical_name && !struct_field.physical_name.empty()) {
+                field_physical_names.emplace_back(struct_field.physical_name);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         DCHECK_EQ(field_names.size(), children.size());
         break;
@@ -123,9 +132,13 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         curr_node.__set_scalar_type(TScalarType());
         TScalarType& scalar_type = curr_node.scalar_type;
         scalar_type.__set_type(starrocks::to_thrift(type));
+<<<<<<< HEAD
         if (len != -1) {
             scalar_type.__set_len(len);
         }
+=======
+        scalar_type.__set_len(len);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scale != -1) {
             scalar_type.__set_scale(scale);
         }
@@ -159,9 +172,13 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         node->set_type(TTypeNodeType::SCALAR);
         PScalarType* scalar_type = node->mutable_scalar_type();
         scalar_type->set_type(starrocks::to_thrift(type));
+<<<<<<< HEAD
         if (len != -1) {
             scalar_type->set_len(len);
         }
+=======
+        scalar_type->set_len(len);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (scale != -1) {
             scalar_type->set_scale(scale);
         }

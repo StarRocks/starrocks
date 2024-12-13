@@ -15,13 +15,24 @@
 #include "exec/pipeline/operator.h"
 
 #include <algorithm>
+<<<<<<< HEAD
 #include <utility>
 
+=======
+#include <memory>
+#include <utility>
+
+#include "common/logging.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "runtime/mem_tracker.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "util/failpoint/fail_point.h"
@@ -42,6 +53,13 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name = strings::Substitute("$0 (plan_node_id=$1)", upper_name, _plan_node_id);
+<<<<<<< HEAD
+=======
+    // some pipeline may have multiple limit operators with same plan_node_id, so add operator id to profile name
+    if (upper_name == "LIMIT") {
+        profile_name += " (operator id=" + std::to_string(id) + ")";
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _runtime_profile = std::make_shared<RuntimeProfile>(profile_name);
     _runtime_profile->set_metadata(_id);
 
@@ -63,7 +81,11 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+<<<<<<< HEAD
     _mem_tracker = state->query_ctx()->operator_mem_tracker(_plan_node_id);
+=======
+    _mem_tracker = std::make_shared<MemTracker>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
@@ -91,7 +113,17 @@ void Operator::set_prepare_time(int64_t cost_ns) {
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
+<<<<<<< HEAD
     _factory->prepare_runtime_in_filters(state);
+=======
+    _runtime_in_filters = _factory->get_colocate_runtime_in_filters(_driver_sequence);
+    _factory->prepare_runtime_in_filters(state);
+    const auto& instance_runtime_filters = _factory->get_runtime_in_filters();
+    _runtime_in_filters.insert(_runtime_in_filters.end(), instance_runtime_filters.begin(),
+                               instance_runtime_filters.end());
+    VLOG_QUERY << "plan_node_id:" << _plan_node_id << " sequence:" << _driver_sequence
+               << " local in runtime filter num:" << _runtime_in_filters.size() << " op:" << this->get_raw_name();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 const LocalRFWaitingSet& Operator::rf_waiting_set() const {
@@ -111,6 +143,7 @@ void Operator::close(RuntimeState* state) {
         _runtime_bloom_filter_num_counter->set((int64_t)rf_bloom_filters->size());
     }
 
+<<<<<<< HEAD
     if (!_is_subordinate) {
         _common_metrics
                 ->add_counter("OperatorPeakMemoryUsage", TUnit::BYTES,
@@ -129,6 +162,8 @@ void Operator::close(RuntimeState* state) {
                 ->set(_mem_tracker->deallocation());
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Pipeline do not need the built in total time counter
     // Reset here to discard assignments from Analytor, Aggregator, etc.
     _runtime_profile->total_time_counter()->set(0L);
@@ -137,7 +172,11 @@ void Operator::close(RuntimeState* state) {
 }
 
 std::vector<ExprContext*>& Operator::runtime_in_filters() {
+<<<<<<< HEAD
     return _factory->get_runtime_in_filters();
+=======
+    return _runtime_in_filters;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
@@ -268,6 +307,10 @@ void Operator::_init_rf_counters(bool init_bloom) {
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterOutputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_eval_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
+<<<<<<< HEAD
+=======
+        _bloom_filter_eval_context.driver_sequence = _driver_sequence;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -279,6 +322,27 @@ void Operator::_init_conjuct_counters() {
     }
 }
 
+<<<<<<< HEAD
+=======
+void Operator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (!_is_subordinate && ctx != nullptr && ctx->need_record_exec_stats(_plan_node_id)) {
+        ctx->update_push_rows_stats(_plan_node_id, _push_row_num_counter->value());
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr &&
+            _bloom_filter_eval_context.join_runtime_filter_output_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 OperatorFactory::OperatorFactory(int32_t id, std::string name, int32_t plan_node_id)
         : _id(id), _name(std::move(name)), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);
@@ -293,6 +357,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
     _state = state;
     if (_runtime_filter_collector) {
         // TODO(hcf) no proper profile for rf_filter_collector attached to
+<<<<<<< HEAD
         RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _row_desc, _runtime_profile.get()));
         auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
         for (auto& [filter_id, desc] : descriptors) {
@@ -310,6 +375,10 @@ Status OperatorFactory::prepare(RuntimeState* state) {
 
             desc->set_shared_runtime_filter(grf);
         }
+=======
+        RETURN_IF_ERROR(_runtime_filter_collector->prepare(state, _runtime_profile.get()));
+        acquire_runtime_filter(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
@@ -322,7 +391,16 @@ void OperatorFactory::close(RuntimeState* state) {
 }
 
 void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
+<<<<<<< HEAD
     auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set);
+=======
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set, -1, true);
+    _prepare_runtime_holders(holders, &_runtime_in_filters);
+}
+
+void OperatorFactory::_prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
+                                               std::vector<ExprContext*>* runtime_in_filters) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto& holder : holders) {
         DCHECK(holder->is_ready());
         auto* collector = holder->get_collector();
@@ -331,13 +409,29 @@ void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
 
         auto&& in_filters = collector->get_in_filters_bounded_by_tuple_ids(_tuple_ids);
         for (auto* filter : in_filters) {
+<<<<<<< HEAD
             filter->prepare(state);
             filter->open(state);
             _runtime_in_filters.push_back(filter);
+=======
+            WARN_IF_ERROR(filter->prepare(runtime_state()), "prepare filter expression failed");
+            WARN_IF_ERROR(filter->open(runtime_state()), "open filter expression failed");
+            runtime_in_filters->push_back(filter);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }
 
+<<<<<<< HEAD
+=======
+std::vector<ExprContext*> OperatorFactory::get_colocate_runtime_in_filters(size_t driver_sequence) {
+    std::vector<ExprContext*> runtime_in_filter;
+    auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set, driver_sequence, true);
+    _prepare_runtime_holders(holders, &runtime_in_filter);
+    return runtime_in_filter;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool OperatorFactory::has_runtime_filters() const {
     // Check runtime in-filters.
     if (!_rf_waiting_set.empty()) {
@@ -360,4 +454,29 @@ bool OperatorFactory::has_topn_filter() const {
     return global_rf_collector != nullptr && global_rf_collector->has_topn_filter();
 }
 
+<<<<<<< HEAD
+=======
+void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
+    if (_runtime_filter_collector == nullptr) {
+        return;
+    }
+    auto& descriptors = _runtime_filter_collector->get_rf_probe_collector()->descriptors();
+    for (auto& [filter_id, desc] : descriptors) {
+        if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
+            continue;
+        }
+        auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+        ExecEnv::GetInstance()->add_rf_event({state->query_id(), filter_id, BackendOptions::get_localhost(),
+                                              strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
+                                                                  this->_plan_node_id, grf != nullptr)});
+
+        if (grf == nullptr) {
+            continue;
+        }
+
+        desc->set_shared_runtime_filter(grf);
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

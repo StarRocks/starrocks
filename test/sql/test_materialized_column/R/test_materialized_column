@@ -7,7 +7,11 @@ USE test_create_table;
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc INT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+=======
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE NOT NULL AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
@@ -39,7 +43,11 @@ E: (1064, 'Getting analyzing error. Detail message: All generated columns must b
 -- !result
 CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Getting analyzing error. Detail message: Generated Column can not be KEY.')
+=======
+E: (1064, 'Getting analyzing error. Detail message: Generated Column mc can not be KEY.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
@@ -49,17 +57,29 @@ SHOW CREATE TABLE t;
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `array_data` array<int(11)> NOT NULL COMMENT "",
+<<<<<<< HEAD
   `mc` double NULL AS array_avg(array_data) COMMENT ""
+=======
+  `mc` double NULL AS array_avg(`array_data`) COMMENT ""
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 DROP TABLE t;
@@ -305,7 +325,11 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 INT AS (array_avg(array_data));
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+=======
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
@@ -321,7 +345,15 @@ E: (1064, "Getting syntax error at line 1, column 40. Detail message: Unexpected
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (mc_1);
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns.')
+=======
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns: mc_1.')
+-- !result
+ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (incr);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns: incr.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 BIGINT AS (sum(id));
 -- result:
@@ -344,7 +376,11 @@ SELECT * FROM t ORDER BY id;
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 INT AS (array_avg(array_data));
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Getting analyzing error. Detail message: Illege expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+=======
+E: (1064, 'Getting analyzing error. Detail message: Illegal expression type for Generated Column Column Type: INT, Expression Type: DOUBLE.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS NOT NULL (array_avg(array_data));
 -- result:
@@ -360,7 +396,11 @@ E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS (mc_2);
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns.')
+=======
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to other generated columns: mc_2.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 BIGINT AS (sum(id));
 -- result:
@@ -368,7 +408,11 @@ E: (1064, "Getting analyzing error. Detail message: Generated Column don't suppo
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 BIGINT AS (incr);
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns.')
+=======
+E: (1064, 'Getting analyzing error. Detail message: Expression can not refers to AUTO_INCREMENT columns: incr.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 BIGINT KEY AS (id);
 -- result:
@@ -376,11 +420,19 @@ E: (1064, 'Getting syntax error. Detail message: Generated Column can not be KEY
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_2 INT;
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Can not modify a generated column to a non-generated column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT AS (id);
 -- result:
 E: (1064, 'Unexpected exception: Can not modify a non-generated column to a generated column')
+=======
+E: (1064, 'Can not modify a generated column to a non-generated column')
+-- !result
+ALTER TABLE t MODIFY COLUMN job BIGINT AS (id);
+-- result:
+E: (1064, 'Can not modify a non-generated column to a generated column')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t DROP COLUMN mc_2;
 -- result:
@@ -407,11 +459,19 @@ CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc 
 -- !result
 ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Can not add column after Generated Column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT;
 -- result:
 E: (1064, 'Unexpected exception: Do not support modify column: job, because it associates with the generated column')
+=======
+E: (1064, 'Can not add column after Generated Column')
+-- !result
+ALTER TABLE t MODIFY COLUMN job BIGINT;
+-- result:
+E: (1064, 'Do not support modify column: job, because it associates with the generated column')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t DROP COLUMN job;
 -- result:
@@ -435,17 +495,29 @@ t	CREATE TABLE `t` (
   `name` bigint(20) NOT NULL COMMENT "",
   `job` int(11) NOT NULL COMMENT "",
   `newcol` int(11) NULL DEFAULT "0" COMMENT "",
+<<<<<<< HEAD
   `mc` int(11) NULL AS job COMMENT ""
+=======
+  `mc` int(11) NULL AS `job` COMMENT ""
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 ALTER TABLE t DROP COLUMN mc;
@@ -505,18 +577,30 @@ SHOW CREATE TABLE t;
 -- result:
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
+<<<<<<< HEAD
   `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
   `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
+=======
+  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 ALTER TABLE t ADD COLUMN (newcol3 BIGINT DEFAULT "0", newcol4 BIGINT DEFAULT "0");
@@ -538,18 +622,30 @@ t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
   `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
+<<<<<<< HEAD
   `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
   `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
+=======
+  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 ALTER TABLE t ADD COLUMN (newcol5 BIGINT DEFAULT "0", newcol6 BIGINT AS id * 1000);
@@ -758,7 +854,11 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_for_add_optimization;
 -- result:
 -- !result
+<<<<<<< HEAD
 -- name: test_schema_change_for_constant_expression
+=======
+-- name: test_schema_change_for_constant_expression @slow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE DATABASE test_schema_change_for_constant_expression;
 -- result:
 -- !result
@@ -902,6 +1002,7 @@ CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DU
 -- !result
 alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after testcol1;
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Column[xxx] does not found')
 -- !result
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after xxx;
@@ -911,6 +1012,17 @@ E: (1064, 'Unexpected exception: Column[xxx] does not found')
 alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after xxx;
 -- result:
 E: (1064, 'Unexpected exception: Column[xxx] does not found')
+=======
+E: (1064, 'Column[xxx] does not found')
+-- !result
+alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after xxx;
+-- result:
+E: (1064, 'Column[xxx] does not found')
+-- !result
+alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after xxx;
+-- result:
+E: (1064, 'Column[xxx] does not found')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10 after xxx, add column testcol2 BIGINT after xxx;
 -- result:
@@ -922,7 +1034,11 @@ E: (1064, 'Getting syntax error from line 1, column 26 to line 1, column 50. Det
 -- !result
 alter table t0 add column testcol1 BIGINT as v1 + 10, add column testcol2 BIGINT after testcol1;
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Can not add column after Generated Column')
+=======
+E: (1064, 'Can not add column after Generated Column')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after testcol1;
 -- result:
@@ -943,12 +1059,19 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 alter table t0 add column testcol3 BIGINT after v1, add column testcol4 BIGINT after v1;
@@ -972,12 +1095,19 @@ t0	CREATE TABLE `t0` (
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 alter table t0 add column testcol5 BIGINT, add column testcol6 BIGINT as v1 * 10;
@@ -998,17 +1128,28 @@ t0	CREATE TABLE `t0` (
   `v2` bigint(20) NOT NULL COMMENT "",
   `v3` bigint(20) NOT NULL COMMENT "",
   `testcol5` bigint(20) NULL COMMENT "",
+<<<<<<< HEAD
   `testcol6` bigint(20) NULL AS v1 * 10 COMMENT ""
+=======
+  `testcol6` bigint(20) NULL AS `v1` * 10 COMMENT ""
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ) ENGINE=OLAP 
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 DROP DATABASE test_schema_change_for_after;
@@ -1029,12 +1170,18 @@ CREATE TABLE `t` (
 PRIMARY KEY(`c1`)
 DISTRIBUTED BY HASH(`c1`) BUCKETS 1
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4",
 "fast_schema_evolution" = "true"
+=======
+"compression" = "LZ4",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- result:
 -- !result

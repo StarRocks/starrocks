@@ -50,9 +50,16 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                                 HIVE SCAN (columns{1,5,6} predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                                 EXCHANGE BROADCAST
                                     ASSERT LE 1
+<<<<<<< HEAD
                                         AGGREGATE ([GLOBAL] aggregate [{88: sum=sum(88: sum), 89: count=sum(89: count)}] group by [[]] having [null]
                                             EXCHANGE GATHER
                                                 AGGREGATE ([LOCAL] aggregate [{88: sum=sum(85: c_sum), 89: count=sum(84: c_count)}] group by [[]] having [null]
                                                     SCAN (mv[customer_agg_mv1] columns[82: c_acctbal, 83: substring_phone, 84: c_count, 85: c_sum] predicate[82: c_acctbal > 0.00 AND 83: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
+=======
+                                        AGGREGATE ([GLOBAL] aggregate [{95: sum=sum(95: sum), 96: count=sum(96: count)}] group by [[]] having [null]
+                                            EXCHANGE GATHER
+                                                AGGREGATE ([LOCAL] aggregate [{95: sum=sum(40: c_sum), 96: count=sum(39: c_count)}] group by [[]] having [null]
+                                                    SCAN (mv[customer_agg_mv1] columns[37: c_acctbal, 38: substring_phone, 39: c_count, 40: c_sum] predicate[37: c_acctbal > 0.00 AND 38: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [end]
 

@@ -597,10 +597,18 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
 
 ImmutableIndexWriter::~ImmutableIndexWriter() {
     if (_idx_wb) {
+<<<<<<< HEAD
         FileSystem::Default()->delete_file(_idx_file_path_tmp);
     }
     if (_bf_wb) {
         FileSystem::Default()->delete_file(_bf_file_path);
+=======
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_idx_file_path_tmp),
+                      "Failed to delete file:" + _idx_file_path_tmp);
+    }
+    if (_bf_wb) {
+        WARN_IF_ERROR(FileSystem::Default()->delete_file(_bf_file_path), "Failed to delete file:" + _bf_file_path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -632,7 +640,11 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         _cur_value_size = kIndexValueSize;
     } else {
         if (new_key_length) {
+<<<<<<< HEAD
             CHECK(key_size > _cur_key_size) << "key size is smaller than before";
+=======
+            RETURN_ERROR_IF_FALSE(key_size > _cur_key_size, "key size is smaller than before");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         _cur_key_size = key_size;
     }
@@ -655,7 +667,11 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
         // update memory usage is too high, flush bloom filter advance to avoid use too much memory
         if (!StorageEngine::instance()->update_manager()->keep_pindex_bf()) {
             for (auto& bf : _bf_vec) {
+<<<<<<< HEAD
                 _bf_wb->append(Slice(bf->data(), bf->size()));
+=======
+                RETURN_IF_ERROR(_bf_wb->append(Slice(bf->data(), bf->size())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             _bf_vec.clear();
             _bf_flushed = true;
@@ -739,7 +755,11 @@ Status ImmutableIndexWriter::write_bf() {
         }
     }
     for (auto& bf : _bf_vec) {
+<<<<<<< HEAD
         _idx_wb->append(Slice(bf->data(), bf->size()));
+=======
+        RETURN_IF_ERROR(_idx_wb->append(Slice(bf->data(), bf->size())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     _meta.mutable_shard_bf_off()->Add(pos_before);
     for (auto bf_len : _shard_bf_size) {
@@ -793,7 +813,11 @@ Status ImmutableIndexWriter::finish() {
     RETURN_IF_ERROR(FileSystem::Default()->rename_file(_idx_file_path_tmp, _idx_file_path));
     _idx_wb.reset();
     RETURN_IF_ERROR(_bf_wb->close());
+<<<<<<< HEAD
     FileSystem::Default()->delete_file(_bf_file_path);
+=======
+    (void)FileSystem::Default()->delete_file(_bf_file_path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _bf_wb.reset();
     return Status::OK();
 }
@@ -2020,7 +2044,11 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wblock_opts, file_name));
         DeferOp close_block([&wfile] {
             if (wfile) {
+<<<<<<< HEAD
                 wfile->close();
+=======
+                WARN_IF_ERROR(wfile->close(), fmt::format("failed to close writable_file: {}", wfile->filename()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         });
         meta->clear_wals();
@@ -2041,7 +2069,11 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         std::string file_name = get_l0_index_file_name(_path, version);
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
+<<<<<<< HEAD
         FileSystem::Default()->delete_file(file_name);
+=======
+        (void)FileSystem::Default()->delete_file(file_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::set<uint32_t> dumped_shard_idxes;
         {
             // File is closed when archive object is destroyed and file size will be updated after file is
@@ -2548,7 +2580,11 @@ Status ImmutableIndex::_get_in_fixlen_shard_by_page(size_t shard_idx, size_t n, 
             auto pageid = h.page() % shard_info.npage;
             auto bucketid = h.bucket() % shard_info.nbucket;
             auto iter = pages.find(pageid);
+<<<<<<< HEAD
             CHECK(iter != pages.end());
+=======
+            RETURN_ERROR_IF_FALSE(iter != pages.end());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto& bucket_info = iter->second.header().buckets[bucketid];
             uint8_t* bucket_pos;
             if (pageid == bucket_info.pageid) {
@@ -2596,7 +2632,11 @@ Status ImmutableIndex::_get_in_varlen_shard_by_page(size_t shard_idx, size_t n, 
             auto pageid = h.page() % shard_info.npage;
             auto bucketid = h.bucket() % shard_info.nbucket;
             auto iter = pages.find(pageid);
+<<<<<<< HEAD
             CHECK(iter != pages.end());
+=======
+            RETURN_ERROR_IF_FALSE(iter != pages.end());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto& bucket_info = iter->second.header().buckets[bucketid];
             uint8_t* bucket_pos;
             if (pageid == bucket_info.pageid) {
@@ -3056,8 +3096,14 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.page_size = page_size;
         dest.uncompressed_size = src.uncompressed_size();
         if (idx->_compression_type == CompressionTypePB::NO_COMPRESSION) {
+<<<<<<< HEAD
             CHECK(dest.uncompressed_size == 0) << "compression type: " << idx->_compression_type
                                                << " uncompressed_size: " << dest.uncompressed_size;
+=======
+            RETURN_ERROR_IF_FALSE(dest.uncompressed_size == 0,
+                                  "compression type: " + std::to_string(idx->_compression_type) +
+                                          " uncompressed_size: " + std::to_string(dest.uncompressed_size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         // This is for compatibility, we don't add data_size in shard_info in the rc version
         // And data_size is added to reslove some bug(https://github.com/StarRocks/starrocks/issues/11868)
@@ -3308,14 +3354,22 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta, bool relo
                     index_meta.l2_versions(i).minor_number(), index_meta.l2_version_merged(i) ? MergeSuffix : "");
             ASSIGN_OR_RETURN(auto l2_rfile, _fs->new_random_access_file(l2_block_path));
             ASSIGN_OR_RETURN(auto l2_index, ImmutableIndex::load(std::move(l2_rfile), load_bf_or_not()));
+<<<<<<< HEAD
             _l2_versions.emplace_back(EditVersionWithMerge(index_meta.l2_versions(i), index_meta.l2_version_merged(i)));
+=======
+            _l2_versions.emplace_back(index_meta.l2_versions(i), index_meta.l2_version_merged(i));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _l2_vec.emplace_back(std::move(l2_index));
         }
     }
     // if reload, don't update _usage_and_size_by_key_length
     if (!reload) {
         // if has l1, idx range is [0, 1)
+<<<<<<< HEAD
         _reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false);
+=======
+        RETURN_IF_ERROR(_reload_usage_and_size_by_key_length(_has_l1 ? 0 : 1, 1, false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return Status::OK();
@@ -3497,7 +3551,11 @@ bool PersistentIndex::_enable_minor_compaction() {
         } else {
             LOG(WARNING) << "PersistentIndex stop do minor compaction, path: " << _path
                          << " , current l2 cnt: " << _l2_versions.size();
+<<<<<<< HEAD
             _reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
+=======
+            (void)_reload_usage_and_size_by_key_length(0, _l1_vec.size(), false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     return false;
@@ -3600,6 +3658,12 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
         stat->reload_meta_cost += watch.elapsed_time();
     }
     _calc_memory_usage();
+<<<<<<< HEAD
+=======
+
+    VLOG(2) << strings::Substitute("commit persistent index successfully, version: [$0,$1]", _version.major_number(),
+                                   _version.minor_number());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -3673,8 +3737,14 @@ public:
 
     void run() override {
         auto scope = IOProfiler::scope(_io_stat_entry);
+<<<<<<< HEAD
         _index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
                                              _found_keys_info);
+=======
+        WARN_IF_ERROR(_index->get_from_one_immutable_index(_immu_index, _num, _keys, _values, _keys_info_by_key_size,
+                                                           _found_keys_info),
+                      "Failed to run GetFromImmutableIndexTask");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 private:
@@ -3774,7 +3844,11 @@ void PersistentIndex::_get_l2_stat(const std::vector<std::unique_ptr<ImmutableIn
 
                     auto iter = usage_and_size_stat.find(key_size);
                     if (iter == usage_and_size_stat.end()) {
+<<<<<<< HEAD
                         usage_and_size_stat.insert({key_size, {usage, size}});
+=======
+                        usage_and_size_stat.insert({static_cast<uint32_t>(key_size), {usage, size}});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     } else {
                         iter->second.first += usage;
                         iter->second.second += size;
@@ -4022,7 +4096,11 @@ Status PersistentIndex::flush_advance() {
                                                   _version.minor_number(), idx);
     RETURN_IF_ERROR(_l0->flush_to_immutable_index(l1_tmp_file, _version, true, true));
 
+<<<<<<< HEAD
     VLOG(1) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
+=======
+    VLOG(2) << "flush tmp l1, idx: " << idx << ", file_path: " << l1_tmp_file << " success";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // load _l1_vec
     std::unique_ptr<RandomAccessFile> l1_rfile;
     ASSIGN_OR_RETURN(l1_rfile, _fs->new_random_access_file(l1_tmp_file));
@@ -4127,7 +4205,11 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
         if ((full.compare(0, l0_prefix.length(), l0_prefix) == 0 && full.compare(l0_file_name) != 0) ||
             (full.compare(0, l1_prefix.length(), l1_prefix) == 0 && full.compare(l1_file_name) != 0)) {
             std::string path = dir + "/" + full;
+<<<<<<< HEAD
             VLOG(1) << "delete expired index file " << path;
+=======
+            VLOG(2) << "delete expired index file " << path;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is " << st.to_string();
@@ -4143,7 +4225,11 @@ Status PersistentIndex::_delete_expired_index_file(const EditVersion& l0_version
                 if ((*version_st) < min_l2_version) {
                     // delete expired l2 file
                     std::string path = dir + "/" + full;
+<<<<<<< HEAD
                     VLOG(1) << "delete expired index file " << path;
+=======
+                    VLOG(2) << "delete expired index file " << path;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Status st = FileSystem::Default()->delete_file(path);
                     if (!st.ok()) {
                         LOG(WARNING) << "delete exprired index file: " << path << ", failed, status is "
@@ -4174,7 +4260,11 @@ Status PersistentIndex::_delete_major_compaction_tmp_index_file() {
         std::string full(name);
         if (major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
+<<<<<<< HEAD
             VLOG(1) << "delete tmp index file " << path;
+=======
+            VLOG(2) << "delete tmp index file " << path;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
@@ -4195,7 +4285,11 @@ Status PersistentIndex::_delete_tmp_index_file() {
             full.compare(full.length() - suffix.length(), suffix.length(), suffix) == 0 &&
             !major_compaction_tmp_index_file(full)) {
             std::string path = dir + "/" + full;
+<<<<<<< HEAD
             VLOG(1) << "delete tmp index file " << path;
+=======
+            VLOG(2) << "delete tmp index file " << path;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Status st = FileSystem::Default()->delete_file(path);
             if (!st.ok()) {
                 LOG(WARNING) << "delete tmp index file: " << path << ", failed, status: " << st.to_string();
@@ -4701,7 +4795,12 @@ Status PersistentIndex::_merge_compaction_advance() {
     RETURN_IF_ERROR(writer->init(idx_file_path_tmp, _version, false));
     int merge_l1_start_idx = _l1_vec.size() - config::max_tmp_l1_num;
     int merge_l1_end_idx = _l1_vec.size();
+<<<<<<< HEAD
     VLOG(2) << "merge compaction advance, start_idx: " << merge_l1_start_idx << " end_idx: " << merge_l1_end_idx;
+=======
+    VLOG(2) << strings::Substitute("merge compaction advance, path: $0, start_idx: $1, end_idx: $2", _path,
+                                   merge_l1_start_idx, merge_l1_end_idx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // keep delete flag when older l1 or l2 exist
     bool keep_delete = (merge_l1_start_idx != 0) || !_l2_vec.empty();
 
@@ -4900,7 +4999,11 @@ Status PersistentIndex::modify_l2_versions(const std::vector<EditVersion>& input
             }
         }
         if (!need_remove) {
+<<<<<<< HEAD
             new_l2_versions.emplace_back(EditVersion(index_meta.l2_versions(i)));
+=======
+            new_l2_versions.emplace_back(index_meta.l2_versions(i));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             new_l2_version_merged.push_back(index_meta.l2_version_merged(i));
         }
     }
@@ -4946,7 +5049,11 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
     RETURN_IF_ERROR(_delete_expired_index_file(
             _version, _l1_version,
             _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
+<<<<<<< HEAD
     _delete_major_compaction_tmp_index_file();
+=======
+    (void)_delete_major_compaction_tmp_index_file();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -5014,7 +5121,11 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
                 _l2_versions.size() > 0 ? _l2_versions[0] : EditVersionWithMerge(INT64_MAX, INT64_MAX, true)));
         _calc_memory_usage();
     }
+<<<<<<< HEAD
     _delete_major_compaction_tmp_index_file();
+=======
+    (void)_delete_major_compaction_tmp_index_file();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -5267,9 +5378,13 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
 
     std::unique_ptr<Column> pk_column;
     if (pkey_schema.num_fields() > 1) {
+<<<<<<< HEAD
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
             CHECK(false) << "create column for primary key encoder failed";
         }
+=======
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
     RETURN_IF_ERROR(_build_commit(loader, index_meta));

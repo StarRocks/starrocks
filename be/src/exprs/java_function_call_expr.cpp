@@ -27,7 +27,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"
@@ -108,7 +111,11 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
         res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
     };
+<<<<<<< HEAD
     call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
+=======
+    (void)call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return res;
 }
 
@@ -120,7 +127,11 @@ JavaFunctionCallExpr::~JavaFunctionCallExpr() {
         this->_call_helper.reset();
         return Status::OK();
     });
+<<<<<<< HEAD
     promise->get_future().get();
+=======
+    (void)promise->get_future().get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // TODO support prepare UDF
@@ -133,11 +144,19 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
         return Status::InternalError("Not Found function id for " + _fn.name.function_name);
     }
 
+<<<<<<< HEAD
     FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
     std::vector<FunctionContext::TypeDesc> args_types;
 
     for (Expr* child : _children) {
         args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
+=======
+    FunctionContext::TypeDesc return_type = _type;
+    std::vector<FunctionContext::TypeDesc> args_types;
+
+    for (Expr* child : _children) {
+        args_types.push_back(child->type());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // todo: varargs use for allocate slice memory, need compute buffer size
@@ -272,7 +291,11 @@ void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, Func
         }
         return Status::OK();
     };
+<<<<<<< HEAD
     call_function_in_pthread(state, function_close)->get_future().get();
+=======
+    (void)call_function_in_pthread(state, function_close)->get_future().get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Expr::close(state, context, scope);
 }
 

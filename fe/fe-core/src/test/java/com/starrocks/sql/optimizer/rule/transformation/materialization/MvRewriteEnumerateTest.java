@@ -90,7 +90,11 @@ public class MvRewriteEnumerateTest extends MvRewriteTestBase {
     }
 
     private static Stream<Arguments> generateArguments_ArrayAgg() {
+<<<<<<< HEAD
         List<String> selectList = Lists.newArrayList(
+=======
+        List<String> selectList = List.of(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "array_agg_distinct(get_json_string(d_user, 'gender'))",
                 "array_sort(array_agg_distinct(get_json_string(d_user, 'gender') ))",
                 "array_length(array_agg_distinct(get_json_string(d_user, 'gender') ))",
@@ -98,16 +102,25 @@ public class MvRewriteEnumerateTest extends MvRewriteTestBase {
                 "sum(distinct get_json_int(d_user, 'age') )",
                 "sum(distinct cast(get_json_string(d_user, 'age') as int) )"
         );
+<<<<<<< HEAD
         List<String> predicatelist = Lists.newArrayList("", "where get_json_string(d_user, 'gender') = 'male'");
         List<String> groupList = Lists.newArrayList(
+=======
+        List<String> predicatelist = List.of("", "where get_json_string(d_user, 'gender') = 'male'");
+        List<String> groupList = List.of(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "",
                 "group by get_json_string(d_user, 'region')",
                 "group by get_json_string(d_user, 'gender')",
                 "group by get_json_string(d_user, 'region'), get_json_string(d_user, 'gender') "
         );
 
+<<<<<<< HEAD
         TestCaseEnumerator enumerator =
                 new TestCaseEnumerator(Lists.newArrayList(selectList.size(), predicatelist.size(), groupList.size()));
+=======
+        var enumerator = new TestCaseEnumerator(List.of(selectList.size(), predicatelist.size(), groupList.size()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return enumerator.enumerate().map(argList ->
                 TestCaseEnumerator.ofArguments(argList, selectList, predicatelist, groupList));
     }

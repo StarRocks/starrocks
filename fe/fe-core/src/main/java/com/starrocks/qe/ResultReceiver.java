@@ -34,12 +34,22 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.rpc.BackendServiceClient;
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.Status;
+import com.starrocks.common.util.DebugUtil;
+import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PUniqueId;
+import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TNetworkAddress;
@@ -61,11 +71,19 @@ public class ResultReceiver {
     private volatile boolean isDone = false;
     private volatile boolean isCancel = false;
     private long packetIdx = 0;
+<<<<<<< HEAD
     private final long timeoutTs;
     private final TNetworkAddress address;
     private final PUniqueId finstId;
     private final Long backendId;
     private Thread currentThread;
+=======
+    private final int timeoutMs;
+    private final long deadlineMs;
+    private final TNetworkAddress address;
+    private final PUniqueId finstId;
+    private final Long backendId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public ResultReceiver(TUniqueId tid, Long backendId, TNetworkAddress address, int timeoutMs) {
         this.finstId = new PUniqueId();
@@ -73,7 +91,12 @@ public class ResultReceiver {
         this.finstId.lo = tid.lo;
         this.backendId = backendId;
         this.address = address;
+<<<<<<< HEAD
         this.timeoutTs = System.currentTimeMillis() + timeoutMs;
+=======
+        this.timeoutMs = timeoutMs;
+        this.deadlineMs = System.currentTimeMillis() + timeoutMs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public RowBatch getNext(Status status) throws TException {
@@ -85,16 +108,27 @@ public class ResultReceiver {
             while (!isDone && !isCancel) {
                 PFetchDataRequest request = new PFetchDataRequest(finstId);
 
+<<<<<<< HEAD
                 currentThread = Thread.currentThread();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Future<PFetchDataResult> future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
                 PFetchDataResult pResult = null;
                 while (pResult == null) {
                     long currentTs = System.currentTimeMillis();
+<<<<<<< HEAD
                     if (currentTs >= timeoutTs) {
                         throw new TimeoutException("query timeout");
                     }
                     try {
                         pResult = future.get(timeoutTs - currentTs, TimeUnit.MILLISECONDS);
+=======
+                    if (currentTs >= deadlineMs) {
+                        throw new TimeoutException("query timeout");
+                    }
+                    try {
+                        pResult = future.get(deadlineMs - currentTs, TimeUnit.MILLISECONDS);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     } catch (InterruptedException e) {
                         // continue to get result
                         LOG.info("future get interrupted Exception");
@@ -124,7 +158,11 @@ public class ResultReceiver {
                 byte[] serialResult = request.getSerializedResult();
                 if (serialResult != null && serialResult.length > 0) {
                     TResultBatch resultBatch = new TResultBatch();
+<<<<<<< HEAD
                     TDeserializer deserializer = new TDeserializer();
+=======
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     deserializer.deserialize(resultBatch, serialResult);
                     rowBatch.setBatch(resultBatch);
                     rowBatch.setEos(pResult.eos);
@@ -134,11 +172,16 @@ public class ResultReceiver {
         } catch (RpcException e) {
             LOG.warn("fetch result rpc exception, finstId={}", DebugUtil.printId(finstId), e);
             status.setRpcStatus(e.getMessage());
+<<<<<<< HEAD
             SimpleScheduler.addToBlacklist(backendId);
+=======
+            SimpleScheduler.addToBlocklist(backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (ExecutionException e) {
             LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
+<<<<<<< HEAD
                 status.setStatus(new Status(TStatusCode.TIMEOUT,
                         String.format("Query exceeded time limit of %d seconds",
                                 ConnectContext.get().getSessionVariable().getQueryTimeoutS())));
@@ -157,6 +200,18 @@ public class ResultReceiver {
             synchronized (this) {
                 currentThread = null;
             }
+=======
+                status.setStatus(new Status(TStatusCode.TIMEOUT, ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                        String.format("please increase the '%s' session variable and retry", SessionVariable.QUERY_TIMEOUT))));
+            } else {
+                status.setRpcStatus(e.getMessage());
+                SimpleScheduler.addToBlocklist(backendId);
+            }
+        } catch (TimeoutException e) {
+            LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
+            status.setTimeOutStatus(ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                    String.format("please increase the '%s' session variable and retry", SessionVariable.QUERY_TIMEOUT)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (isCancel) {
@@ -167,6 +222,7 @@ public class ResultReceiver {
 
     public void cancel() {
         isCancel = true;
+<<<<<<< HEAD
         synchronized (this) {
             if (currentThread != null) {
                 // TODO(cmy): we cannot interrupt this thread, or we may throw
@@ -176,5 +232,15 @@ public class ResultReceiver {
                 // currentThread.interrupt();
             }
         }
+=======
+    }
+
+    public TNetworkAddress getAddress() {
+        return address;
+    }
+
+    public Long getBackendId() {
+        return backendId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

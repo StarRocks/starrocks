@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_GeometryFromText,ST_GeomFromText
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a WKT (Well Known Text) to the corresponding memory geometry.
 

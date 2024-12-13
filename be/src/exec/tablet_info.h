@@ -51,6 +51,10 @@ struct OlapTableIndexSchema {
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
     std::map<std::string, std::string> column_to_expr_value;
+<<<<<<< HEAD
+=======
+    bool is_shadow = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
@@ -81,6 +85,10 @@ public:
         return _proto_schema;
     }
 
+<<<<<<< HEAD
+=======
+    int64_t shadow_index_size() const { return _shadow_indexes; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string debug_string() const;
 
 private:
@@ -92,6 +100,11 @@ private:
     mutable POlapTableSchemaParam* _proto_schema = nullptr;
     std::vector<OlapTableIndexSchema*> _indexes;
     mutable ObjectPool _obj_pool;
+<<<<<<< HEAD
+=======
+
+    int64_t _shadow_indexes = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 using OlapTableIndexTablets = TOlapTableIndexTablets;
@@ -266,6 +279,11 @@ public:
 
     bool is_un_partitioned() const { return _partition_columns.empty(); }
 
+<<<<<<< HEAD
+=======
+    const TOlapTablePartitionParam& param() const { return _t_param; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     /**
      * @brief  find tablets with range partition table

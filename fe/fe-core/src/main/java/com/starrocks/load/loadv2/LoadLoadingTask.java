@@ -39,8 +39,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -96,7 +101,10 @@ public class LoadLoadingTask extends LoadTask {
     private final String mergeConditionStr;
     private final TPartialUpdateMode partialUpdateMode;
 
+<<<<<<< HEAD
     private LoadingTaskPlanner planner;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final ConnectContext context;
 
     private LoadPlanner loadPlanner;
@@ -105,6 +113,10 @@ public class LoadLoadingTask extends LoadTask {
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
+<<<<<<< HEAD
+=======
+    private long warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -131,15 +143,26 @@ public class LoadLoadingTask extends LoadTask {
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
         this.jsonOptions = builder.jsonOptions;
+<<<<<<< HEAD
     }
 
     public void prepare() throws UserException {
+=======
+        this.warehouseId = builder.warehouseId;
+    }
+
+    public void prepare() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusList, fileNum);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
+<<<<<<< HEAD
+=======
+        loadPlanner.setWarehouseId(warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         loadPlanner.plan();
     }
 
@@ -299,7 +322,11 @@ public class LoadLoadingTask extends LoadTask {
             throw new LoadException(String.format("db: %s-%d has been dropped", db.getFullName(), db.getId()));
         }
 
+<<<<<<< HEAD
         if (database.getTable(table.getId()) == null) {
+=======
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), table.getId()) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new LoadException(String.format("table: %s-%d has been dropped from db: %s-%d",
                     table.getName(), table.getId(), db.getFullName(), db.getId()));
         }
@@ -329,6 +356,10 @@ public class LoadLoadingTask extends LoadTask {
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
+<<<<<<< HEAD
+=======
+        private long warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -452,6 +483,14 @@ public class LoadLoadingTask extends LoadTask {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder setWarehouseId(long warehouseId) {
+            this.warehouseId = warehouseId;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public LoadLoadingTask build() {
             return new LoadLoadingTask(this);
         }

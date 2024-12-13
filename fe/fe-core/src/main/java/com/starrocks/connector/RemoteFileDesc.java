@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.TextFileFormatDesc;
+<<<<<<< HEAD
 import com.starrocks.connector.odps.OdpsSplitsInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
@@ -62,11 +63,29 @@ public class RemoteFileDesc {
 
     public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
                           ImmutableList<RemoteFileBlockDesc> blockDescs, ImmutableList<String> hudiDeltaLogs) {
+=======
+
+public class RemoteFileDesc {
+    protected final String fileName;
+    // Optional.
+    // The full path of the remote file.
+    protected String fullPath;
+    protected final String compression;
+    protected final long length;
+    protected final long modificationTime;
+    protected final ImmutableList<RemoteFileBlockDesc> blockDescs;
+    protected boolean splittable;
+    protected TextFileFormatDesc textFileFormatDesc;
+
+    public RemoteFileDesc(String fileName, String compression, long length, long modificationTime,
+                          ImmutableList<RemoteFileBlockDesc> blockDescs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.fileName = fileName;
         this.compression = compression;
         this.length = length;
         this.modificationTime = modificationTime;
         this.blockDescs = blockDescs;
+<<<<<<< HEAD
         this.hudiDeltaLogs = hudiDeltaLogs;
     }
 
@@ -80,6 +99,8 @@ public class RemoteFileDesc {
 
     public static RemoteFileDesc createOdpsRemoteFileDesc(OdpsSplitsInfo odpsSplitsInfo) {
         return new RemoteFileDesc(null, null, 0, 0, null, null, null, null, odpsSplitsInfo);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getFileName() {
@@ -129,6 +150,7 @@ public class RemoteFileDesc {
         return this;
     }
 
+<<<<<<< HEAD
     public ImmutableList<String> getHudiDeltaLogs() {
         return hudiDeltaLogs;
     }
@@ -171,3 +193,19 @@ public class RemoteFileDesc {
         return sb.toString();
     }
 }
+=======
+    @Override
+    public String toString() {
+        return "RemoteFileDesc{" + "fileName='" + fileName + '\'' +
+                "fullPath='" + fullPath + '\'' +
+                ", compression='" + compression + '\'' +
+                ", length=" + length +
+                ", modificationTime=" + modificationTime +
+                ", blockDescs=" + blockDescs +
+                ", splittable=" + splittable +
+                ", textFileFormatDesc=" + textFileFormatDesc +
+                '}';
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

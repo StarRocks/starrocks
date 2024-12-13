@@ -15,16 +15,29 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,9 +46,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class TableFunctionTableSinkTest {
     @Test
     public void testTableFunctionTableSink() {
+<<<<<<< HEAD
         TableFunctionTable tableFunctionTable = new TableFunctionTable("s3://path/to/directory/", "parquet",
                 "uncompressed", ImmutableList.of(new Column("k1", Type.INT)), null, false,
                 Optional.empty(), ImmutableMap.of());
+=======
+        List<Column> columns = ImmutableList.of(new Column("k1", Type.INT));
+        Map<String, String> properties = new HashMap<>();
+        properties.put("path", "s3://path/to/directory/");
+        properties.put("format", "csv");
+        properties.put("compression", "uncompressed");
+        properties.put("csv.column_separator", ",");
+        properties.put("csv.row_delimiter", "\n");
+        TableFunctionTable tableFunctionTable = new TableFunctionTable(columns, properties, new SessionVariable());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TableFunctionTableSink tableFunctionTableSink = new TableFunctionTableSink(tableFunctionTable);
 
@@ -45,7 +69,11 @@ public class TableFunctionTableSinkTest {
 
         assertEquals("TABLE FUNCTION TABLE SINK\n" +
                 "  PATH: s3://path/to/directory/\n" +
+<<<<<<< HEAD
                 "  FORMAT: parquet\n" +
+=======
+                "  FORMAT: csv\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  PARTITION BY: []\n" +
                 "  SINGLE: false\n" +
                 "  RANDOM\n", tableFunctionTableSink.getExplainString("", TExplainLevel.NORMAL));

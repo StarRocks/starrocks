@@ -55,7 +55,11 @@ value_item ::=
 
 | **Parameters**      | **Parameters** | **Description**                                              |
 | ------------------- | -------------- | ------------------------------------------------------------ |
+<<<<<<< HEAD
 | `partition_columns` | YES            | the ames of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partitioning column does not allow `NULL` values. |
+=======
+| `partition_columns` | YES            | the names of the partitioning columns. The partitioning column values can be string (BINARY not supported), date or datetime, integer, and boolean values. From v3.3.3, the partitioning column allows `NULL` values. |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | `partition_name`    | YES            | Partition name. It is recommended to set appropriate partition names based on the business scenario to differentiate the data in different partitions. |
 | `value_list`        | YES            | A list of partitioning column values in a partition.            |
 
@@ -113,4 +117,8 @@ DISTRIBUTED BY HASH(`id`);
 - Currently, StarRocks's shared-data mode does not support this feature.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` statement is used to delete a partition created by using list partitioning, data in the partition is directly removed and cannot be recovered.
 - Currently you cannot [backup and restore](../../administration/management/Backup_and_restore.md) tables created with the list partitioning strategy.
+<<<<<<< HEAD
 - Currently, StarRocks does not support creating [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) with base tables created with the list partitioning strategy.
+=======
+- From v3.3.5 onwards,  StarRocks supports creating [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) with base tables created with the list partitioning strategy.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -31,8 +31,11 @@ This topic describes the rules and limits that apply when you use StarRocks.
 
 - StarRocks supports only UTF-8 encoding, not GBK.
 
+<<<<<<< HEAD
 - StarRocks does not support modifying column names in tables.
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - StarRocks does not support modifying the table types of an existing table. For example, you cannot change a Duplicate Key table to a Primary Key table. You must create a new table.
 
 - By default, a query can be nested with a maximum of 10,000 subqueries, which is controlled by the FE parameter `expr_children_limit`.

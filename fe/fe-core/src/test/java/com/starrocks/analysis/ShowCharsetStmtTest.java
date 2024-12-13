@@ -15,10 +15,17 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.ShowCharsetStmt;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;

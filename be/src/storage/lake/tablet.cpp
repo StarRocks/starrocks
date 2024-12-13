@@ -20,6 +20,10 @@
 #include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/general_tablet_writer.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/location_provider.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/metacache.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/pk_tablet_writer.h"
@@ -89,21 +93,53 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int6
         }
     } else {
         if (type == kHorizontal) {
+<<<<<<< HEAD
             return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
                                                                  flush_pool);
+=======
+            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, is_compaction,
+                                                                   flush_pool);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
+                                                                 is_compaction, flush_pool);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }
 
+<<<<<<< HEAD
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t index_id) {
     return _mgr->get_tablet_schema_by_id(_id, index_id);
+=======
+const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
+    auto tablet_schema_or = _mgr->get_tablet_schema(_id, nullptr);
+    if (!tablet_schema_or.ok()) {
+        return nullptr;
+    }
+    return tablet_schema_or.value();
+}
+
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
+    if (_tablet_schema) {
+        return _tablet_schema;
+    } else if (_tablet_metadata) {
+        return std::make_shared<TabletSchema>(_tablet_metadata->schema());
+    } else {
+        return _mgr->get_tablet_schema(_id, &_version_hint);
+    }
+}
+
+StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema_by_id(int64_t schema_id) {
+    return _mgr->get_tablet_schema_by_id(_id, schema_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(int64_t version) {
@@ -116,6 +152,7 @@ std::vector<RowsetPtr> Tablet::get_rowsets(const TabletMetadataPtr& metadata) {
 }
 
 std::string Tablet::metadata_location(int64_t version) const {
+<<<<<<< HEAD
     return _mgr->tablet_metadata_location(_id, version);
 }
 
@@ -125,6 +162,17 @@ std::string Tablet::metadata_root_location() const {
 
 std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
+=======
+    return _location_provider->tablet_metadata_location(_id, version);
+}
+
+std::string Tablet::metadata_root_location() const {
+    return _location_provider->metadata_root_location(_id);
+}
+
+std::string Tablet::txn_log_location(int64_t txn_id) const {
+    return _location_provider->txn_log_location(_id, txn_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::string Tablet::txn_slog_location(int64_t txn_id) const {
@@ -132,6 +180,7 @@ std::string Tablet::txn_slog_location(int64_t txn_id) const {
 }
 
 std::string Tablet::txn_vlog_location(int64_t version) const {
+<<<<<<< HEAD
     return _mgr->txn_vlog_location(_id, version);
 }
 
@@ -149,6 +198,29 @@ std::string Tablet::delvec_location(std::string_view delvec_name) const {
 
 std::string Tablet::root_location() const {
     return _mgr->tablet_root_location(_id);
+=======
+    return _location_provider->txn_vlog_location(_id, version);
+}
+
+std::string Tablet::segment_location(std::string_view segment_name) const {
+    return _location_provider->segment_location(_id, segment_name);
+}
+
+std::string Tablet::del_location(std::string_view del_name) const {
+    return _location_provider->del_location(_id, del_name);
+}
+
+std::string Tablet::delvec_location(std::string_view delvec_name) const {
+    return _location_provider->delvec_location(_id, delvec_name);
+}
+
+std::string Tablet::sst_location(std::string_view sst_name) const {
+    return _mgr->sst_location(_id, sst_name);
+}
+
+std::string Tablet::root_location() const {
+    return _location_provider->root_location(_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status Tablet::delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate) {
@@ -184,4 +256,19 @@ int64_t Tablet::data_size() {
     }
 }
 
+<<<<<<< HEAD
+=======
+size_t Tablet::num_rows() const {
+    // set_version_hint should be called before to avoid list tablet metadata
+    DCHECK(_version_hint != 0);
+    auto num_rows = _mgr->get_tablet_num_rows(_id, _version_hint);
+    if (num_rows.ok()) {
+        return num_rows.value();
+    } else {
+        LOG(WARNING) << "failed to get tablet rows num" << _id << "num rows: " << num_rows.status();
+        return 0;
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::lake

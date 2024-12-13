@@ -23,6 +23,7 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeTabletSchedulesScanner::_s_columns[] = {
+<<<<<<< HEAD
         {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
@@ -38,6 +39,23 @@ SchemaScanner::ColumnDesc SchemaFeTabletSchedulesScanner::_s_columns[] = {
         {"CLONE_BYTES", TYPE_BIGINT, sizeof(int64_t), false},
         {"CLONE_DURATION", TYPE_DOUBLE, sizeof(double), false},
         {"MSG", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+        {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PRIORITY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLET_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"SCHEDULE_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"CLONE_SRC", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_DEST", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_DURATION", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaFeTabletSchedulesScanner::SchemaFeTabletSchedulesScanner()

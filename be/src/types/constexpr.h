@@ -28,6 +28,12 @@ constexpr int HLL_COLUMN_DEFAULT_LEN = HLL_REGISTERS_COUNT + 1;
 // 1 for type; 1 for hash values count; 8 for hash value
 constexpr int HLL_EMPTY_SIZE = 1;
 
+<<<<<<< HEAD
+=======
+const static int MAX_HLL_LOG_K = 20;
+const static uint8_t DEFAULT_HLL_LOG_K = 17;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // For JSON type
 constexpr int kJsonDefaultSize = 128;
 constexpr int kJsonMetaDefaultFormatVersion = 1;

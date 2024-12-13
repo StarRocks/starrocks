@@ -34,6 +34,10 @@
 
 package com.starrocks.persist;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.leader.MetaHelper;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -67,6 +71,7 @@ public class MetaCleaner {
                 }
                 String filename = file.getName();
                 // Delete all image whose version is less than imageVersionDelete
+<<<<<<< HEAD
                 if (type.equalsIgnoreCase(Storage.IMAGE)) {
                     if (filename.endsWith(".part")) {
                         filename = filename.substring(0, filename.length() - ".part".length());
@@ -74,6 +79,15 @@ public class MetaCleaner {
                     long version = Long.parseLong(filename.substring(filename.lastIndexOf('.') + 1));
 
                     if (version < imageDeleteVersion) {
+=======
+                if (type.equalsIgnoreCase(Storage.IMAGE) || type.equalsIgnoreCase(Storage.CHECKSUM)) {
+                    if (filename.endsWith(MetaHelper.PART_SUFFIX)) {
+                        filename = filename.substring(0, filename.length() - MetaHelper.PART_SUFFIX.length());
+                    }
+                    long version = Long.parseLong(filename.substring(filename.lastIndexOf('.') + 1));
+
+                    if (version <= imageDeleteVersion) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (file.delete()) {
                             LOG.info(file.getAbsoluteFile() + " deleted.");
                         } else {
@@ -85,21 +99,36 @@ public class MetaCleaner {
         }
     }
 
+<<<<<<< HEAD
     private String fileType(File file) throws IOException {
+=======
+    private String fileType(File file) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String type = null;
         String filename = file.getName();
 
         if (filename.equals(Storage.IMAGE_NEW)) {
             type = Storage.IMAGE_NEW;
         } else {
+<<<<<<< HEAD
             if (filename.endsWith(".part")) {
                 filename = filename.substring(0, filename.length() - ".part".length());
+=======
+            if (filename.endsWith(MetaHelper.PART_SUFFIX)) {
+                filename = filename.substring(0, filename.length() - MetaHelper.PART_SUFFIX.length());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (filename.contains(".")) {
                 if (filename.startsWith(Storage.IMAGE)) {
                     type = Storage.IMAGE;
                 }
+<<<<<<< HEAD
+=======
+                if (filename.startsWith(Storage.CHECKSUM)) {
+                    type = Storage.CHECKSUM;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 

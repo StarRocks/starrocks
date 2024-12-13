@@ -162,7 +162,12 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
         String partitionNamesQuery =
                 "SELECT PARTITION_DESCRIPTION as NAME FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
+<<<<<<< HEAD
                 "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
+=======
+                "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL " +
+                "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS') ORDER BY PARTITION_DESCRIPTION";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
@@ -188,7 +193,13 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     @Override
     public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) {
         String partitionColumnsQuery = "SELECT DISTINCT PARTITION_EXPRESSION FROM INFORMATION_SCHEMA.PARTITIONS " +
+<<<<<<< HEAD
                 "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
+=======
+                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL " +
+                "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS') " +
+                "AND PARTITION_EXPRESSION IS NOT NULL";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
@@ -213,8 +224,13 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         JDBCTable jdbcTable = (JDBCTable) table;
         String query = getPartitionQuery(table);
         try (PreparedStatement ps = connection.prepareStatement(query)) {
+<<<<<<< HEAD
             ps.setString(1, jdbcTable.getDbName());
             ps.setString(2, jdbcTable.getJdbcTable());
+=======
+            ps.setString(1, jdbcTable.getCatalogDBName());
+            ps.setString(2, jdbcTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {
@@ -276,7 +292,12 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         final String partitionsQuery = "SELECT PARTITION_DESCRIPTION AS NAME, " +
                 "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
                 "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
+<<<<<<< HEAD
                 "AND PARTITION_NAME IS NOT NULL";
+=======
+                "AND PARTITION_NAME IS NOT NULL " +
+                "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS') ORDER BY PARTITION_DESCRIPTION";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         final String nonPartitionQuery = "SELECT TABLE_NAME AS NAME, " +
                 "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
                 "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ";

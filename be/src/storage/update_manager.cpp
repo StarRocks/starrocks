@@ -277,8 +277,12 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto st = TabletMetaManager::delete_delta_column_group(meta, &wb, dcg.first, dcg.second);
         if (!st.ok()) {
             // continue if error
+<<<<<<< HEAD
             LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id
                          << " st: " << st.get_error_msg();
+=======
+            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id << " st: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
@@ -478,7 +482,11 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
 }
 
 Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelVectorPtr& delvec) {
+<<<<<<< HEAD
     VLOG(1) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
+=======
+    VLOG(2) << "set_cached_del_vec tablet:" << tsid.tablet_id << " rss:" << tsid.segment_id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << " version:" << delvec->version() << " #del:" << delvec->cardinality();
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     auto itr = _del_vec_cache.find(tsid);
@@ -510,7 +518,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     }
 
     string rowset_unique_id = rowset->rowset_id().to_string();
+<<<<<<< HEAD
     VLOG(1) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
+=======
+    VLOG(2) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << " rowset:" << rowset_unique_id;
     // Prepare apply required resources, load updatestate, primary index into cache,
     // so apply can run faster. Since those resources are in cache, they can get evicted
@@ -567,7 +579,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         }
     }
 
+<<<<<<< HEAD
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
+=======
+    VLOG(2) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << " rowset:" << rowset_unique_id;
 
     FAIL_POINT_TRIGGER_EXECUTE(on_rowset_finished_failed_due_to_mem,
@@ -582,7 +598,11 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
 
 void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
     string rowset_unique_id = rowset->rowset_id().to_string();
+<<<<<<< HEAD
     VLOG(1) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
+=======
+    VLOG(2) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << " rowset:" << rowset_unique_id;
     if (rowset->is_column_mode_partial_update()) {
         auto column_state_entry =

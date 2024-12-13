@@ -96,8 +96,13 @@ using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
+<<<<<<< HEAD
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
               "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
+=======
+              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, show_meta, "
+              "check_table_meta_consistency, print_lake_metadata, print_lake_txn_log, print_lake_schema");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -783,7 +788,11 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
     size_t num_short_key_columns = cols.size();
     const KeyCoder* coder = get_key_coder(cols[idx].type->type());
     uint8_t* tmp_mem = _mem_pool.allocate(item_size);
+<<<<<<< HEAD
     coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool);
+=======
+    (void)coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto logical_type = cols[idx].type->type();
 
@@ -857,7 +866,11 @@ Status SegmentDump::calc_checksum() {
     seg_opts.stats = &stats;
     auto seg_res = _segment->new_iterator(schema, seg_opts);
     if (!seg_res.ok()) {
+<<<<<<< HEAD
         std::cout << "new segment iterator failed: " << seg_res.status().get_error_msg() << std::endl;
+=======
+        std::cout << "new segment iterator failed: " << seg_res.status().message() << std::endl;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return seg_res.status();
     }
     auto seg_iter = std::move(seg_res.value());
@@ -1130,7 +1143,11 @@ int meta_tool_main(int argc, char** argv) {
         starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
         Status st = segment_dump.calc_checksum();
         if (!st.ok()) {
+<<<<<<< HEAD
             std::cout << "dump segment data failed: " << st.get_error_msg() << std::endl;
+=======
+            std::cout << "dump segment data failed: " << st.message() << std::endl;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {

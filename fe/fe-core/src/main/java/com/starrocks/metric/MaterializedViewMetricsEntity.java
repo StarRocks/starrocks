@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.metric;
 
 import com.codahale.metrics.Histogram;
@@ -22,6 +25,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.TaskBuilder;
@@ -102,10 +111,17 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(mvId.getDbId());
         if (db != null) {
             dbNameOpt = Optional.of(db.getFullName());
             Table table = db.getTable(mvId.getId());
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(mvId.getDbId());
+        if (db != null) {
+            dbNameOpt = Optional.of(db.getFullName());
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table != null) {
                 mvNameOpt = Optional.of(table.getName());
                 return true;
@@ -122,6 +138,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
     protected void initMaterializedViewMetrics() {
         // refresh metrics
         counterRefreshJobTotal = new LongCounterMetric("mv_refresh_jobs", MetricUnit.REQUESTS,
+<<<<<<< HEAD
                 "total materialized view's refresh jobs");
         metrics.add(counterRefreshJobTotal);
         counterRefreshJobSuccessTotal = new LongCounterMetric("mv_refresh_total_success_jobs", MetricUnit.REQUESTS,
@@ -135,10 +152,26 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterRefreshJobEmptyTotal);
         counterRefreshJobRetryCheckChangedTotal = new LongCounterMetric("mv_refresh_total_retry_meta_count", MetricUnit.REQUESTS,
                 "total materialized view's retry to check table change count");
+=======
+                    "total materialized view's refresh jobs");
+        metrics.add(counterRefreshJobTotal);
+        counterRefreshJobSuccessTotal = new LongCounterMetric("mv_refresh_total_success_jobs", MetricUnit.REQUESTS,
+                    "total materialized view's refresh success jobs");
+        metrics.add(counterRefreshJobSuccessTotal);
+        counterRefreshJobFailedTotal = new LongCounterMetric("mv_refresh_total_failed_jobs", MetricUnit.REQUESTS,
+                    "total materialized view's refresh failed jobs");
+        metrics.add(counterRefreshJobFailedTotal);
+        counterRefreshJobEmptyTotal = new LongCounterMetric("mv_refresh_total_empty_jobs", MetricUnit.REQUESTS,
+                    "total materialized view's refresh empty jobs");
+        metrics.add(counterRefreshJobEmptyTotal);
+        counterRefreshJobRetryCheckChangedTotal = new LongCounterMetric("mv_refresh_total_retry_meta_count", MetricUnit.REQUESTS,
+                    "total materialized view's retry to check table change count");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         metrics.add(counterRefreshJobRetryCheckChangedTotal);
 
         // query metrics
         counterQueryMaterializedViewTotal = new LongCounterMetric("mv_query_total_count", MetricUnit.REQUESTS,
+<<<<<<< HEAD
                 "total materialized view's query count");
         metrics.add(counterQueryMaterializedViewTotal);
         counterQueryHitTotal = new LongCounterMetric("mv_query_total_hit_count", MetricUnit.REQUESTS,
@@ -153,6 +186,22 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         // text based rewrite
         counterQueryTextBasedMatchedTotal = new LongCounterMetric("mv_query_total_text_based_matched_count",
                 MetricUnit.REQUESTS, "total text based matched materialized view's query count");
+=======
+                    "total materialized view's query count");
+        metrics.add(counterQueryMaterializedViewTotal);
+        counterQueryHitTotal = new LongCounterMetric("mv_query_total_hit_count", MetricUnit.REQUESTS,
+                    "total hit materialized view's query count");
+        metrics.add(counterQueryHitTotal);
+        counterQueryConsideredTotal = new LongCounterMetric("mv_query_total_considered_count", MetricUnit.REQUESTS,
+                    "total considered materialized view's query count");
+        metrics.add(counterQueryConsideredTotal);
+        counterQueryMatchedTotal = new LongCounterMetric("mv_query_total_matched_count", MetricUnit.REQUESTS,
+                    "total matched materialized view's query count");
+        metrics.add(counterQueryMatchedTotal);
+        // text based rewrite
+        counterQueryTextBasedMatchedTotal = new LongCounterMetric("mv_query_total_text_based_matched_count",
+                    MetricUnit.REQUESTS, "total text based matched materialized view's query count");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         metrics.add(counterQueryTextBasedMatchedTotal);
 
         // histogram metrics
@@ -170,7 +219,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
 
         // gauge metrics
         counterRefreshPendingJobs = new GaugeMetric<Long>("mv_refresh_pending_jobs", MetricUnit.NOUNIT,
+<<<<<<< HEAD
                 "current materialized view pending refresh jobs number") {
+=======
+                    "current materialized view pending refresh jobs number") {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Override
             public Long getValue() {
                 String mvTaskName = TaskBuilder.getMvTaskName(mvId.getId());
@@ -189,7 +242,11 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterRefreshPendingJobs);
 
         counterRefreshRunningJobs = new GaugeMetric<Long>("mv_refresh_running_jobs", MetricUnit.NOUNIT,
+<<<<<<< HEAD
                 "current materialized view running refresh jobs number") {
+=======
+                    "current materialized view running refresh jobs number") {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Override
             public Long getValue() {
                 String mvTaskName = TaskBuilder.getMvTaskName(mvId.getId());
@@ -212,6 +269,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterRefreshRunningJobs);
 
         counterRowNums = new GaugeMetric<Long>("mv_row_count", MetricUnit.NOUNIT,
+<<<<<<< HEAD
                 "current materialized view's row count") {
             @Override
             public Long getValue() {
@@ -220,10 +278,21 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Table table = db.getTable(mvId.getId());
+=======
+                    "current materialized view's row count") {
+            @Override
+            public Long getValue() {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0L;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
 
+<<<<<<< HEAD
                 db.readLock();
                 MaterializedView mv = (MaterializedView) table;
                 try {
@@ -232,12 +301,21 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 } finally {
                     db.readUnlock();
+=======
+                MaterializedView mv = (MaterializedView) table;
+                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
+                            LockType.READ)) {
+                    return mv.getRowCount();
+                } catch (Exception e) {
+                    return 0L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         };
         metrics.add(counterRowNums);
 
         counterStorageSize = new GaugeMetric<Long>("mv_storage_size", MetricUnit.NOUNIT,
+<<<<<<< HEAD
                 "current materialized view's storage size") {
             @Override
             public Long getValue() {
@@ -246,10 +324,21 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 }
                 Table table = db.getTable(mvId.getId());
+=======
+                    "current materialized view's storage size") {
+            @Override
+            public Long getValue() {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0L;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isMaterializedView()) {
                     return 0L;
                 }
 
+<<<<<<< HEAD
                 db.readLock();
                 MaterializedView mv = (MaterializedView) table;
                 try {
@@ -258,12 +347,21 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0L;
                 } finally {
                     db.readUnlock();
+=======
+                MaterializedView mv = (MaterializedView) table;
+                try (AutoCloseableLock ignore =
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+                    return mv.getDataSize();
+                } catch (Exception e) {
+                    return 0L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         };
         metrics.add(counterStorageSize);
 
         counterInactiveState = new GaugeMetric<Integer>("mv_inactive_state", MetricUnit.NOUNIT,
+<<<<<<< HEAD
                 "current materialized view's inactive or not, 0: active, 1: inactive") {
             @Override
             public Integer getValue() {
@@ -277,6 +375,21 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                 }
                 MaterializedView mv = (MaterializedView) table;
                 try {
+=======
+                    "current materialized view's inactive or not, 0: active, 1: inactive") {
+            @Override
+            public Integer getValue() {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+                if (table == null || !table.isMaterializedView()) {
+                    return 0;
+                }
+                try {
+                    MaterializedView mv = (MaterializedView) table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return mv.isActive() ? 0 : 1;
                 } catch (Exception e) {
                     return 0;
@@ -286,6 +399,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
         metrics.add(counterInactiveState);
 
         counterPartitionCount = new GaugeMetric<Integer>("mv_partition_count", MetricUnit.NOUNIT,
+<<<<<<< HEAD
                 "current materialized view's partition count, 0 if the materialized view is not partitioned") {
             @Override
             public Integer getValue() {
@@ -294,6 +408,16 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
                 Table table = db.getTable(mvId.getId());
+=======
+                    "current materialized view's partition count, 0 if the materialized view is not partitioned") {
+            @Override
+            public Integer getValue() {
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                if (db == null) {
+                    return 0;
+                }
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null || !table.isMaterializedView()) {
                     return 0;
                 }
@@ -302,6 +426,7 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 }
 
+<<<<<<< HEAD
                 db.readLock();
                 try {
                     return mv.getPartitions().size();
@@ -309,6 +434,13 @@ public final class MaterializedViewMetricsEntity implements IMaterializedViewMet
                     return 0;
                 } finally {
                     db.readUnlock();
+=======
+                try (AutoCloseableLock ignore =
+                            new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+                    return mv.getPartitions().size();
+                } catch (Exception e) {
+                    return 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         };

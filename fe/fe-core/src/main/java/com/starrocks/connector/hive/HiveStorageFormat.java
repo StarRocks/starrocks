@@ -48,7 +48,11 @@ public enum HiveStorageFormat {
             PARQUET_HIVE_SERDE_CLASS,
             MAPRED_PARQUET_INPUT_FORMAT_CLASS,
             MAPRED_PARQUET_OUTPUT_FORMAT_CLASS),
+<<<<<<< HEAD
     TEXT(
+=======
+    TEXTFILE(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LAZY_SIMPLE_SERDE_CLASS,
             TEXT_INPUT_FORMAT_CLASS,
             HIVE_IGNORE_KEY_OUTPUT_FORMAT_CLASS),

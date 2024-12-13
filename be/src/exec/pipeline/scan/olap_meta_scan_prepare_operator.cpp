@@ -14,6 +14,11 @@
 
 #include "exec/pipeline/scan/olap_meta_scan_prepare_operator.h"
 
+<<<<<<< HEAD
+=======
+#include <utility>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
 #include "gen_cpp/Types_types.h"
@@ -25,7 +30,11 @@ OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factor
                                                          int32_t driver_sequence, OlapMetaScanNode* const scan_node,
                                                          MetaScanContextPtr scan_ctx)
         : MetaScanPrepareOperator(factory, id, plan_node_id, driver_sequence, std::string("olap_meta_scan_prepare"),
+<<<<<<< HEAD
                                   scan_ctx),
+=======
+                                  std::move(scan_ctx)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _scan_node(scan_node) {}
 
 Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
@@ -44,7 +53,11 @@ Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
 OlapMetaScanPrepareOperatorFactory::OlapMetaScanPrepareOperatorFactory(
         int32_t id, int32_t plan_node_id, OlapMetaScanNode* const scan_node,
         std::shared_ptr<MetaScanContextFactory> scan_ctx_factory)
+<<<<<<< HEAD
         : MetaScanPrepareOperatorFactory(id, plan_node_id, "olap_meta_scan_prepare", scan_ctx_factory),
+=======
+        : MetaScanPrepareOperatorFactory(id, plan_node_id, "olap_meta_scan_prepare", std::move(scan_ctx_factory)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _scan_node(scan_node) {}
 
 OperatorPtr OlapMetaScanPrepareOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

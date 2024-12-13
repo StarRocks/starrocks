@@ -19,8 +19,11 @@ import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.plan.ReplayFromDumpTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
@@ -37,8 +40,12 @@ public class QueryDumpPlannerBenchTest extends ReplayFromDumpTestBase {
     private static String sql;
 
     // NOTE: ignore the test in CI
+<<<<<<< HEAD
     @Ignore
     @BeforeClass
+=======
+    // @BeforeClass
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         String dump = getDumpInfoFromFile("query_dump/materialized-view/mv_join_rewrite");
@@ -47,8 +54,12 @@ public class QueryDumpPlannerBenchTest extends ReplayFromDumpTestBase {
     }
 
     // NOTE: ignore the test in CI
+<<<<<<< HEAD
     @Ignore
     @AfterClass
+=======
+    // @AfterClass
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void afterClass() throws Exception {
         UtFrameUtils.tearDownTestDump();
         ReplayFromDumpTestBase.afterClass();

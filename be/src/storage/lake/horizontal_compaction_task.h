@@ -31,8 +31,13 @@ class TabletWriter;
 class HorizontalCompactionTask : public CompactionTask {
 public:
     explicit HorizontalCompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+<<<<<<< HEAD
                                       CompactionTaskContext* context)
             : CompactionTask(std::move(tablet), std::move(input_rowsets), context) {}
+=======
+                                      CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)
+            : CompactionTask(std::move(tablet), std::move(input_rowsets), context, std::move(tablet_schema)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~HorizontalCompactionTask() override = default;
 

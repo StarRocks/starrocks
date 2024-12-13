@@ -35,7 +35,11 @@
 #include "orc_schema_builder.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 #include "util/stack_util.cpp"
+=======
+#include "util/stack_util.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/timezone_utils.h"
 
 namespace starrocks {
@@ -95,13 +99,21 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
         // build hive column names index.
         int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
         for (int i = 0; i < size; i++) {
+<<<<<<< HEAD
             std::string col_name = format_column_name(hive_column_names->at(i), case_sensitive);
+=======
+            std::string col_name = Utils::format_name(hive_column_names->at(i), case_sensitive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             name_set->insert(col_name);
         }
     } else {
         // build orc column names index.
         for (int i = 0; i < root_type.getSubtypeCount(); i++) {
+<<<<<<< HEAD
             std::string col_name = format_column_name(root_type.getFieldName(i), case_sensitive);
+=======
+            std::string col_name = Utils::format_name(root_type.getFieldName(i), case_sensitive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             name_set->insert(col_name);
         }
     }
@@ -190,6 +202,12 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader, const OrcPredic
         return Status::InternalError(s);
     }
 
+<<<<<<< HEAD
+=======
+    // _batch can't be reused because the schema between files may be different
+    _batch.reset();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
     RETURN_IF_ERROR(_init_cast_exprs());
@@ -317,6 +335,16 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         result->len = len;
         result->precision = precision;
         result->scale = scale;
+<<<<<<< HEAD
+=======
+        // To support iceberg table time type
+        // When orc type is bigint and orc attribute iceberg.long-type is TIME, then convert result type to TYPE_TIME
+        if (result->type == TYPE_BIGINT && orc_type->hasAttributeKey("iceberg.long-type")) {
+            if ("TIME" == orc_type->getAttributeValue("iceberg.long-type")) {
+                result->type = TYPE_TIME;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
@@ -1176,7 +1204,11 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
     if (orc_predicates->rf_collector != nullptr) {
         for (auto& it : orc_predicates->rf_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
+<<<<<<< HEAD
             const JoinRuntimeFilter* filter = rf_desc->runtime_filter();
+=======
+            const JoinRuntimeFilter* filter = rf_desc->runtime_filter(-1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             SlotId probe_slot_id;
             if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
             auto it2 = slot_id_to_pos_in_src_slot_descriptors.find(probe_slot_id);

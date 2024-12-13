@@ -31,6 +31,12 @@ public class TabletFailInfo implements Writable {
     private long tabletId;
     private long backendId;
 
+<<<<<<< HEAD
+=======
+    public TabletFailInfo() {
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TabletFailInfo(long tabletId, long backendId) {
         super();
         this.tabletId = tabletId;
@@ -41,10 +47,24 @@ public class TabletFailInfo implements Writable {
         return tabletId;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getBackendId() {
         return backendId;
     }
 
+<<<<<<< HEAD
+=======
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @NotNull
     public static List<TabletFailInfo> fromThrift(List<TTabletFailInfo> tTabletFailInfos) {
         List<TabletFailInfo> failInfos = Lists.newArrayList();

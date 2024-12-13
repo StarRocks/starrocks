@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_max
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 求取一个ARRAY中的所有数据中的最大值，返回这个结果。
 

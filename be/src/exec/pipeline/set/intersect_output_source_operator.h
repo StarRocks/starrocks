@@ -42,7 +42,11 @@ public:
     }
 
     Status set_finished(RuntimeState* state) override {
+<<<<<<< HEAD
         _intersect_ctx->set_finished();
+=======
+        RETURN_IF_ERROR(_intersect_ctx->set_finished());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
             100.00 * sum(case
@@ -12,6 +13,8 @@ where
         l_partkey = p_partkey
   and l_shipdate >= date '1997-02-01'
   and l_shipdate < date '1997-03-01';
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F05)
 Output Exprs:30: expr
@@ -115,6 +118,10 @@ NON-PARTITION PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997
 MIN/MAX PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997-03-01'
 partitions=1/1
 avgRowSize=28.0
+<<<<<<< HEAD
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 6653886
 column statistics:
 * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 6653885.645940593] ESTIMATE
@@ -133,6 +140,10 @@ TABLE: part
 NON-PARTITION PREDICATES: 17: p_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
+<<<<<<< HEAD
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 20000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (17: p_partkey)

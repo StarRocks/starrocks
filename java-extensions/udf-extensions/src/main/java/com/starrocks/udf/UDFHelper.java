@@ -33,6 +33,10 @@ import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+<<<<<<< HEAD
+=======
+import java.time.LocalDate;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
@@ -53,6 +57,10 @@ public class UDFHelper {
     public static final int TYPE_BOOLEAN = 24;
     public static final int TYPE_TIME = 44;
     public static final int TYPE_VARBINARY = 46;
+<<<<<<< HEAD
+=======
+    public static final int TYPE_DATE = 50;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final int TYPE_DATETIME = 51;
 
     private static final byte[] emptyBytes = new byte[0];
@@ -60,6 +68,11 @@ public class UDFHelper {
     private static final ThreadLocal<DateFormat> formatter =
             ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+<<<<<<< HEAD
+=======
+    private static final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final TimeZone timeZone = TimeZone.getDefault();
 
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
@@ -230,6 +243,20 @@ public class UDFHelper {
         getStringBoxedResult(numRows, results, columnAddr);
     }
 
+<<<<<<< HEAD
+=======
+    private static void getStringLocalDateResult(int numRows, LocalDate[] column, long columnAddr) {
+        // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = dateFormatter.format(column[i]);
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static void getStringTimeStampResult(int numRows, Timestamp[] column, long columnAddr) {
         // TODO: return timestamp
         String[] results = new String[numRows];
@@ -379,6 +406,11 @@ public class UDFHelper {
             case TYPE_VARCHAR: {
                 if (boxedResult instanceof Date[]) {
                     getStringDateResult(numRows, (Date[]) boxedResult, columnAddr);
+<<<<<<< HEAD
+=======
+                } else if (boxedResult instanceof LocalDate[]) {
+                    getStringLocalDateResult(numRows, (LocalDate[]) boxedResult, columnAddr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else if (boxedResult instanceof LocalDateTime[]) {
                     getStringDateTimeResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
                 } else if (boxedResult instanceof Timestamp[]) {

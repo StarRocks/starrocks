@@ -61,7 +61,11 @@ public class GlobalVarPersistInfo implements Writable {
     // the modified variable info will be saved as a json string
     private String persistJsonString;
 
+<<<<<<< HEAD
     private GlobalVarPersistInfo() {
+=======
+    public GlobalVarPersistInfo() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // for persist
     }
 
@@ -70,6 +74,13 @@ public class GlobalVarPersistInfo implements Writable {
         this.varNames = varNames;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPersistJsonString(String persistJsonString) {
+        this.persistJsonString = persistJsonString;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getPersistJsonString() {
         return persistJsonString;
     }

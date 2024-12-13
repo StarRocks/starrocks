@@ -39,8 +39,13 @@ public class DecommissionTest {
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
+<<<<<<< HEAD
         ColocateTableBalancer.getInstance().setInterval(1000);
         GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(1000);
+=======
+        ColocateTableBalancer.getInstance().setInterval(500);
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(500);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
@@ -61,10 +66,14 @@ public class DecommissionTest {
         for (int i = 0; i < numTable; i++) {
             tableNames[i] = "test_" + i;
             PseudoCluster.CreateTableSqlBuilder sqlBuilder = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i])
+<<<<<<< HEAD
                     .setBuckets(2);
             if (i % 2 == 0) {
                 sqlBuilder.setColocateGroup("g1");
             }
+=======
+                    .setBuckets(1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             createTableSqls[i] = sqlBuilder.build();
             insertSqls[i] = PseudoCluster.buildInsertSql("test", tableNames[i]);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
@@ -81,7 +90,11 @@ public class DecommissionTest {
                 break;
             }
             cluster.runSql("test", insertSqls[rand.nextInt(numTable)]);
+<<<<<<< HEAD
             Thread.sleep(1000);
+=======
+            Thread.sleep(3000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         System.out.println("decommission finished");
     }

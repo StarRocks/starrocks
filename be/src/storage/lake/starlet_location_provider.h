@@ -26,11 +26,20 @@ namespace starrocks::lake {
 class StarletLocationProvider : public LocationProvider {
 public:
     StarletLocationProvider() = default;
+<<<<<<< HEAD
     ~StarletLocationProvider() = default;
+=======
+    ~StarletLocationProvider() override = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     DISALLOW_COPY_AND_MOVE(StarletLocationProvider);
 
     std::string root_location(int64_t tablet_id) const override;
+<<<<<<< HEAD
+=======
+
+    StatusOr<std::string> real_location(const std::string& virtual_path) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks::lake

@@ -18,7 +18,13 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.qe.SqlModeHelper;
+<<<<<<< HEAD
 import com.starrocks.sql.common.StarRocksPlannerException;
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.ParsingException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -43,10 +49,22 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInspectMvMeta() throws Exception {
         String db = starRocksAssert.getCtx().getDatabase();
         starRocksAssert.withTable(
                 "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+=======
+    public void testInspectMvMetaFunctions() throws Exception {
+        String db = starRocksAssert.getCtx().getDatabase();
+        starRocksAssert.withTable(
+                "create table mv_base_table_9527 (id int, name string) properties('replication_num'='1')");
+        starRocksAssert.withView("create view mv_base_table_9527_view_1 " +
+                "as " +
+                "select id, count(1) as cnt " +
+                "from mv_base_table_9527 " +
+                "group by id;");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withMaterializedView("create materialized view mv1 " +
                 "distributed by hash(id) " +
                 "refresh async " +
@@ -56,6 +74,13 @@ public class ConstantExpressionTest extends PlanTestBase {
         String fullName = db + ".mv1";
         testFragmentPlanContains(String.format("select inspect_mv_meta('%s');", fullName), "MaterializedView");
 
+<<<<<<< HEAD
+=======
+        testFragmentPlanContains("select inspect_mv_plan('mv1', true);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1', false);", "LogicalOlapScanOperator {table=");
+        testFragmentPlanContains("select inspect_mv_plan('mv1');", "LogicalOlapScanOperator {table=");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // wrong arguments
         Assert.assertThrows(StarRocksPlannerException.class,
                 () -> getFragmentPlan("select inspect_mv_meta('snowflake');"));
@@ -68,6 +93,25 @@ public class ConstantExpressionTest extends PlanTestBase {
 
         // inspect_related_mv
         testFragmentPlanContains("select inspect_related_mv('mv_base_table_9527')", "name\":\"mv1\"");
+<<<<<<< HEAD
+=======
+        starRocksAssert.withMaterializedView("create materialized view mv_from_view_1 " +
+                "distributed by hash(id) " +
+                "refresh async " +
+                "properties('replication_num'='1') " +
+                "as select * from mv_base_table_9527_view_1");
+
+        {
+            String explainString = getFragmentPlan("select inspect_mv_plan('mv_from_view_1');");
+            Assert.assertTrue(explainString,
+                    explainString.contains("1:Project\n" +
+                            "  |  <slot 2> : 'plan 0: \n" +
+                            "LogicalAggregation {type=GLOBAL ,aggrega...'"));
+        }
+
+        starRocksAssert.dropView("mv_base_table_9527_view_1");
+        starRocksAssert.dropMaterializedView("mv_from_view_1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -456,6 +500,73 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testGetQueryDump() throws Exception {
+        DumpInfo prevDumpInfo = connectContext.getDumpInfo();
+
+        try {
+            connectContext.setDumpInfo(null);
+
+            // Non-constant arguments.
+            {
+                String sql = "SELECT get_query_dump(rtrim('select count(v1) from t0')) from t0";
+                Assert.assertThrows("Meta function get_query_dump does not support non-constant arguments",
+                        SemanticException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases.
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', false) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0', true) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"SELECT count(tbl_mock_001.mock_002)...");
+            }
+
+            {
+                String sql = "SELECT get_query_dump('select count(v1) from t0') from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+            // Failed cases.
+            {
+                String sql = "SELECT get_query_dump('') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: query is empty",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+            {
+                String sql = "SELECT get_query_dump('not-a-query') from t0";
+                Assert.assertThrows("Invalid parameter get_query_dump: execute query failed.",
+                        StarRocksPlannerException.class, () -> getFragmentPlan(sql));
+            }
+
+            // Success cases after failed cases.
+            {
+                String sql = "SELECT get_query_dump(concat('select count(v1)', ' from t0')) from t0";
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "{\"statement\":\"select count(v1) from t0\"");
+            }
+
+        } finally {
+            connectContext.setDumpInfo(prevDumpInfo);
+        }
+
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testReplace() throws Exception {
         {
             String plan = getFragmentPlan("SELECT REPLACE('abc def ghi abc', '', '1234')");

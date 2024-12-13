@@ -16,6 +16,10 @@ package com.starrocks.connector.parser.trino;
 
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.TpchSQL;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -93,6 +97,13 @@ public class TrinoTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable("CREATE TABLE `t3` (\n" +
+                "`day` int NULL COMMENT \"\") \n" +
+                "PROPERTIES ('replication_num' = '1')");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withTable("CREATE TABLE `tall` (\n" +
                 "  `ta` varchar(20) NULL COMMENT \"\",\n" +
                 "  `tb` smallint(6) NULL COMMENT \"\",\n" +
@@ -114,6 +125,7 @@ public class TrinoTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         starRocksAssert.withTable("CREATE TABLE region ( R_REGIONKEY  INTEGER NOT NULL,\n" +
                 "                            R_NAME       CHAR(25) NOT NULL,\n" +
                 "                            R_COMMENT    VARCHAR(152),\n" +
@@ -255,6 +267,16 @@ public class TrinoTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
+=======
+        starRocksAssert.withTable(TpchSQL.REGION);
+        starRocksAssert.withTable(TpchSQL.SUPPLIER);
+        starRocksAssert.withTable(TpchSQL.PARTSUPP);
+        starRocksAssert.withTable(TpchSQL.ORDERS);
+        starRocksAssert.withTable(TpchSQL.CUSTOMER);
+        starRocksAssert.withTable(TpchSQL.NATION);
+        starRocksAssert.withTable(TpchSQL.PART);
+        starRocksAssert.withTable(TpchSQL.LINEITEM);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         starRocksAssert.withTable("create table test_array(c0 INT, " +
                 "c1 array<varchar(65533)>, " +
@@ -279,6 +301,10 @@ public class TrinoTestBase {
         FeConstants.runningUnitTest = false;
 
         connectContext.getSessionVariable().setSqlDialect("trino");
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static StatementBase analyzeSuccess(String originStmt) {
@@ -304,7 +330,11 @@ public class TrinoTestBase {
                     connectContext.getSessionVariable()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
+<<<<<<< HEAD
         } catch (ParsingException | StarRocksPlannerException e) {
+=======
+        } catch (ParsingException | StarRocksPlannerException | io.trino.sql.parser.ParsingException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
@@ -352,13 +382,35 @@ public class TrinoTestBase {
         }
     }
 
+<<<<<<< HEAD
     public void runFileUnitTest(String filename) {
+=======
+    protected void assertPlanContains(StatementBase stmt, String... explain) throws Exception {
+        ExecPlan execPlan = StatementPlanner.plan(stmt, connectContext);
+        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    public void runFileUnitTest(String filename) {
+        runFileUnitTest("", filename);
+    }
+
+    public void runFileUnitTest(String sqlBase, String filename) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
 
         String mode = "";
         String tempStr;
+<<<<<<< HEAD
         StringBuilder sql = new StringBuilder();
+=======
+        StringBuilder sql = new StringBuilder(sqlBase);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StringBuilder result = new StringBuilder();
         StringBuilder comment = new StringBuilder();
 

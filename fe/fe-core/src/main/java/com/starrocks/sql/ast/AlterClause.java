@@ -15,13 +15,19 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 import java.util.Map;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Alter clause.
 public abstract class AlterClause implements ParseNode {
 
@@ -34,10 +40,13 @@ public abstract class AlterClause implements ParseNode {
         this.opType = opType;
     }
 
+<<<<<<< HEAD
     public Map<String, String> getProperties() {
         return Maps.newHashMap();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public AlterOpType getOpType() {
         return opType;
     }

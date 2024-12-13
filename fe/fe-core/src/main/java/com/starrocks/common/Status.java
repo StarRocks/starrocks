@@ -146,6 +146,14 @@ public class Status {
         this.errorMsg = msg;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTimeOutStatus(String msg) {
+        this.errorCode = TStatusCode.TIMEOUT;
+        this.errorMsg = msg;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void rewriteErrorMsg() {
         if (ok()) {
             return;

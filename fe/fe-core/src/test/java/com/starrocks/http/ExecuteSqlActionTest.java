@@ -20,7 +20,10 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.json.JSONObject;
 import org.junit.Assert;
+<<<<<<< HEAD
 import org.junit.Before;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
@@ -33,15 +36,23 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
     private static final String QUERY_EXECUTE_API = "/api/v1/catalogs/default_catalog/sql";
 
     @Override
+<<<<<<< HEAD
     @Before
     public void setUp() {
         super.setUp();
+=======
+    protected void doSetUp() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MetricRepo.init();
         ExecuteEnv.setup();
     }
 
     @Test
+<<<<<<< HEAD
     public void test1ExecuteSqlSuccess() throws IOException {
+=======
+    public void test1ExecuteSqlSuccess() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super.setUpWithCatalog();
         RequestBody body =
                 RequestBody.create(JSON, "{ \"query\" :  \"kill 0\" }");

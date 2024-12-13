@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # cosine_similarity
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算两个向量的余弦夹角来评估向量之间的相似度。
 

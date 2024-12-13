@@ -13,7 +13,11 @@ displayed_sidebar: docs
 - 优化部分场景下 bitmap_contains() 函数消耗大量内存和性能慢的问题。([#20616](https://github.com/StarRocks/starrocks/issues/20616))
 - 减少 Compaction 框架对 CPU 资源的消耗。([#11746](https://github.com/StarRocks/starrocks/issues/11746))
 
+<<<<<<< HEAD
 ## 问题修复
+=======
+### 问题修复
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 修复了以下问题：
 
@@ -214,15 +218,26 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 - 【公测中】支持 JSON 数据类型和函数。相关文档，请参见 [JSON](https://docs.starrocks.io/zh/docs/sql-reference/data-types/JSON/)。
 - 支持通过外表查询 Apache Hudi 的数据，进一步完善了数据湖分析的功能。相关文档，请参见 [Apache Hudi 外表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hudi-外部表)。
 - 新增如下函数:
+<<<<<<< HEAD
   - ARRAY 函数，[array_agg](../sql-reference/sql-functions/array-functions/array_agg.md)、[array_sort](../sql-reference/sql-functions/array-functions/array_sort.md)、[array_distinct](../sql-reference/sql-functions/array-functions/array_distinct.md)、[array_join](../sql-reference/sql-functions/array-functions/array_join.md)、[reverse](../sql-reference/sql-functions/string-functions/reverse.md)、[array_slice](../sql-reference/sql-functions/array-functions/array_slice.md)、[array_concat](../sql-reference/sql-functions/array-functions/array_concat.md)、[array_difference](../sql-reference/sql-functions/array-functions/array_difference.md)、[arrays_overlap](../sql-reference/sql-functions/array-functions/arrays_overlap.md)、[array_intersect](../sql-reference/sql-functions/array-functions/array_intersect.md)。
   - BITMAP 函数，包括 [bitmap_max](../sql-reference/sql-functions/bitmap-functions/bitmap_max.md)、[bitmap_min](../sql-reference/sql-functions/bitmap-functions/bitmap_min.md)。
   - 其他函数：[retention](../sql-reference/sql-functions/aggregate-functions/retention.md)、[square](../sql-reference/sql-functions/math-functions/square.md)。
+=======
+  - ARRAY 函数，[array_agg](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_agg/)、[array_sort](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_sort/)、[array_distinct](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_distinct/)、[array_join](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_join/)、[reverse](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/reverse/)、[array_slice](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_slice/)、[array_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_concat/)、[array_difference](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_difference/)、[arrays_overlap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/arrays_overlap/)、[array_intersect](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_intersect/)。
+  - BITMAP 函数，包括 [bitmap_max](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_max/)、[bitmap_min](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_min/)。
+  - 其他函数：[retention](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/retention/)、[square](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/math-functions/square/)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### 功能优化
 
 - 重构CBO优化器的 Parser 和 Analyzer，优化代码结构并支持 Insert with CTE 等语法。提升复杂查询的性能，包括公用表表达式（Common Table Expression，CTE）复用等。
+<<<<<<< HEAD
 - 优化查询Apache Hive外表中基于对象存储（Amazon S3、阿里云OSS、腾讯云COS）的外部表的性能，优化后基于对象存储的查询性能可以与基于HDFS的查询性能基本持平。支持ORC格式文件的延迟物化，提升小文件查询性能。相关文档，请参见 [Apache Hive 外表](../data_source/External_table.md#deprecated-hive-外部表)。
 - 通过外表查询 Apache Hive 的数据时，缓存更新通过定期消费 Hive Metastore 的事件（包括数据变更、分区变更等），实现自动增量更新元数据。并且，还支持查询 Apache Hive 中 DECIMAL 和 ARRAY 类型的数据。相关文档，请参见 [Apache Hive 外表](../data_source/External_table.md#deprecated-hive-外部表)。
+=======
+- 优化查询Apache Hive外表中基于对象存储（Amazon S3、阿里云OSS、腾讯云COS）的外部表的性能，优化后基于对象存储的查询性能可以与基于HDFS的查询性能基本持平。支持ORC格式文件的延迟物化，提升小文件查询性能。相关文档，请参见 [Apache Hive 外表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hive-外部表)。
+- 通过外表查询 Apache Hive 的数据时，缓存更新通过定期消费 Hive Metastore 的事件（包括数据变更、分区变更等），实现自动增量更新元数据。并且，还支持查询 Apache Hive 中 DECIMAL 和 ARRAY 类型的数据。相关文档，请参见 [Apache Hive 外表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hive-外部表)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 优化 UNION ALL 算子性能，性能提升可达2-25倍。
 - 正式发布 Pipeline 引擎，支持自适应调节查询的并行度，并且优化了 Pipeline 引擎的 Profile。提升了高并发场景下小查询的性能。
 - 导入 CSV 文件时，支持使用多个字符作为行分隔符。

@@ -14,15 +14,24 @@
 
 #include "exec/iceberg/iceberg_delete_builder.h"
 
+<<<<<<< HEAD
 #include "column/vectorized_fwd.h"
 #include "exec/hdfs_scanner.h"
+=======
+#include <storage/chunk_helper.h>
+
+#include "column/vectorized_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/parquet/file_reader.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+<<<<<<< HEAD
 #include "storage/chunk_helper.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -38,6 +47,7 @@ static const IcebergColumnMeta k_delete_file_path{
 static const IcebergColumnMeta k_delete_file_pos{
         .id = INT32_MAX - 102, .col_name = "pos", .type = TPrimitiveType::BIGINT};
 
+<<<<<<< HEAD
 Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
                                            int64_t file_length, std::set<int64_t>* need_skip_rowids,
                                            const HdfsScannerParams& scanner_params, RuntimeState* state) {
@@ -69,11 +79,31 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
     for (int64_t offset = 0; offset < file_length;) {
         const int64_t remain_length =
                 std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), file_length - offset);
+=======
+StatusOr<std::unique_ptr<RandomAccessFile>> IcebergDeleteBuilder::open_random_access_file(
+        const TIcebergDeleteFile& delete_file, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
+        std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
+        std::shared_ptr<io::CacheInputStream>& cache_input_stream) const {
+    const OpenFileOptions options{.fs = _params.fs,
+                                  .path = delete_file.full_path,
+                                  .file_size = delete_file.length,
+                                  .fs_stats = &fs_scan_stats,
+                                  .app_stats = &app_scan_stats,
+                                  .datacache_options = _params.datacache_options};
+    ASSIGN_OR_RETURN(auto file,
+                     HdfsScanner::create_random_access_file(shared_buffered_input_stream, cache_input_stream, options));
+    std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+    int64_t offset = 0;
+    while (offset < delete_file.length) {
+        const int64_t remain_length =
+                std::min(static_cast<int64_t>(config::io_coalesce_read_max_buffer_size), delete_file.length - offset);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         io_ranges.emplace_back(offset, remain_length);
         offset += remain_length;
     }
 
     RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
+<<<<<<< HEAD
 
     input_stream = shared_buffered_input_stream;
 
@@ -104,6 +134,38 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
     } catch (std::exception& e) {
         const auto s = strings::Substitute(
                 "ParquetPositionDeleteBuilder::build create parquet::FileReader failed. reason = $0", e.what());
+=======
+    return file;
+}
+
+Status IcebergDeleteBuilder::fill_skip_rowids(const ChunkPtr& chunk) const {
+    const ColumnPtr& file_path = chunk->get_column_by_slot_id(k_delete_file_path.id);
+    const ColumnPtr& pos = chunk->get_column_by_slot_id(k_delete_file_pos.id);
+    for (int i = 0; i < chunk->num_rows(); i++) {
+        if (file_path->get(i).get_slice() == _params.path) {
+            _need_skip_rowids->emplace(pos->get(i).get_int64());
+        }
+    }
+    return Status::OK();
+}
+
+Status IcebergDeleteBuilder::build_parquet(const TIcebergDeleteFile& delete_file) const {
+    HdfsScanStats app_scan_stats;
+    HdfsScanStats fs_scan_stats;
+    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream = nullptr;
+    std::shared_ptr<io::CacheInputStream> cache_input_stream = nullptr;
+
+    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_scan_stats, app_scan_stats,
+                                                        shared_buffered_input_stream, cache_input_stream));
+
+    std::unique_ptr<parquet::FileReader> reader;
+    try {
+        reader = std::make_unique<parquet::FileReader>(_runtime_state->chunk_size(), file.get(),
+                                                       file->get_size().value());
+    } catch (std::exception& e) {
+        const auto s = strings::Substitute(
+                "IcebergDeleteBuilder::build_parquet create parquet::FileReader failed. reason = $0", e.what());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
@@ -112,7 +174,13 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
     std::vector<HdfsScannerContext::ColumnInfo> columns;
     THdfsScanRange scan_range;
     scan_range.offset = 0;
+<<<<<<< HEAD
     scan_range.length = file_length;
+=======
+    scan_range.length = delete_file.length;
+    std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
+                                 &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < slot_descriptors.size(); i++) {
         auto* slot = slot_descriptors[i];
         HdfsScannerContext::ColumnInfo column;
@@ -139,22 +207,35 @@ Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const st
     TIcebergSchema iceberg_schema = TIcebergSchema();
     iceberg_schema.__set_fields(schema_fields);
 
+<<<<<<< HEAD
+=======
+    std::atomic<int32_t> lazy_column_coalesce_counter = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     scanner_ctx->timezone = timezone;
     scanner_ctx->slot_descs = slot_descriptors;
     scanner_ctx->iceberg_schema = &iceberg_schema;
     scanner_ctx->materialized_columns = std::move(columns);
     scanner_ctx->scan_range = &scan_range;
+<<<<<<< HEAD
     scanner_ctx->lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
+=======
+    scanner_ctx->lazy_column_coalesce_counter = &lazy_column_coalesce_counter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     scanner_ctx->stats = &app_scan_stats;
     RETURN_IF_ERROR(reader->init(scanner_ctx.get()));
 
     while (true) {
+<<<<<<< HEAD
         ChunkPtr chunk = ChunkHelper::new_chunk(slot_descriptors, state->chunk_size());
+=======
+        ChunkPtr chunk = ChunkHelper::new_chunk(slot_descriptors, _runtime_state->chunk_size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Status status = reader->get_next(&chunk);
         if (status.is_end_of_file()) {
             break;
         }
 
+<<<<<<< HEAD
         ColumnPtr& file_path = chunk->get_column_by_slot_id(k_delete_file_path.id);
         ColumnPtr& pos = chunk->get_column_by_slot_id(k_delete_file_pos.id);
         for (int i = 0; i < chunk->num_rows(); i++) {
@@ -174,6 +255,92 @@ void ParquetPositionDeleteBuilder::update_delete_file_io_counter(
         RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
         std::shared_ptr<io::CacheInputStream> cache_input_stream,
         std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream) {
+=======
+        RETURN_IF_ERROR(status);
+        RETURN_IF_ERROR(fill_skip_rowids(chunk));
+    }
+    update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
+                                  shared_buffered_input_stream);
+    return Status::OK();
+}
+
+Status IcebergDeleteBuilder::build_orc(const TIcebergDeleteFile& delete_file) const {
+    std::vector slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
+                                 &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
+
+    HdfsScanStats app_scan_stats;
+    HdfsScanStats fs_scan_stats;
+    std::shared_ptr<io::SharedBufferedInputStream> shared_buffered_input_stream;
+    std::shared_ptr<io::CacheInputStream> cache_input_stream;
+
+    ASSIGN_OR_RETURN(auto file, open_random_access_file(delete_file, fs_scan_stats, app_scan_stats,
+                                                        shared_buffered_input_stream, cache_input_stream));
+
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(file.get(), delete_file.length, nullptr);
+    std::unique_ptr<orc::Reader> reader;
+    try {
+        orc::ReaderOptions options;
+        reader = createReader(std::move(input_stream), options);
+    } catch (std::exception& e) {
+        auto s =
+                strings::Substitute("ORCPositionDeleteBuilder::build create orc::Reader failed. reason = $0", e.what());
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+
+    auto orc_reader = std::make_unique<OrcChunkReader>(_runtime_state->chunk_size(), slot_descriptors);
+    orc_reader->disable_broker_load_mode();
+    orc_reader->set_current_file_name(delete_file.full_path);
+    RETURN_IF_ERROR(orc_reader->set_timezone(_runtime_state->timezone()));
+    RETURN_IF_ERROR(orc_reader->init(std::move(reader)));
+
+    orc::RowReader::ReadPosition position;
+    Status s;
+
+    while (true) {
+        s = orc_reader->read_next(&position);
+        if (s.is_end_of_file()) {
+            break;
+        }
+
+        RETURN_IF_ERROR(s);
+
+        auto ret = orc_reader->get_chunk();
+        if (!ret.ok()) {
+            return ret.status();
+        }
+        RETURN_IF_ERROR(fill_skip_rowids(ret.value()));
+    }
+    update_delete_file_io_counter(_params.profile->runtime_profile, app_scan_stats, fs_scan_stats, cache_input_stream,
+                                  shared_buffered_input_stream);
+    return Status::OK();
+}
+
+SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& meta) {
+    TSlotDescriptor desc;
+    desc.__set_id(meta.id);
+    desc.__set_parent(-1);
+    TTypeNode type_node;
+    type_node.__set_type(TTypeNodeType::SCALAR);
+    type_node.__set_scalar_type({});
+    type_node.scalar_type.__set_type(meta.type);
+    type_node.scalar_type.__set_len(-1);
+    desc.__set_slotType({});
+    desc.slotType.__set_types({type_node});
+    desc.__set_colName(meta.col_name);
+    desc.__set_slotIdx(meta.id);
+    desc.__set_isMaterialized(true);
+    desc.__set_nullIndicatorByte(0);
+    desc.__set_nullIndicatorBit(-1);
+
+    return {desc};
+}
+
+void IcebergDeleteBuilder::update_delete_file_io_counter(
+        RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
+        const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
+        const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::string ICEBERG_TIMER = "ICEBERG_V2_MOR";
     ADD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE);
     {
@@ -277,6 +444,7 @@ void ParquetPositionDeleteBuilder::update_delete_file_io_counter(
     }
 }
 
+<<<<<<< HEAD
 Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
                                        int64_t file_length, std::set<int64_t>* need_skip_rowids,
                                        const HdfsScannerParams& scanner_params, RuntimeState* state) {
@@ -465,12 +633,20 @@ SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& m
 
 SlotDescriptor& IcebergDeleteFileMeta::get_delete_file_path_slot() {
     static SlotDescriptor k_delete_file_path_slot = IcebergDeleteFileMeta::gen_slot_helper(k_delete_file_path);
+=======
+SlotDescriptor& IcebergDeleteFileMeta::get_delete_file_path_slot() {
+    static SlotDescriptor k_delete_file_path_slot = gen_slot_helper(k_delete_file_path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return k_delete_file_path_slot;
 }
 
 SlotDescriptor& IcebergDeleteFileMeta::get_delete_file_pos_slot() {
+<<<<<<< HEAD
     static SlotDescriptor k_delete_file_pos_slot = IcebergDeleteFileMeta::gen_slot_helper(k_delete_file_pos);
+=======
+    static SlotDescriptor k_delete_file_pos_slot = gen_slot_helper(k_delete_file_pos);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return k_delete_file_pos_slot;
 }

@@ -23,15 +23,27 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Database;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.JoinRelation;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.LoadStmt;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
@@ -57,11 +69,33 @@ public class UpdateAnalyzer {
         }
     }
 
+<<<<<<< HEAD
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         TableName tableName = updateStmt.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
         MetaUtils.getDatabase(session, tableName);
         Table table = MetaUtils.getTable(session, tableName);
+=======
+    private static void analyzeProperties(UpdateStmt updateStmt, ConnectContext session) {
+        Map<String, String> properties = updateStmt.getProperties();
+        properties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY,
+                String.valueOf(session.getSessionVariable().getInsertMaxFilterRatio()));
+        properties.put(LoadStmt.STRICT_MODE, String.valueOf(session.getSessionVariable().getEnableInsertStrict()));
+        properties.put(LoadStmt.TIMEOUT_PROPERTY, String.valueOf(session.getSessionVariable().getInsertTimeoutS()));
+    }
+
+    public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
+        analyzeProperties(updateStmt, session);
+
+        TableName tableName = updateStmt.getTableName();
+        tableName.normalization(session);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(tableName.getCatalog(), tableName.getDb());
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        }
+        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (table instanceof MaterializedView) {
             throw new SemanticException("The data of '%s' cannot be modified because '%s' is a materialized view,"
@@ -82,7 +116,11 @@ public class UpdateAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         if (table.isOlapTable()) {
+=======
+        if (table.isOlapTable() || table.isCloudNativeTable()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (session.getSessionVariable().getPartialUpdateMode().equals("column")) {
                 // use partial update by column
                 updateStmt.setUsePartialUpdate();
@@ -147,7 +185,11 @@ public class UpdateAnalyzer {
                 selectList.addItem(item);
                 assignColumnList.add(col);
             } else if (col.isGeneratedColumn()) {
+<<<<<<< HEAD
                 Expr expr = col.generatedColumnExpr();
+=======
+                Expr expr = col.getGeneratedColumnExpr(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 item = new SelectListItem(expr, col.getName());
                 mcToItem.put(col, item);
                 selectList.addItem(item);

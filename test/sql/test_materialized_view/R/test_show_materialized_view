@@ -42,7 +42,11 @@ AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) A
 FROM `test_show_materialized_view`.`user_tags`
 GROUP BY `user_tags`.`user_id`;
 -- !result
+<<<<<<< HEAD
 alter materialized view user_tags_mv1 set ("session.query_timeout" = "3600");
+=======
+alter materialized view user_tags_mv1 set ("session.insert_timeout" = "3600");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 -- !result
 alter materialized view user_tags_mv1 set ("mv_rewrite_staleness_second" = "3600");
@@ -57,7 +61,11 @@ PROPERTIES (
 "replicated_storage" = "true",
 "mv_rewrite_staleness_second" = "3600",
 "replication_num" = "1",
+<<<<<<< HEAD
 "session.query_timeout" = "3600",
+=======
+"session.insert_timeout" = "3600",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_medium" = "HDD"
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
@@ -73,7 +81,11 @@ PROPERTIES (
 "replicated_storage" = "true",
 "mv_rewrite_staleness_second" = "3600",
 "replication_num" = "1",
+<<<<<<< HEAD
 "session.query_timeout" = "3600",
+=======
+"session.insert_timeout" = "3600",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_medium" = "HDD"
 )
 AS SELECT `user_tags`.`user_id`, bitmap_union(to_bitmap(`user_tags`.`tag_id`)) AS `bitmap_union(to_bitmap(tag_id))`
@@ -82,4 +94,8 @@ GROUP BY `user_tags`.`user_id`;
 -- !result
 drop database test_show_materialized_view;
 -- result:
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -18,6 +18,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -26,7 +30,12 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+<<<<<<< HEAD
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -52,9 +61,15 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     private Set<Long> totalInvolvedBackends;
     private Set<Long> errorReplicaIds;
+<<<<<<< HEAD
     private Set<Long> dirtyPartitionSet;
     private Set<String> invalidDictCacheColumns;
     private Map<String, Long> validDictCacheColumns;
+=======
+    private Set<Long> dirtyPhysicalPartitionSet;
+    private Set<ColumnId> invalidDictCacheColumns;
+    private Map<ColumnId, Long> validDictCacheColumns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public OlapTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
         this.dbTxnMgr = dbTxnMgr;
@@ -76,7 +91,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
         totalInvolvedBackends = Sets.newHashSet();
         errorReplicaIds = Sets.newHashSet();
+<<<<<<< HEAD
         dirtyPartitionSet = Sets.newHashSet();
+=======
+        dirtyPhysicalPartitionSet = Sets.newHashSet();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
 
@@ -108,6 +127,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (tableId != table.getId()) {
                 continue;
             }
+<<<<<<< HEAD
             long partitionId = tabletMeta.getPhysicalPartitionId();
             if (table.getPhysicalPartition(partitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
@@ -116,6 +136,16 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 continue;
             }
             dirtyPartitionSet.add(partitionId);
+=======
+            long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+            if (table.getPhysicalPartition(physicalPartitionId) == null) {
+                // this can happen when partitionId == -1 (tablet being dropping)
+                // or partition really not exist.
+                LOG.warn("partition {} not exist, ignore tablet {}", physicalPartitionId, tabletId);
+                continue;
+            }
+            dirtyPhysicalPartitionSet.add(physicalPartitionId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
                     .add(tabletCommitInfos.get(i).getBackendId());
             allCommittedBackends.add(tabletCommitInfos.get(i).getBackendId());
@@ -129,7 +159,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     !tabletCommitInfos.get(i).getValidDictCacheColumns().isEmpty()) {
                 TabletCommitInfo tabletCommitInfo = tabletCommitInfos.get(i);
                 List<Long> validDictCollectedVersions = tabletCommitInfo.getValidDictCollectedVersions();
+<<<<<<< HEAD
                 List<String> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
+=======
+                List<ColumnId> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int j = 0; j < validDictCacheColumns.size(); j++) {
                     long version = 0;
                     // validDictCollectedVersions != validDictCacheColumns means be has not upgrade
@@ -149,7 +183,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         // use for selection of primary replica for replicated storage
         for (TabletFailInfo failedTablet : failedTablets) {
             if (failedTablet.getTabletId() == -1) {
+<<<<<<< HEAD
                 Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(failedTablet.getBackendId());
+=======
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackend(failedTablet.getBackendId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (backend != null) {
                     backend.setLastWriteFail(true);
                 }
@@ -163,14 +202,22 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
 
         for (Long committedBackend : allCommittedBackends) {
+<<<<<<< HEAD
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(committedBackend);
+=======
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(committedBackend);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (backend != null) {
                 backend.setLastWriteFail(false);
             }
         }
 
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+<<<<<<< HEAD
             if (!dirtyPartitionSet.contains(partition.getId())) {
+=======
+            if (!dirtyPhysicalPartitionSet.contains(partition.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 continue;
             }
 
@@ -191,7 +238,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     for (long tabletBackend : tabletBackends) {
                         Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                         if (replica == null) {
+<<<<<<< HEAD
                             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+=======
+                            Backend backend =
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(tabletBackend);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             throw new TransactionCommitFailedException("Not found replicas of tablet. "
                                     + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
                         }
@@ -205,7 +257,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                             if (lfv < 0) {
                                 ++successReplicaNum;
                             } else {
+<<<<<<< HEAD
                                 Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+=======
+                                Backend backend =
+                                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(tabletBackend);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 failedReplicaInfoSB.append(
                                         String.format("%d:{be:%d %s st:%s V:%d LFV:%d},", replica.getId(), tabletBackend,
                                                 backend == null ? "" : backend.getHost(),
@@ -213,7 +270,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                             }
                             replica.setLastWriteFail(false);
                         } else {
+<<<<<<< HEAD
                             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
+=======
+                            Backend backend =
+                                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(tabletBackend);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             failedReplicaInfoSB.append(
                                     String.format("%d:{be:%d %s st:%s V:%d LFV:%d},", replica.getId(), tabletBackend,
                                             backend == null ? "" : backend.getHost(),
@@ -243,6 +305,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preWriteCommitLog(TransactionState txnState) {
+<<<<<<< HEAD
         Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED
                 || txnState.getTransactionStatus() == TransactionStatus.PREPARED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
@@ -258,27 +321,49 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (isFirstPartition) {
 
                 List<String> validDictCacheColumnNames = Lists.newArrayList();
+=======
+        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.PREPARED);
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
+        boolean isFirstPartition = true;
+        txnState.getErrorReplicas().addAll(errorReplicaIds);
+        for (long physicalPartitionId : dirtyPhysicalPartitionSet) {
+            PartitionCommitInfo partitionCommitInfo;
+            if (isFirstPartition) {
+
+                List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
                 });
+<<<<<<< HEAD
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
                         version,
+=======
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
+                        -1,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         System.currentTimeMillis(),
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
             } else {
+<<<<<<< HEAD
                 partitionCommitInfo = new PartitionCommitInfo(partitionId,
                         version,
+=======
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
+                        -1,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         System.currentTimeMillis() /* use as partition visible time */);
             }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }
 
+<<<<<<< HEAD
         if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
             ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
                     .getTxnCommitAttachment();
@@ -293,6 +378,10 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postWriteCommitLog(TransactionState txnState) {
+=======
+        txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // add publish version tasks. set task to null as a placeholder.
         // tasks will be created when publishing version.
         for (long backendId : totalInvolvedBackends) {
@@ -302,11 +391,20 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+<<<<<<< HEAD
             List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db != null) {
             db.readLock();
+=======
+                          List<TabletFailInfo> failedTablets) {
+        txnState.clearAutomaticPartitionSnapshot();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(txnState.getDbId());
+        if (db != null) {
+            Locker locker = new Locker();
+            locker.lockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
                 // update write failed backend/replica
@@ -314,7 +412,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 for (TabletFailInfo failedTablet : failedTablets) {
                     LOG.debug("failed tablet ", failedTablet);
                     if (failedTablet.getTabletId() == -1) {
+<<<<<<< HEAD
                         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(failedTablet.getBackendId());
+=======
+                        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .getBackend(failedTablet.getBackendId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (backend != null) {
                             backend.setLastWriteFail(true);
                         }
@@ -329,7 +432,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             } catch (Exception e) {
                 LOG.warn("Fail to execute postAbort", e);
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -338,12 +445,20 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             return;
         }
         // for aborted transaction, we don't know which backends are involved, so we have to send clear task to all backends.
+<<<<<<< HEAD
         List<Long> allBeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+=======
+        List<Long> allBeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AgentBatchTask batchTask = null;
         synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {
                 ClearTransactionTask task = new ClearTransactionTask(beId, txnState.getTransactionId(),
+<<<<<<< HEAD
                         Lists.newArrayList(), txnState.getTxnType());
+=======
+                        Lists.newArrayList(), txnState.getTransactionType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 CLEAR_TRANSACTION_TASKS.add(task);
             }
             // try to group send tasks, not sending every time a txn is aborted. to avoid too many task rpc.

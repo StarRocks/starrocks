@@ -1,0 +1,173 @@
+-- name: test_mv_skip_partition_cache_iceberg;
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_iceberg_db_${uuid0};
+-- result:
+-- !result
+use mv_iceberg_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+   `id` varchar(36),
+   `location_id` varchar(36),
+   `location_id_hash` int,
+   `source_id` varchar(36),
+   `person_id` varchar(36)
+)
+PARTITION BY (person_id);
+-- result:
+-- !result
+INSERT INTO t1 VALUES (1, 'beijing', 20, 'a', 'a1'), (2, 'guangdong', 30, 'b', 'b1'), (3, 'guangdong', 20, 'c', 'c1');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create materialized view test_mv1
+PARTITION BY `person_id`
+DISTRIBUTED BY HASH(`id`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+) 
+as select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1;
+-- result:
+-- !result
+refresh materialized view  test_mv1 with sync mode;
+select * from test_mv1 order by 1, 2, 3;
+-- result:
+1	beijing	a1
+2	guangdong	b1
+3	guangdong	c1
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong'", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing'", "test_mv1")
+-- result:
+True
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 order by 1, 2, 3;
+-- result:
+1	beijing	a1
+2	guangdong	b1
+3	guangdong	c1
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong' order by 1, 2, 3;
+-- result:
+2	guangdong	b1
+3	guangdong	c1
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing' order by 1, 2, 3;
+-- result:
+1	beijing	a1
+-- !result
+set enable_connector_async_list_partitions = true;
+-- result:
+-- !result
+INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES (3, 'guangdong', 30, 'c', 'c1');
+-- result:
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "mv_iceberg_db_${uuid0}.t1")
+-- result:
+True
+-- !result
+refresh materialized view test_mv1 with sync mode;
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong'", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing'", "test_mv1")
+-- result:
+True
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 order by 1, 2, 3;
+-- result:
+1	beijing	a1
+2	guangdong	b1
+3	guangdong	c1
+3	guangdong	c1
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong' order by 1, 2, 3;
+-- result:
+2	guangdong	b1
+3	guangdong	c1
+3	guangdong	c1
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing' order by 1, 2, 3;
+-- result:
+1	beijing	a1
+-- !result
+set enable_connector_async_list_partitions = false;
+-- result:
+-- !result
+INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES (4, 'beijing', 30, 'c', 'c1');
+-- result:
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong'", "test_mv1")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing'", "test_mv1")
+-- result:
+True
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 order by 1, 2, 3;
+-- result:
+1	beijing	a1
+2	guangdong	b1
+3	guangdong	c1
+3	guangdong	c1
+4	beijing	c1
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='guangdong' order by 1, 2, 3;
+-- result:
+2	guangdong	b1
+3	guangdong	c1
+3	guangdong	c1
+-- !result
+select `id`, `location_id`, `person_id` from mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where location_id='beijing' order by 1, 2, 3;
+-- result:
+1	beijing	a1
+4	beijing	c1
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop database default_catalog.db_${uuid0} force;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} force;
+-- result:
+-- !result

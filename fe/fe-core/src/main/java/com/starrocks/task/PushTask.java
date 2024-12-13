@@ -42,8 +42,14 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
+=======
+import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCondition;
@@ -128,11 +134,19 @@ public class PushTask extends AgentTask {
 
     // for load v2 (SparkLoadJob)
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
+<<<<<<< HEAD
                     long replicaId, int schemaHash, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
                     TDescriptorTable tDescriptorTable, String timezone, TTabletType tabletType, List<TColumn> columnsDesc) {
         this(null, backendId, dbId, tableId, partitionId, indexId,
                 tabletId, replicaId, schemaHash, -1, timeoutSecond, loadJobId, pushType, null,
+=======
+                    long replicaId, int schemaHash, long version, int timeoutSecond, long loadJobId, TPushType pushType,
+                    TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
+                    TDescriptorTable tDescriptorTable, String timezone, TTabletType tabletType, List<TColumn> columnsDesc) {
+        this(null, backendId, dbId, tableId, partitionId, indexId,
+                tabletId, replicaId, schemaHash, version, timeoutSecond, loadJobId, pushType, null,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature, columnsDesc);
         this.tBrokerScanRange = tBrokerScanRange;
         this.tDescriptorTable = tDescriptorTable;
@@ -164,7 +178,12 @@ public class PushTask extends AgentTask {
                         String columnName = ((SlotRef) binaryPredicate.getChild(0)).getColumnName();
                         String value = ((LiteralExpr) binaryPredicate.getChild(1)).getStringValue();
                         BinaryType op = binaryPredicate.getOp();
+<<<<<<< HEAD
                         tCondition.setColumn_name(columnName);
+=======
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         tCondition.setCondition_op(op.toString());
                         conditionValues.add(value);
                     } else if (condition instanceof IsNullPredicate) {
@@ -175,14 +194,24 @@ public class PushTask extends AgentTask {
                         if (isNullPredicate.isNotNull()) {
                             value = "NOT NULL";
                         }
+<<<<<<< HEAD
                         tCondition.setColumn_name(columnName);
+=======
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         tCondition.setCondition_op(op);
                         conditionValues.add(value);
                     } else if (condition instanceof InPredicate) {
                         InPredicate inPredicate = (InPredicate) condition;
                         String columnName = ((SlotRef) inPredicate.getChild(0)).getColumnName();
                         String op = inPredicate.isNotIn() ? "!*=" : "*=";
+<<<<<<< HEAD
                         tCondition.setColumn_name(columnName);
+=======
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         tCondition.setCondition_op(op);
                         for (int i = 1; i <= inPredicate.getInElementNum(); i++) {
                             conditionValues.add(((LiteralExpr) inPredicate.getChild(i)).getStringValue());

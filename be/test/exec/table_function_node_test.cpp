@@ -62,7 +62,10 @@ void TableFunctionNodeTest::SetUp() {
     _tnode.num_children = 1;
 
     _tnode.row_tuples.push_back(1);
+<<<<<<< HEAD
     _tnode.nullable_tuples.push_back(false);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(TableFunctionNodeTest, close_after_not_init) {

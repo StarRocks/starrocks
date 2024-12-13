@@ -43,12 +43,22 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+<<<<<<< HEAD
 import com.starrocks.analysis.DateLiteral;
+=======
+import com.starrocks.analysis.BloomFilterIndexUtil;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -70,7 +80,11 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.qe.SqlModeHelper;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -81,6 +95,12 @@ import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
@@ -88,10 +108,18 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
+=======
+import org.jetbrains.annotations.NotNull;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.threeten.extra.PeriodDuration;
 
 import java.time.format.DateTimeParseException;
@@ -124,8 +152,11 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BF_COLUMNS = "bloom_filter_columns";
     public static final String PROPERTIES_BF_FPP = "bloom_filter_fpp";
+<<<<<<< HEAD
     private static final double MAX_FPP = 0.05;
     private static final double MIN_FPP = 0.0001;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final String PROPERTIES_COLUMN_SEPARATOR = "column_separator";
     public static final String PROPERTIES_LINE_DELIMITER = "line_delimiter";
@@ -166,6 +197,13 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BUCKET_SIZE = "bucket_size";
 
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_MUTABLE_BUCKET_NUM = "mutable_bucket_num";
+
+    public static final String PROPERTIES_ENABLE_LOAD_PROFILE = "enable_load_profile";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES = "base_compaction_forbidden_time_ranges";
 
     public static final String PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC = "primary_index_cache_expire_sec";
@@ -185,9 +223,18 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
+<<<<<<< HEAD
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+=======
+    public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
+
+    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
+    public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
+    public static final String PROPERTIES_EXCLUDED_REFRESH_TABLES = "excluded_refresh_tables";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // 1. `force_external_table_query_rewrite` is used to control whether external table can be rewritten or not
     // 2. external table can be rewritten by default if not specific.
@@ -216,6 +263,13 @@ public class PropertyAnalyzer {
     // -1: disable randomize, use current time as start
     // positive value: use [0, mv_randomize_start) as random interval
     public static final String PROPERTY_MV_RANDOMIZE_START = "mv_randomize_start";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTY_MV_ENABLE_QUERY_REWRITE = "enable_query_rewrite";
+
+    // transparent_mv_rewrite_mode
+    public static final String PROPERTY_TRANSPARENT_MV_REWRITE_MODE = "transparent_mv_rewrite_mode";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * Materialized View sort keys
@@ -371,7 +425,11 @@ public class PropertyAnalyzer {
         return partitionTimeToLive;
     }
 
+<<<<<<< HEAD
     public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties) {
+=======
+    public static Pair<String, PeriodDuration> analyzePartitionTTL(Map<String, String> properties, boolean removeProperties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL)) {
             String ttlStr = properties.get(PROPERTIES_PARTITION_TTL);
             PeriodDuration duration;
@@ -380,23 +438,40 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new SemanticException(String.format("illegal %s: %s", PROPERTIES_PARTITION_TTL, e.getMessage()));
             }
+<<<<<<< HEAD
             properties.remove(PROPERTIES_PARTITION_TTL);
+=======
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_TTL);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Pair.create(ttlStr, duration);
         }
         return Pair.create(null, PeriodDuration.ZERO);
     }
 
+<<<<<<< HEAD
     public static int analyzePartitionLiveNumber(Map<String, String> properties,
                                                  boolean removeProperties) throws AnalysisException {
+=======
+    public static int analyzePartitionLiveNumber(Map<String, String> properties, boolean removeProperties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int partitionLiveNumber = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER)) {
             try {
                 partitionLiveNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_LIVE_NUMBER));
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new AnalysisException("Partition Live Number: " + e.getMessage());
             }
             if (partitionLiveNumber <= 0 && partitionLiveNumber != INVALID) {
                 throw new AnalysisException("Illegal Partition Live Number: " + partitionLiveNumber);
+=======
+                throw new SemanticException("Partition Live Number: " + e.getMessage());
+            }
+            if (partitionLiveNumber <= 0 && partitionLiveNumber != INVALID) {
+                throw new SemanticException("Illegal Partition Live Number: " + partitionLiveNumber);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (removeProperties) {
                 properties.remove(PROPERTIES_PARTITION_LIVE_NUMBER);
@@ -405,12 +480,52 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
+<<<<<<< HEAD
     public static long analyzeBucketSize(Map<String, String> properties) throws AnalysisException {
+=======
+    public static String analyzePartitionRetentionCondition(Database db,
+                                                            OlapTable olapTable,
+                                                            Map<String, String> properties,
+                                                            boolean removeProperties) {
+        String partitionRetentionCondition = "";
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
+                throw new SemanticException("Illegal partition retention condition: " + partitionRetentionCondition);
+            }
+            // parse retention condition
+            Expr whereExpr = null;
+            try {
+                whereExpr = SqlParser.parseSqlToExpr(partitionRetentionCondition, SqlModeHelper.MODE_DEFAULT);
+                if (whereExpr == null) {
+                    throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+                }
+            } catch (Exception e) {
+                throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+            }
+            // validate retention condition
+            TableName tableName = new TableName(db.getFullName(), olapTable.getName());
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
+            try {
+                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false);
+            } catch (Exception e) {
+                throw new SemanticException("Failed to validate retention condition: " + e.getMessage());
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            }
+        }
+        return partitionRetentionCondition;
+    }
+
+    public static long analyzeBucketSize(Map<String, String> properties) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long bucketSize = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
             try {
                 bucketSize = Long.parseLong(properties.get(PROPERTIES_BUCKET_SIZE));
             } catch (NumberFormatException e) {
+<<<<<<< HEAD
                 throw new AnalysisException("Bucket size: " + e.getMessage());
             }
             if (bucketSize < 0) {
@@ -422,6 +537,44 @@ public class PropertyAnalyzer {
         }
     }
 
+=======
+                throw new SemanticException("Bucket size: " + e.getMessage());
+            }
+            if (bucketSize < 0) {
+                throw new SemanticException("Illegal bucket size: " + bucketSize);
+            }
+            return bucketSize;
+        } else {
+            throw new SemanticException("Bucket size is not set");
+        }
+    }
+
+    public static long analyzeMutableBucketNum(Map<String, String> properties) {
+        long mutableBucketNum = 0;
+        if (properties != null && properties.containsKey(PROPERTIES_MUTABLE_BUCKET_NUM)) {
+            try {
+                mutableBucketNum = Long.parseLong(properties.get(PROPERTIES_MUTABLE_BUCKET_NUM));
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Mutable bucket num: " + e.getMessage());
+            }
+            if (mutableBucketNum < 0) {
+                throw new SemanticException("Illegal mutable bucket num: " + mutableBucketNum);
+            }
+            return mutableBucketNum;
+        } else {
+            throw new SemanticException("Mutable bucket num is not set");
+        }
+    }
+
+    public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {
+        boolean enableLoadProfile = false;
+        if (properties != null && properties.containsKey(PROPERTIES_ENABLE_LOAD_PROFILE)) {
+            enableLoadProfile = Boolean.parseBoolean(properties.get(PROPERTIES_ENABLE_LOAD_PROFILE));
+        }
+        return enableLoadProfile;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static String analyzeBaseCompactionForbiddenTimeRanges(Map<String, String> properties) {
         if (properties != null && properties.containsKey(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             String forbiddenTimeRanges = properties.get(PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES);
@@ -466,6 +619,7 @@ public class PropertyAnalyzer {
         return partitionRefreshNumber;
     }
 
+<<<<<<< HEAD
     public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv) {
         if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
             throw new SemanticException("The excluded_trigger_tables property only applies to asynchronous refreshes.");
@@ -473,6 +627,17 @@ public class PropertyAnalyzer {
         List<TableName> tables = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             String tableStr = properties.get(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+=======
+    public static List<TableName> analyzeExcludedTables(Map<String, String> properties,
+                                                        String propertiesKey,
+                                                        MaterializedView mv) {
+        if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
+            throw new SemanticException("The " + propertiesKey + " property only applies to asynchronous refreshes.");
+        }
+        List<TableName> tables = Lists.newArrayList();
+        if (properties != null && properties.containsKey(propertiesKey)) {
+            String tableStr = properties.get(propertiesKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults().splitToList(tableStr);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
@@ -483,7 +648,11 @@ public class PropertyAnalyzer {
                             " is not base table of materialized view " + mv.getName());
                 }
             }
+<<<<<<< HEAD
             properties.remove(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+=======
+            properties.remove(propertiesKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return tables;
     }
@@ -519,8 +688,12 @@ public class PropertyAnalyzer {
         return replicationNum;
     }
 
+<<<<<<< HEAD
     public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault)
             throws AnalysisException {
+=======
+    public static Short analyzeReplicationNum(Map<String, String> properties, boolean isDefault) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String key = PROPERTIES_DEFAULT_PREFIX;
         if (isDefault) {
             key += PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
@@ -541,6 +714,7 @@ public class PropertyAnalyzer {
         return resourceGroup;
     }
 
+<<<<<<< HEAD
     private static void checkReplicationNum(short replicationNum) throws AnalysisException {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
@@ -551,11 +725,27 @@ public class PropertyAnalyzer {
             backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
+=======
+    private static void checkReplicationNum(short replicationNum) {
+        if (replicationNum <= 0) {
+            throw new SemanticException("Replication num should larger than 0");
+        }
+
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
+        if (RunMode.isSharedDataMode()) {
+            backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new SemanticException("Number of available CN nodes is " + backendIds.size()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
             if (replicationNum > backendIds.size()) {
+<<<<<<< HEAD
                 throw new AnalysisException("Table replication num should be less than " +
+=======
+                throw new SemanticException("Table replication num should be less than " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "of equal to the number of available BE nodes. "
                         + "You can change this default by setting the replication_num table properties. "
                         + "Current alive backend is [" + Joiner.on(",").join(backendIds) + "].");
@@ -664,8 +854,12 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseFastSchemaEvolution(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
+<<<<<<< HEAD
             return RunMode.isSharedNothingMode() ? Config.enable_fast_schema_evolution
                     : Config.experimental_enable_fast_schema_evolution_in_shared_data;
+=======
+            return Config.enable_fast_schema_evolution;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {
@@ -741,6 +935,7 @@ public class PropertyAnalyzer {
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {
         double bfFpp = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BF_FPP)) {
+<<<<<<< HEAD
             String bfFppStr = properties.get(PROPERTIES_BF_FPP);
             try {
                 bfFpp = Double.parseDouble(bfFppStr);
@@ -753,6 +948,10 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Bloom filter fpp should in [" + MIN_FPP + ", " + MAX_FPP + "]");
             }
 
+=======
+            bfFpp = BloomFilterIndexUtil.analyzeBloomFilterFpp(properties);
+            // have to remove this from properties, which means it's valid and checked already
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             properties.remove(PROPERTIES_BF_FPP);
         }
 
@@ -782,21 +981,61 @@ public class PropertyAnalyzer {
         return timeout;
     }
 
+<<<<<<< HEAD
     // analyzeCompressionType will parse the compression type from properties
     public static TCompressionType analyzeCompressionType(Map<String, String> properties) throws AnalysisException {
+=======
+    // parse compression level if possible
+    public static int analyzeCompressionLevel(Map<String, String> properties) throws AnalysisException {
+        String compressionName = properties.get(PROPERTIES_COMPRESSION);
+        String noSpacesCompression = compressionName.replace(" ", "");
+        String pattern = "^zstd\\((\\d+)\\)$";
+        Pattern r = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE);
+        Matcher m = r.matcher(noSpacesCompression);
+        if (m.matches()) {
+            String levelString = m.group(1);
+            int number = Integer.parseInt(levelString);
+            if (number >= 1 && number <= 22) {
+                properties.remove(PROPERTIES_COMPRESSION);
+                return number;
+            } else {
+                throw new AnalysisException("Invalid level for zstd compression type");
+            }
+        }
+        return -1;
+    }
+
+    // analyzeCompressionType will parse the compression type from properties
+    public static Pair<TCompressionType, Integer> analyzeCompressionType(
+                                                    Map<String, String> properties) throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
         if (ConnectContext.get() != null) {
             String defaultCompression = ConnectContext.get().getSessionVariable().getDefaultTableCompression();
             compressionType = CompressionUtils.getCompressTypeByName(defaultCompression);
         }
         if (properties == null || !properties.containsKey(PROPERTIES_COMPRESSION)) {
+<<<<<<< HEAD
             return compressionType;
         }
+=======
+            return new Pair<TCompressionType, Integer>(compressionType, -1);
+        }
+        int level = analyzeCompressionLevel(properties);
+        if (level != -1) {
+            return new Pair<TCompressionType, Integer>(TCompressionType.ZSTD, level);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String compressionName = properties.get(PROPERTIES_COMPRESSION);
         properties.remove(PROPERTIES_COMPRESSION);
 
         if (CompressionUtils.getCompressTypeByName(compressionName) != null) {
+<<<<<<< HEAD
             return CompressionUtils.getCompressTypeByName(compressionName);
+=======
+            return new Pair<TCompressionType, Integer>(CompressionUtils.getCompressTypeByName(compressionName), -1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             throw new AnalysisException("unknown compression type: " + compressionName);
         }
@@ -1040,6 +1279,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> analyzedUniqueConstraints = Lists.newArrayList();
 
         if (properties != null && properties.containsKey(PROPERTIES_UNIQUE_CONSTRAINT)) {
+<<<<<<< HEAD
             String uniqueConstraintStr = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
             if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
                 return uniqueConstraints;
@@ -1083,6 +1323,35 @@ public class PropertyAnalyzer {
                                         uniqueConstraint.getUniqueColumns(), table.getName()));
                     }
                     analyzedUniqueConstraints.add(uniqueConstraint);
+=======
+            String constraintDescs = properties.get(PROPERTIES_UNIQUE_CONSTRAINT);
+            if (Strings.isNullOrEmpty(constraintDescs)) {
+                return uniqueConstraints;
+            }
+
+            String[] constraintArray = constraintDescs.split(";");
+            for (String constraintDesc : constraintArray) {
+                if (Strings.isNullOrEmpty(constraintDesc)) {
+                    continue;
+                }
+                Pair<TableName, List<String>> parseResult = UniqueConstraint.parseUniqueConstraintDesc(
+                        table.getCatalogName(), db.getFullName(), table.getName(), constraintDesc);
+                TableName tableName = parseResult.first;
+                List<String> columnNames = parseResult.second;
+                if (table.isMaterializedView()) {
+                    Table uniqueConstraintTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                            tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                    if (uniqueConstraintTable == null) {
+                        throw new SemanticException(String.format("table: %s does not exist", tableName));
+                    }
+                    List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(uniqueConstraintTable, columnNames);
+                    analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
+                            tableName.getTbl(), columnIds));
+                } else {
+                    List<ColumnId> columnIds = MetaUtils.getColumnIdsByColumnNames(table, columnNames);
+                    analyzedUniqueConstraints.add(new UniqueConstraint(tableName.getCatalog(), tableName.getDb(),
+                            tableName.getTbl(), columnIds));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             properties.remove(PROPERTIES_UNIQUE_CONSTRAINT);
@@ -1148,7 +1417,11 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
+<<<<<<< HEAD
                             uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
+=======
+                            uniqueConstraint -> SRStringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .collect(Collectors.toList());
         }
 
@@ -1216,11 +1489,19 @@ public class PropertyAnalyzer {
                 String targetTablePath = foreignKeyMatcher.group(6);
                 String targetColumns = foreignKeyMatcher.group(8);
                 // case insensitive
+<<<<<<< HEAD
                 List<String> childColumns = Arrays.stream(sourceColumns.split(",")).
                         map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
                 List<String> parentColumns = Arrays.stream(targetColumns.split(",")).
                         map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
                 if (childColumns.size() != parentColumns.size()) {
+=======
+                List<String> childColumnNames = Arrays.stream(sourceColumns.split(",")).
+                        map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentColumnNames = Arrays.stream(targetColumns.split(",")).
+                        map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                if (childColumnNames.size() != parentColumnNames.size()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new SemanticException(String.format("invalid foreign key constraint:%s," +
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
@@ -1229,25 +1510,33 @@ public class PropertyAnalyzer {
                         foreignKeyConstraintDesc, db);
                 BaseTableInfo parentTableInfo = parentTablePair.first;
                 Table parentTable = parentTablePair.second;
+<<<<<<< HEAD
                 if (!parentColumns.stream().allMatch(parentTable::containColumn)) {
                     throw new SemanticException(String.format("some columns of:%s do not exist in parent table:%s",
                             parentColumns, parentTable.getName()));
                 }
 
+=======
+                List<ColumnId> parentColumnIds = MetaUtils.getColumnIdsByColumnNames(parentTable, parentColumnNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Pair<BaseTableInfo, Table> childTablePair = Pair.create(null, analyzedTable);
                 Table childTable = analyzedTable;
                 if (analyzedTable.isMaterializedView()) {
                     childTablePair = analyzeForeignKeyConstraintTablePath(sourceTablePath, foreignKeyConstraintDesc,
                             db);
                     childTable = childTablePair.second;
+<<<<<<< HEAD
                     if (!childColumns.stream().allMatch(childTable::containColumn)) {
                         throw new SemanticException(String.format("some columns of:%s do not exist in table:%s",
                                 childColumns, childTable.getName()));
                     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     if (!analyzedTable.isNativeTable()) {
                         throw new SemanticException("do not support add foreign key on external table");
                     }
+<<<<<<< HEAD
                     if (!childColumns.stream().allMatch(analyzedTable::containColumn)) {
                         throw new SemanticException(String.format("some columns of:%s do not exist in table:%s",
                                 childColumns, analyzedTable.getName()));
@@ -1259,6 +1548,16 @@ public class PropertyAnalyzer {
                 List<Pair<String, String>> columnRefPairs = Streams.zip(childColumns.stream(),
                         parentColumns.stream(), Pair::create).collect(Collectors.toList());
                 for (Pair<String, String> pair : columnRefPairs) {
+=======
+                }
+                List<ColumnId> childColumnIds = MetaUtils.getColumnIdsByColumnNames(childTable, childColumnNames);
+
+                analyzeForeignKeyUniqueConstraint(parentTable, parentColumnNames, analyzedTable);
+
+                List<Pair<ColumnId, ColumnId>> columnRefPairs = Streams.zip(childColumnIds.stream(),
+                        parentColumnIds.stream(), Pair::create).collect(Collectors.toList());
+                for (Pair<ColumnId, ColumnId> pair : columnRefPairs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Column childColumn = childTable.getColumn(pair.first);
                     Column parentColumn = parentTable.getColumn(pair.second);
                     if (!childColumn.getType().equals(parentColumn.getType())) {
@@ -1310,13 +1609,25 @@ public class PropertyAnalyzer {
         if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
             String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
             properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
+<<<<<<< HEAD
             if (type.equalsIgnoreCase("LOCAL")) {
                 return TPersistentIndexType.LOCAL;
+=======
+            if (type.equalsIgnoreCase(TableProperty.LOCAL_INDEX_TYPE)) {
+                return TPersistentIndexType.LOCAL;
+            } else if (type.equalsIgnoreCase(TableProperty.CLOUD_NATIVE_INDEX_TYPE)) {
+                return TPersistentIndexType.CLOUD_NATIVE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 throw new AnalysisException("Invalid persistent index type: " + type);
             }
         }
+<<<<<<< HEAD
         return TPersistentIndexType.LOCAL;
+=======
+        return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
+                : TPersistentIndexType.LOCAL;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static PeriodDuration analyzeStorageCoolDownTTL(Map<String, String> properties,
@@ -1368,6 +1679,7 @@ public class PropertyAnalyzer {
                 } else if (bfColumns == null) {
                     bfFpp = 0;
                 }
+<<<<<<< HEAD
                 materializedView.setBloomFilterInfo(bfColumns, bfFpp);
             }
             // mv_rewrite_staleness second.
@@ -1376,6 +1688,24 @@ public class PropertyAnalyzer {
                 materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
                 materializedView.getTableProperty().getProperties().put(
                         PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND, maxMVRewriteStaleness.toString());
+=======
+                Set<ColumnId> bfColumnIds = null;
+                if (bfColumns != null && !bfColumns.isEmpty()) {
+                    bfColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    for (String colName : bfColumns) {
+                        bfColumnIds.add(materializedView.getColumn(colName).getColumnId());
+                    }
+                }
+                materializedView.setBloomFilterInfo(bfColumnIds, bfFpp);
+            }
+            // mv_rewrite_staleness second.
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+                int maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+                materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                        Integer.toString(maxMVRewriteStaleness));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             // partition ttl
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
@@ -1384,11 +1714,30 @@ public class PropertyAnalyzer {
                             + " is only supported by partitioned materialized-view");
                 }
 
+<<<<<<< HEAD
                 Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+=======
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
                 materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
             }
+<<<<<<< HEAD
+=======
+            // partition retention condition
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION
+                            + " is only supported by partitioned materialized-view");
+                }
+                String ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, materializedView,
+                        properties, true);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+                materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             // partition ttl number
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
@@ -1396,9 +1745,15 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
+<<<<<<< HEAD
                 if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
                             + " does not support non-partitioned materialized view.");
+=======
+                if (!materializedView.getPartitionInfo().isRangePartition()) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
+                            + " does not support non-range-partitioned materialized view.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             // partition auto refresh partitions limit
@@ -1409,7 +1764,11 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
                 if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
+<<<<<<< HEAD
                             + " does not support non-partitioned materialized view.");
+=======
+                            + " does not support non-range-partitioned materialized view.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             // partition refresh number
@@ -1425,6 +1784,7 @@ public class PropertyAnalyzer {
             }
             // exclude trigger tables
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+<<<<<<< HEAD
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
                 StringBuilder tableSb = new StringBuilder();
                 for (int i = 1; i <= tables.size(); i++) {
@@ -1442,6 +1802,26 @@ public class PropertyAnalyzer {
                         .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
                 materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
+=======
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                        PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
+                        materializedView);
+                String tableSb = getExcludeString(tables);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb);
+                materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
+            // exclude refresh base tables
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES)) {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTables(properties,
+                        PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES,
+                        materializedView);
+                String tableSb = getExcludeString(tables);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES, tableSb);
+                materializedView.getTableProperty().setExcludedRefreshTables(tables);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // resource_group
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP)) {
                 String resourceGroup = PropertyAnalyzer.analyzeResourceGroup(properties);
@@ -1456,7 +1836,12 @@ public class PropertyAnalyzer {
             // force external query rewrite
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
                 String propertyValue = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+<<<<<<< HEAD
                 TableProperty.QueryRewriteConsistencyMode value = TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+=======
+                TableProperty.QueryRewriteConsistencyMode value =
+                        TableProperty.analyzeExternalTableQueryRewrite(propertyValue);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 properties.remove(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
                 materializedView.getTableProperty().getProperties().
                         put(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, String.valueOf(value));
@@ -1498,6 +1883,30 @@ public class PropertyAnalyzer {
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().addTableToGroup(
                         db, materializedView, colocateGroup, materializedView.isCloudNativeMaterializedView());
             }
+<<<<<<< HEAD
+=======
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+                TableProperty.MVQueryRewriteSwitch value = TableProperty.analyzeQueryRewriteSwitch(str);
+                materializedView.getTableProperty().setMvQueryRewriteSwitch(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+            }
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+                TableProperty.MVTransparentRewriteMode value = TableProperty.analyzeMVTransparentRewrite(str);
+                materializedView.getTableProperty().setMvTransparentRewriteMode(value);
+                materializedView.getTableProperty().getProperties().put(
+                        PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE, str);
+                properties.remove(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // compression
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPRESSION)) {
                 String str = properties.get(PropertyAnalyzer.PROPERTIES_COMPRESSION);
@@ -1505,6 +1914,10 @@ public class PropertyAnalyzer {
                         PropertyAnalyzer.PROPERTIES_COMPRESSION, str);
                 properties.remove(PropertyAnalyzer.PROPERTIES_COMPRESSION);
             }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // ORDER BY() -> sortKeys
             if (CollectionUtils.isNotEmpty(materializedView.getTableProperty().getMvSortKeys())) {
                 materializedView.getTableProperty().putMvSortKeys();
@@ -1523,6 +1936,24 @@ public class PropertyAnalyzer {
                         .setLakeStorageInfo(db, materializedView, storageVolumeId, properties);
             }
 
+<<<<<<< HEAD
+=======
+            // warehouse
+            if (materializedView.isCloudNativeMaterializedView()) {
+                // use warehouse for current session（if u exec "set warehouse aaa" before you create mv1, then use aaa）
+                long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+                    String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                            .getWarehouse(warehouseName);
+                    warehouseId = warehouse.getId();
+                }
+
+                materializedView.setWarehouseId(warehouseId);
+                LOG.debug("set warehouse {} in materializedView", warehouseId);
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // datacache.partition_duration
             if (materializedView.isCloudNativeMaterializedView()) {
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
@@ -1531,11 +1962,16 @@ public class PropertyAnalyzer {
                 }
             }
 
+<<<<<<< HEAD
+=======
+            // NOTE: for recognizing unknown properties, this should be put as the last if condition
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // session properties
             if (!properties.isEmpty()) {
                 // analyze properties
                 List<SetListItem> setListItems = Lists.newArrayList();
                 for (Map.Entry<String, String> entry : properties.entrySet()) {
+<<<<<<< HEAD
                     if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
                         throw new AnalysisException("Analyze materialized properties failed " +
                                 "because unknown properties: " + properties +
@@ -1546,6 +1982,10 @@ public class PropertyAnalyzer {
                             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                     SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
                     VariableMgr.checkSystemVariableExist(variable);
+=======
+                    SystemVariable variable = getMVSystemVariable(properties, entry);
+                    GlobalStateMgr.getCurrentState().getVariableMgr().checkSystemVariableExist(variable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     setListItems.add(variable);
                 }
                 SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
@@ -1562,6 +2002,41 @@ public class PropertyAnalyzer {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @NotNull
+    private static String getExcludeString(List<TableName> tables) {
+        StringBuilder tableSb = new StringBuilder();
+        for (int i = 1; i <= tables.size(); i++) {
+            TableName tableName = tables.get(i - 1);
+            if (tableName.getDb() == null) {
+                tableSb.append(tableName.getTbl());
+            } else {
+                tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
+            }
+            if (i != tables.size()) {
+                tableSb.append(",");
+            }
+        }
+        return tableSb.toString();
+    }
+
+    @NotNull
+    private static SystemVariable getMVSystemVariable(Map<String, String> properties, Map.Entry<String, String> entry)
+            throws AnalysisException {
+        if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+            throw new AnalysisException("Analyze materialized properties failed " +
+                    "because unknown properties: " + properties +
+                    ", please add `session.` prefix if you want add session variables for mv(" +
+                    "eg, \"session.insert_timeout\"=\"30000000\").");
+        }
+        String varKey = entry.getKey().substring(
+                PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+        SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
+        return variable;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static DataProperty analyzeMVDataProperty(MaterializedView materializedView,
                                                      Map<String, String> properties) {
         DataProperty dataProperty;
@@ -1582,6 +2057,10 @@ public class PropertyAnalyzer {
                     .put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME,
                             String.valueOf(dataProperty.getCooldownTimeMs()));
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return dataProperty;
     }
 
@@ -1594,7 +2073,11 @@ public class PropertyAnalyzer {
         }
         StringBuilder sb = new StringBuilder("(");
         boolean first = true;
+<<<<<<< HEAD
         for (Map.Entry<String, String> entry : properties.entrySet()) {
+=======
+        for (var entry : properties.entrySet()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!first) {
                 sb.append(",");
             }

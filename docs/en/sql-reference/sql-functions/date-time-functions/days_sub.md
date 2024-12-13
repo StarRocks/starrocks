@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Subtracts specified days from a date or datetime to get a new datetime.
 

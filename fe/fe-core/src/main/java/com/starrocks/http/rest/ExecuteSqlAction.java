@@ -54,7 +54,11 @@ import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -174,9 +178,15 @@ public class ExecuteSqlAction extends RestBaseAction {
     private void changeCatalogAndDB(String catalogName, String databaseName, HttpConnectContext context)
             throws StarRocksHttpException {
         try {
+<<<<<<< HEAD
             context.getGlobalStateMgr().changeCatalog(context, catalogName);
             if (databaseName != null) {
                 context.getGlobalStateMgr().changeCatalogDb(context, databaseName);
+=======
+            context.changeCatalog(catalogName);
+            if (databaseName != null) {
+                context.changeCatalogDb(databaseName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } catch (Exception e) {
             // 403 Forbidden DdlException
@@ -265,7 +275,11 @@ public class ExecuteSqlAction extends RestBaseAction {
         if (customVariable != null) {
             try {
                 for (String key : customVariable.keySet()) {
+<<<<<<< HEAD
                     VariableMgr.setSystemVariable(context.getSessionVariable(),
+=======
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(context.getSessionVariable(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             new SystemVariable(key, new StringLiteral(customVariable.get(key))), true);
                 }
                 context.setThreadLocalInfo();

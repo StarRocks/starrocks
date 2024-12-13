@@ -24,6 +24,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.SetMultimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.OlapScanNode;
@@ -31,7 +35,14 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.proto.PExecShortCircuitResult;
+<<<<<<< HEAD
 import com.starrocks.rpc.BrpcProxy;
+=======
+import com.starrocks.qe.scheduler.NonRecoverableException;
+import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.server.GlobalStateMgr;
@@ -43,6 +54,10 @@ import com.starrocks.thrift.TKeyLiteralExpr;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TRuntimeProfileTree;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TScanRangeLocation;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.log4j.LogManager;
@@ -51,8 +66,15 @@ import org.apache.thrift.TDeserializer;
 
 import java.util.LinkedList;
 import java.util.List;
+<<<<<<< HEAD
 import java.util.Optional;
 import java.util.Queue;
+=======
+import java.util.Map;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -60,18 +82,34 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.qe.scheduler.DefaultWorkerProvider.isWorkerAvailable;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
     private static final Logger LOG = LogManager.getLogger(ShortCircuitHybridExecutor.class);
 
     public ShortCircuitHybridExecutor(ConnectContext context, PlanFragment planFragment,
                                       List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
+<<<<<<< HEAD
                                       boolean isBinaryRow, boolean enableProfile) {
         super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile);
     }
 
     @Override
     public void exec() {
+=======
+                                      boolean isBinaryRow, boolean enableProfile, String protocol,
+                                      WorkerProvider workerProvider) {
+        super(context, planFragment, scanRangeLocations, tDescriptorTable, isBinaryRow, enableProfile,
+                protocol, workerProvider);
+    }
+
+    @Override
+    public void exec() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (result != null) {
             return;
         }
@@ -95,11 +133,22 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
             PBackendService service = BrpcProxy.getBackendService(beAddress);
             try {
                 PExecShortCircuitRequest pRequest = new PExecShortCircuitRequest();
+<<<<<<< HEAD
                 pRequest.setRequest(tRequest);
                 watch.start();
                 Future<PExecShortCircuitResult> future = service.execShortCircuit(pRequest);
                 PExecShortCircuitResult shortCircuitResult = future.get(
                         context.getSessionVariable().getQueryTimeoutS(), TimeUnit.SECONDS);
+=======
+                pRequest.setAttachmentProtocol(protocol);
+                pRequest.setRequest(tRequest, protocol);
+                watch.start();
+                Future<PExecShortCircuitResult> future = service.execShortCircuit(pRequest);
+                if (null == future) {
+                    return;
+                }
+                PExecShortCircuitResult shortCircuitResult = future.get(context.getExecTimeout(), TimeUnit.SECONDS);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 watch.stop();
                 long t = watch.elapsed().toMillis();
                 MetricRepo.HISTO_SHORTCIRCUIT_RPC_LATENCY.update(t);
@@ -121,7 +170,11 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 RowBatch rowBatch = new RowBatch();
                 rowBatch.setEos(i.incrementAndGet() == be2ShortCircuitRequests.keys().size());
                 if (serialResult != null && serialResult.length > 0) {
+<<<<<<< HEAD
                     TDeserializer deserializer = new TDeserializer();
+=======
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     TResultBatch resultBatch = new TResultBatch();
                     deserializer.deserialize(resultBatch, serialResult);
                     rowBatch.setBatch(resultBatch);
@@ -129,7 +182,11 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 rowBatchQueue.offer(rowBatch);
 
                 if (shortCircuitResult.profile != null) {
+<<<<<<< HEAD
                     TDeserializer deserializer = new TDeserializer();
+=======
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     TRuntimeProfileTree runtimeProfileTree = new TRuntimeProfileTree();
                     deserializer.deserialize(runtimeProfileTree, shortCircuitResult.profile);
                     RuntimeProfile beProfile = new RuntimeProfile(beAddress.toString());
@@ -190,6 +247,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
      *
      * @return
      */
+<<<<<<< HEAD
     private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() {
         SetMultimap<TNetworkAddress, TabletWithVersion> backend2Tablets = HashMultimap.create();
         scanRangeLocations.forEach(range -> {
@@ -247,6 +305,72 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 commonRequest.setPlan(planFragment.getPlanRoot().treeToThrift());
                 toSendRequests.put(addr, commonRequest);
             });
+=======
+    private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() throws NonRecoverableException {
+        SetMultimap<TNetworkAddress, TabletWithVersion> backend2Tablets = HashMultimap.create();
+        ImmutableMap<Long, Backend> idToBackends =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
+        Map<Long, Backend> aliveIdToBackends = idToBackends.entrySet().stream()
+                .filter(be -> isWorkerAvailable(be.getValue()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        for (TScanRangeLocations range : scanRangeLocations) {
+            TInternalScanRange internalScanRange = range.getScan_range().getInternal_scan_range();
+            Set<Long> scanBackendIds =
+                    range.getLocations().stream().map(TScanRangeLocation::getBackend_id).collect(Collectors.toSet());
+            TabletWithVersion tabletWithVersion = new TabletWithVersion(internalScanRange.getTablet_id(),
+                    internalScanRange.getVersion());
+
+            Optional<Backend> be = pick(scanBackendIds, aliveIdToBackends);
+            if (be.isEmpty()) {
+                workerProvider.reportWorkerNotFoundException();
+            }
+            be.ifPresent(backend -> backend2Tablets.put(be.get().getBrpcAddress(), tabletWithVersion));
+        }
+        return backend2Tablets;
+    }
+
+    private SetMultimap<TNetworkAddress, TExecShortCircuitParams> createRequests() throws StarRocksException {
+        SetMultimap<TNetworkAddress, TExecShortCircuitParams> toSendRequests = HashMultimap.create();
+        Optional<PlanNode> planNode = getOlapScanNode();
+        if (planNode.isEmpty()) {
+            return toSendRequests;
+        }
+        OlapScanNode olapScanNode = ((OlapScanNode) planNode.get());
+        // set literal exprs
+        List<List<LiteralExpr>> keyTuples = olapScanNode.getRowStoreKeyLiterals();
+        List<TKeyLiteralExpr> keyLiteralExprs = keyTuples.stream().map(keyTuple -> {
+            TKeyLiteralExpr keyLiteralExpr = new TKeyLiteralExpr();
+            keyLiteralExpr.setLiteral_exprs(keyTuple.stream()
+                    .map(Expr::treeToThrift)
+                    .collect(Collectors.toList()));
+            return keyLiteralExpr;
+        }).collect(Collectors.toList());
+
+        // fill tablet id and version , then bind be network
+        SetMultimap<TNetworkAddress, TabletWithVersion> be2Tablets = assignTablet2Backends();
+
+        olapScanNode.clearScanNodeForThriftBuild();
+        be2Tablets.forEach((be, tableVersion) -> {
+            TExecShortCircuitParams commonRequest = new TExecShortCircuitParams();
+            commonRequest.setDesc_tbl(tDescriptorTable);
+            commonRequest.setOutput_exprs(planFragment.getOutputExprs().stream()
+                    .map(Expr::treeToThrift).collect(Collectors.toList()));
+            commonRequest.setIs_binary_row(isBinaryRow);
+            commonRequest.setEnable_profile(enableProfile);
+            if (planFragment.getSink() != null) {
+                commonRequest.setData_sink(planFragment.sinkToThrift());
+            }
+            commonRequest.setKey_literal_exprs(keyLiteralExprs);
+
+            List<Long> tabletIds = be2Tablets.get(be).stream().map(TabletWithVersion::getTabletId)
+                    .collect(Collectors.toList());
+            commonRequest.setTablet_ids(tabletIds);
+            List<String> versions = be2Tablets.get(be).stream().map(TabletWithVersion::getVersion)
+                    .collect(Collectors.toList());
+            commonRequest.setVersions(versions);
+            commonRequest.setPlan(planFragment.getPlanRoot().treeToThrift());
+            toSendRequests.put(be, commonRequest);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
 
         return toSendRequests;

@@ -17,14 +17,25 @@ package com.starrocks.planner;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.CompressionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.HiveWriteUtils;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+=======
+import com.starrocks.connector.hive.TextFileFormatDesc;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
@@ -33,17 +44,31 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THiveTableSink;
 
 import java.util.List;
+<<<<<<< HEAD
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
+=======
+import java.util.Optional;
+
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toTextFileFormatDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class HiveTableSink extends DataSink {
 
     protected final TupleDescriptor desc;
     private final String fileFormat;
+<<<<<<< HEAD
+=======
+    private Optional<TextFileFormatDesc> textFileFormatDesc = Optional.empty();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final String stagingDir;
     private final List<String> dataColNames;
     private final List<String> partitionColNames;
     private final String compressionType;
+<<<<<<< HEAD
+=======
+    private final long targetMaxFileSize;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private final CloudConfiguration cloudConfiguration;
@@ -56,6 +81,7 @@ public class HiveTableSink extends DataSink {
         this.tableIdentifier = hiveTable.getUUID();
         this.isStaticPartitionSink = isStaticPartitionSink;
         HiveStorageFormat format = hiveTable.getStorageFormat();
+<<<<<<< HEAD
         if (format != HiveStorageFormat.PARQUET) {
             throw new StarRocksConnectorException("Writing to hive table in [%s] format is not supported.", format.name());
         }
@@ -65,6 +91,20 @@ public class HiveTableSink extends DataSink {
             throw new SemanticException("compression type " + compressionType + " is not supported. " +
                     "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
         }
+=======
+        if (format != HiveStorageFormat.PARQUET && format != HiveStorageFormat.ORC
+                && format != HiveStorageFormat.TEXTFILE) {
+            throw new StarRocksConnectorException("Writing to hive table in [%s] format is not supported.", format.name());
+        }
+        this.fileFormat = hiveTable.getStorageFormat().name().toLowerCase();
+        if (format == HiveStorageFormat.TEXTFILE) {
+            this.textFileFormatDesc = Optional.of(toTextFileFormatDesc(hiveTable.getSerdeProperties()));
+            this.compressionType = String.valueOf(TCompressionType.NO_COMPRESSION);
+        } else {
+            this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
+        }
+        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,
@@ -95,8 +135,16 @@ public class HiveTableSink extends DataSink {
         tHiveTableSink.setStaging_dir(stagingDir);
         tHiveTableSink.setFile_format(fileFormat);
         tHiveTableSink.setIs_static_partition_sink(isStaticPartitionSink);
+<<<<<<< HEAD
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tHiveTableSink.setCompression_type(compression);
+=======
+        Preconditions.checkState(CompressionUtils.getConnectorSinkCompressionType(compressionType).isPresent());
+        TCompressionType compression = CompressionUtils.getConnectorSinkCompressionType(compressionType).get();
+        tHiveTableSink.setCompression_type(compression);
+        tHiveTableSink.setTarget_max_file_size(targetMaxFileSize);
+        textFileFormatDesc.ifPresent(fileFormatDesc -> tHiveTableSink.setText_file_desc(fileFormatDesc.toThrift()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tHiveTableSink.setCloud_configuration(tCloudConfiguration);

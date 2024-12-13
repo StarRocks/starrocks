@@ -27,6 +27,10 @@
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "util/thrift_rpc_helper.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 using namespace fmt::literals;
 
@@ -90,6 +94,7 @@ static Status to_status(const TBrokerOperationStatus& st, const TNetworkAddress&
 template <typename Method, typename Request, typename Response>
 static Status call_method(const TNetworkAddress& broker, Method method, const Request& request, Response* response,
                           int retry_count = 1, int timeout_ms = DEFAULT_TIMEOUT_MS) {
+<<<<<<< HEAD
     TFileBrokerServiceClient* client;
 #ifndef BE_TEST
     Status status;
@@ -123,6 +128,20 @@ static Status call_method(const TNetworkAddress& broker, Method method, const Re
                     fmt::format("Fail to call broker, error={}, broker={}", e.what(), broker.hostname));
         }
     }
+=======
+#ifdef BE_TEST
+    TFileBrokerServiceClient* client = g_broker_client;
+    (client->*method)(*response, request);
+    return Status::OK();
+#else
+    return ThriftRpcHelper::rpc<TFileBrokerServiceClient>(
+            broker,
+            [method, response, &request](BrokerServiceConnection& client) {
+                (client.get()->*method)(*response, request);
+            },
+            timeout_ms, retry_count);
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // This function will *NOT* return EOF status.
@@ -221,10 +240,14 @@ public:
         FileSystem::on_file_write_open(this);
     }
 
+<<<<<<< HEAD
     ~BrokerWritableFile() override {
         auto st = BrokerWritableFile::close();
         st.permit_unchecked_error();
     }
+=======
+    ~BrokerWritableFile() override { (void)BrokerWritableFile::close(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status append(const Slice& data) override {
         TBrokerPWriteRequest request;
@@ -289,6 +312,10 @@ private:
 
 StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const SequentialFileOptions& opts,
                                                                                 const std::string& path) {
+<<<<<<< HEAD
+=======
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -316,6 +343,11 @@ StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(
 
 StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(
         const RandomAccessFileOptions& opts, const std::string& path) {
+<<<<<<< HEAD
+=======
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -347,6 +379,10 @@ StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(cons
 
 StatusOr<std::unique_ptr<WritableFile>> BrokerFileSystem::new_writable_file(const WritableFileOptions& opts,
                                                                             const std::string& path) {
+<<<<<<< HEAD
+=======
+    if (opts.encryption_info.is_encrypted()) return Status::NotSupported("BrokerFileSystem do not support encryption");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (opts.mode == FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE) {
         if (auto st = _path_exists(path); st.ok()) {
             return Status::NotSupported(fmt::format("Cannot truncate a file by broker, path={}", path));

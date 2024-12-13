@@ -32,6 +32,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+<<<<<<< HEAD
+=======
+import com.starrocks.statistic.sample.ColumnSampleManager;
+import com.starrocks.statistic.sample.PrimitiveTypeColumnStats;
+import com.starrocks.statistic.sample.SampleInfo;
+import com.starrocks.statistic.sample.TabletSampleManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -117,12 +124,17 @@ public class StatisticsSQLTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("stat0");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("stat0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         t0StatsTableId = t0.getId();
     }
 
     @Test
     public void testSampleStatisticsSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("stat0");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
@@ -141,12 +153,47 @@ public class StatisticsSQLTest extends PlanTestBase {
         Assert.assertEquals(3, StringUtils.countMatches(plan, "OlapScanNode"));
         assertCContains(plan, "left(");
         assertCContains(plan, "count * 1024");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
+        List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING);
+        TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
+
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
+                sampleInfo);
+
+        sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                columnSampleManager.getComplexTypeStats());
+        String complexSql = sampleInfo.generateComplexTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                columnSampleManager.getComplexTypeStats());
+        assertCContains(complexSql, "INSERT INTO _statistics_.table_statistic_v1 VALUES");
+
+        String simpleSql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(),
+                db.getFullName(), columnSampleManager.splitPrimitiveTypeStats().get(0), tabletSampleManager);
+        String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
+                t0.getId(), "v3", db.getId(), "test.stat0", "test");
+        assertCContains(simpleSql, except);
+        starRocksAssert.useDatabase("_statistics_");
+
+        String plan = getFragmentPlan(simpleSql);
+
+        Assert.assertEquals(2, StringUtils.countMatches(plan, "OlapScanNode"));
+        assertCContains(plan, "left(");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testFullStatisticsSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("stat0");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("stat0");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = Lists.newArrayList("j1", "s1");
@@ -169,14 +216,24 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testFullStatisticsSQLWithStruct() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("struct_a");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
 
         FullStatisticsCollectJob job = new FullStatisticsCollectJob(db, t0, pids, columnNames, ImmutableList.of(Type.INT,
+<<<<<<< HEAD
                 Type.INT, Type.INT), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap());
+=======
+                Type.INT, Type.INT), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<List<String>> sqls = job.buildCollectSQLList(1);
         Assert.assertEquals(3, sqls.size());
@@ -193,18 +250,31 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testHistogramStatisticsSQLWithStruct() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("struct_a");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("struct_a");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<String> columnNames = Lists.newArrayList("b.a", "b.c", "d.c.a");
         HistogramStatisticsCollectJob histogramStatisticsCollectJob = new HistogramStatisticsCollectJob(
                 db, t0, Lists.newArrayList("b.a", "b.c", "d.c.a"),
+<<<<<<< HEAD
                 Lists.newArrayList(Type.INT, Type.INT, Type.INT),
                 StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
         for (String col : columnNames) {
             String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
                     db, t0, 3L, col);
+=======
+                Lists.newArrayList(Type.INT, Type.INT, Type.INT), StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+        for (String col : columnNames) {
+            String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
+                    db, t0, 3L, col, 0.1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
             assertCContains(plan, "0:OlapScanNode\n" +
@@ -217,7 +287,11 @@ public class StatisticsSQLTest extends PlanTestBase {
             sql = sql.substring(sql.indexOf("SELECT"));
             starRocksAssert.useDatabase("_statistics_");
             String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
             assertCContains(plan, "4:AGGREGATE (update finalize)\n" +
+=======
+            assertCContains(plan, "AGGREGATE (update finalize)\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  output: histogram");
         }
     }
@@ -255,8 +329,13 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeFullSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
         List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
@@ -279,6 +358,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeSampleSQL() throws Exception {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
@@ -289,6 +369,20 @@ public class StatisticsSQLTest extends PlanTestBase {
         for (String column : columnNames) {
             String sql = job.buildSampleInsertSQL(db.getId(), t0.getId(), Lists.newArrayList(column),
                     Lists.newArrayList(t0.getColumn(column).getType()), 200);
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("escape0['abc']");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+
+        for (Column column : t0.getColumns()) {
+            if (!column.getType().canStatistic()) {
+                continue;
+            }
+            TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
+            SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
+            String sql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
+                    Lists.newArrayList(new PrimitiveTypeColumnStats(column.getName(), column.getType())),
+                    tabletSampleManager);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             starRocksAssert.useDatabase("_statistics_");
             ExecPlan plan = getExecPlan(sql);
             List<Expr> output = plan.getOutputExprs();
@@ -296,7 +390,11 @@ public class StatisticsSQLTest extends PlanTestBase {
             Assert.assertEquals(output.get(3).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
             Assert.assertEquals(output.get(4).getType().getPrimitiveType(), Type.STRING.getPrimitiveType());
 
+<<<<<<< HEAD
             assertCContains(plan.getColNames().get(1).replace("\\", ""), column);
+=======
+            assertCContains(plan.getColNames().get(1).replace("\\", ""), column.getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             assertCContains(plan.getColNames().get(3).replace("\\", ""), "escape0['abc']");
         }
     }
@@ -398,7 +496,11 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testQuota() {
+<<<<<<< HEAD
         Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("complex_table");
+=======
+        Table t0 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable("complex_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertContains(StatisticUtils.quoting(t0, "v2.a2.b2['+']"), "`v2.a2.b2['+']`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3"), "`struct_a.c3.d3`");
         assertContains(StatisticUtils.quoting(t0, "struct_a.c3.d3.struct_b"), "`struct_a.c3.d3`.`struct_b`");

@@ -18,10 +18,18 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Reference;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
+import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -44,8 +52,13 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class DefaultWorkerProviderTest {
+<<<<<<< HEAD
     private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new);
     private final ImmutableMap<Long, ComputeNode> id2ComputeNode = genWorkers(10, 15, ComputeNode::new);
+=======
+    private final ImmutableMap<Long, ComputeNode> id2Backend = genWorkers(0, 10, Backend::new, false);
+    private final ImmutableMap<Long, ComputeNode> id2ComputeNode = genWorkers(10, 15, ComputeNode::new, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final ImmutableMap<Long, ComputeNode> availableId2Backend = ImmutableMap.of(
             0L, id2Backend.get(0L),
             2L, id2Backend.get(2L),
@@ -62,12 +75,24 @@ public class DefaultWorkerProviderTest {
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     private static <C extends ComputeNode> ImmutableMap<Long, C> genWorkers(long startId, long endId,
+<<<<<<< HEAD
                                                                             Supplier<C> factory) {
+=======
+                                                                            Supplier<C> factory, boolean halfDead) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<Long, C> res = new TreeMap<>();
         for (long i = startId; i < endId; i++) {
             C worker = factory.get();
             worker.setId(i);
+<<<<<<< HEAD
             worker.setAlive(true);
+=======
+            if (halfDead && i % 2 == 0) {
+                worker.setAlive(false);
+            } else {
+                worker.setAlive(true);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             worker.setHost("host#" + i);
             worker.setBePort(80);
             res.put(i, worker);
@@ -87,7 +112,11 @@ public class DefaultWorkerProviderTest {
         id2ComputeNode.get(deadCNId).setAlive(false);
         new MockUp<SimpleScheduler>() {
             @Mock
+<<<<<<< HEAD
             public boolean isInBlacklist(long backendId) {
+=======
+            public boolean isInBlocklist(long backendId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
             }
         };
@@ -121,8 +150,15 @@ public class DefaultWorkerProviderTest {
             // Reset nextComputeNodeIndex.
             nextComputeNodeIndex.setRef(0);
 
+<<<<<<< HEAD
             workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
                     numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+=======
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -168,7 +204,12 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+<<<<<<< HEAD
                             true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+=======
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             for (Long selectedWorkerId : selectedWorkerIdsList) {
                 Assert.assertTrue("selectedWorkerId:" + selectedWorkerId,
@@ -179,7 +220,12 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+<<<<<<< HEAD
                             false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+=======
+                            false, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Assert.assertEquals(availableId2Backend.size(), selectedWorkerIdsList.size());
             for (Long selectedWorkerId : selectedWorkerIdsList) {
@@ -191,7 +237,12 @@ public class DefaultWorkerProviderTest {
         for (Integer numUsedComputeNodes : numUsedComputeNodesList) {
             workerProvider =
                     workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+<<<<<<< HEAD
                             true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES);
+=======
+                            true, numUsedComputeNodes, ComputationFragmentSchedulingPolicy.ALL_NODES,
+                            WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<Long> selectedWorkerIdsList = workerProvider.getAllAvailableNodes();
             Collections.reverse(selectedWorkerIdsList); //put ComputeNode id to the front,Backend id to the back
             //test ComputeNode
@@ -208,7 +259,11 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectWorker() throws UserException {
+=======
+    public void testSelectWorker() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         true);
@@ -225,7 +280,11 @@ public class DefaultWorkerProviderTest {
 
     private static <C extends ComputeNode> void testSelectNextWorkerHelper(DefaultWorkerProvider workerProvider,
                                                                            Map<Long, C> id2Worker)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Set<Long> selectedWorkers = new HashSet<>(id2Worker.size());
         for (int i = 0; i < id2Worker.size(); i++) {
@@ -239,7 +298,11 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectNextWorker() throws UserException {
+=======
+    public void testSelectNextWorker() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DefaultWorkerProvider workerProvider;
 
         workerProvider =
@@ -256,10 +319,39 @@ public class DefaultWorkerProviderTest {
                         false);
         testSelectNextWorkerHelper(workerProvider, availableId2Backend);
 
+<<<<<<< HEAD
         workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(), false);
         DefaultWorkerProvider finalWorkerProvider = workerProvider;
         Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+=======
+        ImmutableMap<Long, ComputeNode> id2BackendHalfDead = genWorkers(0, 10, Backend::new, true);
+        workerProvider =
+                new DefaultWorkerProvider(id2BackendHalfDead, id2ComputeNode, ImmutableMap.of(), ImmutableMap.of(),
+                        false);
+        DefaultWorkerProvider finalWorkerProvider = workerProvider;
+
+        SchedulerException e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+        Assert.assertEquals(
+                "Backend node not found. Check if any backend node is down.backend:" +
+                        " [host#0 alive: false inBlacklist: false] " +
+                        "[host#2 alive: false inBlacklist: false]" +
+                        " [host#4 alive: false inBlacklist: false]" +
+                        " [host#6 alive: false inBlacklist: false]" +
+                        " [host#8 alive: false inBlacklist: false] ",
+                e.getMessage());
+        ImmutableMap<Long, ComputeNode> id2ComputeNodeHalfDead = genWorkers(10, 15, ComputeNode::new, true);
+        workerProvider =
+                new DefaultWorkerProvider(id2ComputeNodeHalfDead, ImmutableMap.of());
+        finalWorkerProvider = workerProvider;
+        e = Assert.assertThrows(SchedulerException.class, finalWorkerProvider::selectNextWorker);
+        Assert.assertEquals(
+                "Compute node not found. Check if any compute node is down.compute node:" +
+                        " [host#10 alive: false inBlacklist: false]" +
+                        " [host#12 alive: false inBlacklist: false]" +
+                        " [host#14 alive: false inBlacklist: false] ",
+                e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

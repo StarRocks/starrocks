@@ -22,6 +22,10 @@
 #include "column/type_traits.h"
 #include "exprs/agg/java_udaf_function.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/bloom_filter.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type_infra.h"
 #include "udf/java/java_udf.h"
 
@@ -168,6 +172,13 @@ bool FunctionContext::error_if_overflow() const {
     return _state != nullptr && _state->error_if_overflow();
 }
 
+<<<<<<< HEAD
+=======
+bool FunctionContext::allow_throw_exception() const {
+    return _state != nullptr && _state->query_options().allow_throw_exception;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
     case THREAD_LOCAL:
@@ -191,12 +202,17 @@ bool FunctionContext::add_warning(const char* warning_msg) {
     std::stringstream ss;
     ss << "UDF WARNING: " << warning_msg;
 
+<<<<<<< HEAD
     if (_state != nullptr) {
         return _state->log_error(ss.str());
     } else {
         std::cerr << ss.str() << std::endl;
         return true;
     }
+=======
+    std::cerr << ss.str() << std::endl;
+    return true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 const FunctionContext::TypeDesc* FunctionContext::get_arg_type(int arg_idx) const {

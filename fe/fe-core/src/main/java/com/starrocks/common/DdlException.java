@@ -17,7 +17,11 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
 public class DdlException extends UserException {
+=======
+public class DdlException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public DdlException(String msg) {
         super(msg);
     }

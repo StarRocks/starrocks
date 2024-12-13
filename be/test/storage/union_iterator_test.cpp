@@ -20,9 +20,15 @@
 #include <vector>
 
 #include "column/chunk.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+=======
+#include "column/fixed_length_column.h"
+#include "column/schema.h"
+#include "common/config.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -30,7 +36,11 @@ namespace starrocks {
 class UnionIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
+<<<<<<< HEAD
     void TearDown() override { TEST_clear_all_columns_this_thread(); }
+=======
+    void TearDown() override {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // return chunk with single column of type int32_t.
     class IntIterator final : public ChunkIterator {
@@ -93,7 +103,11 @@ TEST_F(UnionIteratorTest, union_two) {
     };
 
     ChunkPtr chunk = ChunkHelper::new_chunk(iter->schema(), config::vector_chunk_size);
+<<<<<<< HEAD
     iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+=======
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status st = iter->get_next(chunk.get());
     ASSERT_TRUE(st.ok());
@@ -135,7 +149,11 @@ TEST_F(UnionIteratorTest, union_one) {
     auto sub1 = std::make_shared<IntIterator>(n1);
 
     auto iter = new_union_iterator({sub1});
+<<<<<<< HEAD
     iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+=======
+    ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
         auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));

@@ -48,7 +48,13 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/brpc.h"
+<<<<<<< HEAD
 #include "storage/local_tablet_reader.h"
+=======
+#include "storage/dictionary_cache_manager.h"
+#include "storage/local_tablet_reader.h"
+#include "storage/storage_engine.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -252,5 +258,8 @@ void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::pr
 }
 
 template class BackendInternalServiceImpl<PInternalService>;
+<<<<<<< HEAD
 template class BackendInternalServiceImpl<doris::PBackendService>;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

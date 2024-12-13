@@ -14,6 +14,7 @@
 
 package com.starrocks.http.rest;
 
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -22,10 +23,32 @@ import java.util.Map;
 
 public class TransactionResult extends RestBaseResult {
     private Map<String, Object> resultMap = Maps.newHashMap();
+=======
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class TransactionResult extends RestBaseResult {
+
+    public static final String STATUS_KEY = "Status";
+    public static final String MESSAGE_KEY = "Message";
+
+    public static final String TXN_ID_KEY = "TxnId";
+    public static final String LABEL_KEY = "Label";
+
+    private final Map<String, Object> resultMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public TransactionResult() {
         status = ActionStatus.OK;
         msg = "";
+<<<<<<< HEAD
+=======
+        resultMap = new HashMap<>(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void addResultEntry(String key, Object value) {
@@ -42,18 +65,30 @@ public class TransactionResult extends RestBaseResult {
     }
 
     public boolean containMsg() {
+<<<<<<< HEAD
         return msg.length() > 0;
+=======
+        return StringUtils.isNotEmpty(msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean stateOK() {
         return status == ActionStatus.OK;
     }
+<<<<<<< HEAD
     
 
     public String toJson() {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         addResultEntry("Status", status);
         addResultEntry("Message", msg);
+=======
+
+    public String toJson() {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        addResultEntry(STATUS_KEY, status);
+        addResultEntry(MESSAGE_KEY, msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return gson.toJson(resultMap);
     }
 }

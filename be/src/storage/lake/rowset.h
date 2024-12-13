@@ -20,6 +20,10 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+<<<<<<< HEAD
+=======
+#include "storage/rowset/base_rowset.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::lake {
 
@@ -27,7 +31,11 @@ class MetaFileBuilder;
 class TabletManager;
 class TabletWriter;
 
+<<<<<<< HEAD
 class Rowset {
+=======
+class Rowset : public BaseRowset {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     static std::vector<RowsetPtr> get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata);
 
@@ -47,6 +55,7 @@ public:
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index,
                     size_t compaction_segment_limit);
 
+<<<<<<< HEAD
     ~Rowset();
 
     DISALLOW_COPY_AND_MOVE(Rowset);
@@ -54,6 +63,15 @@ public:
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
 
     [[nodiscard]] StatusOr<size_t> get_read_iterator_num();
+=======
+    virtual ~Rowset();
+
+    DISALLOW_COPY_AND_MOVE(Rowset);
+
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+
+    StatusOr<size_t> get_read_iterator_num();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // only used for updatable tablets' rowset, for update state load, it wouldn't load delvec
     // simply get iterators to iterate all rows without complex options like predicates
@@ -61,8 +79,13 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema,
                                                                                     OlapReaderStatistics* stats);
+=======
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(const Schema& schema, bool file_data_cache,
+                                                                      OlapReaderStatistics* stats);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // used for primary index load, it will get segment iterator by specifice version and it's delvec,
     // without complex options like predicates
@@ -71,10 +94,18 @@ public:
     // |stats| used for iterator read stats
     // return iterator list, an iterator for each segment,
     // if the segment is empty, it wouln't add this iterator to iterator list
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
             const Schema& schema, int64_t version, const MetaFileBuilder* builder, OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
+=======
+    StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(const Schema& schema, int64_t version,
+                                                                                  const MetaFileBuilder* builder,
+                                                                                  OlapReaderStatistics* stats);
+
+    [[nodiscard]] bool is_overlapped() const override { return metadata().overlapped(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // if _compaction_segment_limit is set > 0, it means only partial segments will be used
     [[nodiscard]] int64_t num_segments() const {
@@ -88,7 +119,11 @@ public:
                                                               TabletWriter* writer, uint64_t& uncompacted_num_rows,
                                                               uint64_t& uncompacted_data_size);
 
+<<<<<<< HEAD
     [[nodiscard]] int64_t num_rows() const { return metadata().num_rows(); }
+=======
+    [[nodiscard]] int64_t num_rows() const override { return metadata().num_rows(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     [[nodiscard]] int64_t num_dels() const { return metadata().num_dels(); }
 
@@ -96,10 +131,16 @@ public:
 
     [[nodiscard]] uint32_t id() const { return metadata().id(); }
 
+<<<<<<< HEAD
+=======
+    [[nodiscard]] RowsetId rowset_id() const override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     [[nodiscard]] int index() const { return _index; }
 
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
+<<<<<<< HEAD
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
@@ -110,10 +151,33 @@ public:
 
     [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
                                        bool fill_metadata_cache,
+=======
+    [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
+
+    StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
+
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
+
+    // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
+    Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
+
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments);
 
     int64_t tablet_id() const { return _tablet_id; }
 
+<<<<<<< HEAD
+=======
+    [[nodiscard]] int64_t version() const { return metadata().version(); }
+
+    bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
+
+    // no practical significance, just compatible interface
+    int64_t start_version() const override { return 0; }
+    int64_t end_version() const override { return 0; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -121,6 +185,11 @@ private:
     int _index;
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
+<<<<<<< HEAD
+=======
+    std::vector<SegmentSharedPtr> _segments;
+    bool _parallel_load;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
     // default is 0 means every segment will be used.
     // only used for compaction

@@ -15,6 +15,7 @@
 
 package com.starrocks.persist.metablock;
 
+<<<<<<< HEAD
 import com.google.gson.stream.JsonReader;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
@@ -134,4 +135,41 @@ public class SRMetaBlockReader {
                     "Invalid meta block, checksum mismatch! expect %d actual %d", footer.getChecksum(), checksum));
         }
     }
+=======
+import java.io.IOException;
+import java.lang.reflect.Type;
+
+public interface SRMetaBlockReader {
+
+    SRMetaBlockHeader getHeader();
+
+    int readInt() throws IOException, SRMetaBlockEOFException;
+
+    long readLong() throws IOException, SRMetaBlockEOFException;
+
+    byte readByte() throws IOException, SRMetaBlockEOFException;
+
+    short readShort() throws IOException, SRMetaBlockEOFException;
+
+    double readDouble() throws IOException, SRMetaBlockEOFException;
+
+    float readFloat() throws IOException, SRMetaBlockEOFException;
+
+    char readChar() throws IOException, SRMetaBlockEOFException;
+
+    boolean readBoolean() throws IOException, SRMetaBlockEOFException;
+
+    String readString() throws IOException, SRMetaBlockEOFException;
+
+    <T> T readJson(Type returnType) throws IOException, SRMetaBlockEOFException;
+
+    <T> T readJson(Class<T> classType) throws IOException, SRMetaBlockEOFException;
+
+    <T> void readCollection(Class<T> classType, CollectionConsumer<? super T> action) throws IOException, SRMetaBlockEOFException;
+
+    <K, V> void readMap(Type keyType, Type valueType, MapEntryConsumer<? super K, ? super V> action)
+            throws IOException, SRMetaBlockEOFException;
+
+    void close() throws IOException, SRMetaBlockException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -32,10 +32,26 @@ public interface StatisticStorage {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
+<<<<<<< HEAD
     default void refreshTableStatistic(Table table) {
     }
 
     default void refreshTableStatisticSync(Table table) {
+=======
+    default void refreshTableStatistic(Table table, boolean isSync) {
+    }
+
+    default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
+    }
+
+    /**
+     * Overwrite the statistics of `targetPartition` with `sourcePartition`
+     */
+    default void overwritePartitionStatistics(long tableId, long sourcePartition, long targetPartition) {
+    }
+
+    default void updatePartitionStatistics(long tableId, long partition, long rows) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     ColumnStatistic getColumnStatistic(Table table, String column);
@@ -50,10 +66,13 @@ public interface StatisticStorage {
         return null;
     }
 
+<<<<<<< HEAD
     default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         return getColumnStatistics(table, columns);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
         return columns.stream().
                 map(col -> ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
@@ -88,6 +107,12 @@ public interface StatisticStorage {
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
     }
 
+<<<<<<< HEAD
+=======
+    default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {
     }
 

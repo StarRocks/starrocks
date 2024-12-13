@@ -16,11 +16,19 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.catalog.TableIdentifier;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.hive.HiveCatalog;
 import org.junit.Assert;
 import org.junit.Test;
@@ -49,4 +57,22 @@ public class IcebergHiveCatalogTest {
         List<String> dbs = icebergHiveCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRenameTable(@Mocked HiveCatalog hiveCatalog) {
+        new Expectations() {
+            {
+                hiveCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(
+                "catalog", new Configuration(), ImmutableMap.of("hive.metastore.uris", "thrift://129.1.2.3:9876"));
+        icebergHiveCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergHiveCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

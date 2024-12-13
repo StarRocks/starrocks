@@ -56,6 +56,13 @@ public:
     static Status get_tables_info(const SchemaScannerState& state, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 
+<<<<<<< HEAD
+=======
+    static Status get_temporary_tables_info(const SchemaScannerState& state,
+                                            const TGetTemporaryTablesInfoRequest& request,
+                                            TGetTemporaryTablesInfoResponse* response);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static Status describe_table(const SchemaScannerState& state, const TDescribeTableParams& desc_params,
                                  TDescribeTableResult* desc_result);
 

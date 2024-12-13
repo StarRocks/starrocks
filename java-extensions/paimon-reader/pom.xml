@@ -12,6 +12,7 @@
     <artifactId>paimon-reader</artifactId>
 
     <properties>
+<<<<<<< HEAD
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
@@ -20,10 +21,15 @@
         <hive.version>3.1.2</hive.version>
         <hadoop.version>3.4.0</hadoop.version>
         <zstd.version>1.5.5-5</zstd.version>
+=======
+        <java-extensions.home>${basedir}/../</java-extensions.home>
+        <paimon.version>0.8.2</paimon.version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     </properties>
 
     <dependencies>
         <dependency>
+<<<<<<< HEAD
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
             <version>${paimon.version}</version>
@@ -65,11 +71,16 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-1.2-api</artifactId>
             <version>${log4j.version}</version>
+=======
+            <groupId>com.starrocks</groupId>
+            <artifactId>jni-connector</artifactId>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
 
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-hdfs-client</artifactId>
+<<<<<<< HEAD
             <version>${hadoop.version}</version>
         </dependency>
 
@@ -131,11 +142,14 @@
             <groupId>org.apache.derby</groupId>
             <artifactId>derby</artifactId>
             <version>10.17.1.0</version>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
 
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+<<<<<<< HEAD
             <version>${hadoop.version}</version>
             <exclusions>
                 <exclusion>
@@ -181,11 +195,14 @@
             <groupId>com.github.luben</groupId>
             <artifactId>zstd-jni</artifactId>
             <version>${zstd.version}</version>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
 
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aws</artifactId>
+<<<<<<< HEAD
             <version>${hadoop.version}</version>
             <exclusions>
                 <exclusion>
@@ -199,6 +216,34 @@
             <groupId>commons-lang</groupId>
             <artifactId>commons-lang</artifactId>
             <version>2.6</version>
+=======
+        </dependency>
+
+        <dependency>
+            <groupId>io.trino.hive</groupId>
+            <artifactId>hive-apache</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-bundle</artifactId>
+            <version>${paimon.version}</version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
 
         <dependency>
@@ -217,6 +262,7 @@
     <build>
         <finalName>starrocks-paimon-reader</finalName>
         <plugins>
+<<<<<<< HEAD
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -226,6 +272,8 @@
                     <target>${java.version}</target>
                 </configuration>
             </plugin>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- copy all dependency libs to target lib dir -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -245,6 +293,7 @@
                     </execution>
                 </executions>
             </plugin>
+<<<<<<< HEAD
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
@@ -269,4 +318,8 @@
         </plugins>
     </build>
 
+=======
+        </plugins>
+    </build>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 </project>

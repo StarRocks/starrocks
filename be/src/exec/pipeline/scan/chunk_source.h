@@ -77,6 +77,10 @@ public:
 
     virtual bool reach_limit() { return false; }
 
+<<<<<<< HEAD
+=======
+    virtual void update_chunk_exec_stats(RuntimeState* state) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Used to print custom error msg in be.out when coredmp
     // Don't do heavey work, it calls frequently
     virtual const std::string get_custom_coredump_msg() const { return ""; }
@@ -87,12 +91,15 @@ protected:
     // The schedule entity of this workgroup for resource group.
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const;
 
+<<<<<<< HEAD
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ScanOperator* _scan_op;
     const int32_t _scan_operator_seq;
     RuntimeProfile* _runtime_profile;

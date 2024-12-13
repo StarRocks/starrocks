@@ -14,6 +14,7 @@
 
 #include "meta_helper.h"
 
+<<<<<<< HEAD
 #include <boost/algorithm/string.hpp>
 
 #include "formats/utils.h"
@@ -39,12 +40,38 @@ void ParquetMetaHelper::build_column_name_2_pos_in_meta(
     }
 }
 
+=======
+#include "formats/parquet/metadata.h"
+#include "formats/parquet/schema.h"
+#include "formats/utils.h"
+#include "gen_cpp/Descriptors_types.h"
+#include "runtime/descriptors.h"
+
+namespace starrocks::parquet {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void ParquetMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
     for (auto& materialized_column : materialized_columns) {
+<<<<<<< HEAD
         int32_t field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.name());
         if (field_idx < 0) continue;
+=======
+        const SlotDescriptor* slotDesc = materialized_column.slot_desc;
+
+        int32_t field_idx = -1;
+        if (slotDesc->col_unique_id() != -1) {
+            field_idx = _file_metadata->schema().get_field_idx_by_field_id(materialized_column.col_unique_id());
+            if (field_idx < 0) continue;
+        } else if (!slotDesc->col_physical_name().empty()) {
+            field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.col_physical_name());
+            if (field_idx < 0) continue;
+        } else {
+            field_idx = _file_metadata->schema().get_field_idx_by_column_name(materialized_column.name());
+            if (field_idx < 0) continue;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         const ParquetField* parquet_field = _file_metadata->schema().get_stored_column_by_field_idx(field_idx);
         // check is type is invalid
@@ -85,6 +112,7 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
             }
         }
     } else if (parquet_field->type == ColumnType::STRUCT) {
+<<<<<<< HEAD
         std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type{};
         for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
             field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
@@ -101,6 +129,52 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
             if (_is_valid_type(&child_parquet_field, it->second)) {
                 has_valid_child = true;
                 break;
+=======
+        if (!type_descriptor->field_ids.empty()) {
+            std::unordered_map<int32_t, const TypeDescriptor*> field_id_2_type;
+            for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                field_id_2_type.emplace(type_descriptor->field_ids[idx], &type_descriptor->children[idx]);
+            }
+
+            // start to check struct type
+            for (const auto& child_parquet_field : parquet_field->children) {
+                auto it = field_id_2_type.find(child_parquet_field.field_id);
+                if (it == field_id_2_type.end()) {
+                    continue;
+                }
+
+                if (_is_valid_type(&child_parquet_field, it->second)) {
+                    has_valid_child = true;
+                    break;
+                }
+            }
+        } else {
+            std::unordered_map<std::string, const TypeDescriptor*> field_name_2_type;
+            if (!type_descriptor->field_physical_names.empty()) {
+                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                    field_name_2_type.emplace(
+                            Utils::format_name(type_descriptor->field_physical_names[idx], _case_sensitive),
+                            &type_descriptor->children[idx]);
+                }
+            } else {
+                for (size_t idx = 0; idx < type_descriptor->children.size(); idx++) {
+                    field_name_2_type.emplace(Utils::format_name(type_descriptor->field_names[idx], _case_sensitive),
+                                              &type_descriptor->children[idx]);
+                }
+            }
+
+            // start to check struct type
+            for (const auto& child_parquet_field : parquet_field->children) {
+                auto it = field_name_2_type.find(Utils::format_name(child_parquet_field.name, _case_sensitive));
+                if (it == field_name_2_type.end()) {
+                    continue;
+                }
+
+                if (_is_valid_type(&child_parquet_field, it->second)) {
+                    has_valid_child = true;
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -108,10 +182,13 @@ bool ParquetMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     return has_valid_child;
 }
 
+<<<<<<< HEAD
 const ParquetField* ParquetMetaHelper::get_parquet_field(const std::string& col_name) const {
     return _file_metadata->schema().get_stored_column_by_column_name(col_name);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void IcebergMetaHelper::_init_field_mapping() {
     for (const auto& each : _t_iceberg_schema->fields) {
         _field_name_2_iceberg_field.emplace(Utils::format_name(each.name, _case_sensitive), &each);
@@ -176,6 +253,7 @@ bool IcebergMetaHelper::_is_valid_type(const ParquetField* parquet_field, const 
     return has_valid_child;
 }
 
+<<<<<<< HEAD
 void IcebergMetaHelper::build_column_name_2_pos_in_meta(
         std::unordered_map<std::string, size_t>& column_name_2_pos_in_meta, const tparquet::RowGroup& row_group,
         const std::vector<SlotDescriptor*>& slots) const {
@@ -195,6 +273,8 @@ void IcebergMetaHelper::build_column_name_2_pos_in_meta(
     }
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContext::ColumnInfo>& materialized_columns,
                                              std::vector<GroupReaderParam::Column>& read_cols,
                                              std::unordered_set<std::string>& existed_column_names) const {
@@ -225,6 +305,7 @@ void IcebergMetaHelper::prepare_read_columns(const std::vector<HdfsScannerContex
     }
 }
 
+<<<<<<< HEAD
 const ParquetField* IcebergMetaHelper::get_parquet_field(const std::string& col_name) const {
     auto it = _field_name_2_iceberg_field.find(Utils::format_name(col_name, _case_sensitive));
     if (it == _field_name_2_iceberg_field.end()) {
@@ -234,4 +315,6 @@ const ParquetField* IcebergMetaHelper::get_parquet_field(const std::string& col_
     return _file_metadata->schema().get_stored_column_by_field_id(field_id);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::parquet

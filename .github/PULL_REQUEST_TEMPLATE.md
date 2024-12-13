@@ -1,3 +1,10 @@
+<<<<<<< HEAD
+=======
+## Why I'm doing:
+
+## What I'm doing:
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Fixes #issue
 
 ## What type of PR is this:
@@ -32,7 +39,15 @@ If yes, please specify the type of change:
 
 ## Bugfix cherry-pick branch check:
 - [ ] I have checked the version labels which the pr will be auto-backported to the target branch
+<<<<<<< HEAD
   - [ ] 3.2
   - [ ] 3.1
   - [ ] 3.0
   - [ ] 2.5
+=======
+  - [ ] 3.4
+  - [ ] 3.3
+  - [ ] 3.2
+  - [ ] 3.1
+  - [ ] 3.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

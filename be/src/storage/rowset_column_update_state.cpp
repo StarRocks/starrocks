@@ -187,7 +187,11 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
 
     if (_partial_update_states[start_idx].inited) {
         // assume that states between [start_idx, end_idx) should be inited
+<<<<<<< HEAD
         CHECK(_partial_update_states[end_idx - 1].inited);
+=======
+        RETURN_ERROR_IF_FALSE(_partial_update_states[end_idx - 1].inited);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 
@@ -542,7 +546,12 @@ Status RowsetColumnUpdateState::_fill_default_columns(const TabletSchemaCSPtr& t
                                                                  type_info, tablet_column.length(), row_cnt);
             ColumnIteratorOptions iter_opts;
             RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+<<<<<<< HEAD
             default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]].get());
+=======
+            RETURN_IF_ERROR(
+                    default_value_iter->fetch_values_by_rowid(nullptr, row_cnt, (*columns)[column_ids[i]].get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             TRY_CATCH_BAD_ALLOC((*columns)[column_ids[i]]->append_default(row_cnt));
         }
@@ -692,6 +701,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     RETURN_IF_ERROR(tablet->updates()->get_latest_applied_version(&latest_applied_version));
     RETURN_IF_ERROR(_finalize_partial_update_state(tablet, rowset, tracker, latest_applied_version, index));
 
+<<<<<<< HEAD
     std::vector<int32_t> update_column_ids;
     std::vector<uint32_t> update_column_uids;
     std::vector<uint32_t> unique_update_column_ids;
@@ -700,6 +710,16 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         if (cid >= tschema->num_key_columns()) {
             update_column_ids.push_back(cid);
             update_column_uids.push_back((uint32_t)cid);
+=======
+    std::vector<ColumnId> update_column_ids;
+    std::vector<ColumnUID> update_column_uids;
+    std::vector<ColumnUID> unique_update_column_ids;
+    const auto& tschema = rowset->schema();
+    for (ColumnId cid : txn_meta.partial_update_column_ids()) {
+        if (cid >= tschema->num_key_columns()) {
+            update_column_ids.push_back(cid);
+            update_column_uids.push_back((ColumnUID)cid);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     for (uint32_t uid : txn_meta.partial_update_column_unique_ids()) {
@@ -729,6 +749,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // rss_id -> update file id -> <rowid, update rowid>
     std::map<uint32_t, UptidToRowidPairs> rss_upt_id_to_rowid_pairs;
     for (int upt_id = 0; upt_id < _partial_update_states.size(); upt_id++) {
+<<<<<<< HEAD
         for (const auto& each : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
             auto rssid = (uint32_t)(each.first >> 32);
             auto rowid = (uint32_t)(each.first & ROWID_MASK);
@@ -736,6 +757,15 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         }
         insert_rows += _partial_update_states[upt_id].insert_rowids.size();
         update_rows += _partial_update_states[upt_id].rss_rowid_to_update_rowid.size();
+=======
+        for (const auto& each_rss : _partial_update_states[upt_id].rss_rowid_to_update_rowid) {
+            for (const auto& each : each_rss.second) {
+                rss_upt_id_to_rowid_pairs[each_rss.first][upt_id].emplace_back(each.first, each.second);
+            }
+            update_rows += each_rss.second.size();
+        }
+        insert_rows += _partial_update_states[upt_id].insert_rowids.size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     cost_str << " [generate delta column group writer] " << watch.elapsed_time();
     watch.reset();
@@ -747,7 +777,11 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
     // {{1,2}, {3,4}} -> {"aaa.cols", "bbb.cols"}
     // It means column_1 and column_2 are stored in aaa.cols, and column_3 and column_4 are stored in bbb.cols
+<<<<<<< HEAD
     std::map<uint32_t, std::vector<std::vector<uint32_t>>> dcg_column_ids;
+=======
+    std::map<uint32_t, std::vector<std::vector<ColumnUID>>> dcg_column_ids;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::map<uint32_t, std::vector<std::string>> dcg_column_files;
     // 3. read from raw segment file and update file, and generate `.col` files one by one
     int idx = 0; // It is used for generate different .cols filename
@@ -755,6 +789,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
         for (const auto& each : rss_upt_id_to_rowid_pairs) {
             int64_t t1 = MonotonicMillis();
             // 3.1 build column id range
+<<<<<<< HEAD
             std::vector<int32_t> selective_update_column_ids =
                     append_fixed_batch(update_column_ids, col_index, BATCH_HANDLE_COLUMN_CNT);
             std::vector<uint32_t> selective_update_column_uids =
@@ -764,6 +799,17 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             // 3.2 build partial schema
             auto partial_tschema = TabletSchema::create(tschema, selective_update_column_ids);
             Schema partial_schema = ChunkHelper::convert_schema(tschema, selective_update_column_uids);
+=======
+            std::vector<ColumnId> selective_update_column_ids =
+                    append_fixed_batch(update_column_ids, col_index, BATCH_HANDLE_COLUMN_CNT);
+            std::vector<ColumnUID> selective_update_column_uids =
+                    append_fixed_batch(update_column_uids, col_index, BATCH_HANDLE_COLUMN_CNT);
+            std::vector<ColumnUID> selective_unique_update_column_ids =
+                    append_fixed_batch(unique_update_column_ids, col_index, BATCH_HANDLE_COLUMN_CNT);
+            // 3.2 build partial schema
+            auto partial_tschema = TabletSchema::create(tschema, selective_update_column_uids);
+            Schema partial_schema = ChunkHelper::convert_schema(tschema, selective_update_column_ids);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ASSIGN_OR_RETURN(auto delta_column_group_writer, build_writer_fn(each.first, partial_tschema, idx));
             // 3.3 read from source segment
             ASSIGN_OR_RETURN(auto rowsetid_segid, _find_rowset_seg_id(each.first));

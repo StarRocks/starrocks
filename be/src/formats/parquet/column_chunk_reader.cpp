@@ -14,6 +14,7 @@
 
 #include "formats/parquet/column_chunk_reader.h"
 
+<<<<<<< HEAD
 #include <memory>
 
 #include "common/status.h"
@@ -22,6 +23,26 @@
 #include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+=======
+#include <glog/logging.h>
+
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include "common/compiler_util.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "formats/parquet/encoding.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "fs/fs.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "util/compression/block_compression.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 
@@ -31,7 +52,18 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _max_rep_level(max_rep_level),
           _type_length(type_length),
           _chunk_metadata(column_chunk),
+<<<<<<< HEAD
           _opts(opts) {}
+=======
+          _opts(opts),
+          _def_level_decoder(&opts.stats->level_decode_ns),
+          _rep_level_decoder(&opts.stats->level_decode_ns) {
+    if (_chunk_metadata->meta_data.__isset.statistics && _chunk_metadata->meta_data.statistics.__isset.null_count &&
+        _chunk_metadata->meta_data.statistics.null_count == 0) {
+        _current_row_group_no_null = true;
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
@@ -50,7 +82,11 @@ Status ColumnChunkReader::init(int chunk_size) {
     // seek to the first page
     RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
+<<<<<<< HEAD
     auto compress_type = convert_compression_codec(metadata().codec);
+=======
+    auto compress_type = ParquetUtils::convert_compression_codec(metadata().codec);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
     _chunk_size = chunk_size;
@@ -118,6 +154,14 @@ Status ColumnChunkReader::_parse_page_header() {
         _opts.stats->has_page_statistics |=
                 (header.data_page_header.__isset.statistics && (header.data_page_header.statistics.__isset.min_value ||
                                                                 header.data_page_header.statistics.__isset.min));
+<<<<<<< HEAD
+=======
+        _current_page_no_null =
+                (header.data_page_header.__isset.statistics && header.data_page_header.statistics.__isset.null_count &&
+                 header.data_page_header.statistics.null_count == 0)
+                        ? true
+                        : false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return Status::OK();
@@ -282,6 +326,21 @@ Status ColumnChunkReader::_try_load_dictionary() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+Status ColumnChunkReader::load_dictionary_page() {
+    if (_dict_page_parsed) {
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(_parse_page_header());
+    if (UNLIKELY(!current_page_is_dict())) {
+        return Status::InternalError("Not a dictionary page in dictionary page offset");
+    }
+    return _parse_dict_page();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool ColumnChunkReader::current_page_is_dict() {
     const auto header = _page_reader->current_header();
     return header->type == tparquet::PageType::DICTIONARY_PAGE;

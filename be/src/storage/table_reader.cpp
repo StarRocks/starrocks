@@ -18,13 +18,20 @@
 #include <queue>
 
 #include "exec/tablet_info.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "serde/protobuf_serde.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "util/brpc_stub_cache.h"
+<<<<<<< HEAD
+=======
+#include "util/internal_service_recoverable_stub.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/ref_count_closure.h"
 
 namespace starrocks {
@@ -61,7 +68,11 @@ Status TableReader::init(const TableReaderParams& params) {
     RETURN_IF_ERROR(_partition_param->init(nullptr));
     _location_param = std::make_unique<OlapTableLocationParam>(params.location_param);
     _nodes_info = std::make_unique<StarRocksNodesInfo>(params.nodes_info);
+<<<<<<< HEAD
     _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc(), false);
+=======
+    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -220,8 +231,12 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
             LOG(WARNING) << msg;
             st = Status::InternalError(msg);
         } else {
+<<<<<<< HEAD
             doris::PBackendService_Stub* stub =
                     ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+=======
+            auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (stub == nullptr) {
                 string msg = strings::Substitute("multi_get fail to get brpc stub for $0:$1 tablet:$2", node_info->host,
                                                  node_info->brpc_port, tablet_id);
@@ -238,9 +253,16 @@ Status TableReader::_tablet_multi_get_remote(int64_t tablet_id, int64_t version,
     return st;
 }
 
+<<<<<<< HEAD
 Status TableReader::_tablet_multi_get_rpc(doris::PBackendService_Stub* stub, int64_t tablet_id, int64_t version,
                                           Chunk& keys, const std::vector<std::string>& value_columns,
                                           std::vector<bool>& found, Chunk& values, SchemaPtr& value_schema) {
+=======
+Status TableReader::_tablet_multi_get_rpc(const std::shared_ptr<PInternalService_RecoverableStub>& stub,
+                                          int64_t tablet_id, int64_t version, Chunk& keys,
+                                          const std::vector<std::string>& value_columns, std::vector<bool>& found,
+                                          Chunk& values, SchemaPtr& value_schema) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     PTabletReaderMultiGetRequest request;
     request.set_tablet_id(tablet_id);
     request.set_version(version);

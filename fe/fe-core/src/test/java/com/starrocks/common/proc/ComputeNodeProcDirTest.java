@@ -14,6 +14,7 @@
 
 package com.starrocks.common.proc;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
@@ -21,6 +22,20 @@ import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.DefaultWarehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.After;
@@ -42,8 +57,17 @@ public class ComputeNodeProcDirTest {
     @Mocked
     private StarOSAgent starOsAgent;
     @Mocked
+<<<<<<< HEAD
     private RunMode runMode;
 
+=======
+    private NodeMgr nodeMgr;
+    @Mocked
+    private RunMode runMode;
+
+    private final VariableMgr variableMgr = new VariableMgr();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setUp() {
         b1 = new ComputeNode(1000, "host1", 10000);
@@ -67,15 +91,39 @@ public class ComputeNodeProcDirTest {
 
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
+=======
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+<<<<<<< HEAD
             }
         };
+=======
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @After
@@ -112,12 +160,28 @@ public class ComputeNodeProcDirTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFetchResultSharedData() throws AnalysisException {
+=======
+    public void testFetchResultSharedData(@Mocked WarehouseManager warehouseManager) throws AnalysisException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 RunMode.isSharedDataMode();
                 minTimes = 1;
                 result = true;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -131,4 +195,37 @@ public class ComputeNodeProcDirTest {
             Assert.assertEquals(String.valueOf(tabletNumSharedData), row.get(columnIndex));
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testWarehouse(@Mocked WarehouseManager warehouseManager) throws AnalysisException {
+        new Expectations() {
+            {
+                systemInfoService.getComputeNodeIds(anyBoolean);
+                result = Lists.newArrayList(1000L, 1001L);
+            }
+        };
+
+        new Expectations() {
+            {
+                RunMode.isSharedDataMode();
+                minTimes = 0;
+                result = true;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        ComputeNodeProcDir dir = new ComputeNodeProcDir(systemInfoService);
+        ProcResult result = dir.fetchResult();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

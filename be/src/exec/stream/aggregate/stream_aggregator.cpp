@@ -26,8 +26,13 @@ namespace starrocks::stream {
 
 namespace {
 
+<<<<<<< HEAD
 void append_prev_result(ChunkPtr result_chunk, const Columns& group_by_columns, size_t row_idx, ChunkPtr prev_result,
                         size_t prev_result_idx) {
+=======
+void append_prev_result(const ChunkPtr& result_chunk, const Columns& group_by_columns, size_t row_idx,
+                        const ChunkPtr& prev_result, size_t prev_result_idx) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK_EQ(result_chunk->num_columns(), group_by_columns.size() + prev_result->num_columns());
     auto columns = result_chunk->columns();
     for (size_t i = 0; i < group_by_columns.size(); i++) {
@@ -134,12 +139,21 @@ Status StreamAggregator::process_chunk(StreamChunk* chunk) {
 Status StreamAggregator::output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk) {
     ChunkPtr intermediate_chunk = std::make_shared<Chunk>();
     std::vector<ChunkPtr> detail_chunks;
+<<<<<<< HEAD
     RETURN_IF_ERROR(output_changes(chunk_size, result_chunk, &intermediate_chunk, detail_chunks));
     return Status::OK();
 }
 
 Status StreamAggregator::output_changes(int32_t chunk_size, StreamChunkPtr* result_chunk, ChunkPtr* intermediate_chunk,
                                         std::vector<ChunkPtr>& detail_chunks) {
+=======
+    RETURN_IF_ERROR(output_changes_internal(chunk_size, result_chunk, &intermediate_chunk, detail_chunks));
+    return Status::OK();
+}
+
+Status StreamAggregator::output_changes_internal(int32_t chunk_size, StreamChunkPtr* result_chunk,
+                                                 ChunkPtr* intermediate_chunk, std::vector<ChunkPtr>& detail_chunks) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SCOPED_TIMER(_agg_stat->get_results_timer);
     RETURN_IF_ERROR(hash_map_variant().visit([&](auto& variant_value) {
         auto& hash_map_with_key = *variant_value;

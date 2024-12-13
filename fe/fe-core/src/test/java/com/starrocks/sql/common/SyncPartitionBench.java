@@ -170,7 +170,11 @@ public class SyncPartitionBench {
      */
     @Benchmark
     public void diffRangeBench() {
+<<<<<<< HEAD
         PartitionDiffer.diffRange(srcRangeMap, dstRangeMap);
+=======
+        RangePartitionDiffer.diffRange(srcRangeMap, dstRangeMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -304,6 +308,7 @@ public class SyncPartitionBench {
         }
 
         // TODO: Callers may use `List<PartitionRange>` directly.
+<<<<<<< HEAD
         List<PartitionRange> srcRanges = srcRangeMap.keySet().stream().map(name -> new PartitionRange(name,
                 srcRangeMap.get(name))).collect(Collectors.toList());
         List<PartitionRange> dstRanges = dstRangeMap.keySet().stream().map(name -> new PartitionRange(name,
@@ -312,6 +317,16 @@ public class SyncPartitionBench {
         Collections.sort(dstRanges, PartitionRange::compareTo);
 
         for (PartitionRange srcRange : srcRanges) {
+=======
+        List<PRangeCellPlus> srcRanges = srcRangeMap.keySet().stream().map(name -> new PRangeCellPlus(name,
+                srcRangeMap.get(name))).collect(Collectors.toList());
+        List<PRangeCellPlus> dstRanges = dstRangeMap.keySet().stream().map(name -> new PRangeCellPlus(name,
+                dstRangeMap.get(name))).collect(Collectors.toList());
+        Collections.sort(srcRanges, PRangeCellPlus::compareTo);
+        Collections.sort(dstRanges, PRangeCellPlus::compareTo);
+
+        for (PRangeCellPlus srcRange : srcRanges) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             int mid = Collections.binarySearch(dstRanges, srcRange);
             if (mid < 0) {
                 continue;

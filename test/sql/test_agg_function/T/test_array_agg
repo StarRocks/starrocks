@@ -11,7 +11,10 @@ DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -77,6 +80,7 @@ select array_agg(name order by 1 desc nulls first), array_agg(name order by 1 de
 select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls last) from ss order by 1;
 
 select array_agg(distinct subject order by 1, name) from ss group by id order by id;
+<<<<<<< HEAD
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
 select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
@@ -88,16 +92,37 @@ select array_agg(distinct null order by score,1,4.00),array_agg(null order by sc
 select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
 select cardinality(array_agg(distinct arr order by score,name, subject)), cardinality(array_agg(distinct mmap order by score, name,subject)) from ss group by id order by 1;
 select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1,2;
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1,2;
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1,2;
+select array_agg(distinct name order by 1) from ss group by id order by 1;
+select cardinality(array_agg(distinct arr order by score, cardinality(arr), arr)) from ss group by id order by 1;
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
+select cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by id;
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1, 2;
+select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
+select cardinality(array_agg(distinct arr order by score,name, subject)), cardinality(array_agg(distinct mmap order by score, name,subject)) from ss group by id order by 1,2;
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1,2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select array_agg(distinct score order by 1) from ss group by id order by 1;
 select array_agg(distinct score order by 1,name) from ss group by id order by 1;
 select array_agg(distinct 1 order by 1) from ss group by id order by 1;
 select array_agg(distinct 12 order by score) from ss group by id order by 1;
 select array_agg(distinct subject order by 1) from ss group by id order by 1;
+<<<<<<< HEAD
 select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
 select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
 select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
+=======
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1,2,3;
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1, 2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select array_agg( null order by score,4.00) from ss group by id order by 1;
 select array_agg( score order by 1) from ss group by id order by 1;
 select array_agg( score order by 1,name) from ss group by id order by 1;
@@ -111,7 +136,11 @@ select array_agg(name order by 1), array_agg(distinct name order by 1, score) fr
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss order by 1;
 select array_agg(distinct name order by 1) from ss order by 1;
 select cardinality(array_agg(distinct arr order by score,1)) from ss order by 1;
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+=======
+select array_agg(distinct name order by 1, score), count(distinct id), max(score)  from ss order by 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
 select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss order by 1;
 select array_agg(distinct subject order by 1, null) from ss order by 1;
@@ -135,6 +164,7 @@ select array_agg(distinct 1 order by 1) from ss order by 1;
 set new_planner_agg_stage = 2;
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
 select array_agg(distinct subject order by 1, name) from ss group by id order by id;
+<<<<<<< HEAD
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
 select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1;
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1;
@@ -146,16 +176,37 @@ select array_agg(distinct null order by score,1,4.00),array_agg(null order by sc
 select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
 select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1;
 select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1,2;
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1,2;
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1,2;
+select array_agg(distinct name order by 1) from ss group by id order by 1;
+select cardinality(array_agg(distinct arr order by score, 1)) from ss group by id order by 1;
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
+select cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by id;
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1, 2;
+select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1, 2;
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1,2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select array_agg(distinct score order by 1) from ss group by id order by 1;
 select array_agg(distinct score order by 1,name) from ss group by id order by 1;
 select array_agg(distinct 1 order by 1) from ss group by id order by 1;
 select array_agg(distinct 12 order by score) from ss group by id order by 1;
 select array_agg(distinct subject order by 1) from ss group by id order by 1;
+<<<<<<< HEAD
 select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
 select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
 select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
+=======
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1,2,3;
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1, 2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select array_agg( null order by score,4.00) from ss group by id order by 1;
 select array_agg( score order by 1) from ss group by id order by 1;
 select array_agg( score order by 1,name) from ss group by id order by 1;
@@ -169,7 +220,11 @@ select array_agg(name order by 1), array_agg(distinct name order by 1, score) fr
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss order by 1;
 select array_agg(distinct name order by 1) from ss order by 1;
 select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1;
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+=======
+select array_agg(distinct name order by 1, score, 1), count(distinct id), max(score)  from ss order by 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap)), name),max(id) as a from ss order by a;
 select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss order by 1;
 select array_agg(distinct subject order by 1, null) from ss order by 1;
@@ -205,6 +260,7 @@ select array_agg(name order by 1 nulls first), array_agg(name order by 1 nulls l
 set new_planner_agg_stage = 0;
 
 set enable_exchange_pass_through = false;
+<<<<<<< HEAD
 select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1;
 select array_agg(distinct subject order by 1, name) from ss group by id order by id;
 select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1;
@@ -218,16 +274,39 @@ select array_agg(distinct null order by score,1,4.00),array_agg(null order by sc
 select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
 select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1;
 select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1;
+=======
+select array_agg(distinct name order by 1, score), count(distinct id), array_agg(name order by 1) from ss group by id order by 1,2;
+select array_agg(distinct subject order by 1, name) from ss group by id order by id;
+select array_agg(distinct name order by 1), cardinality(array_agg(distinct arr order by score)) from ss group by id order by 1,2;
+select array_agg(name order by 1), array_agg(distinct name order by 1, score) from ss group by id order by 1,2;
+select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss group by id order by 1,2;
+select array_agg(distinct name order by 1) from ss group by id order by 1;
+select cardinality(array_agg(distinct arr order by score,1)) from ss group by id order by 1;
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select cardinality(array_agg(distinct mmap order by score, name,subject)) from ss group by id order by id;
+select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss group by id order by 1, 2;
+select array_agg(distinct subject order by 1, null) from ss group by id order by 1;
+select cardinality(array_agg(distinct arr order by score,name,subject)), cardinality(array_agg(distinct mmap order by score,name,subject)) from ss group by id order by 1, 2;
+select array_agg(distinct score order by score,4.00),array_agg(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss group by id order by 1, 2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select array_agg(distinct score order by 1) from ss group by id order by 1;
 select array_agg(distinct score order by 1,name) from ss group by id order by 1;
 select array_agg(distinct 1 order by 1) from ss group by id order by 1;
 select array_agg(distinct 12 order by score) from ss group by id order by 1;
 select array_agg(distinct subject order by 1) from ss group by id order by 1;
+<<<<<<< HEAD
 select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1;
 select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1;
 select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1;
 select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1;
 select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1;
+=======
+select group_concat( name,subject order by 1,2), array_agg(distinct id order by 1), max(score) from ss group by id order by 1, 2, 3;
+select array_agg( name order by 1,score), count(distinct id), max(score)  from ss group by id order by 1, 2, 3;
+select array_agg( subject order by score,1), count(distinct id), max(score)  from ss group by id order by 1, 2, 3;
+select array_agg(name order by score,4,1), count(distinct id), max(score)  from ss group by id order by 1, 2,3;
+select cardinality(array_agg( name order by score,4.00)), cardinality(array_agg(distinct name order by score,4.00)) from ss group by id order by 1, 2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select array_agg( null order by score,4.00) from ss group by id order by 1;
 select array_agg( score order by 1) from ss group by id order by 1;
 select array_agg( score order by 1,name) from ss group by id order by 1;
@@ -241,7 +320,11 @@ select array_agg(name order by 1), array_agg(distinct name order by 1, score) fr
 select array_agg(distinct name order by 1,score), array_agg(distinct score order by 1) from ss order by 1;
 select array_agg(distinct name order by 1) from ss order by 1;
 select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1;
+<<<<<<< HEAD
 select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+=======
+select array_agg(distinct name order by 1, score, 1), count(distinct id), max(score)  from ss order by 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
 select array_agg(distinct null order by score,1,4.00),array_agg(null order by score,1,4.00 ) from ss order by 1;
 select array_agg(distinct subject order by 1, null) from ss order by 1;

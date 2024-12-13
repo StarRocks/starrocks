@@ -447,4 +447,17 @@ double CyclesPerSecond() {
     return cpuinfo_cycles_per_second;
 }
 
+<<<<<<< HEAD
+=======
+int get_cur_core_file_limit() {
+    struct rlimit rlim;
+    int ret = getrlimit(RLIMIT_CORE, &rlim);
+    if (ret == 0) {
+        return rlim.rlim_cur;
+    } else {
+        return 0;
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace base

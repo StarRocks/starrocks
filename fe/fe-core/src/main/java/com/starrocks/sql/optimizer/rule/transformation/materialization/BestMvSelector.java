@@ -22,6 +22,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.DebugUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -29,6 +33,10 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.Rule;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -36,17 +44,43 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class BestMvSelector {
     private final List<OptExpression> expressions;
     private final OptimizerContext context;
     private final OptExpression queryPlan;
     private final boolean isAggQuery;
+<<<<<<< HEAD
 
     public BestMvSelector(List<OptExpression> expressions, OptimizerContext context, OptExpression queryPlan) {
+=======
+    private final Rule rule;
+
+    public BestMvSelector(List<OptExpression> expressions, OptimizerContext context, OptExpression queryPlan, Rule rule) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.expressions = expressions;
         this.context = context;
         this.queryPlan = queryPlan;
         this.isAggQuery = queryPlan.getOp() instanceof LogicalAggregationOperator;
+<<<<<<< HEAD
+=======
+        this.rule = rule;
+    }
+
+    private List<OptExpression> calculateStatistics(List<OptExpression> expressions, OptimizerContext context) {
+        for (OptExpression expression : expressions) {
+            try {
+                calculateStatistics(expression, context);
+            } catch (Exception e) {
+                logMVRewrite(context, rule, "calculate statistics failed: {}", DebugUtil.getStackTrace(e));
+            }
+        }
+        return expressions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public OptExpression selectBest() {
@@ -54,9 +88,13 @@ public class BestMvSelector {
             return expressions.get(0);
         }
         // compute the statistics of OptExpression
+<<<<<<< HEAD
         for (OptExpression expression : expressions) {
             calculateStatistics(expression, context);
         }
+=======
+        List<OptExpression> validExpressions = calculateStatistics(expressions, context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // collect original table scans
         List<Table> originalTables = MvUtils.getAllTables(queryPlan);
@@ -65,18 +103,30 @@ public class BestMvSelector {
         Set<String> nonEquivalenceColumns = Sets.newHashSet();
         MvUtils.splitPredicate(predicates, equivalenceColumns, nonEquivalenceColumns);
         List<CandidateContext> contexts = Lists.newArrayList();
+<<<<<<< HEAD
         for (int i = 0; i < expressions.size(); i++) {
             List<Table> expressionTables = MvUtils.getAllTables(expressions.get(i));
             originalTables.stream().forEach(originalTable -> expressionTables.remove(originalTable));
             CandidateContext mvContext = getMVContext(
                     expressions.get(i), isAggQuery, context, expressionTables, equivalenceColumns, nonEquivalenceColumns);
+=======
+        for (int i = 0; i < validExpressions.size(); i++) {
+            List<Table> expressionTables = MvUtils.getAllTables(validExpressions.get(i));
+            originalTables.stream().forEach(originalTable -> expressionTables.remove(originalTable));
+            CandidateContext mvContext = getMVContext(
+                    validExpressions.get(i), isAggQuery, context, expressionTables, equivalenceColumns, nonEquivalenceColumns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkState(mvContext != null);
             mvContext.setIndex(i);
             contexts.add(mvContext);
         }
         // sort expressions based on statistics output row count and compute size
         contexts.sort(new CandidateContextComparator());
+<<<<<<< HEAD
         return expressions.get(contexts.get(0).getIndex());
+=======
+        return validExpressions.get(contexts.get(0).getIndex());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @VisibleForTesting
@@ -131,6 +181,7 @@ public class BestMvSelector {
     public static class CandidateContextComparator implements Comparator<CandidateContext> {
         @Override
         public int compare(CandidateContext context1, CandidateContext context2) {
+<<<<<<< HEAD
             // compare group by key num
             int ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
             if (ret != 0) {
@@ -139,6 +190,10 @@ public class BestMvSelector {
 
             // larger is better
             ret = Integer.compare(context2.sortScore, context1.sortScore);
+=======
+            // larger is better
+            int ret = Integer.compare(context2.sortScore, context1.sortScore);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (ret != 0) {
                 return ret;
             }
@@ -150,6 +205,15 @@ public class BestMvSelector {
                 return ret;
             }
 
+<<<<<<< HEAD
+=======
+            // compare group by key num
+            ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
+            if (ret != 0) {
+                return ret;
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // compare by schema column num
             ret = Integer.compare(context1.getSchemaColumnNum(), context2.getSchemaColumnNum());
             if (ret != 0) {

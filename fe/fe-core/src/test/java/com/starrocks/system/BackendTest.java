@@ -12,13 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.system;
 
 import org.junit.Assert;
 import org.junit.Test;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class BackendTest {
 
     @Test
@@ -30,6 +36,7 @@ public class BackendTest {
 
     @Test
     public void cpuCoreUpdate() {
+<<<<<<< HEAD
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 8);
         Assert.assertEquals(8, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
         Assert.assertEquals(4, BackendCoreStat.getDefaultDOP());
@@ -47,10 +54,30 @@ public class BackendTest {
         BackendCoreStat.removeNumOfHardwareCoresOfBe(2);
         Assert.assertEquals(16, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
         Assert.assertEquals(8, BackendCoreStat.getDefaultDOP());
+=======
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 8);
+        Assert.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(4, BackendResourceStat.getInstance().getDefaultDOP());
+
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 16);
+        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
+
+        // add new backend 2
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(2, 8);
+        Assert.assertEquals(12, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(6, BackendResourceStat.getInstance().getDefaultDOP());
+
+        // remove new backend 2
+        BackendResourceStat.getInstance().removeBe(2);
+        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(8, BackendResourceStat.getInstance().getDefaultDOP());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void defaultSinkDopTest() {
+<<<<<<< HEAD
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 8);
         Assert.assertEquals(8, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
         Assert.assertEquals(2, BackendCoreStat.getSinkDefaultDOP());
@@ -74,5 +101,30 @@ public class BackendTest {
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 64);
         Assert.assertEquals(64, BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
         Assert.assertEquals(16, BackendCoreStat.getSinkDefaultDOP());
+=======
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 8);
+        Assert.assertEquals(8, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(2, BackendResourceStat.getInstance().getSinkDefaultDOP());
+
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 16);
+        Assert.assertEquals(16, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(5, BackendResourceStat.getInstance().getSinkDefaultDOP());
+
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 24);
+        Assert.assertEquals(24, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
+
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 32);
+        Assert.assertEquals(32, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(8, BackendResourceStat.getInstance().getSinkDefaultDOP());
+
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 48);
+        Assert.assertEquals(48, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(12, BackendResourceStat.getInstance().getSinkDefaultDOP());
+
+        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(1, 64);
+        Assert.assertEquals(64, BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe());
+        Assert.assertEquals(16, BackendResourceStat.getInstance().getSinkDefaultDOP());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

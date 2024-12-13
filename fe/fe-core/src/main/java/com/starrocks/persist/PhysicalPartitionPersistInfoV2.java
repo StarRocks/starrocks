@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.PhysicalPartition;
+<<<<<<< HEAD
 import com.starrocks.catalog.PhysicalPartitionImpl;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -35,9 +41,15 @@ public class PhysicalPartitionPersistInfoV2 implements Writable {
     @SerializedName("partitionId")
     private Long partitionId;
     @SerializedName("physicalPartition")
+<<<<<<< HEAD
     private PhysicalPartitionImpl partition;
 
     public PhysicalPartitionPersistInfoV2(Long dbId, Long tableId, Long partitionId, PhysicalPartitionImpl partition) {
+=======
+    private PhysicalPartition partition;
+
+    public PhysicalPartitionPersistInfoV2(Long dbId, Long tableId, Long partitionId, PhysicalPartition partition) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;

@@ -17,8 +17,12 @@ PARTITION p202008 VALUES [('2020-07-01'), ('2020-07-29')),
 PARTITION p202012 VALUES [('2020-08-01'), (MAXVALUE)))
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- result:
 -- !result
@@ -35,8 +39,12 @@ COMMENT "OLAP"
 PARTITION BY date_trunc('month', d2)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false"
+=======
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- result:
 -- !result
@@ -175,4 +183,8 @@ select k1, d2 from ptest_expr where date_trunc('day', d2) > days_sub(d2, 4) orde
 select k1, d2 from ptest_expr where datediff('2020-08-01', d2) < 0 order by k1;
 -- result:
 14	2050-01-05
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

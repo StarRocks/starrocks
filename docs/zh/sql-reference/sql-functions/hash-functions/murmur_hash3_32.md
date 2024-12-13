@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # murmur_hash3_32
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回输入字符串的 32 位 murmur3 hash 值。
 

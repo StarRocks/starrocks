@@ -18,8 +18,13 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.system.information.BeConfigsSystemTable;
 import com.starrocks.catalog.system.information.BeTabletsSystemTable;
 import com.starrocks.catalog.system.information.FeTabletSchedulesSystemTable;
@@ -33,11 +38,21 @@ import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TablesConfigSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.system.information.ViewsSystemTable;
+=======
+import com.starrocks.catalog.system.information.TemporaryTablesTable;
+import com.starrocks.catalog.system.information.ViewsSystemTable;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TSchemaTable;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+<<<<<<< HEAD
+=======
+import org.apache.commons.lang3.NotImplementedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -69,6 +84,10 @@ public class SystemTable extends Table {
                     .add(TablesConfigSystemTable.NAME)
                     .add(TaskRunsSystemTable.NAME)
                     .add(TasksSystemTable.NAME)
+<<<<<<< HEAD
+=======
+                    .add(TemporaryTablesTable.NAME)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .add(ViewsSystemTable.NAME)
                     .build();
 
@@ -132,11 +151,19 @@ public class SystemTable extends Table {
             columns = Lists.newArrayList();
         }
 
+<<<<<<< HEAD
         public Builder column(String name, ScalarType type) {
             return column(name, type, true);
         }
 
         public Builder column(String name, ScalarType type, boolean nullable) {
+=======
+        public Builder column(String name, Type type) {
+            return column(name, type, true);
+        }
+
+        public Builder column(String name, Type type, boolean nullable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             columns.add(new Column(name, type, false, null, nullable, null, ""));
             return this;
         }
@@ -160,6 +187,28 @@ public class SystemTable extends Table {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether this system table supports evaluation in FE
+     *
+     * @return true if it's supported
+     */
+    public boolean supportFeEvaluation() {
+        return false;
+    }
+
+    /**
+     * Evaluate the system table query with specified predicate
+     *
+     * @param predicate can only be conjuncts
+     * @return All columns and rows according to the schema of this table
+     */
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        throw new NotImplementedException("not supported");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static boolean needQueryFromLeader(String tableName) {
         return QUERY_FROM_LEADER_TABLES.contains(tableName);
     }

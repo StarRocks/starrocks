@@ -14,7 +14,15 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <memory>
+=======
+#include <stddef.h>
+#include <stdint.h>
+
+#include <memory>
+#include <string>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <unordered_map>
 #include <vector>
 

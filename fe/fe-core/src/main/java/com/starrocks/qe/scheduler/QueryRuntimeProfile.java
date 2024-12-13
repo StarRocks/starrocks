@@ -19,7 +19,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
@@ -28,13 +31,26 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.datacache.LoadDataCacheMetrics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
+<<<<<<< HEAD
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
+=======
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.task.LoadEtlTask;
+import com.starrocks.thrift.TLoadDataCacheMetrics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -47,14 +63,26 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collection;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
+=======
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+<<<<<<< HEAD
+=======
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class QueryRuntimeProfile {
@@ -77,6 +105,11 @@ public class QueryRuntimeProfile {
      */
     private static final Long MARKED_COUNT_DOWN_VALUE = -1L;
 
+<<<<<<< HEAD
+=======
+    public static final String LOAD_CHANNEL_PROFILE_NAME = "LoadChannel";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final JobSpec jobSpec;
 
     private final ConnectContext connectContext;
@@ -84,13 +117,25 @@ public class QueryRuntimeProfile {
     /**
      * True indicates that the profile has been reported.
      * <p> When {@link SessionVariable#isEnableLoadProfile()} is enabled,
+<<<<<<< HEAD
      * if the time costs of stream load is less than {@link Config#stream_load_profile_collect_second},
+=======
+     * if the time costs of stream load is less than {@link Config#stream_load_profile_collect_threshold_second},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * the profile will not be reported to FE to reduce the overhead of profile under high-frequency import
      */
     private boolean profileAlreadyReported = false;
 
     private RuntimeProfile queryProfile;
+<<<<<<< HEAD
     private final List<RuntimeProfile> fragmentProfiles;
+=======
+    private List<RuntimeProfile> fragmentProfiles;
+
+    // The load channel profile is only present if loading to OlapTables.
+    // The hierarchy is LoadChannel -> Channel(BE) -> Index
+    private final Optional<RuntimeProfile> loadChannelProfile;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * The number of instances of this query.
@@ -124,15 +169,36 @@ public class QueryRuntimeProfile {
     // ------------------------------------------------------------------------------------
     private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
 
+<<<<<<< HEAD
     public QueryRuntimeProfile(ConnectContext connectContext,
                                JobSpec jobSpec,
                                int numFragments,
+=======
+    // Fields for datacache
+    private final DataCacheSelectMetrics dataCacheSelectMetrics = new DataCacheSelectMetrics();
+
+    public QueryRuntimeProfile(ConnectContext connectContext,
+                               JobSpec jobSpec,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                boolean isShortCircuit) {
         this.connectContext = connectContext;
         this.jobSpec = jobSpec;
         this.isShortCircuit = isShortCircuit;
 
         this.queryProfile = new RuntimeProfile("Execution");
+<<<<<<< HEAD
+=======
+
+        if (jobSpec.hasOlapTableSink()) {
+            loadChannelProfile = Optional.of(new RuntimeProfile(LOAD_CHANNEL_PROFILE_NAME));
+            queryProfile.addChild(loadChannelProfile.get());
+        } else {
+            loadChannelProfile = Optional.empty();
+        }
+    }
+
+    public void initFragmentProfiles(int numFragments) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.fragmentProfiles = new ArrayList<>(numFragments);
         for (int i = 0; i < numFragments; i++) {
             RuntimeProfile profile = new RuntimeProfile("Fragment " + i);
@@ -198,12 +264,26 @@ public class QueryRuntimeProfile {
     }
 
     public void attachExecutionProfiles(Collection<FragmentInstanceExecState> executions) {
+<<<<<<< HEAD
+=======
+        Map<Integer, List<RuntimeProfile>> profiles = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (FragmentInstanceExecState execState : executions) {
             if (!execState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
+<<<<<<< HEAD
             fragmentProfiles.get(execState.getFragmentIndex()).addChild(execState.getProfile());
         }
+=======
+            if (execState.getProfile() == null) {
+                continue;
+            }
+            profiles.computeIfAbsent(execState.getFragmentIndex(), k -> Lists.newArrayList());
+            profiles.get(execState.getFragmentIndex()).add(execState.getProfile());
+        }
+        profiles.forEach((k, v) -> fragmentProfiles.get(k).addChildren(v));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void finishInstance(TUniqueId instanceId) {
@@ -227,6 +307,16 @@ public class QueryRuntimeProfile {
     }
 
     public boolean addListener(Consumer<Boolean> task) {
+<<<<<<< HEAD
+=======
+        if (connectContext instanceof ArrowFlightSqlConnectContext) {
+            profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
+                task.accept(true);
+            }));
+            return true;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (EXECUTOR.getQueue().remainingCapacity() <= 0) {
             return false;
         }
@@ -261,6 +351,23 @@ public class QueryRuntimeProfile {
         return queryProfile;
     }
 
+<<<<<<< HEAD
+=======
+    public void updateLoadChannelProfile(TReportExecStatusParams params) {
+        if (params.isSetLoad_channel_profile() && loadChannelProfile.isPresent()) {
+            loadChannelProfile.get().update(params.load_channel_profile);
+            if (LOG.isDebugEnabled()) {
+                StringBuilder builder = new StringBuilder();
+                loadChannelProfile.get().prettyPrint(builder, "");
+                LOG.debug("Load channel profile for query_id={} after reported by instance_id={}\n{}",
+                        DebugUtil.printId(jobSpec.getQueryId()),
+                        DebugUtil.printId(params.getFragment_instance_id()),
+                        builder);
+            }
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void updateProfile(FragmentInstanceExecState execState, TReportExecStatusParams params) {
         if (params.isSetProfile()) {
             profileAlreadyReported = true;
@@ -312,6 +419,18 @@ public class QueryRuntimeProfile {
         fragmentProfiles.forEach(RuntimeProfile::sortChildren);
     }
 
+<<<<<<< HEAD
+=======
+    public void updateDataCacheSelectMetrics(long backendId, TLoadDataCacheMetrics tLoadDataCacheMetrics) {
+        LoadDataCacheMetrics loadDataCacheMetrics = LoadDataCacheMetrics.buildFromThrift(tLoadDataCacheMetrics);
+        dataCacheSelectMetrics.updateLoadDataCacheMetrics(backendId, loadDataCacheMetrics);
+    }
+
+    public DataCacheSelectMetrics getDataCacheSelectMetrics() {
+        return dataCacheSelectMetrics;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void updateLoadInformation(FragmentInstanceExecState execState, TReportExecStatusParams params) {
         if (params.isSetDelta_urls()) {
             deltaUrls.addAll(params.getDelta_urls());
@@ -337,6 +456,12 @@ public class QueryRuntimeProfile {
         if (params.isSetSink_commit_infos()) {
             sinkCommitInfos.addAll(params.getSink_commit_infos());
         }
+<<<<<<< HEAD
+=======
+        if (params.isSetLoad_datacache_metrics()) {
+            updateDataCacheSelectMetrics(params.backend_id, params.load_datacache_metrics);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public RuntimeProfile buildQueryProfile(boolean needMerge) {
@@ -545,9 +670,72 @@ public class QueryRuntimeProfile {
                 newQueryProfile.addCounter("FrontendProfileMergeTime", TUnit.TIME_NS, null);
         processTimer.setValue(System.nanoTime() - start);
 
+<<<<<<< HEAD
         return newQueryProfile;
     }
 
+=======
+        Optional<RuntimeProfile> mergedLoadChannelProfile = mergeLoadChannelProfile();
+        mergedLoadChannelProfile.ifPresent(newQueryProfile::addChild);
+
+        return newQueryProfile;
+    }
+
+    Optional<RuntimeProfile> mergeLoadChannelProfile() {
+        if (loadChannelProfile.isEmpty()) {
+            return Optional.empty();
+        }
+
+        RuntimeProfile originProfile = loadChannelProfile.get();
+        RuntimeProfile mergedProfile = new RuntimeProfile(originProfile.getName());
+
+        mergedProfile.copyAllInfoStringsFrom(originProfile, null);
+        mergedProfile.copyAllCountersFrom(originProfile);
+
+        List<RuntimeProfile> channelProfiles = originProfile.getChildList().stream()
+                .map(pair -> pair.first)
+                .collect(Collectors.toList());
+
+        Counter counter = mergedProfile.addCounter("ChannelNum", TUnit.UNIT, null);
+        counter.setValue(channelProfiles.size());
+
+        String hosts = channelProfiles.stream()
+                .map(p -> getChannelHost(p.getName()))
+                .filter(Optional::isPresent)
+                .map(Optional::get)
+                .collect(Collectors.joining(","));
+        mergedProfile.addInfoString("BackendAddresses", hosts);
+
+        RuntimeProfile mergedChannelProfile =
+                RuntimeProfile.mergeIsomorphicProfiles(channelProfiles, Collections.emptySet());
+        if (mergedChannelProfile == null) {
+            if (LOG.isDebugEnabled()) {
+                StringBuilder builder = new StringBuilder();
+                originProfile.prettyPrint(builder, "");
+                LOG.debug("Load channel profile is empty after merged, query_id={}, the original profile\n{}",
+                        DebugUtil.printId(jobSpec.getQueryId()), builder);
+            }
+            return Optional.empty();
+        }
+        mergedProfile.copyAllInfoStringsFrom(mergedChannelProfile, null);
+        mergedProfile.copyAllCountersFrom(mergedChannelProfile);
+        mergedChannelProfile.getChildList().forEach(pair -> mergedProfile.addChild(pair.first));
+
+        RuntimeProfile.removeRedundantMinMaxMetrics(mergedProfile);
+
+        return Optional.of(mergedProfile);
+    }
+
+    // The pattern for each channel profile name like "Channel (host=127.0.0.1)"
+    private static final Pattern CHANNEL_NAME_PATTERN = Pattern.compile("^Channel \\(host=(.+)\\)$");
+
+    // Get load channel host from the channel profile name.
+    private static Optional<String> getChannelHost(String channelProfileName) {
+        Matcher matcher = CHANNEL_NAME_PATTERN.matcher(channelProfileName);
+        return matcher.matches() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private List<String> getUnfinishedInstanceIds() {
         return profileDoneSignal.getLeftMarks().stream()
                 .map(Map.Entry::getKey)

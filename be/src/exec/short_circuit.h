@@ -67,7 +67,10 @@ private:
 
     // exec
     ExecNode* _source = nullptr;
+<<<<<<< HEAD
     TDescriptorTable* _t_desc_tbl;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<DataSink> _sink;
     std::vector<std::unique_ptr<TFetchDataResult>> _results;
 };

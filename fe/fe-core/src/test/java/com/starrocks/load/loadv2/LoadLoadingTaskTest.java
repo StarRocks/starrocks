@@ -24,6 +24,10 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.VariableMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -40,6 +44,11 @@ public class LoadLoadingTaskTest {
     @Injectable
     private ConnectContext connectContext;
 
+<<<<<<< HEAD
+=======
+    private VariableMgr variableMgr = new VariableMgr();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testBuilder(
             @Mocked GlobalStateMgr globalStateMgr) {
@@ -83,6 +92,13 @@ public class LoadLoadingTaskTest {
 
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 

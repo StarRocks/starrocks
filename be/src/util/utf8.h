@@ -17,6 +17,10 @@
 #include <cstring>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "simdutf.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/slice.h"
 
 namespace starrocks {
@@ -118,6 +122,7 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
     return p;
 }
 
+<<<<<<< HEAD
 // utf8_length
 // this SIMD optimization bases upon the brilliant implementation of ClickHouse
 // (https://github.com/ClickHouse/ClickHouse/blob/master/src/Common/UTF8Helpers.cpp)
@@ -165,6 +170,10 @@ inline static int utf8_len(const char* begin, const char* end) {
         len += static_cast<int8_t>(*p) > static_cast<int8_t>(0xBF);
     }
     return len;
+=======
+static inline int utf8_len(const char* begin, const char* end) {
+    return simdutf::count_utf8(begin, end - begin);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // Check if the string contains a utf-8 character
@@ -190,6 +199,7 @@ static inline Slice utf8_char_start(const char* end) {
     return {p, count};
 }
 
+<<<<<<< HEAD
 // Modify from https://github.com/lemire/fastvalidate-utf-8/blob/master/include/simdasciicheck.h
 static inline bool validate_ascii_fast(const char* src, size_t len) {
 #ifdef __AVX2__
@@ -235,6 +245,10 @@ static inline bool validate_ascii_fast(const char* src, size_t len) {
     }
     return !(tail_has_error & 0x80);
 #endif
+=======
+static inline bool validate_ascii_fast(const char* src, size_t len) {
+    return simdutf::validate_ascii(src, len);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

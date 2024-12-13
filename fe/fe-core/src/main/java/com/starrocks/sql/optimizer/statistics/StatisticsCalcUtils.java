@@ -61,10 +61,17 @@ public class StatisticsCalcUtils {
         List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
                 .stream().map(Column::getName).collect(Collectors.toList());
         List<ColumnStatistic> columnStatisticList =
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
 
         Map<String, Histogram> histogramStatistics =
                 GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
+=======
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, columns);
+
+        Map<String, Histogram> histogramStatistics =
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
@@ -106,7 +113,11 @@ public class StatisticsCalcUtils {
         // column stats
         List<String> columnNames = columns.values().stream().map(Column::getName).collect(Collectors.toList());
         Map<Long, List<ColumnStatistic>> columnStatistics =
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsOfPartitionLevel(table,
+=======
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatisticsOfPartitionLevel(table,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         partitionIdList, columnNames);
         if (MapUtils.isEmpty(columnStatistics)) {
             return null;
@@ -118,7 +129,11 @@ public class StatisticsCalcUtils {
         Map<Long, Statistics> result = Maps.newHashMap();
         Map<String, ColumnRefOperator> columnNameMap =
                 columns.entrySet().stream().collect(Collectors.toMap(x -> x.getValue().getName(), Map.Entry::getKey));
+<<<<<<< HEAD
         for (Map.Entry<Long, List<ColumnStatistic>> entry : columnStatistics.entrySet()) {
+=======
+        for (var entry : columnStatistics.entrySet()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Statistics.Builder builder = Statistics.builder();
             for (int i = 0; i < columnNames.size(); i++) {
                 String columnName = columnNames.get(i);
@@ -149,9 +164,15 @@ public class StatisticsCalcUtils {
         // The purpose of this is to make the statistics of the number of rows more accurate.
         // For example, a large amount of data LOAD may cause the number of rows to change greatly.
         // This leads to very inaccurate row counts.
+<<<<<<< HEAD
         LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
         long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentStatisticStorage()
+=======
+        LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
+        long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
+        Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTableStatistics(table.getId(), selectedPartitions);
         Map<Long, Long> result = Maps.newHashMap();
         for (Partition partition : selectedPartitions) {
@@ -159,7 +180,11 @@ public class StatisticsCalcUtils {
             Optional<Long> tableStatistic =
                     tableStatisticMap.getOrDefault(partition.getId(), Optional.empty());
             LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+<<<<<<< HEAD
             if (!tableStatistic.isPresent()) {
+=======
+            if (tableStatistic.isEmpty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 partitionRowCount = partition.getRowCount();
                 if (updateDatetime.isAfter(lastWorkTimestamp)) {
                     partitionRowCount += deltaRows;
@@ -186,6 +211,7 @@ public class StatisticsCalcUtils {
             long rowCount = 0;
 
             BasicStatsMeta basicStatsMeta =
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
             StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
             LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
@@ -193,6 +219,15 @@ public class StatisticsCalcUtils {
                 Map<Long, Long> partitionRows =
                         getPartitionRows(table, basicStatsMeta, selectedPartitions);
                 for (Partition partition : selectedPartitions) {
+=======
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(table.getId());
+            StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
+            LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
+            if (StatsConstants.AnalyzeType.FULL == analyzeType) {
+                Map<Long, Long> partitionRows =
+                        getPartitionRows(table, basicStatsMeta, selectedPartitions);
+                for (var partition : selectedPartitions) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     long partitionRowCount = partitionRows.get(partition.getId());
                     updateQueryDumpInfo(optimizerContext, table, partition.getName(), partitionRowCount);
                     rowCount += partitionRowCount;
@@ -264,7 +299,11 @@ public class StatisticsCalcUtils {
 
     private static long deltaRows(Table table, long totalRowCount) {
         long tblRowCount = 0L;
+<<<<<<< HEAD
         Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentStatisticStorage()
+=======
+        Map<Long, Optional<Long>> tableStatisticMap = GlobalStateMgr.getCurrentState().getStatisticStorage()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTableStatistics(table.getId(), table.getPartitions());
 
         for (Partition partition : table.getPartitions()) {

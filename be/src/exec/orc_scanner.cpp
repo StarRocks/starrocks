@@ -86,6 +86,12 @@ Status ORCScanner::open() {
     RETURN_IF_ERROR(_orc_reader->set_timezone(_state->timezone()));
     _orc_reader->set_runtime_state(_state);
     _orc_reader->set_case_sensitive(_case_sensitive);
+<<<<<<< HEAD
+=======
+    if (_scan_range.params.__isset.flexible_column_mapping && _scan_range.params.flexible_column_mapping) {
+        _orc_reader->set_invalid_as_null(true);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();

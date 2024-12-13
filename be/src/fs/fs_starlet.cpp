@@ -28,15 +28,27 @@
 #include <worker.h>
 
 #include "common/config.h"
+<<<<<<< HEAD
 #include "fs/output_stream_adapter.h"
 #include "gutil/strings/util.h"
 #include "io/input_stream.h"
+=======
+#include "fs/encrypt_file.h"
+#include "fs/output_stream_adapter.h"
+#include "gutil/strings/util.h"
+#include "io/input_stream.h"
+#include "io/io_profiler.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
 #include "io/throttled_output_stream.h"
 #include "io/throttled_seekable_input_stream.h"
 #include "service/staros_worker.h"
 #include "storage/olap_common.h"
+<<<<<<< HEAD
+=======
+#include "util/stopwatch.hpp"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -138,6 +150,11 @@ public:
     }
 
     StatusOr<int64_t> read(void* data, int64_t count) override {
+<<<<<<< HEAD
+=======
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
@@ -146,6 +163,10 @@ public:
         if (res.ok()) {
             g_starlet_io_num_reads << 1;
             g_starlet_io_read << *res;
+<<<<<<< HEAD
+=======
+            IOProfiler::add_read(*res, watch.elapsed_time());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return *res;
         } else {
             return to_status(res.status());
@@ -153,6 +174,11 @@ public:
     }
 
     StatusOr<std::string> read_all() override {
+<<<<<<< HEAD
+=======
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
@@ -161,6 +187,10 @@ public:
         if (res.ok()) {
             g_starlet_io_num_reads << 1;
             g_starlet_io_read << res.value().size();
+<<<<<<< HEAD
+=======
+            IOProfiler::add_read(res.value().size(), watch.elapsed_time());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return std::move(res).value();
         } else {
             return to_status(res.status());
@@ -173,6 +203,7 @@ public:
             return to_status(stream_st.status());
         }
 
+<<<<<<< HEAD
         const auto& read_stats = (*stream_st)->get_read_stats();
         auto stats = std::make_unique<io::NumericStatistics>();
         stats->reserve(9);
@@ -182,6 +213,19 @@ public:
         stats->append(kIOCountRemote, read_stats.io_count_remote);
         stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
         stats->append(kIONsRemote, read_stats.io_ns_remote);
+=======
+        const auto& read_stats = (*stream_st)->get_io_stats();
+        auto stats = std::make_unique<io::NumericStatistics>();
+        stats->reserve(11);
+        stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
+        stats->append(kBytesWriteLocalDisk, read_stats.bytes_write_local_disk);
+        stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
+        stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
+        stats->append(kIOCountRemote, read_stats.io_count_remote);
+        stats->append(kIONsReadLocalDisk, read_stats.io_ns_read_local_disk);
+        stats->append(kIONsWriteLocalDisk, read_stats.io_ns_write_local_disk);
+        stats->append(kIONsRemote, read_stats.io_ns_read_remote);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         stats->append(kPrefetchHitCount, read_stats.prefetch_hit_count);
         stats->append(kPrefetchWaitFinishNs, read_stats.prefetch_wait_finish_ns);
         stats->append(kPrefetchPendingNs, read_stats.prefetch_pending_ns);
@@ -214,6 +258,11 @@ public:
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
+<<<<<<< HEAD
+=======
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto left = size;
         while (left > 0) {
             auto* p = static_cast<const char*>(data) + size - left;
@@ -225,6 +274,10 @@ public:
         }
         g_starlet_io_num_writes << 1;
         g_starlet_io_write << size;
+<<<<<<< HEAD
+=======
+        IOProfiler::add_write(size, watch.elapsed_time());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
 
@@ -292,7 +345,11 @@ public:
             istream = std::make_unique<io::ThrottledSeekableInputStream>(std::move(istream),
                                                                          config::experimental_lake_wait_per_get_ms);
         }
+<<<<<<< HEAD
         return std::make_unique<RandomAccessFile>(std::move(istream), info.path, is_cache_hit);
+=======
+        return RandomAccessFile::from(std::move(istream), info.path, is_cache_hit, opts.encryption_info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
@@ -311,8 +368,13 @@ public:
         if (!file_st.ok()) {
             return to_status(file_st.status());
         }
+<<<<<<< HEAD
         auto istream = std::make_shared<StarletInputStream>(std::move(*file_st));
         return std::make_unique<SequentialFile>(std::move(istream), path);
+=======
+        auto istream = std::make_unique<StarletInputStream>(std::move(*file_st));
+        return SequentialFile::from(std::move(istream), path, opts.encryption_info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override {
@@ -338,7 +400,12 @@ public:
         if (config::experimental_lake_wait_per_put_ms > 0) {
             os = std::make_unique<io::ThrottledOutputStream>(std::move(os), config::experimental_lake_wait_per_put_ms);
         }
+<<<<<<< HEAD
         return std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path);
+=======
+        return wrap_encrypted(std::make_unique<starrocks::OutputStreamAdapter>(std::move(os), path),
+                              opts.encryption_info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status delete_file(const std::string& path) override {

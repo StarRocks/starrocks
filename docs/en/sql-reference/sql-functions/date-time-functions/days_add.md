@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_add
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Adds a specified number of days to a given date or date time.
 

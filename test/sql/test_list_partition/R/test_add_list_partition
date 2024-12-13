@@ -1,4 +1,13 @@
 -- name: test_add_list_partition
+<<<<<<< HEAD
+=======
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CREATE TABLE t_p_error (
   calendar_day varchar(65533) NOT NULL COMMENT "",
   calendar_year varchar(65533) NOT NULL COMMENT "",
@@ -12,10 +21,17 @@ PROPERTIES ( "replication_num" = "1");
 insert into t_p_error values ('2022-01-01','2011','104979534377373696');
 -- result:
 -- !result
+<<<<<<< HEAD
 SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE table_name = 't_p_error' ORDER BY PARTITION_ID;
 -- result:
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	()
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2011'))
+=======
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+-- result:
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2011"]]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 insert into t_p_error 
 select calendar_day, cast(calendar_year as int) + 1, calendar_id from t_p_error;
@@ -26,11 +42,19 @@ insert into t_p_error values
     ('2022-01-01','2012','104979534377373696');
 -- result:
 -- !result
+<<<<<<< HEAD
 SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE table_name = 't_p_error' ORDER BY PARTITION_ID;
 -- result:
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	()
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2011'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2012'))
+=======
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+-- result:
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2011"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2012"]]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t_p_error ADD PARTITION IF NOT EXISTS p2024 VALUES IN ('2024');
 -- result:
@@ -42,12 +66,21 @@ SELECT * FROM t_p_error WHERE calendar_year = '2024';
 -- result:
 2022-01-01	2024	abc
 -- !result
+<<<<<<< HEAD
 SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE table_name = 't_p_error' ORDER BY PARTITION_ID;
 -- result:
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	()
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2011'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2012'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2024'))
+=======
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+-- result:
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2011"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2012"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2024"]]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t_p_error ADD PARTITION IF NOT EXISTS p2024 VALUES IN (('2030'));
 -- result:
@@ -59,6 +92,7 @@ SELECT * FROM t_p_error WHERE calendar_year = '2030';
 -- result:
 2022-01-01	2030	abc
 -- !result
+<<<<<<< HEAD
 SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE table_name = 't_p_error' ORDER BY PARTITION_ID;
 -- result:
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	()
@@ -66,6 +100,15 @@ SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partition
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2012'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2024'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2030'))
+=======
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+-- result:
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2011"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2012"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2024"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2030"]]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t_p_error ADD TEMPORARY PARTITION IF NOT EXISTS p2024_tmp VALUES IN ('2024');
 -- result:
@@ -77,6 +120,7 @@ SELECT * FROM t_p_error WHERE calendar_year = '2024';
 -- result:
 2022-01-01	2024	abc
 -- !result
+<<<<<<< HEAD
 SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE table_name = 't_p_error' ORDER BY PARTITION_ID;
 -- result:
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	()
@@ -85,10 +129,21 @@ SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partition
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2024'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2030'))
 1	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2024'))
+=======
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+-- result:
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2011"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2012"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2024"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2030"]]
+1	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2024"]]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER TABLE t_p_error REPLACE PARTITION (p2024) WITH TEMPORARY PARTITION (p2024_tmp);
 -- result:
 -- !result
+<<<<<<< HEAD
 SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE table_name = 't_p_error' ORDER BY PARTITION_ID;
 -- result:
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	()
@@ -96,6 +151,15 @@ SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partition
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2012'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2030'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2024'))
+=======
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+-- result:
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2011"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2012"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2030"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2024"]]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT * FROM t_p_error WHERE calendar_year = '2024';
 -- result:
@@ -104,6 +168,7 @@ SELECT * FROM t_p_error WHERE calendar_year = '2024';
 insert into t_p_error select calendar_day, cast(calendar_year as int) + 1, calendar_id from t_p_error;
 -- result:
 -- !result
+<<<<<<< HEAD
 SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE table_name = 't_p_error' ORDER BY PARTITION_ID;
 -- result:
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	()
@@ -114,6 +179,18 @@ SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partition
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2025'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2031'))
 0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	(('2013'))
+=======
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND  table_name = 't_p_error' ORDER BY PARTITION_ID;
+-- result:
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2011"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2012"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2030"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2024"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2025"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2013"]]
+0	`calendar_year` varchar(65533) NOT NULL COMMENT ""	[["2031"]]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT * FROM t_p_error WHERE calendar_year = '2024';
 -- result:
@@ -130,4 +207,10 @@ SELECT * FROM t_p_error WHERE calendar_year = '2011';
 -- result:
 2022-01-01	2011	104979534377373696
 2022-01-01	2011	104979534377373696
+<<<<<<< HEAD
+=======
+-- !result
+DROP database test_db_${uuid0} FORCE;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result

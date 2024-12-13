@@ -64,6 +64,10 @@
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
+=======
+#include "runtime/batch_write/batch_write_mgr.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/buffer_control_block.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
@@ -76,8 +80,15 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/types.h"
 #include "service/brpc.h"
+<<<<<<< HEAD
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+=======
+#include "storage/dictionary_cache_manager.h"
+#include "storage/storage_engine.h"
+#include "storage/txn_manager.h"
+#include "util/arrow/row_batch.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/failpoint/fail_point.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
@@ -228,7 +239,11 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         if (!st.ok()) {
             st.to_protobuf(response->mutable_status());
             done->Run();
+<<<<<<< HEAD
             LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+=======
+            LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
         this->_transmit_chunk(cntl_base, params.get(), response, done);
@@ -302,7 +317,11 @@ void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcContr
 
     auto st = _exec_plan_fragment(cntl, request);
     if (!st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.get_error_msg();
+=======
+        LOG(WARNING) << "exec plan fragment failed, errmsg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     st.to_protobuf(response->mutable_status());
 }
@@ -426,10 +445,18 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+<<<<<<< HEAD
+=======
+    // incremental scan ranges deployment.
+    if (!t_request.__isset.fragment) {
+        return pipeline::FragmentExecutor::append_incremental_scan_ranges(_exec_env, t_request);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
         return Status::InvalidArgument("batch_size is not set");
     }
+<<<<<<< HEAD
     // Before version 2.5, broker load/export was not executed in the pipeline engine.
     // The batch_size params may not be set in the request sent by FE.
     // During the grayscale upgrade process, the request sent by the old version of FE will report an error.
@@ -443,6 +470,16 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
                                 MAX_CHUNK_SIZE, batch_size));
         }
     }
+=======
+    auto batch_size = t_request.query_options.batch_size;
+    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+        return Status::InvalidArgument(
+                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                            MAX_CHUNK_SIZE, batch_size));
+    }
+
+    bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     VLOG(1) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
             << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num << ", is_pipeline=" << is_pipeline
             << ", chunk_size=" << t_request.query_options.batch_size;
@@ -488,6 +525,11 @@ inline std::string cancel_reason_to_string(::starrocks::PPlanFragmentCancelReaso
         return "InternalError";
     case TIMEOUT:
         return "TimeOut";
+<<<<<<< HEAD
+=======
+    case QUERY_FINISHED:
+        return "QueryFinished";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default:
         return "UnknownReason";
     }
@@ -518,7 +560,17 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
     Status st;
     auto reason_string =
             request->has_cancel_reason() ? cancel_reason_to_string(request->cancel_reason()) : "UnknownReason";
+<<<<<<< HEAD
     LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+=======
+    bool cancel_query_ctx = tid.hi == 0 && tid.lo == 0;
+    if (cancel_query_ctx) {
+        DCHECK(request->has_query_id());
+        LOG(INFO) << "cancel query ctx, query_id=" << print_id(request->query_id()) << ", reason: " << reason_string;
+    } else {
+        LOG(INFO) << "cancel fragment, fragment_instance_id=" << print_id(tid) << ", reason: " << reason_string;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (request->has_is_pipeline() && request->is_pipeline()) {
         TUniqueId query_id;
@@ -530,19 +582,40 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         query_id.__set_hi(request->query_id().hi());
         query_id.__set_lo(request->query_id().lo());
+<<<<<<< HEAD
         auto&& query_ctx = _exec_env->query_context_mgr()->get(query_id);
+=======
+
+        auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!query_ctx) {
             VLOG(1) << strings::Substitute("QueryContext already destroyed: query_id=$0, fragment_instance_id=$1",
                                            print_id(query_id), print_id(tid));
             st.to_protobuf(result->mutable_status());
             return;
         }
+<<<<<<< HEAD
         auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
         if (!fragment_ctx) {
             LOG(INFO) << strings::Substitute("FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1",
                                              print_id(query_id), print_id(tid));
         } else {
             fragment_ctx->cancel(Status::Cancelled(reason_string));
+=======
+        if (cancel_query_ctx) {
+            // cancel query_id
+            query_ctx->cancel(Status::Cancelled(reason_string));
+        } else {
+            // cancel fragment
+            auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
+            if (!fragment_ctx) {
+                LOG(INFO) << strings::Substitute(
+                        "FragmentContext already destroyed: query_id=$0, fragment_instance_id=$1", print_id(query_id),
+                        print_id(tid));
+            } else {
+                fragment_ctx->cancel(Status::Cancelled(reason_string));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     } else {
         if (request->has_cancel_reason()) {
@@ -552,7 +625,11 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
             st = _exec_env->fragment_mgr()->cancel(tid);
         }
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.get_error_msg();
+=======
+            LOG(WARNING) << "cancel plan fragment failed, errmsg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     st.to_protobuf(result->mutable_status());
@@ -610,7 +687,11 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             result->mutable_status()->set_status_code(TStatusCode::NOT_FOUND);
             return;
         }
+<<<<<<< HEAD
         pipeline::DriverExecutor* driver_executor = _exec_env->wg_driver_executor();
+=======
+        pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
     }
 }
@@ -818,6 +899,88 @@ void PInternalServiceImplBase<T>::get_file_schema(google::protobuf::RpcControlle
 }
 
 template <typename T>
+<<<<<<< HEAD
+=======
+void PInternalServiceImplBase<T>::process_dictionary_cache(google::protobuf::RpcController* controller,
+                                                           const PProcessDictionaryCacheRequest* request,
+                                                           PProcessDictionaryCacheResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    PProcessDictionaryCacheRequestType request_type = request->type();
+    switch (request_type) {
+    case PProcessDictionaryCacheRequestType::BEGIN: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->begin(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::REFRESH: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->refresh(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::COMMIT: {
+        auto st = StorageEngine::instance()->dictionary_cache_manager()->commit(request);
+        if (!st.ok()) {
+            LOG(WARNING) << st.message();
+            Status::InternalError(st.message()).to_protobuf(response->mutable_status());
+            break;
+        }
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::CLEAR: {
+        StorageEngine::instance()->dictionary_cache_manager()->clear(request->dict_id(), request->is_cancel());
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    case PProcessDictionaryCacheRequestType::STATISTIC: {
+        StorageEngine::instance()->dictionary_cache_manager()->get_info(request->dict_id(), *response);
+        Status::OK().to_protobuf(response->mutable_status());
+        break;
+    }
+    default: {
+        std::stringstream ss;
+        ss << "invalid request type for process_dictionary_cache";
+        LOG(WARNING) << ss.str();
+        Status::InternalError(ss.str()).to_protobuf(response->mutable_status());
+        break;
+    }
+    }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::fetch_arrow_schema(google::protobuf::RpcController* controller,
+                                                     const PFetchArrowSchemaRequest* request,
+                                                     PFetchArrowSchemaResult* result, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    std::shared_ptr<arrow::Schema> schema =
+            ExecEnv::GetInstance()->result_mgr()->get_arrow_schema(UniqueId(request->finst_id()).to_thrift());
+    if (schema == nullptr) {
+        const auto status = Status::NotFound("arrow schema not found");
+        status.to_protobuf(result->mutable_status());
+        return;
+    }
+
+    std::string schema_as_str;
+    const auto status = serialize_arrow_schema(&schema, &schema_as_str);
+    if (status.ok()) {
+        result->set_schema(std::move(schema_as_str));
+    }
+    status.to_protobuf(result->mutable_status());
+}
+
+template <typename T>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcController* controller,
                                                    const PGetFileSchemaRequest* request, PGetFileSchemaResult* response,
                                                    google::protobuf::Closure* done) {
@@ -868,7 +1031,11 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
     auto* cntl = static_cast<brpc::Controller*>(controller);
     Status st = _submit_mv_maintenance_task(cntl);
     if (!st.ok()) {
+<<<<<<< HEAD
         LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.get_error_msg();
+=======
+        LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     st.to_protobuf(response->mutable_status());
     return;
@@ -1137,14 +1304,22 @@ void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcControlle
 }
 
 template <typename T>
+<<<<<<< HEAD
 Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest*,
+=======
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                         PExecShortCircuitResult* response) {
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
+<<<<<<< HEAD
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
+=======
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), t_requests.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     ShortCircuitExecutor executor{_exec_env};
     RETURN_IF_ERROR(executor.prepare(*t_requests));
@@ -1176,7 +1351,20 @@ void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcContro
     StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
+<<<<<<< HEAD
 template class PInternalServiceImplBase<PInternalService>;
 template class PInternalServiceImplBase<doris::PBackendService>;
+=======
+template <typename T>
+void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* cntl_base,
+                                              const PStreamLoadRequest* request, PStreamLoadResponse* response,
+                                              google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
+}
+
+template class PInternalServiceImplBase<PInternalService>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

@@ -94,13 +94,21 @@ public class SplitMultiPhaseAggRule extends SplitAggregateRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(aggOp.getAggregations().values());
+<<<<<<< HEAD
         if (!distinctCols.isPresent()) {
+=======
+        if (distinctCols.isEmpty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new StarRocksPlannerException("The query contains multiple distinct agg functions, " +
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
         if (isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+<<<<<<< HEAD
             return Lists.newArrayList();
+=======
+            return List.of();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (aggOp.getGroupingKeys().isEmpty()) {

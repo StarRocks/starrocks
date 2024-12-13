@@ -86,6 +86,11 @@ protected:
     Version _output_version;
 
     RuntimeProfile _runtime_profile;
+<<<<<<< HEAD
+=======
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     // merge rows from vectorized reader and write into `_output_rs_writer`.

@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 if (CLANG_TIDY_PATH)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/service")
 
 # where to put generated binaries
@@ -36,7 +39,11 @@ add_library(Service
 )
 
 # only build starrocks_be when TEST is off
+<<<<<<< HEAD
 if (NOT ${MAKE_TEST} STREQUAL "ON")
+=======
+if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     add_executable(starrocks_be
         starrocks_main.cpp
         )

@@ -16,9 +16,12 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -51,6 +54,7 @@ public class CreateTableAsSelectStmt extends StatementBase {
         this.insertStmt = new InsertStmt(createTableStmt.getDbTbl(), queryStatement);
     }
 
+<<<<<<< HEAD
     public boolean createTable(ConnectContext session) throws AnalysisException {
         try {
             return session.getGlobalStateMgr().getMetadataMgr().createTable(createTableStmt);
@@ -67,6 +71,8 @@ public class CreateTableAsSelectStmt extends StatementBase {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getColumnNames() {
         return columnNames;
     }
@@ -97,4 +103,12 @@ public class CreateTableAsSelectStmt extends StatementBase {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableAsSelectStatement(this, context);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public int getTimeout() {
+        return insertStmt.getTimeout();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

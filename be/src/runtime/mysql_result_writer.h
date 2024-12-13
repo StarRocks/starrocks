@@ -34,9 +34,13 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include "common/statusor.h"
 #include "runtime/result_writer.h"
 #include "runtime/runtime_state.h"
+=======
+#include "runtime/buffer_control_result_writer.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -47,7 +51,11 @@ class RuntimeProfile;
 using TFetchDataResultPtr = std::unique_ptr<TFetchDataResult>;
 using TFetchDataResultPtrs = std::vector<TFetchDataResultPtr>;
 // convert the row batch to mysql protocol row
+<<<<<<< HEAD
 class MysqlResultWriter final : public ResultWriter {
+=======
+class MysqlResultWriter final : public BufferControlResultWriter {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                       bool is_binary_format, RuntimeProfile* parent_profile);
@@ -58,6 +66,7 @@ public:
 
     Status append_chunk(Chunk* chunk) override;
 
+<<<<<<< HEAD
     Status close() override;
 
     StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
@@ -70,10 +79,19 @@ private:
     StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
     BufferControlBlock* _sinker;
+=======
+    StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
+
+private:
+    // this function is only used in non-pipeline engine
+    StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::vector<ExprContext*>& _output_expr_ctxs;
     MysqlRowBuffer* _row_buffer;
     bool _is_binary_format;
 
+<<<<<<< HEAD
     RuntimeProfile* _parent_profile; // parent profile from result sink. not owned
     // total time cost on append chunk operation
     RuntimeProfile::Counter* _append_chunk_timer = nullptr;
@@ -84,6 +102,8 @@ private:
     // number of sent rows
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const size_t _max_row_buffer_size = 1024 * 1024 * 1024;
 };
 

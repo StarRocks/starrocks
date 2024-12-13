@@ -20,6 +20,10 @@ import com.starrocks.qe.ConnectContext;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.function.Function;
 
 public class Tracers {
@@ -28,7 +32,11 @@ public class Tracers {
     }
 
     public enum Module {
+<<<<<<< HEAD
         NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL
+=======
+        NONE, ALL, BASE, OPTIMIZER, SCHEDULER, ANALYZE, MV, EXTERNAL, PARSER
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static final Tracer EMPTY_TRACER = new Tracer() {
@@ -39,11 +47,19 @@ public class Tracers {
     // [empty tracer, real tracer]
     private final Tracer[] allTracer = new Tracer[] {EMPTY_TRACER, EMPTY_TRACER};
 
+<<<<<<< HEAD
     // mark enable module
     private int moduleMask = 0;
 
     // mark enable mode
     private int modeMask = 0;
+=======
+    // mark enable module, default enable parser module
+    private int moduleMask = 1 << Module.PARSER.ordinal();
+
+    // mark enable mode, default enable timer mode
+    private int modeMask = 1 << Mode.TIMER.ordinal();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private boolean isCommandLog = false;
 
@@ -102,6 +118,12 @@ public class Tracers {
      */
     public static void init(Mode mode, Module module, boolean enableProfile, boolean checkMV) {
         Tracers tracers = THREAD_LOCAL.get();
+<<<<<<< HEAD
+=======
+        // reset all mark
+        tracers.moduleMask = 0;
+        tracers.modeMask = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (Module.NONE == module || null == module) {
             tracers.moduleMask = 0;
         }
@@ -172,6 +194,13 @@ public class Tracers {
         return tracers.tracer(module, Mode.TIMER).watchScope(name);
     }
 
+<<<<<<< HEAD
+=======
+    public static Timer watchScope(Tracers tracers, Module module, String name) {
+        return tracers.tracer(module, Mode.TIMER).watchScope(name);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void log(Module module, String log) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(module, Mode.LOGS).log(log);
@@ -211,7 +240,11 @@ public class Tracers {
         tracers.tracer(module, Mode.VARS).record(name, value);
     }
 
+<<<<<<< HEAD
     public static void count(Module module, String name, int count) {
+=======
+    public static void count(Module module, String name, long count) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(module, Mode.VARS).count(name, count);
     }
@@ -250,4 +283,29 @@ public class Tracers {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.allTracer[1].toRuntimeProfile(profile);
     }
+<<<<<<< HEAD
+=======
+
+    public static Optional<Timer> getSpecifiedTimer(String name) {
+        Tracers tracers = THREAD_LOCAL.get();
+        return tracers.allTracer[1].getSpecifiedTimer(name);
+    }
+
+    public static String getTrace(Mode mode) {
+        switch (mode) {
+            case TIMER:
+                return Tracers.printScopeTimer();
+            case VARS:
+                return Tracers.printVars();
+            case TIMING:
+                return Tracers.printTiming();
+            case LOGS:
+                return Tracers.printLogs();
+            case REASON:
+                return Tracers.printReasons();
+            default:
+                return "";
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

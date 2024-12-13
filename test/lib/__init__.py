@@ -27,6 +27,10 @@ SHELL_FLAG = "shell: "
 TRINO_FLAG = "trino: "
 SPARK_FLAG = "spark: "
 HIVE_FLAG = "hive: "
+<<<<<<< HEAD
+=======
+ARROW_FLAG = "arrow: "
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 FUNCTION_FLAG = "function: "
 NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"

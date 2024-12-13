@@ -40,13 +40,20 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
+<<<<<<< HEAD
 import com.starrocks.system.SystemInfoService;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TFrontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
@@ -59,9 +66,14 @@ import com.starrocks.thrift.TUserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+=======
+import java.util.List;
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.starrocks.catalog.InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
@@ -168,7 +180,11 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -315,7 +331,11 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeFeNodes() {
+<<<<<<< HEAD
         for (Frontend fe : GlobalStateMgr.getCurrentState().getFrontends(null /* all */)) {
+=======
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!fe.isAlive()) {
                 continue;
             }
@@ -331,6 +351,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeBeScanRanges() {
+<<<<<<< HEAD
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         Set<ComputeNode> computeNodes = new HashSet<>(systemInfoService.getIdToBackend().values());
         computeNodes.addAll(systemInfoService.getIdComputeNode().values());
@@ -338,13 +359,38 @@ public class SchemaScanNode extends ScanNode {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
             if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
+=======
+        List<ComputeNode> nodeList;
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            long warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+
+            nodeList = computeNodeIds.stream()
+                    .map(id -> GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(id))
+                    .collect(Collectors.toList());
+        } else {
+            nodeList = Lists.newArrayList();
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends());
+            nodeList.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes());
+        }
+
+        for (ComputeNode node : nodeList) {
+            // if user specifies BE id, we try to scan all BEs(including bad BE)
+            // if user doesn't specify BE id, we only scan live BEs
+            if ((node.isAlive() && beId == null) || (beId != null && beId.equals(node.getId()))) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
                 TScanRangeLocation location = new TScanRangeLocation();
+<<<<<<< HEAD
                 location.setBackend_id(be.getId());
                 location.setServer(new TNetworkAddress(be.getHost(), be.getBePort()));
+=======
+                location.setBackend_id(node.getId());
+                location.setServer(new TNetworkAddress(node.getHost(), node.getBePort()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 scanRangeLocations.addToLocations(location);
                 TScanRange scanRange = new TScanRange();
                 scanRangeLocations.setScan_range(scanRange);
@@ -363,11 +409,14 @@ public class SchemaScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         return beScanRanges == null ? 1 : beScanRanges.size();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
     }

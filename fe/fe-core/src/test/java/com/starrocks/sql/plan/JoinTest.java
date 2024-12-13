@@ -30,6 +30,10 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testIsNullPredicatePushdownClear() throws Exception {
         {
@@ -767,7 +771,11 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select v1+1,v4 from t0, t1 where v2 = v5 and v3 > v6";
         plan = getVerboseExplain(sql);
+<<<<<<< HEAD
         assertContains(plan, "output columns: 1, 3, 4, 6");
+=======
+        assertContains(plan, "output columns: 1, 4");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select (v2+v6 = 1 or v2+v6 = 5) from t0, t1 where v2 = v5 ";
         plan = getVerboseExplain(sql);
@@ -1112,8 +1120,13 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderTakeEffect() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb("test");
         Table table = db.getTable("join2");
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "join2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1136,7 +1149,11 @@ public class JoinTest extends PlanTestBase {
     public void testJoinReorderWithWithClause() throws Exception {
         connectContext.setDatabase("test");
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         Table table = globalStateMgr.getDb("test").getTable("join2");
+=======
+        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -1639,7 +1656,11 @@ public class JoinTest extends PlanTestBase {
     @Test
     public void testJoinReorderWithReanalyze() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+<<<<<<< HEAD
         Table table = globalStateMgr.getDb("test").getTable("join2");
+=======
+        Table table = globalStateMgr.getLocalMetastore().getDb("test").getTable("join2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable1 = (OlapTable) table;
         try {
             setTableStatistics(olapTable1, 2);
@@ -3282,11 +3303,32 @@ public class JoinTest extends PlanTestBase {
                 "    );";
         String plan = getFragmentPlan(query);
         //outer join can not use const expr replacement optimization because it may generate null values
+<<<<<<< HEAD
         assertContains(plan, "17:Project\n" +
                 "  |  <slot 29> : 29: expr\n" +
                 "  |  \n" +
                 "  16:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason:");
+=======
+        assertContains(plan, "11:Project\n" +
+                "  |  <slot 29> : 29: expr\n" +
+                "  |  \n" +
+                "  10:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN\n" +
+                "  |  colocate: false, reason: ");
+    }
+
+    @Test
+    public void testJoinOnConstValue() throws Exception {
+        String query = "select coalesce(b.v1, a.v1) as v1, a.v2 \n" +
+                "from t0 a left join (select 'cccc' as v1, 'dddd' as v2) b on a.v1 = b.v1 \n" +
+                "where coalesce(b.v1, a.v1) = '1';";
+        String plan = getFragmentPlan(query);
+        assertContainsIgnoreColRefs(plan, "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: coalesce('cccc', CAST(1: v1 AS VARCHAR)) = '1'");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

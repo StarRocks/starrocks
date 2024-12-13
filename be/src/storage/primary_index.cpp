@@ -20,7 +20,10 @@
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
@@ -29,6 +32,10 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/xxh3.h"
@@ -1184,8 +1191,13 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
+<<<<<<< HEAD
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
     if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+=======
+
+    if (tablet->get_enable_persistent_index()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
@@ -1226,9 +1238,13 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     OlapReaderStatistics stats;
     std::unique_ptr<Column> pk_column;
     if (pk_columns.size() > 1) {
+<<<<<<< HEAD
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
             CHECK(false) << "create column for primary key encoder failed";
         }
+=======
+        RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     // only hold pkey, so can use larger chunk size
     vector<uint32_t> rowids;
@@ -1244,7 +1260,11 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
         }
         auto& itrs = res.value();
         // TODO(cbl): auto close iterators on failure
+<<<<<<< HEAD
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+=======
+        RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {
@@ -1320,7 +1340,11 @@ const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t id
         const Slice* vkeys = reinterpret_cast<const Slice*>(pks.raw_data());
         return vkeys + idx_begin;
     } else {
+<<<<<<< HEAD
         CHECK(_key_size > 0);
+=======
+        DCHECK(_key_size > 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         const uint8_t* keys = pks.raw_data() + idx_begin * _key_size;
         for (size_t i = idx_begin; i < idx_end; i++) {
             key_slices->emplace_back(keys, _key_size);
@@ -1334,7 +1358,11 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
+<<<<<<< HEAD
     _build_persistent_values(rssid, rowids, 0, pks.size(), &values);
+=======
+    RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, pks.size(), &values));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
     RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true));
     return Status::OK();
@@ -1595,8 +1623,12 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     _set_schema(pkey_schema);
 
+<<<<<<< HEAD
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
     if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+=======
+    if (tablet->get_enable_persistent_index()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_persistent_index != nullptr) {
             _persistent_index.reset();
         }

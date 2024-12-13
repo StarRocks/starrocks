@@ -18,8 +18,13 @@
 
 #include "gtest/gtest.h"
 #include "gutil/port.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "types/constexpr.h"
+=======
+#include "types/constexpr.h"
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 

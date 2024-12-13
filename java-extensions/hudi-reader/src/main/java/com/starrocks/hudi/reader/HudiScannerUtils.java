@@ -42,7 +42,11 @@ public class HudiScannerUtils {
     private static final long MICRO = 1_000_000;
     private static final long NANO = 1_000_000_000;
 
+<<<<<<< HEAD
     public static LocalDateTime getTimestamp(long value, TimeUnit timeUnit, String timeZone) {
+=======
+    public static LocalDateTime getTimestamp(long value, TimeUnit timeUnit, ZoneId zoneId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long seconds = 0L;
         long nanoseconds = 0L;
 
@@ -69,7 +73,11 @@ public class HudiScannerUtils {
             default:
                 break;
         }
+<<<<<<< HEAD
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds, nanoseconds), ZoneId.of(timeZone));
+=======
+        return LocalDateTime.ofInstant(Instant.ofEpochSecond(seconds, nanoseconds), zoneId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static boolean isMaybeInt64Timestamp(ColumnType.TypeValue type) {

@@ -29,3 +29,14 @@ EOF
 test_explain_analyze "${sql}"
 test_explain_analyze "set enable_runtime_adaptive_dop = true; ${sql}"
 test_explain_analyze "set enable_spill = true; set spill_mode = 'force'; ${sql}"
+<<<<<<< HEAD
+=======
+
+sql=$(cat << EOF
+explain analyze select * from t0  left join[bucket] temp1 on t0.v1 = temp1.v1 limit 2;
+EOF
+)
+test_explain_analyze "${sql}"
+test_explain_analyze "set enable_runtime_adaptive_dop = true; ${sql}"
+test_explain_analyze "set enable_spill = true; set spill_mode = 'force'; ${sql}"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

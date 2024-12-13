@@ -177,6 +177,11 @@ private:
 
     Status _flush_update_file(const SegmentPB& segment_pb, butil::IOBuf& data);
 
+<<<<<<< HEAD
+=======
+    Status _flush_index_files(const SegmentPB& segment_pb, butil::IOBuf& data);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
@@ -187,8 +192,17 @@ protected:
     int _num_segment = 0;
     int _num_delfile = 0;
     int _num_uptfile = 0;
+<<<<<<< HEAD
     vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
+=======
+    int _num_indexfile = 0;
+    vector<uint32> _delfile_idxes;
+    vector<std::string> _tmp_segment_files;
+    std::vector<string> _segment_encryption_metas;
+    std::vector<string> _delfile_encryption_metas;
+    std::vector<string> _updatefile_encryption_metas;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
 

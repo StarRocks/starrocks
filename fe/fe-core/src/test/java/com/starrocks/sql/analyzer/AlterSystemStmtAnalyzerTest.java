@@ -17,7 +17,10 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.OperationType;
+<<<<<<< HEAD
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -160,8 +163,12 @@ public class AlterSystemStmtAnalyzerTest {
         String showBackendLocationSqlStr = "show backends";
         ShowBackendsStmt showBackendsStmt = (ShowBackendsStmt) UtFrameUtils.parseStmtWithNewParser(showBackendLocationSqlStr,
                 connectContext);
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, showBackendsStmt);
         ShowResultSet showResultSet = showExecutor.execute();
+=======
+        ShowResultSet showResultSet = ShowExecutor.execute(showBackendsStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(showResultSet.getResultRows());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("a:b"));
     }
@@ -170,17 +177,29 @@ public class AlterSystemStmtAnalyzerTest {
     public void testModifyBackendLocationPersistence() throws Exception {
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getNodeMgr().save(initialImage.getDataOutputStream());
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(initialImage.getImageWriter());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         modifyBackendLocation("c:d");
 
         // make final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getNodeMgr().save(finalImage.getDataOutputStream());
 
         // test replay
         NodeMgr nodeMgrFollower = new NodeMgr();
         nodeMgrFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+=======
+        GlobalStateMgr.getCurrentState().getNodeMgr().save(finalImage.getImageWriter());
+
+        // test replay
+        NodeMgr nodeMgrFollower = new NodeMgr();
+        nodeMgrFollower.load(initialImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Backend persistentState =
                 (Backend) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_BACKEND_STATE_CHANGE_V2);
         nodeMgrFollower.getClusterInfo().updateInMemoryStateBackend(persistentState);
@@ -189,7 +208,11 @@ public class AlterSystemStmtAnalyzerTest {
 
         // test restart
         NodeMgr nodeMgrLeader = new NodeMgr();
+<<<<<<< HEAD
         nodeMgrLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+=======
+        nodeMgrLeader.load(finalImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("{c=d}",
                 nodeMgrLeader.getClusterInfo().getBackend(persistentState.getId()).getLocation().toString());
     }

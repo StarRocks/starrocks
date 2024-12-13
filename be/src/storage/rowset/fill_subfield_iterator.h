@@ -44,6 +44,7 @@ public:
 
     Status seek_to_first() override;
 
+<<<<<<< HEAD
     Status seek_to_ordinal(ordinal_t ord);
 
     ordinal_t get_current_ordinal() const override;
@@ -52,6 +53,13 @@ public:
                                       const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override {
         return Status::NotSupported("");
     }
+=======
+    Status seek_to_ordinal(ordinal_t ord) override;
+
+    ordinal_t get_current_ordinal() const override;
+
+    ordinal_t num_rows() const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     ColumnId _cid;

@@ -18,8 +18,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 import java.util.Map;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // rename column
 public class ColumnRenameClause extends AlterTableClause {
     private final String colName;
@@ -30,10 +33,16 @@ public class ColumnRenameClause extends AlterTableClause {
     }
 
     public ColumnRenameClause(String colName, String newColName, NodePosition pos) {
+<<<<<<< HEAD
         super(AlterOpType.SCHEMA_CHANGE, pos);
         this.colName = colName;
         this.newColName = newColName;
         this.needTableStable = false;
+=======
+        super(AlterOpType.RENAME, pos);
+        this.colName = colName;
+        this.newColName = newColName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getColName() {
@@ -45,11 +54,14 @@ public class ColumnRenameClause extends AlterTableClause {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, String> getProperties() {
         return null;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitColumnRenameClause(this, context);
     }

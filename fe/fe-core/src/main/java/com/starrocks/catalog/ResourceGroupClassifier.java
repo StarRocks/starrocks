@@ -209,7 +209,11 @@ public class ResourceGroupClassifier {
         if (CollectionUtils.isNotEmpty(databaseIds)) {
             String str = databaseIds.stream()
                     .map(id ->
+<<<<<<< HEAD
                             Optional.ofNullable(GlobalStateMgr.getCurrentState().getDb(id))
+=======
+                            Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     .map(Database::getFullName)
                                     .orElse("unknown"))
                     .collect(Collectors.joining(","));

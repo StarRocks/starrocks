@@ -77,6 +77,12 @@ public:
     RuntimeState* TEST_runtime_state() { return _state; }
     ScannerCounter* TEST_scanner_counter() { return _counter; }
 
+<<<<<<< HEAD
+=======
+    static void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                             std::vector<SlotDescriptor>* output);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,
                                 int size);

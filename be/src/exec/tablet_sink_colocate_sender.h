@@ -16,7 +16,11 @@
 
 #include "exec/tablet_sink_sender.h"
 
+<<<<<<< HEAD
 namespace starrocks::stream_load {
+=======
+namespace starrocks {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // TabletSinkColocateSender will control one index/table's send chunks.
 class TabletSinkColocateSender final : public TabletSinkSender {
@@ -27,7 +31,11 @@ public:
                              std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
                              TWriteQuorumType::type write_quorum_type, int num_repicas);
 
+<<<<<<< HEAD
     ~TabletSinkColocateSender() = default;
+=======
+    ~TabletSinkColocateSender() override = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public:
     Status send_chunk(const OlapTableSchemaParam* schema, const std::vector<OlapTablePartition*>& partitions,
@@ -40,7 +48,12 @@ public:
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
     Status try_close(RuntimeState* state) override;
+<<<<<<< HEAD
     Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile) override;
+=======
+    Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
+                      bool write_txn_log) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_open_done() override;
     bool is_full() override;
@@ -57,4 +70,8 @@ private:
     std::vector<std::vector<int64_t>> _index_tablet_ids;
 };
 
+<<<<<<< HEAD
 } // namespace starrocks::stream_load
+=======
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

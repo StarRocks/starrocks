@@ -123,7 +123,11 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return ScalarType.createVarbinary(columnSize);
                 } else {
+<<<<<<< HEAD
                     return ScalarType.createVarbinary(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
@@ -148,7 +152,11 @@ public class SqlServerSchemaResolver extends JDBCSchemaResolver {
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
+<<<<<<< HEAD
                 return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
 

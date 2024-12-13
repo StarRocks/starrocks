@@ -17,7 +17,10 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

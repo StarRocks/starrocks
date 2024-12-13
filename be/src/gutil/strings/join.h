@@ -168,7 +168,11 @@ inline string JoinStrings(const CONTAINER& components, const StringPiece& delim)
 template <class CONTAINER, typename FUNC>
 string JoinMapped(const CONTAINER& components, const FUNC& functor, const StringPiece& delim) {
     string result;
+<<<<<<< HEAD
     for (typename CONTAINER::const_iterator iter = components.begin(); iter != components.end(); iter++) {
+=======
+    for (auto iter = components.begin(); iter != components.end(); iter++) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (iter != components.begin()) {
             result.append(delim.data(), delim.size());
         }

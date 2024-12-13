@@ -60,7 +60,11 @@ public class AgentTaskQueue {
     private static final Logger LOG = LogManager.getLogger(AgentTaskQueue.class);
 
     // backend id -> (task type -> (signature -> agent task))
+<<<<<<< HEAD
     private static Table<Long, TTaskType, Map<Long, AgentTask>> tasks = HashBasedTable.create();
+=======
+    public static Table<Long, TTaskType, Map<Long, AgentTask>> tasks = HashBasedTable.create();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static int taskNum = 0;
 
     public static synchronized void addBatchTask(AgentBatchTask batchTask) {
@@ -69,6 +73,13 @@ public class AgentTaskQueue {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static synchronized void addTaskList(List<AgentTask> taskList) {
+        taskList.forEach(AgentTaskQueue::addTask);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static synchronized boolean addTask(AgentTask task) {
         long backendId = task.getBackendId();
         TTaskType type = task.getTaskType();

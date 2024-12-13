@@ -28,12 +28,21 @@ tab1	CREATE TABLE `tab1` (
 PRIMARY KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "primary_index_cache_expire_sec" = "3600",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"primary_index_cache_expire_sec" = "3600",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 insert into tab1 values(100, "100", 100, 100, 100), (200, "200", 200, 200, 200), (300, "300", 300, 300, 300);
@@ -58,11 +67,19 @@ tab1	CREATE TABLE `tab1` (
 PRIMARY KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 alter table tab1 set ("primary_index_cache_expire_sec" = "7200");
@@ -80,12 +97,21 @@ tab1	CREATE TABLE `tab1` (
 PRIMARY KEY(`k1`, `k2`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 10 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "primary_index_cache_expire_sec" = "7200",
 "compression" = "LZ4"
+=======
+"compression" = "LZ4",
+"enable_persistent_index" = "true",
+"fast_schema_evolution" = "true",
+"primary_index_cache_expire_sec" = "7200",
+"replicated_storage" = "true",
+"replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 -- !result
 select * from tab1 where v2 = 200;
@@ -119,7 +145,11 @@ PROPERTIES (
     "primary_index_cache_expire_sec" = "-100"
 );
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Property primary_index_cache_expire_sec must not be less than 0')
+=======
+E: (1064, 'Property primary_index_cache_expire_sec must not be less than 0')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE table tab3 (
       k1 INTEGER,
@@ -136,5 +166,10 @@ PROPERTIES (
     "primary_index_cache_expire_sec" = "asd"
 );
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: Property primary_index_cache_expire_sec must be integer: asd')
 -- !result
+=======
+E: (1064, 'Property primary_index_cache_expire_sec must be integer: asd')
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

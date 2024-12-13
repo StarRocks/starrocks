@@ -47,8 +47,15 @@
 #include "runtime/mem_tracker.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
+<<<<<<< HEAD
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/segment.h"
+=======
+#include "storage/rowset/base_rowset.h"
+#include "storage/rowset/rowset_meta.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -131,7 +138,11 @@ private:
     RowsetState _rowset_state{ROWSET_UNLOADED};
 };
 
+<<<<<<< HEAD
 class Rowset : public std::enable_shared_from_this<Rowset> {
+=======
+class Rowset : public std::enable_shared_from_this<Rowset>, public BaseRowset {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     Rowset(const TabletSchemaCSPtr&, std::string rowset_path, RowsetMetaSharedPtr rowset_meta);
     Rowset(const Rowset&) = delete;
@@ -148,7 +159,11 @@ public:
     //
     // May be called multiple times, subsequent calls will no-op.
     // Derived class implements the load logic by overriding the `do_load_once()` method.
+<<<<<<< HEAD
     Status load();
+=======
+    Status load() override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // reload this rowset after the underlying segment file is changed
     Status reload();
@@ -175,6 +190,11 @@ public:
 
     std::vector<SegmentSharedPtr>& segments() { return _segments; }
 
+<<<<<<< HEAD
+=======
+    std::vector<SegmentSharedPtr> get_segments() override { return _segments; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // only used for updatable tablets' rowset
     // simply get iterators to iterate all rows without complex options like predicates
     // |schema| read schema
@@ -220,16 +240,28 @@ public:
     void make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id);
 
     // helper class to access RowsetMeta
+<<<<<<< HEAD
     int64_t start_version() const { return rowset_meta()->version().first; }
     int64_t end_version() const { return rowset_meta()->version().second; }
     size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
     bool empty() const { return rowset_meta()->empty(); }
     size_t num_rows() const { return rowset_meta()->num_rows(); }
+=======
+    int64_t start_version() const override { return rowset_meta()->version().first; }
+    int64_t end_version() const override { return rowset_meta()->version().second; }
+    size_t data_disk_size() const { return rowset_meta()->total_disk_size(); }
+    bool empty() const { return rowset_meta()->empty(); }
+    int64_t num_rows() const override { return rowset_meta()->num_rows(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t num_rows_upt() const { return rowset_meta()->num_rows_upt(); }
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
     int64_t total_update_row_size() const { return rowset_meta()->total_update_row_size(); }
     Version version() const { return rowset_meta()->version(); }
+<<<<<<< HEAD
     RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
+=======
+    RowsetId rowset_id() const override { return rowset_meta()->rowset_id(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
@@ -238,9 +270,17 @@ public:
     int64_t num_segments() const { return rowset_meta()->num_segments(); }
     uint32_t num_delete_files() const { return rowset_meta()->get_num_delete_files(); }
     uint32_t num_update_files() const { return rowset_meta()->get_num_update_files(); }
+<<<<<<< HEAD
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
     bool is_overlapped() const { return rowset_meta()->is_segments_overlapping(); }
+=======
+    bool has_data_files() const override {
+        return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0;
+    }
+    KeysType keys_type() const { return _keys_type; }
+    bool is_overlapped() const override { return rowset_meta()->is_segments_overlapping(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const TabletSchemaCSPtr tablet_schema() { return rowset_meta()->tablet_schema(); }
 
@@ -327,7 +367,13 @@ public:
                 if (_refs_by_reader == 0 && _rowset_state_machine.rowset_state() == ROWSET_UNLOADING) {
                     // first do close, then change state
                     do_close();
+<<<<<<< HEAD
                     _rowset_state_machine.on_release();
+=======
+                    WARN_IF_ERROR(_rowset_state_machine.on_release(),
+                                  strings::Substitute("rowset state on_release error, $0",
+                                                      _rowset_state_machine.rowset_state()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             if (_rowset_state_machine.rowset_state() == ROWSET_UNLOADED) {
@@ -411,6 +457,14 @@ private:
 
     Status _copy_delta_column_group_files(KVStore* kvstore, const std::string& dir, int64_t version);
 
+<<<<<<< HEAD
+=======
+    StatusOr<std::shared_ptr<Segment>> _load_segment(int32_t idx, const TabletSchemaCSPtr& schema,
+                                                     std::shared_ptr<FileSystem>& fs,
+                                                     const FooterPointerPB* partial_rowset_footer,
+                                                     size_t* foot_size_hint);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<SegmentSharedPtr> _segments;
 
     std::atomic<bool> is_compacting{false};
@@ -418,6 +472,7 @@ private:
     KeysType _keys_type;
 };
 
+<<<<<<< HEAD
 class RowsetReleaseGuard {
 public:
     explicit RowsetReleaseGuard(std::shared_ptr<Rowset> rowset) : _rowset(std::move(rowset)) { _rowset->acquire(); }
@@ -426,6 +481,58 @@ public:
 private:
     std::shared_ptr<Rowset> _rowset;
 };
+=======
+struct adopt_acquire_t {
+    explicit adopt_acquire_t() = default;
+};
+
+template <class T>
+class TReleaseGuard {
+public:
+    explicit TReleaseGuard(T rowset) : _rowset(std::move(rowset)) { _rowset->acquire(); }
+    explicit TReleaseGuard(T rowset, adopt_acquire_t) : _rowset(std::move(rowset)) {}
+    ~TReleaseGuard() {
+        if (_rowset) {
+            _rowset->release();
+        }
+    }
+
+private:
+    T _rowset;
+};
+
+template <class T>
+class TReleaseGuard<std::vector<std::vector<T>>> {
+public:
+    TReleaseGuard() = default;
+    explicit TReleaseGuard(std::vector<std::vector<T>>&& rowsets, adopt_acquire_t)
+            : _tablet_rowsets(std::move(rowsets)) {}
+
+    TReleaseGuard& operator=(TReleaseGuard&& other) noexcept {
+        std::swap(_tablet_rowsets, other._tablet_rowsets);
+        return *this;
+    }
+    ~TReleaseGuard() { reset(); }
+
+    void reset() {
+        for (auto& rowset_list : _tablet_rowsets) {
+            Rowset::release_readers(rowset_list);
+        }
+        _tablet_rowsets.clear();
+    }
+    const std::vector<std::vector<T>>& tablet_rowsets() const { return _tablet_rowsets; }
+
+    TReleaseGuard(TReleaseGuard&& other) = delete;
+    TReleaseGuard(const TReleaseGuard& other) = delete;
+    TReleaseGuard& operator=(const TReleaseGuard& other) = delete;
+
+private:
+    std::vector<std::vector<T>> _tablet_rowsets;
+};
+using RowsetReleaseGuard = TReleaseGuard<RowsetSharedPtr>;
+using MultiRowsetReleaseGuard = TReleaseGuard<std::vector<std::vector<RowsetSharedPtr>>>;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
 
 } // namespace starrocks

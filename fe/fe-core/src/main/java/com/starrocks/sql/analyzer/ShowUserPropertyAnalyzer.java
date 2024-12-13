@@ -23,7 +23,11 @@ public class ShowUserPropertyAnalyzer {
     public static void analyze(ShowUserPropertyStmt statment, ConnectContext context) {
         String user = statment.getUser();
         if (Strings.isNullOrEmpty(user)) {
+<<<<<<< HEAD
             statment.setUser(context.getQualifiedUser());
+=======
+            statment.setUser(context.getCurrentUserIdentity().getUser());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             statment.setUser(user);
         }

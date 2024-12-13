@@ -54,7 +54,11 @@ namespace starrocks {
 
 ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& t_output_expr, const TResultSink& sink,
                        int buffer_size)
+<<<<<<< HEAD
         : _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+=======
+        : _row_desc(row_desc), _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!sink.__isset.type || sink.type == TResultSinkType::MYSQL_PROTOCAL) {
         _sink_type = TResultSinkType::MYSQL_PROTOCAL;
     } else {
@@ -158,11 +162,18 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
         if (_writer != nullptr) {
             _sender->update_num_written_rows(_writer->get_written_rows());
         }
+<<<<<<< HEAD
         _sender->close(final_status);
     }
     auto st = state->exec_env()->result_mgr()->cancel_at_time(
             time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
     st.permit_unchecked_error();
+=======
+        (void)_sender->close(final_status);
+    }
+    (void)state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
+                                                          state->fragment_instance_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Expr::close(_output_expr_ctxs, state);
 
     _closed = true;

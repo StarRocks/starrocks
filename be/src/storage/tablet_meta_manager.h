@@ -143,7 +143,11 @@ public:
     static Status pending_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t version,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key);
 
+<<<<<<< HEAD
     using PendingRowsetIterateFunc = std::function<bool(int64_t version, std::string_view rowset_meta_data)>;
+=======
+    using PendingRowsetIterateFunc = std::function<StatusOr<bool>(int64_t version, std::string_view rowset_meta_data)>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static Status pending_rowset_iterate(DataDir* store, TTabletId tablet_id, const PendingRowsetIterateFunc& func);
 
     // On success, store a pointer to `RowsetMeta` in |*meta| and return OK status.

@@ -17,7 +17,11 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.common.GenericPool;
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -25,7 +29,11 @@ import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 
 import java.util.Map;
 
+<<<<<<< HEAD
 public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends GenericPool<VALUE> {
+=======
+public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> extends ThriftConnectionPool<VALUE> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected Map<TNetworkAddress, MockedBackend> backendMap = Maps.newConcurrentMap();
 
     public MockGenericPool(String name) {
@@ -41,11 +49,14 @@ public class MockGenericPool<VALUE extends org.apache.thrift.TServiceClient> ext
     }
 
     @Override
+<<<<<<< HEAD
     public boolean reopen(VALUE object) {
         return true;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void clearPool(TNetworkAddress addr) {
     }
 

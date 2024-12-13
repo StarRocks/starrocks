@@ -227,7 +227,11 @@ Status UnionNode::_get_next_materialize(RuntimeState* state, ChunkPtr* chunk) {
             continue;
         }
 
+<<<<<<< HEAD
         _move_materialize_chunk(tmp_chunk, *chunk);
+=======
+        RETURN_IF_ERROR(_move_materialize_chunk(tmp_chunk, *chunk));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         break;
     }
 
@@ -338,9 +342,12 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
 pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
+<<<<<<< HEAD
     bool prev_force_disable_adaptive_dop = context->force_disable_adaptive_dop();
     context->set_force_disable_adaptive_dop(true);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<OpFactories> operators_list;
     operators_list.reserve(_children.size() + 1);
     const auto num_operators_generated = _children.size() + !_const_expr_lists.empty();
@@ -349,7 +356,13 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     size_t i = 0;
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
+<<<<<<< HEAD
         operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
+=======
+        auto child_ops = child(i)->decompose_to_pipeline(context);
+        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        operators_list.emplace_back(child_ops);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         UnionPassthroughOperator::SlotMap* dst2src_slot_map = nullptr;
         if (!_pass_through_slot_maps.empty()) {
@@ -373,7 +386,13 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
     // ProjectOperatorFactory is used for the materialized sub-node.
     for (; i < _children.size(); i++) {
+<<<<<<< HEAD
         operators_list.emplace_back(child(i)->decompose_to_pipeline(context));
+=======
+        auto child_ops = child(i)->decompose_to_pipeline(context);
+        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        operators_list.emplace_back(child_ops);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         const auto& dst_tuple_desc =
                 context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
@@ -419,15 +438,28 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
+<<<<<<< HEAD
+=======
+    if (limit() != -1) {
+        for (size_t i = 0; i < operators_list.size(); ++i) {
+            operators_list[i].emplace_back(
+                    std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list);
     if (limit() != -1) {
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
+<<<<<<< HEAD
 
     context->set_force_disable_adaptive_dop(prev_force_disable_adaptive_dop);
     final_operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), final_operators);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return final_operators;
 }
 

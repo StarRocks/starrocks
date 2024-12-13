@@ -15,9 +15,23 @@
 package com.starrocks.qe.scheduler.plan;
 
 import com.starrocks.qe.scheduler.SchedulerTestBase;
+<<<<<<< HEAD
 import org.junit.Test;
 
 public class AggregateTest extends SchedulerTestBase {
+=======
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+public class AggregateTest extends SchedulerTestBase {
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        SchedulerTestBase.beforeClass();
+        connectContext.getSessionVariable().setEnableGroupExecution(false);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testLocalOnePhaseAggregateNonePartition() {
         runFileUnitTest("scheduler/aggregate/agg_local_one_phase_non_partition");

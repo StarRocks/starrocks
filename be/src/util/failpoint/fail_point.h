@@ -15,7 +15,11 @@ namespace starrocks::failpoint {
 
 class FailPoint {
 public:
+<<<<<<< HEAD
     FailPoint(const std::string& name);
+=======
+    FailPoint(std::string name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~FailPoint() = default;
 
     virtual bool shouldFail();
@@ -64,7 +68,11 @@ public:
     Status add(FailPoint* fp);
     FailPoint* get(const std::string& name);
 
+<<<<<<< HEAD
     void iterate(std::function<void(FailPoint*)> callback);
+=======
+    void iterate(const std::function<void(FailPoint*)>& callback);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     FailPointRegistry();

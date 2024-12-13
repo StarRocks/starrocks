@@ -22,6 +22,11 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/query_cache/cache_manager.h"
@@ -111,8 +116,12 @@ TEST_F(QueryCacheTest, testCacheManager) {
     };
 
     for (auto i = 0; i < 10; ++i) {
+<<<<<<< HEAD
         auto st = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
         st.permit_unchecked_error();
+=======
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     ASSERT_EQ(cache_mgr->memory_usage(), 960);
@@ -129,8 +138,12 @@ TEST_F(QueryCacheTest, testCacheManager) {
     ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
+<<<<<<< HEAD
         auto st = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
         st.permit_unchecked_error();
+=======
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     ASSERT_LE(cache_mgr->memory_usage(), cache_mgr->capacity());
 
@@ -154,8 +167,12 @@ TEST_F(QueryCacheTest, testCacheManager) {
     ASSERT_GE(cache_mgr->hit_count(), 0);
 
     for (auto i = 0; i < 10; ++i) {
+<<<<<<< HEAD
         auto st = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
         st.permit_unchecked_error();
+=======
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
     ASSERT_GE(cache_mgr->memory_usage(), 0);
@@ -238,7 +255,11 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     Tasks tasks;
     tasks.resize(dop);
     for (auto i = 0; i < dop; ++i) {
+<<<<<<< HEAD
         pipeline::Pipeline pipeline(0, opFactories);
+=======
+        pipeline::Pipeline pipeline(0, opFactories, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto upstream_operators = pipeline.create_operators(dop, i);
         auto downstream_operator = reduce_source->create(dop, i);
         tasks[i].upstream = std::move(upstream_operators);
@@ -266,12 +287,19 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         tasks[k].cache_operator->set_multilane_operators(std::move(multilane_operators));
 
         for (auto& i : upstream) {
+<<<<<<< HEAD
             auto st = i->prepare(state);
             st.permit_unchecked_error();
         }
 
         auto st = tasks[k].downstream->prepare(state);
         st.permit_unchecked_error();
+=======
+            (void)i->prepare(state);
+        }
+
+        (void)tasks[k].downstream->prepare(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return tasks;
 }

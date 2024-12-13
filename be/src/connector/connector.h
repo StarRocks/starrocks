@@ -15,9 +15,17 @@
 #pragma once
 
 #include <memory>
+<<<<<<< HEAD
 #include <string>
 #include <unordered_map>
 
+=======
+#include <optional>
+#include <string>
+#include <unordered_map>
+
+#include "connector/connector_chunk_sink.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
@@ -83,6 +91,14 @@ public:
         int mem_alloc_failed_count;
     };
     void update_profile(const Profile& profile);
+<<<<<<< HEAD
+=======
+    void set_morsel(pipeline::ScanMorsel* morsel) { _morsel = morsel; }
+
+    void set_driver_sequence(size_t driver_sequence) {
+        runtime_bloom_filter_eval_context.driver_sequence = driver_sequence;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     int64_t _read_limit = -1; // no limit
@@ -98,6 +114,11 @@ protected:
         *chunk = ChunkHelper::new_chunk(*_tuple_desc, n);
         return Status::OK();
     }
+<<<<<<< HEAD
+=======
+
+    pipeline::ScanMorsel* _morsel = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class StreamDataSource : public DataSource {
@@ -160,6 +181,17 @@ public:
         *max_value = MAX_DATA_SOURCE_MEM_BYTES;
     }
 
+<<<<<<< HEAD
+=======
+    virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges, size_t scan_parallelism = 0);
+
+    int64_t get_scan_dop() const { return scan_dop; }
+
+    // possible physical distribution optimize of data source
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual bool sorted_by_keys_per_tablet() const { return false; }
     virtual bool output_chunk_by_bucket() const { return false; }
     virtual bool is_asc_hint() const { return true; }
@@ -167,6 +199,10 @@ public:
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
+<<<<<<< HEAD
+=======
+    int64_t scan_dop = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
@@ -178,6 +214,10 @@ enum ConnectorType {
     FILE = 4,
     LAKE = 5,
     BINLOG = 6,
+<<<<<<< HEAD
+=======
+    ICEBERG = 7,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class Connector {
@@ -190,17 +230,36 @@ public:
     static const std::string FILE;
     static const std::string LAKE;
     static const std::string BINLOG;
+<<<<<<< HEAD
+=======
+    static const std::string ICEBERG;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
     // Later version we could use user-defined data.
 
     virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
+<<<<<<< HEAD
                                                               const TPlanNode& plan_node) const = 0;
+=======
+                                                              const TPlanNode& plan_node) const {
+        CHECK(false) << connector_type() << " connector does not implement chunk source yet";
+        __builtin_unreachable();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
     //                                                         const std::string& table_handle) const;
 
+<<<<<<< HEAD
+=======
+    virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
+        __builtin_unreachable();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual ConnectorType connector_type() const = 0;
 };
 

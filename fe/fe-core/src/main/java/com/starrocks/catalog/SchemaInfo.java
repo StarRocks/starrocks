@@ -16,7 +16,10 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.alter.SchemaChangeHandler;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.thrift.TStorageType;
@@ -52,7 +55,11 @@ public class SchemaInfo {
     @SerializedName("indexes")
     private final List<Index> indexes;
     @SerializedName("bfColumns")
+<<<<<<< HEAD
     private final Set<String> bloomFilterColumnNames;
+=======
+    private final Set<ColumnId> bloomFilterColumnNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
 
@@ -107,7 +114,11 @@ public class SchemaInfo {
         return indexes;
     }
 
+<<<<<<< HEAD
     public Set<String> getBloomFilterColumnNames() {
+=======
+    public Set<ColumnId> getBloomFilterColumnNames() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return bloomFilterColumnNames;
     }
 
@@ -129,6 +140,7 @@ public class SchemaInfo {
         for (Column column : columns) {
             TColumn tColumn = column.toThrift();
             // is bloom filter column
+<<<<<<< HEAD
             if (bloomFilterColumnNames != null && bloomFilterColumnNames.contains(column.getName())) {
                 tColumn.setIs_bloom_filter_column(true);
             }
@@ -140,6 +152,11 @@ public class SchemaInfo {
             if (column.getName().startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
                 tColumn.setColumn_name(column.getName().substring(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1.length()));
             }
+=======
+            if (bloomFilterColumnNames != null && bloomFilterColumnNames.contains(column.getColumnId())) {
+                tColumn.setIs_bloom_filter_column(true);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             tColumns.add(tColumn);
         }
         tSchema.setColumns(tColumns);
@@ -175,7 +192,11 @@ public class SchemaInfo {
         private List<Integer> sortKeyIndexes;
         private List<Integer> sortKeyUniqueIds;
         private List<Index> indexes;
+<<<<<<< HEAD
         private Set<String> bloomFilterColumnNames;
+=======
+        private Set<ColumnId> bloomFilterColumnNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private double bloomFilterFpp; // false positive probability
 
         private Builder() {
@@ -240,7 +261,11 @@ public class SchemaInfo {
             return this;
         }
 
+<<<<<<< HEAD
         public Builder setBloomFilterColumnNames(Collection<String> bloomFilterColumnNames) {
+=======
+        public Builder setBloomFilterColumnNames(Collection<ColumnId> bloomFilterColumnNames) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Preconditions.checkState(this.bloomFilterColumnNames == null);
             if (bloomFilterColumnNames != null) {
                 this.bloomFilterColumnNames = new HashSet<>(bloomFilterColumnNames);

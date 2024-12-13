@@ -23,22 +23,35 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+<<<<<<< HEAD
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.CancelStmt;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CompactionTask;
+<<<<<<< HEAD
 import org.apache.commons.lang.NotImplementedException;
+=======
+import org.apache.hadoop.util.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -47,6 +60,7 @@ import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
 import java.util.List;
 
+<<<<<<< HEAD
 public class CompactionHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(CompactionHandler.class);
 
@@ -69,12 +83,21 @@ public class CompactionHandler extends AlterHandler {
     // add synchronized to avoid process 2 or more stmts at same time
     public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database database,
                                               OlapTable olapTable) throws UserException {
+=======
+public class CompactionHandler  {
+    private static final Logger LOG = LogManager.getLogger(CompactionHandler.class);
+
+    // add synchronized to avoid process 2 or more stmts at same time
+    public static synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db,
+                                                     OlapTable olapTable) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         Preconditions.checkState(alterClause instanceof CompactionClause);
 
         CompactionClause compactionClause = (CompactionClause) alterClause;
         if (RunMode.isSharedDataMode()) {
+<<<<<<< HEAD
             List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
             for (Partition partition : allPartitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
@@ -83,18 +106,43 @@ public class CompactionHandler extends AlterHandler {
                     CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
                     compactionManager.triggerManualCompaction(partitionIdentifier);
                 }
+=======
+            Locker locker = new Locker();
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+            try {
+                List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
+                for (Partition partition : allPartitions) {
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        PartitionIdentifier partitionIdentifier =
+                                new PartitionIdentifier(db.getId(), olapTable.getId(), physicalPartition.getId());
+                        CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
+                        compactionManager.triggerManualCompaction(partitionIdentifier);
+                    }
+                }
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } else {
             ArrayListMultimap<Long, Long> backendToTablets = ArrayListMultimap.create();
             AgentBatchTask batchTask = new AgentBatchTask();
 
+<<<<<<< HEAD
             database.readLock();
+=======
+            Locker locker = new Locker();
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             try {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
                 for (Partition partition : allPartitions) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
+<<<<<<< HEAD
                                     MaterializedIndex.IndexExtState.VISIBLE)) {
+=======
+                                MaterializedIndex.IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             for (Tablet tablet : index.getTablets()) {
                                 for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {
                                     backendToTablets.put(backendId, tablet.getId());
@@ -104,14 +152,24 @@ public class CompactionHandler extends AlterHandler {
                     }
                 }
             } catch (Exception e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
             } finally {
                 database.readUnlock();
+=======
+                throw new StarRocksException(e.getMessage());
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             for (Long backendId : backendToTablets.keySet()) {
                 CompactionTask task = new CompactionTask(null, backendId,
+<<<<<<< HEAD
                         database.getId(),
+=======
+                        db.getId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         olapTable.getId(),
                         backendToTablets.get(backendId),
                         ((CompactionClause) alterClause).isBaseCompaction()
@@ -132,7 +190,11 @@ public class CompactionHandler extends AlterHandler {
     }
 
     @NotNull
+<<<<<<< HEAD
     private List<Partition> findAllPartitions(OlapTable olapTable, CompactionClause compactionClause) {
+=======
+    private static List<Partition> findAllPartitions(OlapTable olapTable, CompactionClause compactionClause) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Partition> allPartitions = new ArrayList<>();
         if (compactionClause.getPartitionNames().isEmpty()) {
             allPartitions.addAll(olapTable.getPartitions());
@@ -149,10 +211,13 @@ public class CompactionHandler extends AlterHandler {
         }
         return allPartitions;
     }
+<<<<<<< HEAD
 
     @Override
     public synchronized void cancel(CancelStmt stmt) throws DdlException {
         throw new NotImplementedException();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -41,12 +41,19 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "gutil/int128.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
+<<<<<<< HEAD
+=======
+#include "types/large_int_value.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
@@ -62,7 +69,11 @@ public:
         // TODO(alvinz): To reuse this colum
         auto column = ColumnHelper::create_column(index_type, false);
         size_t n = 1;
+<<<<<<< HEAD
         decoder->next_batch(&n, column.get());
+=======
+        ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(1, n);
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
@@ -101,7 +112,11 @@ public:
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
             uint32_t seek_off = random() % size;
+<<<<<<< HEAD
             for_page_decoder.seek_to_position_in_page(seek_off);
+=======
+            ASSERT_TRUE(for_page_decoder.seek_to_position_in_page(seek_off).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             EXPECT_EQ((int32_t)(seek_off), for_page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&for_page_decoder, &ret);

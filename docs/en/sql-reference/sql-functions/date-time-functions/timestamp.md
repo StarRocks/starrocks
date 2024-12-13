@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timestamp
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the DATETIME value of a date or datetime expression.
 

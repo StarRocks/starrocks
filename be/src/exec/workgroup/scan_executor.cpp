@@ -20,9 +20,13 @@
 namespace starrocks::workgroup {
 
 ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue)
+<<<<<<< HEAD
         : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
 }
+=======
+        : _task_queue(std::move(task_queue)), _thread_pool(std::move(thread_pool)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 void ScanExecutor::close() {
     _task_queue->close();
@@ -32,8 +36,12 @@ void ScanExecutor::close() {
 void ScanExecutor::initialize(int num_threads) {
     _num_threads_setter.set_actual_num(num_threads);
     for (auto i = 0; i < num_threads; ++i) {
+<<<<<<< HEAD
         auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
         st.permit_unchecked_error();
+=======
+        (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -43,8 +51,14 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
         return;
     }
     for (int i = old_num_threads; i < num_threads; ++i) {
+<<<<<<< HEAD
         auto st = _thread_pool->submit_func([this]() { this->worker_thread(); });
         st.permit_unchecked_error();
+=======
+        if (_num_threads_setter.should_expand()) {
+            (void)_thread_pool->submit_func([this]() { this->worker_thread(); });
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -70,12 +84,24 @@ void ScanExecutor::worker_thread() {
         int64_t time_spent_ns = 0;
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
+<<<<<<< HEAD
             task.work_function();
+=======
+            task.run();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         if (current_thread != nullptr) {
             current_thread->inc_finished_tasks();
         }
         _task_queue->update_statistics(task, time_spent_ns);
+<<<<<<< HEAD
+=======
+
+        // task
+        if (!task.is_finished()) {
+            _task_queue->force_put(std::move(task));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -83,4 +109,19 @@ bool ScanExecutor::submit(ScanTask task) {
     return _task_queue->try_offer(std::move(task));
 }
 
+<<<<<<< HEAD
+=======
+void ScanExecutor::force_submit(ScanTask task) {
+    _task_queue->force_put(std::move(task));
+}
+
+void ScanExecutor::bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) {
+    _thread_pool->bind_cpus(cpuids, borrowed_cpuids);
+}
+
+int64_t ScanExecutor::num_tasks() const {
+    return _task_queue->size();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::workgroup

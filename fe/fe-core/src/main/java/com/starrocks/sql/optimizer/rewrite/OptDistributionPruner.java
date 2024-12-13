@@ -17,6 +17,11 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
@@ -28,6 +33,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
 import com.starrocks.planner.PartitionColumnFilter;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import org.apache.logging.log4j.LogManager;
@@ -49,7 +58,12 @@ public class OptDistributionPruner {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex table = physicalPartition.getIndex(olapScanOperator.getSelectedIndexId());
+<<<<<<< HEAD
                 Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
+=======
+                Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(),
+                        olapScanOperator, olapTable.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result.addAll(tabletIds);
             }
         }
@@ -57,7 +71,11 @@ public class OptDistributionPruner {
     }
 
     private static Collection<Long> distributionPrune(MaterializedIndex index, DistributionInfo distributionInfo,
+<<<<<<< HEAD
                                                       LogicalOlapScanOperator operator) {
+=======
+                                                      LogicalOlapScanOperator operator, Map<ColumnId, Column> idToColumn) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             DistributionPruner distributionPruner;
             if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH) {
@@ -71,7 +89,11 @@ public class OptDistributionPruner {
                     filters = operator.getColumnFilters();
                 }
                 distributionPruner = new HashDistributionPruner(index.getTabletIdsInOrder(),
+<<<<<<< HEAD
                         info.getDistributionColumns(),
+=======
+                        MetaUtils.getColumnsByColumnIds(idToColumn, info.getDistributionColumns()),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         filters,
                         info.getBucketNum());
                 return distributionPruner.prune();

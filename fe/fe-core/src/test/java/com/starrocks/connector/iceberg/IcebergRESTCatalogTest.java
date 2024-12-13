@@ -62,4 +62,22 @@ public class IcebergRESTCatalogTest {
         boolean exists = icebergRESTCatalog.tableExists("db1", "tbl1");
         Assert.assertTrue(exists);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRenameTable(@Mocked RESTCatalog restCatalog) {
+        new Expectations() {
+            {
+                restCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog(
+                "rest_native_catalog", new Configuration(), new HashMap<>());
+        icebergRESTCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergRESTCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

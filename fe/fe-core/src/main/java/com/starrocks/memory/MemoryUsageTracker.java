@@ -14,6 +14,10 @@
 
 package com.starrocks.memory;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
@@ -25,6 +29,10 @@ import com.starrocks.qe.QeProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,7 +65,13 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Load", currentState.getLoadMgr());
         registerMemoryTracker("Load", currentState.getRoutineLoadMgr());
         registerMemoryTracker("Load", currentState.getStreamLoadMgr());
+<<<<<<< HEAD
 
+=======
+        registerMemoryTracker("Load", currentState.getInsertOverwriteJobMgr());
+
+        registerMemoryTracker("Compaction", currentState.getCompactionMgr());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         registerMemoryTracker("Export", currentState.getExportMgr());
         registerMemoryTracker("Delete", currentState.getDeleteMgr());
         registerMemoryTracker("Transaction", currentState.getGlobalTransactionMgr());
@@ -70,6 +84,12 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
         registerMemoryTracker("Agent", new AgentTaskTracker());
+<<<<<<< HEAD
+=======
+        if (currentState.getStatisticStorage() instanceof CachedStatisticStorage) {
+            registerMemoryTracker("Statistics", (CachedStatisticStorage) currentState.getStatisticStorage());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
         if (qeProcessor instanceof QeProcessorImpl) {
@@ -95,6 +115,11 @@ public class MemoryUsageTracker extends FrontendDaemon {
 
     public static void trackMemory() {
         long totalTracked = trackMemory(REFERENCE);
+<<<<<<< HEAD
+=======
+        totalTracked += trackMemory(ImmutableMap.of("Connector",
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getMemTrackers()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LOG.info("total tracked memory: {}, jvm: {}", new ByteSizeValue(totalTracked), getJVMMemory());
     }
@@ -119,6 +144,10 @@ public class MemoryUsageTracker extends FrontendDaemon {
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : trackers.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
                 String className = statEntry.getKey();
                 MemoryTrackable tracker = statEntry.getValue();
@@ -143,6 +172,10 @@ public class MemoryUsageTracker extends FrontendDaemon {
                     memoryStat.setPeakConsumption(currentEstimateSize);
                 }
                 memoryStat.setCounterInfo(GsonUtils.GSON.toJson(counterMap));
+<<<<<<< HEAD
+=======
+                memoryStat.setCounterMap(counterMap);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 usageMap.put(className, memoryStat);
 
                 totalTracked += currentEstimateSize;

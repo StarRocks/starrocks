@@ -14,6 +14,10 @@
 
 #include "exec/hash_join_node.h"
 
+<<<<<<< HEAD
+=======
+#include <glog/logging.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <runtime/runtime_state.h>
 
 #include <memory>
@@ -25,6 +29,11 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
@@ -38,6 +47,11 @@
 #include "exprs/expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/runtime_filter_bank.h"
+<<<<<<< HEAD
+=======
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/RuntimeFilter_types.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -134,6 +148,7 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _runtime_join_filter_pushdown_limit = state->query_options().runtime_join_filter_pushdown_limit;
     }
 
+<<<<<<< HEAD
     if (tnode.__isset.need_create_tuple_columns) {
         _need_create_tuple_columns = tnode.need_create_tuple_columns;
     }
@@ -141,6 +156,17 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.output_columns) {
         _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
+=======
+    if (tnode.hash_join_node.__isset.output_columns) {
+        _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
+    }
+    if (tnode.hash_join_node.__isset.late_materialization) {
+        _enable_late_materialization = tnode.hash_join_node.late_materialization;
+    }
+    if (tnode.hash_join_node.__isset.enable_partition_hash_join) {
+        _enable_partition_hash_join = tnode.hash_join_node.enable_partition_hash_join;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -159,12 +185,21 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _search_ht_timer = ADD_CHILD_TIMER(_runtime_profile, "2-SearchHashTableTime", "ProbeTime");
     _output_build_column_timer = ADD_CHILD_TIMER(_runtime_profile, "3-OutputBuildColumnTime", "ProbeTime");
     _output_probe_column_timer = ADD_CHILD_TIMER(_runtime_profile, "4-OutputProbeColumnTime", "ProbeTime");
+<<<<<<< HEAD
     _output_tuple_column_timer = ADD_CHILD_TIMER(_runtime_profile, "5-OutputTupleColumnTime", "ProbeTime");
     _probe_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "6-ProbeConjunctEvaluateTime", "ProbeTime");
     _other_join_conjunct_evaluate_timer =
             ADD_CHILD_TIMER(_runtime_profile, "7-OtherJoinConjunctEvaluateTime", "ProbeTime");
     _where_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "8-WhereConjunctEvaluateTime", "ProbeTime");
 
+=======
+    _probe_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "5-ProbeConjunctEvaluateTime", "ProbeTime");
+    _other_join_conjunct_evaluate_timer =
+            ADD_CHILD_TIMER(_runtime_profile, "6-OtherJoinConjunctEvaluateTime", "ProbeTime");
+    _where_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "7-WhereConjunctEvaluateTime", "ProbeTime");
+
+    _probe_counter = ADD_COUNTER(_runtime_profile, "probeCount", TUnit::UNIT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _probe_rows_counter = ADD_COUNTER(_runtime_profile, "ProbeRows", TUnit::UNIT);
     _build_rows_counter = ADD_COUNTER(_runtime_profile, "BuildRows", TUnit::UNIT);
     _build_buckets_counter = ADD_COUNTER(_runtime_profile, "BuildBuckets", TUnit::UNIT);
@@ -181,14 +216,20 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _init_hash_table_param(&param);
     _ht.create(param);
 
+<<<<<<< HEAD
     _probe_column_count = _ht.get_probe_column_count();
     _build_column_count = _ht.get_build_column_count();
+=======
+    _output_probe_column_count = _ht.get_output_probe_column_count();
+    _output_build_column_count = _ht.get_output_build_column_count();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }
 
 void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
+<<<<<<< HEAD
     param->need_create_tuple_columns = _need_create_tuple_columns;
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
@@ -201,6 +242,19 @@ void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
 
     param->build_output_slots = _output_slots;
     param->probe_output_slots = _output_slots;
+=======
+    param->join_type = _join_type;
+    param->build_row_desc = &child(1)->row_desc();
+    param->probe_row_desc = &child(0)->row_desc();
+    param->search_ht_timer = _search_ht_timer;
+    param->probe_counter = _probe_counter;
+    param->output_build_column_timer = _output_build_column_timer;
+    param->output_probe_column_timer = _output_probe_column_timer;
+    param->build_output_slots = _output_slots;
+    param->probe_output_slots = _output_slots;
+    param->enable_late_materialization = _enable_late_materialization;
+    param->enable_partition_hash_join = _enable_partition_hash_join;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -265,13 +319,21 @@ Status HashJoinNode::open(RuntimeState* state) {
 
         {
             SCOPED_TIMER(_build_conjunct_evaluate_timer);
+<<<<<<< HEAD
             _evaluate_build_keys(chunk);
+=======
+            RETURN_IF_ERROR(_evaluate_build_keys(chunk));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
             // copy chunk of right table
             SCOPED_TIMER(_copy_right_table_chunk_timer);
+<<<<<<< HEAD
             TRY_CATCH_BAD_ALLOC(_ht.append_chunk(state, chunk, _key_columns));
+=======
+            TRY_CATCH_BAD_ALLOC(_ht.append_chunk(chunk, _key_columns));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -409,8 +471,12 @@ Status HashJoinNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     }
 
+<<<<<<< HEAD
     DCHECK_EQ((*chunk)->num_columns(),
               (*chunk)->get_tuple_id_to_index_map().size() + (*chunk)->get_slot_id_to_index_map().size());
+=======
+    DCHECK_EQ((*chunk)->num_columns(), (*chunk)->get_slot_id_to_index_map().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     *eos = false;
     DCHECK_CHUNK(*chunk);
@@ -434,13 +500,24 @@ void HashJoinNode::close(RuntimeState* state) {
 template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
 pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+<<<<<<< HEAD
 
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
+=======
+    auto rhs_operators = child(1)->decompose_to_pipeline(context);
+    // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
+    // return empty result in this case. Hash join cannot be divided into multiple
+    // partitions in this case. Otherwise, NULL value in right table will only occur
+    // in some partition hash table, and other partition hash table can output chunk.
+    // TODO: support nullaware left anti join with shuffle join
+    DCHECK(_join_type != TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN || _distribution_mode == TJoinDistributionMode::BROADCAST);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), rhs_operators);
     } else {
+<<<<<<< HEAD
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
         // partitions in this case. Otherwise, NULL value in right table will only occur
@@ -458,14 +535,29 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), rhs_operators,
                                                                               _build_equivalence_partition_expr_ctxs);
         }
+=======
+        // Both HashJoin{Build, Probe}Operator are parallelized
+        // There are two ways of shuffle
+        // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
+        // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+        // there is no need to perform local shuffle again at receiver side
+        // 2. Otherwise, add LocalExchangeOperator
+        // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into HashJoin{Build, Probe}Operator.
+        rhs_operators = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), rhs_operators,
+                                                                          _build_equivalence_partition_expr_ctxs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
     auto workgroup = context->fragment_context()->workgroup();
+<<<<<<< HEAD
     auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto build_side_spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
+=======
+    auto build_side_spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(num_right_partitions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (runtime_state()->enable_spill() && runtime_state()->enable_hash_join_spill() &&
         std::is_same_v<HashJoinBuilderFactory, SpillableHashJoinBuildOperatorFactory>) {
@@ -473,6 +565,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
+<<<<<<< HEAD
     HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           _row_descriptor, child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(),
@@ -485,6 +578,17 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+=======
+    HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
+                          _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
+                          child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
+                          _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization,
+                          _enable_partition_hash_join);
+    auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
+
+    // Create a shared RefCountedRuntimeFilterCollector
+    auto rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // In default query engine, we only build one hash table for join right child.
     // But for pipeline query engine, we will build `num_right_partitions` hash tables, so we need to enlarge the limit
 
@@ -519,12 +623,29 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
 
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
+<<<<<<< HEAD
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
                                                                               context->degree_of_parallelism());
     } else {
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
             lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators);
+=======
+    auto join_colocate_group = context->find_exec_group_by_plan_node_id(_id);
+    if (join_colocate_group->type() == ExecutionGroupType::COLOCATE) {
+        DCHECK(context->current_execution_group()->is_colocate_exec_group());
+        DCHECK_EQ(context->current_execution_group(), join_colocate_group);
+        context->set_current_execution_group(join_colocate_group);
+    } else {
+        // left child is colocate group, but current join is not colocate group
+        if (context->current_execution_group()->is_colocate_exec_group()) {
+            lhs_operators = context->interpolate_grouped_exchange(_id, lhs_operators);
+        }
+
+        if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
+            lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
+                                                                                  context->degree_of_parallelism());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             auto* rhs_source_op = context->source_operator(rhs_operators);
             auto* lhs_source_op = context->source_operator(lhs_operators);
@@ -533,13 +654,37 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
                                                                               _probe_equivalence_partition_expr_ctxs);
         }
     }
+<<<<<<< HEAD
     lhs_operators.emplace_back(std::move(probe_op));
+=======
+
+    lhs_operators.emplace_back(std::move(probe_op));
+    // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
+    // Operators consuming the runtime filters will inspect this placeholder.
+    if (context->is_colocate_group() && _distribution_mode == TJoinDistributionMode::COLOCATE) {
+        for (auto runtime_filter_build_desc : _build_runtime_filters) {
+            // local colocate won't generate global runtime filter
+            DCHECK(!runtime_filter_build_desc->has_remote_targets());
+            runtime_filter_build_desc->set_num_colocate_partition(num_right_partitions);
+        }
+        size_t num_left_partition = context->source_operator(lhs_operators)->degree_of_parallelism();
+        DCHECK_EQ(num_left_partition, num_right_partitions);
+        context->fragment_context()->runtime_filter_hub()->add_holder(_id, num_right_partitions);
+    } else {
+        context->fragment_context()->runtime_filter_hub()->add_holder(_id);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (limit() != -1) {
         lhs_operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
 
+<<<<<<< HEAD
     if (_hash_join_node.__isset.interpolate_passthrough && _hash_join_node.interpolate_passthrough) {
+=======
+    if (_hash_join_node.__isset.interpolate_passthrough && _hash_join_node.interpolate_passthrough &&
+        !context->is_colocate_group()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), lhs_operators,
                                                                               context->degree_of_parallelism(), true);
     }
@@ -580,7 +725,11 @@ bool HashJoinNode::_has_null(const ColumnPtr& column) {
 Status HashJoinNode::_build(RuntimeState* state) {
     // build hash table
     SCOPED_TIMER(_build_ht_timer);
+<<<<<<< HEAD
     TRY_CATCH_BAD_ALLOC(_ht.build(state));
+=======
+    TRY_CATCH_BAD_ALLOC(RETURN_IF_ERROR(_ht.build(state)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -869,7 +1018,11 @@ Status HashJoinNode::_process_other_conjunct(ChunkPtr* chunk) {
     switch (_join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+<<<<<<< HEAD
         return _process_outer_join_with_other_conjunct(chunk, _probe_column_count, _build_column_count);
+=======
+        return _process_outer_join_with_other_conjunct(chunk, _output_probe_column_count, _output_build_column_count);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
     case TJoinOp::LEFT_ANTI_JOIN:

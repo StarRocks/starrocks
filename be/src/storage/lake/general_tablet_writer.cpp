@@ -19,6 +19,10 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
@@ -31,8 +35,13 @@ namespace starrocks::lake {
 
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                              std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+<<<<<<< HEAD
                                                              ThreadPool* flush_pool)
         : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool) {}
+=======
+                                                             bool is_compaction, ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 
@@ -68,7 +77,17 @@ void HorizontalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
+<<<<<<< HEAD
             full_paths_to_delete.emplace_back(_tablet_mgr->segment_location(_tablet_id, f.path));
+=======
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->segment_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->segment_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -78,8 +97,25 @@ void HorizontalGeneralTabletWriter::close() {
 Status HorizontalGeneralTabletWriter::reset_segment_writer() {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->segment_location(_tablet_id, name)));
     SegmentWriterOptions opts;
+=======
+    SegmentWriterOptions opts;
+    opts.is_compaction = _is_compaction;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    std::unique_ptr<WritableFile> of;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+    } else {
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -94,12 +130,20 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         RETURN_IF_ERROR(_seg_writer->finalize(&segment_size, &index_size, &footer_position));
         const std::string& segment_path = _seg_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
+<<<<<<< HEAD
         _files.emplace_back(FileInfo{segment_name, segment_size});
+=======
+        _files.emplace_back(FileInfo{segment_name, segment_size, _seg_writer->encryption_meta()});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _data_size += segment_size;
         if (segment) {
             segment->set_data_size(segment_size);
             segment->set_index_size(index_size);
             segment->set_path(segment_path);
+<<<<<<< HEAD
+=======
+            segment->set_encryption_meta(_seg_writer->encryption_meta());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         _seg_writer.reset();
     }
@@ -108,8 +152,14 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
 
 VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                          std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+<<<<<<< HEAD
                                                          uint32_t max_rows_per_segment, ThreadPool* flush_pool)
         : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool),
+=======
+                                                         uint32_t max_rows_per_segment, bool is_compaction,
+                                                         ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, is_compaction, flush_pool),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _max_rows_per_segment(max_rows_per_segment) {}
 
 VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() {
@@ -225,7 +275,11 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         RETURN_IF_ERROR(segment_writer->finalize_footer(&segment_size, &footer_position));
         const std::string& segment_path = segment_writer->segment_path();
         std::string segment_name = std::string(basename(segment_path));
+<<<<<<< HEAD
         _files.emplace_back(FileInfo{segment_name, segment_size});
+=======
+        _files.emplace_back(FileInfo{segment_name, segment_size, segment_writer->encryption_meta()});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _data_size += segment_size;
         segment_writer.reset();
     }
@@ -242,7 +296,17 @@ void VerticalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
+<<<<<<< HEAD
             full_paths_to_delete.emplace_back(_tablet_mgr->segment_location(_tablet_id, f.path));
+=======
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->segment_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->segment_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -253,8 +317,25 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->segment_location(_tablet_id, name)));
     SegmentWriterOptions opts;
+=======
+    SegmentWriterOptions opts;
+    opts.is_compaction = _is_compaction;
+    WritableFileOptions wopts;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    std::unique_ptr<WritableFile> of;
+    if (_location_provider && _fs) {
+        ASSIGN_OR_RETURN(of, _fs->new_writable_file(wopts, _location_provider->segment_location(_tablet_id, name)));
+    } else {
+        ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;

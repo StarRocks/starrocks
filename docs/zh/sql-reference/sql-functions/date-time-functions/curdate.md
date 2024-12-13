@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # curdate,current_date
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取当前的日期，以 DATE 类型返回。
 

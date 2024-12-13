@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Circle
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将一个 WKT(Well Known Text)转化为地球球面上的一个圆。
 

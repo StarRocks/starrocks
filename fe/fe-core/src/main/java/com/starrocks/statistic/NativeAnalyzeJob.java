@@ -29,6 +29,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
 import com.starrocks.statistic.StatsConstants.ScheduleType;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections.CollectionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -105,7 +109,11 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @Override
     public String getDbName() throws MetaNotFoundException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
@@ -114,11 +122,19 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
     @Override
     public String getTableName() throws MetaNotFoundException {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
         Table table = db.getTable(tableId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + dbId);
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -204,6 +220,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
     }
 
     @Override
+<<<<<<< HEAD
     public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
@@ -212,18 +229,43 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+=======
+    public List<StatisticsCollectJob> instantiateJobs() {
+        return StatisticsCollectJobFactory.buildStatisticsCollectJob(this);
+    }
+
+    @Override
+    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor,
+                    List<StatisticsCollectJob> jobs) {
+        if (CollectionUtils.isEmpty(jobs)) {
+            return;
+        }
+        setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
+
+        boolean hasFailedCollectJob = false;
+        for (StatisticsCollectJob statsJob : jobs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
                     statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             statisticExecutor.collectStatistics(statsConnectContext, statsJob, analyzeStatus, true);
             if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
                 setStatus(StatsConstants.ScheduleStatus.FAILED);
                 setWorkTime(LocalDateTime.now());
                 setReason(analyzeStatus.getReason());
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+=======
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 hasFailedCollectJob = true;
                 break;
             }
@@ -232,7 +274,11 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         if (!hasFailedCollectJob) {
             setStatus(ScheduleStatus.FINISH);
             setWorkTime(LocalDateTime.now());
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

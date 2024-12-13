@@ -56,7 +56,10 @@ protected:
 private:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
+<<<<<<< HEAD
     const std::map<std::string, std::string>* _column_to_expr_value = nullptr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {

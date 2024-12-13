@@ -1,11 +1,17 @@
 -- name: test_column_with_row_variable
 ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 DROP TABLE IF EXISTS t1_var;
 -- result:
 []
+=======
+-- !result
+DROP TABLE IF EXISTS t1_var;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE IF NOT EXISTS t1_var(
     k1 int,
@@ -22,7 +28,10 @@ PROPERTIES (
     "storage_type" = "column_with_row"
 );
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 INSERT INTO t1_var(k1, k2, v1, v2, v3, v4) VALUES
     (1, 2, 'a2222222', 'a2222222', "2222-12-22", 33),
@@ -33,11 +42,17 @@ INSERT INTO t1_var(k1, k2, v1, v2, v3, v4) VALUES
     (3, 3, 'e2222222', 'e2222222', "2222-12-22", 100),
     (4, 4, 'f2222222', 'f2222222', "2222-12-22", 101);
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 set enable_short_circuit = true;
 -- result:
 []
+=======
+-- !result
+set enable_short_circuit = true;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select length(v1), v1, v2, v3, v4 from t1_var where k1 = 3 and k2 = 3;
 -- result:
@@ -50,6 +65,7 @@ select * from t1_var where k1 = 3 and k2 = 3;
 select k1, k2, v3, v4 from t1_var where k1 = 3 and k2 = 3 and v1 = 'a2222222';
 -- result:
 -- !result
+<<<<<<< HEAD
 set enable_short_circuit = false;
 -- result:
 []
@@ -62,3 +78,31 @@ DROP TABLE t1_var FORCE;
 -- result:
 []
 -- !result
+=======
+set global thrift_plan_protocol = "compact";
+-- result:
+-- !result
+select length(v1), v1, v2, v3, v4 from t1_var where k1 = 3 and k2 = 3;
+-- result:
+8	e2222222	e2222222	2222-12-22	100
+-- !result
+select * from t1_var where k1 = 3 and k2 = 3;
+-- result:
+3	3	e2222222	e2222222	2222-12-22	100
+-- !result
+select k1, k2, v3, v4 from t1_var where k1 = 3 and k2 = 3 and v1 = 'a2222222';
+-- result:
+-- !result
+set global thrift_plan_protocol = "binary";
+-- result:
+-- !result
+set enable_short_circuit = false;
+-- result:
+-- !result
+TRUNCATE TABLE t1_var;
+-- result:
+-- !result
+DROP TABLE t1_var FORCE;
+-- result:
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

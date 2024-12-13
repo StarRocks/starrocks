@@ -16,6 +16,10 @@ package com.starrocks.connector.odps;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OdpsTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -48,22 +52,36 @@ public class OdpsTableTest {
     @Test
     public void testGetDbName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
+<<<<<<< HEAD
         when(odpsTable.getDbName()).thenReturn("dbName");
         assertEquals("dbName", odpsTable.getDbName());
+=======
+        when(odpsTable.getCatalogDBName()).thenReturn("dbName");
+        assertEquals("dbName", odpsTable.getCatalogDBName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testGetTableName() {
         OdpsTable odpsTable = mock(OdpsTable.class);
+<<<<<<< HEAD
         when(odpsTable.getTableName()).thenReturn("tableName");
         assertEquals("tableName", odpsTable.getTableName());
+=======
+        when(odpsTable.getCatalogTableName()).thenReturn("tableName");
+        assertEquals("tableName", odpsTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testDataColumnNames() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> dataColumns = new ArrayList<>();
+<<<<<<< HEAD
         Column column = new Column();
+=======
+        Column column = new Column("k1", Type.INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         column.setName("name");
         dataColumns.add(column);
         when(odpsTable.getDataColumnNames()).thenReturn(
@@ -75,7 +93,11 @@ public class OdpsTableTest {
     public void testPartitionColumns() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> partitionColumns = new ArrayList<>();
+<<<<<<< HEAD
         Column column = new Column();
+=======
+        Column column = new Column("k1", Type.INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         column.setName("name");
         partitionColumns.add(column);
         when(odpsTable.getPartitionColumns()).thenReturn(partitionColumns);
@@ -86,7 +108,11 @@ public class OdpsTableTest {
     public void testPartitionColumnNames() {
         OdpsTable odpsTable = mock(OdpsTable.class);
         List<Column> partitionColumns = new ArrayList<>();
+<<<<<<< HEAD
         Column column = new Column();
+=======
+        Column column = new Column("k1", Type.INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         column.setName("name");
         partitionColumns.add(column);
         when(odpsTable.getPartitionColumnNames()).thenReturn(

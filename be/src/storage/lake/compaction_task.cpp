@@ -16,30 +16,64 @@
 
 #include "gen_cpp/lake_types.pb.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_writer.h"
+=======
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_writer.h"
+#include "storage/lake/update_manager.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::lake {
 
 CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+<<<<<<< HEAD
                                CompactionTaskContext* context)
+=======
+                               CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         : _txn_id(context->txn_id),
           _tablet(std::move(tablet)),
           _input_rowsets(std::move(input_rowsets)),
           _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
                                                     GlobalEnv::GetInstance()->compaction_mem_tracker())),
+<<<<<<< HEAD
           _context(context) {}
 
 Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer,
                                                     bool is_pk) {
+=======
+          _context(context),
+          _tablet_schema(std::move(tablet_schema)) {}
+
+Status CompactionTask::execute_index_major_compaction(TxnLogPB* txn_log) {
+    if (_tablet.get_schema()->keys_type() == KeysType::PRIMARY_KEYS) {
+        SCOPED_RAW_TIMER(&_context->stats->sst_merge_ns);
+        auto metadata = _tablet.metadata();
+        if (metadata->enable_persistent_index() &&
+            metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
+            return _tablet.tablet_manager()->update_mgr()->execute_index_major_compaction(*metadata, txn_log);
+        }
+    }
+    return Status::OK();
+}
+
+Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
     }
 
     // check last rowset whether this is a partial compaction
+<<<<<<< HEAD
     if (!is_pk && _input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
+=======
+    if (_tablet_schema->keys_type() != KeysType::PRIMARY_KEYS && _input_rowsets.size() > 0 &&
+        _input_rowsets.back()->partial_segments_compaction()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         uint64_t uncompacted_num_rows = 0;
         uint64_t uncompacted_data_size = 0;
         RETURN_IF_ERROR(_input_rowsets.back()->add_partial_compaction_segments_info(
@@ -51,6 +85,10 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
         for (auto& file : writer->files()) {
             op_compaction->mutable_output_rowset()->add_segments(file.path);
             op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
+<<<<<<< HEAD
+=======
+            op_compaction->mutable_output_rowset()->add_segment_encryption_metas(file.encryption_meta);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
         op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());

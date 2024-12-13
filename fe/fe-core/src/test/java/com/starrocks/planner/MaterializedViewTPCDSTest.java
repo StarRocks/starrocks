@@ -27,9 +27,12 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
         TPCDSTestUtil.prepareTables(starRocksAssert);
+<<<<<<< HEAD
         starRocksAssert.dropDatabase("test");
         starRocksAssert.withDatabase("test")
                         .useDatabase("test");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
     }
 

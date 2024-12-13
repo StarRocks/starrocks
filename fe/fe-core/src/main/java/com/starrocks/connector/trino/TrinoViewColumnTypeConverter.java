@@ -82,13 +82,21 @@ public class TrinoViewColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
+<<<<<<< HEAD
                 return ScalarType.createDefaultExternalTableString();
+=======
+                return ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case "VARCHAR":
                 int length = 0;
                 try {
                     length = getVarcharLength(trinoType);
                 } catch (StarRocksConnectorException e) {
+<<<<<<< HEAD
                     return ScalarType.createDefaultExternalTableString();
+=======
+                    return ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 return ScalarType.createVarcharType(length);
             case "CHAR":

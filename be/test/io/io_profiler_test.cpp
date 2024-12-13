@@ -131,4 +131,23 @@ TEST(IOProfilerTest, test_context_io) {
         ASSERT_EQ(IOProfiler::IOMode::IOMODE_NONE, IOProfiler::get_context_io_mode());
     }
 }
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+
+TEST(IOProfilerTest, test_profile_and_get_topn_stats) {
+    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 5);
+    auto expect = IOProfiler::IOStat{0, 0, 0, 0, 0, 0};
+    IOProfiler::add_read(4, 4000);
+    ADD_READ_IO_STAT(expect, 4, 0);
+    IOProfiler::add_write(4, 4000);
+    ADD_WRITE_IO_STAT(expect, 4, 0);
+    IOProfiler::stop();
+    ASSERT_FALSE(IOProfiler::is_empty());
+    auto ret = IOProfiler::profile_and_get_topn_stats_str("all", 1, 1);
+    ASSERT_TRUE(IOProfiler::is_empty());
+}
+
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

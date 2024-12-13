@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofweek
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回指定日期的工作日索引值，即星期日为 1，星期一为 2，星期六为 7。
 

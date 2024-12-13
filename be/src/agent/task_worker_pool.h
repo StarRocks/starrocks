@@ -39,7 +39,10 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+<<<<<<< HEAD
 #include <utility>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <vector>
 
 #include "agent/agent_common.h"
@@ -47,10 +50,15 @@
 #include "agent/utils.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+<<<<<<< HEAD
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "util/cpu_usage_info.h"
 #include "util/threadpool.h"
+=======
+#include "storage/storage_engine.h"
+#include "util/cpu_usage_info.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -236,4 +244,21 @@ private:
     CpuUsageRecorder _cpu_usage_recorder;
 };
 
+<<<<<<< HEAD
+=======
+class ReportDataCacheMetricsTaskWorkerPool final : public TaskWorkerPool<AgentTaskRequestWithoutReqBody> {
+public:
+    ReportDataCacheMetricsTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
+    }
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

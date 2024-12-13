@@ -20,12 +20,20 @@ import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.NodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
@@ -53,8 +61,15 @@ public class StreamLoadManagerTest {
     @Mocked
     private EditLog editLog;
 
+<<<<<<< HEAD
     private GlobalTransactionMgr globalTransactionMgr;
     private Database db;
+=======
+    private SystemInfoService systemInfoService;
+    private GlobalTransactionMgr globalTransactionMgr;
+    private Database db;
+    private NodeMgr nodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Before
     public void setUp() {
@@ -80,10 +95,21 @@ public class StreamLoadManagerTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
                 minTimes = 0;
                 result = db;
 
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                minTimes = 0;
+                result = db.getTable(CatalogMocker.TEST_TBL_ID);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -98,13 +124,17 @@ public class StreamLoadManagerTest {
         };
 
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
+<<<<<<< HEAD
         SystemInfoService systemInfoService = new SystemInfoService();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 minTimes = 0;
                 result = globalTransactionMgr;
@@ -116,16 +146,50 @@ public class StreamLoadManagerTest {
                 systemInfoService.getBackendIds(true);
                 minTimes = 0;
                 result = Lists.newArrayList();
+=======
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                minTimes = 0;
+                result = globalTransactionMgr;
+
+                nodeMgr = new NodeMgr();
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 GlobalStateMgr.getCurrentState().getNextId();
                 minTimes = 0;
                 result = 1001L;
             }
         };
+<<<<<<< HEAD
     }
 
     @Test
     public void testBeginStreamLoadTask() throws UserException {
+=======
+
+        new Expectations(nodeMgr) {
+            {
+                systemInfoService = new SystemInfoService();
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+        new Expectations(systemInfoService) {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = Lists.newArrayList();
+            }
+        };
+    }
+
+    @Test
+    public void testBeginStreamLoadTask() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
@@ -136,7 +200,11 @@ public class StreamLoadManagerTest {
         int channelId = 0;
         
         TransactionResult resp = new TransactionResult();
+<<<<<<< HEAD
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+=======
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
@@ -154,7 +222,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testChannelIdEqualChannelNum() throws UserException {
+=======
+    public void testChannelIdEqualChannelNum() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
@@ -165,7 +237,11 @@ public class StreamLoadManagerTest {
         int channelId = 1;
         
         TransactionResult resp = new TransactionResult();
+<<<<<<< HEAD
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+=======
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");
         Assert.assertEquals(1, idToStreamLoadTask.size());
@@ -174,7 +250,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTaskByName() throws UserException {
+=======
+    public void testGetTaskByName() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -185,19 +265,52 @@ public class StreamLoadManagerTest {
         int channelId = 0;
         
         TransactionResult resp = new TransactionResult();
+<<<<<<< HEAD
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+=======
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(labelName);
         Assert.assertEquals(1, tasks.size());
         Assert.assertEquals("label1", tasks.get(0).getLabel());
+<<<<<<< HEAD
         Assert.assertEquals("label1", tasks.get(0).getLabel());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("test_db", tasks.get(0).getDBName());
         Assert.assertEquals(20000, tasks.get(0).getDBId());
         Assert.assertEquals("test_tbl", tasks.get(0).getTableName());
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTaskByIdWhenMatched() throws UserException {
+=======
+    public void testGetTaskByNameWithNullLabelName() throws StarRocksException {
+        StreamLoadMgr streamLoadManager = new StreamLoadMgr();
+
+        String dbName = "test_db";
+        String tableName = "test_tbl";
+        String labelName1 = "label1";
+        String labelName2 = "label2";
+        long timeoutMillis = 100000;
+        int channelNum = 5;
+        int channelId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName1, "", "", timeoutMillis, channelNum, channelId, resp);
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName2, "", "", timeoutMillis, channelNum, channelId, resp);
+
+        List<StreamLoadTask> tasks = streamLoadManager.getTaskByName(null);
+        Assert.assertEquals(2, tasks.size());
+        Assert.assertEquals("label1", tasks.get(0).getLabel());
+        Assert.assertEquals("label2", tasks.get(1).getLabel());
+    }
+
+    @Test
+    public void testGetTaskByIdWhenMatched() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -208,7 +321,11 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
+<<<<<<< HEAD
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+=======
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         StreamLoadTask task = streamLoadManager.getTaskById(1001L);
         Assert.assertNotNull(task);
@@ -220,7 +337,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTaskByIdWhenNotMatched() throws UserException {
+=======
+    public void testGetTaskByIdWhenNotMatched() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -231,25 +352,40 @@ public class StreamLoadManagerTest {
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
+<<<<<<< HEAD
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+=======
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         StreamLoadTask task = streamLoadManager.getTaskById(1002L);
         Assert.assertNull(task);
     }
 
     @Test
+<<<<<<< HEAD
     public void testStreamLoadTaskAfterCommit() throws UserException {
+=======
+    public void testStreamLoadTaskAfterCommit() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
         String tableName = "test_tbl";
         String labelName = "label2";
         long timeoutMillis = 100000;
+<<<<<<< HEAD
         int channelNum = 1;
         int channelId = 0;
 
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTask(dbName, tableName, labelName, timeoutMillis, channelNum, channelId, resp);
+=======
+        long warehouseId = 0;
+
+        TransactionResult resp = new TransactionResult();
+        streamLoadManager.beginLoadTask(dbName, tableName, labelName, "", "", timeoutMillis, resp, false, warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, StreamLoadTask> idToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "idToStreamLoadTask");

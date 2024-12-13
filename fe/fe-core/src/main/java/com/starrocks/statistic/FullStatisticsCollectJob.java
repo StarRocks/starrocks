@@ -21,6 +21,10 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.OlapTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -44,6 +48,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+<<<<<<< HEAD
+=======
+import java.io.StringWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +59,23 @@ import java.util.Map;
 public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(FullStatisticsCollectJob.class);
 
+<<<<<<< HEAD
+=======
+    //| table_id       | bigint           | NO   | true  | <null>  |       |
+    //| partition_id   | bigint           | NO   | true  | <null>  |       |
+    //| column_name    | varchar(65530)   | NO   | true  | <null>  |       |
+    //| db_id          | bigint           | NO   | false | <null>  |       |
+    //| table_name     | varchar(65530)   | NO   | false | <null>  |       |
+    //| partition_name | varchar(65530)   | NO   | false | <null>  |       |
+    //| row_count      | bigint           | NO   | false | <null>  |       |
+    //| data_size      | bigint           | NO   | false | <null>  |       |
+    //| ndv            | hll              | NO   | false |         |       |
+    //| null_count     | bigint           | NO   | false | <null>  |       |
+    //| max            | varchar(1048576) | NO   | false | <null>  |       |
+    //| min            | varchar(1048576) | NO   | false | <null>  |       |
+    //| update_time    | datetime         | NO   | false | <null>  |       |
+    private static final String TABLE_NAME = "column_statistics";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnNameStr'" + // VARCHAR
@@ -61,6 +86,19 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
             " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
+<<<<<<< HEAD
+=======
+    private static final String OVERWRITE_PARTITION_TEMPLATE =
+            "INSERT INTO " + TABLE_NAME + "\n" +
+                    "SELECT " +
+                    "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
+                    "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time \n" +
+                    "FROM " + TABLE_NAME + "\n" +
+                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
+    private static final String DELETE_PARTITION_TEMPLATE =
+            "DELETE FROM " + TABLE_NAME + "\n" +
+                    "WHERE `table_id`=$tableId AND `partition_id`=$sourcePartitionId";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private final List<Long> partitionIdList;
 
@@ -86,6 +124,12 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
         List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
         long totalCollectSQL = collectSQLList.size();
+<<<<<<< HEAD
+=======
+        if (table.isTemporaryTable()) {
+            context.setSessionId(((OlapTable) table).getSessionId());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         context.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
 
         // First, the collection task is divided into several small tasks according to the column name and partition,
@@ -131,7 +175,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             }
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (lastFailure != null) {
@@ -311,6 +359,30 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         return builder.toString();
     }
 
+<<<<<<< HEAD
+=======
+    public static List<String> buildOverwritePartitionSQL(long tableId, long sourcePartitionId,
+                                                          long targetPartitionId) {
+        List<String> result = Lists.newArrayList();
+
+        VelocityContext context = new VelocityContext();
+        context.put("tableId", tableId);
+        context.put("targetPartitionId", sourcePartitionId);
+        context.put("sourcePartitionId", targetPartitionId);
+        {
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", OVERWRITE_PARTITION_TEMPLATE);
+            result.add(sw.toString());
+        }
+        {
+            StringWriter sw = new StringWriter();
+            DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", DELETE_PARTITION_TEMPLATE);
+            result.add(sw.toString());
+        }
+        return result;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("FullStatisticsCollectJob{");

@@ -162,6 +162,10 @@ public:
 private:
     friend class Future<R>;
     friend class FutureBase<R>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<R>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     friend class Promise<R>;
 
     R& value() noexcept { return _result.value(); }

@@ -45,6 +45,10 @@ public class MultiCastPlanFragment extends PlanFragment {
         this.children.addAll(planFragment.getChildren());
         this.setLoadGlobalDicts(planFragment.loadGlobalDicts);
         this.setQueryGlobalDicts(planFragment.queryGlobalDicts);
+<<<<<<< HEAD
+=======
+        this.setQueryGlobalDictExprs(planFragment.queryGlobalDictExprs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<PlanFragment> getDestFragmentList() {

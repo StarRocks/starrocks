@@ -5,4 +5,10 @@ CVE-2024-47554
 # ignore avro-1.11.3.jar introduced by iceberg-core-1.6.0
 CVE-2024-47561
 # ingore nimbus-jose-jwt-9.31.jar
+<<<<<<< HEAD
 CVE-2023-52428
+=======
+CVE-2023-52428
+# ingore io.netty:netty-common (netty-common-4.1.100.Final.jar) 
+CVE-2024-47535
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

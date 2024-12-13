@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_unique_agg
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将一列中的 distinct 值（包括空值 null）串联成一个数组（多行转一行）。
 

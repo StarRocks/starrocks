@@ -15,14 +15,24 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.UserIdentity;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -76,16 +86,27 @@ public class SetCatalogStmtTest {
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+<<<<<<< HEAD
         StmtExecutor executor = new StmtExecutor(ctx, "set catalog hive_catalog");
+=======
+        StmtExecutor executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement(
+                "set catalog hive_catalog", ctx.getSessionVariable().getSqlMode()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         executor.execute();
 
         Assert.assertEquals("hive_catalog", ctx.getCurrentCatalog());
 
+<<<<<<< HEAD
         executor = new StmtExecutor(ctx, "set catalog default_catalog");
+=======
+        executor = new StmtExecutor(ctx, SqlParser.parseSingleStatement("set catalog default_catalog",
+                ctx.getSessionVariable().getSqlMode()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         executor.execute();
 
         Assert.assertEquals("default_catalog", ctx.getCurrentCatalog());
 
+<<<<<<< HEAD
         executor = new StmtExecutor(ctx, "set xxx default_catalog");
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
@@ -93,5 +114,9 @@ public class SetCatalogStmtTest {
         executor = new StmtExecutor(ctx, "set catalog default_catalog xxx");
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
+=======
+        AnalyzeTestUtil.analyzeFail("set xxx default_catalog");
+        AnalyzeTestUtil.analyzeFail("set catalog default_catalog xxx");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_name,
@@ -31,6 +32,8 @@ group by
 order by
     o_totalprice desc,
     o_orderdate limit 100;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:2: C_NAME | 1: C_CUSTKEY | 10: O_ORDERKEY | 14: O_ORDERDATE | 13: O_TOTALPRICE | 56: sum

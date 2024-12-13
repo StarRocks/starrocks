@@ -1,0 +1,86 @@
+-- name: test_materialized_view_union_rewrite
+CREATE TABLE `t1` (
+  `k1` date NULL COMMENT "",
+  `k2` datetime NULL COMMENT "",
+  `k3` char(20) NULL COMMENT "",
+  `k4` varchar(20) NULL COMMENT "",
+  `k5` boolean NULL COMMENT "",
+  `v1` tinyint(4) NULL COMMENT "",
+  `v2` smallint(6) NULL COMMENT "",
+  `v3` int(11) NULL COMMENT "",
+  `v4` bigint(20) NULL COMMENT "",
+  `v5` largeint(40) NULL COMMENT "",
+  `v6` float NULL COMMENT "",
+  `v7` double NULL COMMENT "",
+  `v8` decimal(27, 9) NULL COMMENT ""
+) ENGINE=OLAP
+UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+  PARTITION p1 VALUES [("0000-01-01"), ("2020-01-01")),
+  PARTITION p2 VALUES [("2020-01-01"), ("2023-01-01")),
+  PARTITION p3 VALUES [("2023-01-01"), ("2025-01-01"))
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`)
+PROPERTIES (
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values ('2020-01-01', '2020-01-01 01:00:00', '1', '1', 1, 1, 1, 1, 1, 1, 1, 1, 1.0);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv0
+PARTITION BY (`k1`)
+DISTRIBUTED BY random
+REFRESH DEFERRED MANUAL
+PROPERTIES (
+  "replication_num" = "1"
+)
+AS SELECT * FROM t1; 
+REFRESH MATERIALIZED VIEW test_mv0 WITH SYNC MODE;
+-- result:
+-- !result
+function: check_hit_materialized_view("select count(*) from t1", "test_mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select * from t1", "test_mv0")
+-- result:
+None
+-- !result
+select count(*) from t1;
+-- result:
+1
+-- !result
+select * from t1 order by k1;
+-- result:
+2020-01-01	2020-01-01 01:00:00	1	1	1	1	1	1	1	1	1.0	1.0	1.000000000
+-- !result
+insert into t1 values ('2023-01-02', '2020-01-01 01:00:00', '1', '1', 1, 1, 1, 1, 1, 1, 1, 1, 1.0);
+-- result:
+-- !result
+function: check_hit_materialized_view("select count(*) from t1", "test_mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select * from t1", "test_mv0")
+-- result:
+None
+-- !result
+select count(*) from t1;
+-- result:
+2
+-- !result
+select * from t1 order by k1;
+-- result:
+2020-01-01	2020-01-01 01:00:00	1	1	1	1	1	1	1	1	1.0	1.0	1.000000000
+2023-01-02	2020-01-01 01:00:00	1	1	1	1	1	1	1	1	1.0	1.0	1.000000000
+-- !result
+drop materialized view test_mv0;
+-- result:
+-- !result
+drop table t1;
+-- result:
+-- !result

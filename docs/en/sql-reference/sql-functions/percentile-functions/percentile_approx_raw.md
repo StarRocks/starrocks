@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_approx_raw
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the value that corresponds to a specified percentile from `x`.
 

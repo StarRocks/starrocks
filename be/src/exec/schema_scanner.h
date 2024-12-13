@@ -91,7 +91,11 @@ class SchemaScanner {
 public:
     struct ColumnDesc {
         const char* name;
+<<<<<<< HEAD
         LogicalType type;
+=======
+        TypeDescriptor type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int size;
         bool is_null;
     };

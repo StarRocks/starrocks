@@ -41,7 +41,10 @@
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/MVMaintenance_types.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/internal_service.pb.h"
 #include "util/countdown_latch.h"
 #include "util/priority_thread_pool.hpp"
@@ -176,6 +179,19 @@ public:
     void exec_short_circuit(google::protobuf::RpcController* controller, const PExecShortCircuitRequest* request,
                             PExecShortCircuitResult* response, google::protobuf::Closure* done) override;
 
+<<<<<<< HEAD
+=======
+    void process_dictionary_cache(google::protobuf::RpcController* controller,
+                                  const PProcessDictionaryCacheRequest* request,
+                                  PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
+
+    void fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
+                            PFetchArrowSchemaResult* result, google::protobuf::Closure* done);
+
+    void stream_load(google::protobuf::RpcController* controller, const PStreamLoadRequest* request,
+                     PStreamLoadResponse* response, google::protobuf::Closure* done) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     void _transmit_chunk(::google::protobuf::RpcController* controller,
                          const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,

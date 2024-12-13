@@ -52,12 +52,25 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.util.NetUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.datacache.DataCacheMetrics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.CancelDisableDiskInfo;
@@ -65,25 +78,45 @@ import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+<<<<<<< HEAD
 import com.starrocks.persist.gson.GsonUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.ast.DropBackendClause;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceGroupUsage;
 import com.starrocks.thrift.TStatusCode;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -103,12 +136,21 @@ public class SystemInfoService implements GsonPostProcessable {
     public static final String DEFAULT_CLUSTER = "default_cluster";
 
     @SerializedName(value = "be")
+<<<<<<< HEAD
     private volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
 
     @SerializedName(value = "ce")
     private volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
     private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
+=======
+    protected volatile ConcurrentHashMap<Long, Backend> idToBackendRef;
+
+    @SerializedName(value = "ce")
+    protected volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
+
+    protected volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
 
     private final NodeSelector nodeSelector;
@@ -123,6 +165,7 @@ public class SystemInfoService implements GsonPostProcessable {
         nodeSelector = new NodeSelector(this);
     }
 
+<<<<<<< HEAD
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
 
@@ -132,6 +175,17 @@ public class SystemInfoService implements GsonPostProcessable {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             addComputeNode(pair.first, pair.second);
+=======
+    public void addComputeNodes(AddComputeNodeClause addComputeNodeClause)
+            throws DdlException {
+
+        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
+            checkSameNodeExist(pair.first, pair.second);
+        }
+
+        for (Pair<String, Integer> pair : addComputeNodeClause.getHostPortPairs()) {
+            addComputeNode(pair.first, pair.second, addComputeNodeClause.getWarehouse());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -163,17 +217,29 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     // Final entry of adding compute node
+<<<<<<< HEAD
     private void addComputeNode(String host, int heartbeatPort) {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
         setComputeNodeOwner(newComputeNode);
+=======
+    private void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
+        ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
+        setComputeNodeOwner(newComputeNode);
+        addComputeNodeToWarehouse(newComputeNode, warehouse);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
     }
 
+<<<<<<< HEAD
     private void setComputeNodeOwner(ComputeNode computeNode) {
+=======
+    public void setComputeNodeOwner(ComputeNode computeNode) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         computeNode.setBackendState(BackendState.using);
     }
 
@@ -181,6 +247,7 @@ public class SystemInfoService implements GsonPostProcessable {
         return idToBackendRef.size() + idToComputeNodeRef.size() == 1;
     }
 
+<<<<<<< HEAD
     /**
      * @param hostPortPairs : backend's host and port
      */
@@ -195,6 +262,19 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     private void checkSameNodeExist(String host, int heartPort) throws DdlException {
+=======
+    public void addBackends(AddBackendClause addBackendClause) throws DdlException {
+        for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
+            checkSameNodeExist(pair.first, pair.second);
+        }
+
+        for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
+            addBackend(pair.first, pair.second, addBackendClause.getWarehouse());
+        }
+    }
+
+    public void checkSameNodeExist(String host, int heartPort) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check is already exist
         if (getBackendWithHeartbeatPort(host, heartPort) != null) {
             throw new DdlException("Backend already exists with same host " + host + " and port " + heartPort);
@@ -223,12 +303,33 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
     }
 
+<<<<<<< HEAD
     private void setBackendOwner(Backend backend) {
         backend.setBackendState(BackendState.using);
     }
 
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort) {
+=======
+    public void setBackendOwner(Backend backend) {
+        backend.setBackendState(BackendState.using);
+    }
+
+    public void addComputeNodeToWarehouse(ComputeNode computeNode, String warehouseName)
+            throws DdlException {
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
+        // check if the warehouse exist
+        if (warehouse == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouseName));
+        }
+
+        computeNode.setWorkerGroupId(warehouse.getAnyWorkerGroupId());
+        computeNode.setWarehouseId(warehouse.getId());
+    }
+
+    // Final entry of adding backend
+    private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToBackend
         idToBackendRef.put(newBackend.getId(), newBackend);
@@ -240,6 +341,10 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
+<<<<<<< HEAD
+=======
+        addComputeNodeToWarehouse(newBackend, warehouse);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
@@ -250,6 +355,12 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ShowResultSet modifyBackendHost(ModifyBackendClause modifyBackendClause) throws DdlException {
+<<<<<<< HEAD
+=======
+        if (RunMode.isSharedDataMode()) {
+            throw new DdlException("modify backend host is not supported in shared-data cluster.");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String willBeModifiedHost = modifyBackendClause.getSrcHost();
         String fqdn = modifyBackendClause.getDestHost();
         List<Backend> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
@@ -272,7 +383,12 @@ public class SystemInfoService implements GsonPostProcessable {
             formatSb.append("\nplease execute %d times, to modify the remaining backends\n");
             for (int i = 1; i < candidateBackends.size(); i++) {
                 Backend be = candidateBackends.get(i);
+<<<<<<< HEAD
                 formatSb.append(be.getHost()).append(":").append(be.getHeartbeatPort()).append("\n");
+=======
+                formatSb.append(NetUtils.getHostPortInAccessibleFormat(be.getHost(), be.getHeartbeatPort())).
+                        append("\n");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             opMessage = String.format(
                     formatSb.toString(), willBeModifiedHost,
@@ -340,6 +456,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
     public void dropComputeNodes(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
@@ -358,12 +475,40 @@ public class SystemInfoService implements GsonPostProcessable {
         ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         if (dropComputeNode == null) {
             throw new DdlException("compute node does not exists[" + host + ":" + heartbeatPort + "]");
+=======
+    public void dropComputeNodes(DropComputeNodeClause dropComputeNodeClause) throws DdlException {
+        String warehouse = dropComputeNodeClause.getWarehouse();
+        // check if the warehouse exist
+        if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
+        }
+
+        for (Pair<String, Integer> pair : dropComputeNodeClause.getHostPortPairs()) {
+            dropComputeNode(pair.first, pair.second, warehouse);
+        }
+    }
+
+    public void dropComputeNode(String host, int heartbeatPort, String warehouse)
+            throws DdlException {
+        ComputeNode dropComputeNode = getComputeNodeWithHeartbeatPort(host, heartbeatPort);
+        if (dropComputeNode == null) {
+            throw new DdlException("compute node does not exists[" +
+                    NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
+        }
+
+        // check if warehouseName is right
+        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(dropComputeNode.getWarehouseId());
+        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+            throw new DdlException("compute node [" + host + ":" + heartbeatPort +
+                    "] does not exist in warehouse " + warehouse);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
         // remove from BackendCoreStat
+<<<<<<< HEAD
         BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
 
         // remove worker
@@ -373,6 +518,17 @@ public class SystemInfoService implements GsonPostProcessable {
             if (starletPort != 0) {
                 String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
                 GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
+=======
+        BackendResourceStat.getInstance().removeBe(dropComputeNode.getId());
+
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = dropComputeNode.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(dropComputeNode.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, dropComputeNode.getWorkerGroupId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -386,6 +542,7 @@ public class SystemInfoService implements GsonPostProcessable {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
         boolean needCheckWithoutForce = !dropBackendClause.isForce();
 
+<<<<<<< HEAD
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) == null) {
@@ -395,6 +552,16 @@ public class SystemInfoService implements GsonPostProcessable {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             dropBackend(pair.first, pair.second, needCheckWithoutForce);
+=======
+        String warehouse = dropBackendClause.getWarehouse();
+        // check if the warehouse exist
+        if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouse) == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("name: %s", warehouse));
+        }
+
+        for (Pair<String, Integer> pair : hostPortPairs) {
+            dropBackend(pair.first, pair.second, warehouse, needCheckWithoutForce);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -405,6 +572,7 @@ public class SystemInfoService implements GsonPostProcessable {
             throw new DdlException("Backend[" + backendId + "] does not exist");
         }
 
+<<<<<<< HEAD
         dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
     }
 
@@ -417,6 +585,22 @@ public class SystemInfoService implements GsonPostProcessable {
             db.readLock();
             try {
                 db.getTables().stream()
+=======
+        dropBackend(backend.getHost(), backend.getHeartbeatPort(), WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+    }
+
+    protected void checkWhenNotForceDrop(Backend droppedBackend) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<Long> tabletIds =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
+        List<Long> dbs = globalStateMgr.getLocalMetastore().getDbIds();
+
+        dbs.stream().map(dbId -> globalStateMgr.getLocalMetastore().getDb(dbId)).forEach(db -> {
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()).stream()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .filter(Table::isOlapTableOrMaterializedView)
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
@@ -440,18 +624,43 @@ public class SystemInfoService implements GsonPostProcessable {
                                     });
                         }));
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         });
     }
 
     // final entry of dropping backend
+<<<<<<< HEAD
     public void dropBackend(String host, int heartbeatPort, boolean needCheckWithoutForce) throws DdlException {
         if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
             throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
         }
 
         Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
+=======
+    public void dropBackend(String host, int heartbeatPort, String warehouse, boolean needCheckWithoutForce) throws DdlException {
+        Backend droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
+
+        if (droppedBackend == null) {
+            throw new DdlException("backend does not exists[" +
+                    NetUtils.getHostPortInAccessibleFormat(host, heartbeatPort) + "]");
+        }
+
+        // check if warehouseName is right
+        Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(droppedBackend.getWarehouseId());
+        if (wh != null && !warehouse.equalsIgnoreCase(wh.getName())) {
+            LOG.warn("warehouseName in dropBackends is not equal, " +
+                            "warehouseName from dropBackendClause is {}, while actual one is {}",
+                    warehouse, wh.getName());
+            throw new DdlException("backend [" + host + ":" + heartbeatPort +
+                    "] does not exist in warehouse " + warehouse);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (needCheckWithoutForce) {
             try {
                 checkWhenNotForceDrop(droppedBackend);
@@ -469,6 +678,7 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.copyOf(copiedReportVersions);
 
         // remove from BackendCoreStat
+<<<<<<< HEAD
         BackendCoreStat.removeNumOfHardwareCoresOfBe(droppedBackend.getId());
 
         // remove worker
@@ -478,6 +688,17 @@ public class SystemInfoService implements GsonPostProcessable {
             if (starletPort != 0) {
                 String workerAddr = droppedBackend.getHost() + ":" + starletPort;
                 GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
+=======
+        BackendResourceStat.getInstance().removeBe(droppedBackend.getId());
+
+        // remove worker
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = droppedBackend.getStarletPort();
+            // only need to remove worker after be reported its staretPort
+            if (starletPort != 0) {
+                String workerAddr = NetUtils.getHostPortInAccessibleFormat(droppedBackend.getHost(), starletPort);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, droppedBackend.getWorkerGroupId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -640,7 +861,20 @@ public class SystemInfoService implements GsonPostProcessable {
         return backend;
     }
 
+<<<<<<< HEAD
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+=======
+    public void updateDataCacheMetrics(long backendId, DataCacheMetrics dataCacheMetrics) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateDataCacheMetrics receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+        node.updateDataCacheMetrics(dataCacheMetrics);
+    }
+
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memUsedBytes,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     int cpuUsedPermille, List<TResourceGroupUsage> groupUsages) {
         ComputeNode node = getBackendOrComputeNode(backendId);
         if (node == null) {
@@ -648,13 +882,21 @@ public class SystemInfoService implements GsonPostProcessable {
             return;
         }
 
+<<<<<<< HEAD
         node.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+=======
+        node.updateResourceUsage(numRunningQueries, memUsedBytes, cpuUsedPermille);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (groupUsages != null) {
             List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages = new ArrayList<>(groupUsages.size());
             for (TResourceGroupUsage usage : groupUsages) {
                 ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr()
+<<<<<<< HEAD
                         .getResourceGroupIncludingDefault(usage.getGroup_id());
+=======
+                        .getResourceGroup(usage.getGroup_id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (group == null) {
                     continue;
                 }
@@ -689,7 +931,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public ComputeNode getComputeNodeWithHeartbeatPort(String host, int heartPort) {
         for (ComputeNode computeNode : idToComputeNodeRef.values()) {
+<<<<<<< HEAD
             if (computeNode.getHost().equals(host) && computeNode.getHeartbeatPort() == heartPort) {
+=======
+            if (NetUtils.isSameIP(computeNode.getHost(), host) && computeNode.getHeartbeatPort() == heartPort) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return computeNode;
             }
         }
@@ -698,7 +944,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public Backend getBackendWithHeartbeatPort(String host, int heartPort) {
         for (Backend backend : idToBackendRef.values()) {
+<<<<<<< HEAD
             if (backend.getHost().equals(host) && backend.getHeartbeatPort() == heartPort) {
+=======
+            if (NetUtils.isSameIP(backend.getHost(), host) && backend.getHeartbeatPort() == heartPort) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return backend;
             }
         }
@@ -707,7 +957,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public long getBackendIdWithStarletPort(String host, int starletPort) {
         for (Backend backend : idToBackendRef.values()) {
+<<<<<<< HEAD
             if (backend.getHost().equals(host) && backend.getStarletPort() == starletPort) {
+=======
+            if (NetUtils.isSameIP(backend.getHost(), host) && backend.getStarletPort() == starletPort) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return backend.getId();
             }
         }
@@ -716,7 +970,11 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
         for (ComputeNode cn : idToComputeNodeRef.values()) {
+<<<<<<< HEAD
             if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
+=======
+            if (NetUtils.isSameIP(cn.getHost(), host) && cn.getStarletPort() == starletPort) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return cn.getId();
             }
         }
@@ -724,6 +982,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
+<<<<<<< HEAD
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (computeNode == null) {
@@ -731,6 +990,16 @@ public class SystemInfoService implements GsonPostProcessable {
                     GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+=======
+        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(
+                host.getHostname(), host.getPort());
+        if (computeNode == null) {
+            computeNode =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getComputeNodeWithBePort(host.getHostname(), host.getPort());
+            if (computeNode == null) {
+                throw new StarRocksException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         if (computeNode.getBrpcPort() < 0) {
@@ -788,8 +1057,11 @@ public class SystemInfoService implements GsonPostProcessable {
         return idToComputeNodeRef.size();
     }
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getAliveComputeNodeNumber() {
         return getComputeNodeIds(true).size();
     }
@@ -818,7 +1090,11 @@ public class SystemInfoService implements GsonPostProcessable {
             }
             boolean hostMatch = false;
             // target, cur has same ip
+<<<<<<< HEAD
             if (targetPair.first.equals(curPair.first)) {
+=======
+            if (NetUtils.isSameIP(targetPair.first, curPair.first)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 hostMatch = true;
             }
             // target, cur has same fqdn and both of them are not equal ""
@@ -936,7 +1212,11 @@ public class SystemInfoService implements GsonPostProcessable {
         if (node instanceof Backend) {
             AtomicLong atomicLong;
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
+<<<<<<< HEAD
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+                Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (db != null) {
                     updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
@@ -955,6 +1235,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
     public long saveBackends(DataOutputStream dos, long checksum) throws IOException {
         ImmutableMap<Long, Backend> idToBackend = ImmutableMap.copyOf(idToBackendRef);
         int backendCount = idToBackend.size();
@@ -1015,11 +1296,14 @@ public class SystemInfoService implements GsonPostProcessable {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void clear() {
         this.idToBackendRef = new ConcurrentHashMap<>();
         this.idToReportVersionRef = ImmutableMap.of();
     }
 
+<<<<<<< HEAD
     public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) throws AnalysisException {
         hostPort = hostPort.replaceAll("\\s+", "");
         if (hostPort.isEmpty()) {
@@ -1034,6 +1318,23 @@ public class SystemInfoService implements GsonPostProcessable {
         String host = pair[0];
         if (Strings.isNullOrEmpty(host)) {
             throw new AnalysisException("Host is null");
+=======
+    public static Pair<String, Integer> validateHostAndPort(String hostPort, boolean resolveHost) {
+        hostPort = hostPort.replaceAll("\\s+", "");
+        if (hostPort.isEmpty()) {
+            throw new SemanticException("Invalid host port: " + hostPort);
+        }
+
+        String[] hostInfo;
+        try {
+            hostInfo = NetUtils.resolveHostInfoFromHostPort(hostPort);
+        } catch (AnalysisException e) {
+            throw new SemanticException("Invalid host port: " + hostPort, e);
+        }
+        String host = hostInfo[0];
+        if (Strings.isNullOrEmpty(host)) {
+            throw new SemanticException("Host is null");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         int heartbeatPort;
@@ -1049,17 +1350,30 @@ public class SystemInfoService implements GsonPostProcessable {
             }
 
             // validate port
+<<<<<<< HEAD
             heartbeatPort = Integer.parseInt(pair[1]);
 
             if (heartbeatPort <= 0 || heartbeatPort >= 65536) {
                 throw new AnalysisException("Port is out of range: " + heartbeatPort);
+=======
+            heartbeatPort = Integer.parseInt(hostInfo[1]);
+
+            if (heartbeatPort <= 0 || heartbeatPort >= 65536) {
+                throw new SemanticException("Port is out of range: " + heartbeatPort);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             return new Pair<>(host, heartbeatPort);
         } catch (UnknownHostException e) {
+<<<<<<< HEAD
             throw new AnalysisException("Unknown host: " + e.getMessage());
         } catch (Exception e) {
             throw new AnalysisException("Encounter unknown exception: " + e.getMessage());
+=======
+            throw new SemanticException("Unknown host: " + e.getMessage());
+        } catch (Exception e) {
+            throw new SemanticException("Encounter unknown exception: " + e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1087,17 +1401,30 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
+<<<<<<< HEAD
             BackendCoreStat.removeNumOfHardwareCoresOfBe(computeNodeId);
+=======
+            BackendResourceStat.getInstance().removeBe(computeNodeId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // clear map in starosAgent
         if (RunMode.isSharedDataMode()) {
+<<<<<<< HEAD
             long starletPort = cn.getStarletPort();
             if (starletPort == 0) {
                 return;
             }
             String workerAddr = cn.getHost() + ":" + starletPort;
             GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+=======
+            int starletPort = cn.getStarletPort();
+            if (starletPort == 0) {
+                return;
+            }
+            String workerAddr = NetUtils.getHostPortInAccessibleFormat(cn.getHost(), starletPort);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1114,17 +1441,30 @@ public class SystemInfoService implements GsonPostProcessable {
         // BackendCoreStat is a global state, checkpoint should not modify it.
         if (!GlobalStateMgr.isCheckpointThread()) {
             // remove from BackendCoreStat
+<<<<<<< HEAD
             BackendCoreStat.removeNumOfHardwareCoresOfBe(backend.getId());
+=======
+            BackendResourceStat.getInstance().removeBe(backend.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // clear map in starosAgent
         if (RunMode.isSharedDataMode()) {
+<<<<<<< HEAD
             long starletPort = backend.getStarletPort();
             if (starletPort == 0) {
                 return;
             }
             String workerAddr = backend.getHost() + ":" + starletPort;
             GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+=======
+            int starletPort = backend.getStarletPort();
+            if (starletPort == 0) {
+                return;
+            }
+            String workerAddr = NetUtils.getHostPortInAccessibleFormat(backend.getHost(), starletPort);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1176,7 +1516,11 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         if (getClusterAvailableCapacityB() <= 0L) {
+<<<<<<< HEAD
             throw new DdlException("Cluster has no available capacity");
+=======
+            throw new SemanticException("Cluster has no available capacity");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -1257,10 +1601,19 @@ public class SystemInfoService implements GsonPostProcessable {
         if (!GlobalStateMgr.isCheckpointThread()) {
             // update BackendCoreStat
             for (ComputeNode node : idToBackendRef.values()) {
+<<<<<<< HEAD
                 BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
             }
             for (ComputeNode node : idToComputeNodeRef.values()) {
                 BackendCoreStat.setNumOfHardwareCoresOfBe(node.getId(), node.getCpuCores());
+=======
+                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+            }
+            for (ComputeNode node : idToComputeNodeRef.values()) {
+                BackendResourceStat.getInstance().setNumHardwareCoresOfBe(node.getId(), node.getCpuCores());
+                BackendResourceStat.getInstance().setMemLimitBytesOfBe(node.getId(), node.getMemLimitBytes());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }

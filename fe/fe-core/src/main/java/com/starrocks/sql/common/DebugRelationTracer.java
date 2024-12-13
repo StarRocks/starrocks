@@ -24,7 +24,11 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 
+<<<<<<< HEAD
 public class DebugRelationTracer extends AstVisitor<String, String> {
+=======
+public class DebugRelationTracer implements AstVisitor<String, String> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String visit(ParseNode node) {
         return node == null ? "null" : node.toSql();

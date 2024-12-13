@@ -231,7 +231,15 @@ AS
 
 > **注意**
 >
+<<<<<<< HEAD
 > 异步物化视图暂不支持使用 List 分区策略。
+=======
+> 自 v3.3.3 起，StarRocks 支持创建基于 List 分区策略的异步物化视图。
+>
+> - 您可以基于使用 List 分区或表达式分区策略创建的表来创建 List 分区的物化视图。
+> - 目前，当使用 List 分区策略创建物化视图时，您只能指定一个分区键。如果基表有多个分区键，您只能选择其中一个分区键。
+> - 使用 List 分区策略的物化视图的刷新行为和查询改写逻辑与使用 Range 分区策略的物化视图一致。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 该参数支持如下值：
 
@@ -256,12 +264,20 @@ AS
 - `storage_cooldown_time`: 当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间必须大于当前时间。如不指定该属性，默认不进行自动降冷。取值格式为："yyyy-MM-dd HH:mm:ss"。
 - `partition_ttl`: 物化视图分区的生存时间 (TTL)。数据在指定的时间范围内的分区将被保留，过期的分区将被自动删除。单位：`YEAR`、`MONTH`、`DAY`、`HOUR` 和 `MINUTE`。例如，您可以将此属性设置为 `2 MONTH`（2个月）。建议您使用此属性，不推荐使用 `partition_ttl_number`。该属性自 v3.1.5 起支持。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。对于分区开始时间小于当前时间的分区，当数量超过该值之后，多余的分区将会被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。在[动态分区](../../../table_design/data_distribution/dynamic_partitioning.md)场景下，提前创建的未来分区将不会被纳入 TTL 考虑。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
+<<<<<<< HEAD
 - `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
+=======
+- `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。自 v3.3 起，默认值由 `-1` 变为 `1`，表示 StarRocks 每次只刷新一个分区。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 - `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。
 - `mv_rewrite_staleness_second`：如果当前物化视图的上一次刷新在此属性指定的时间间隔内，则此物化视图可直接用于查询改写，无论基表数据是否更新。如果上一次刷新时间早于此属性指定的时间间隔，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
+<<<<<<< HEAD
+=======
+- `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会触发该表的数据刷新到物化视图。通常需要与属性 `excluded_trigger_tables` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   > **注意**
   >
@@ -276,19 +292,38 @@ AS
   - `loose`：直接启用自动查询改写，无需进行一致性检查。
 - `storage_volume`：[如果您使用存算分离集群](../../../deployment/shared_data/shared_data.mdx)，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
+<<<<<<< HEAD
   - `true`：启用基于 External Catalog 的物化视图的查询改写。
   - `false`（默认值）：禁用基于 External Catalog 的物化视图的查询改写。
 
   由于无法保证基表和基于 External Catalog 的物化视图之间的数据强一致，因此默认情况下禁用此功能。启用此功能时，物化视图将根据 `query_rewrite_consistency` 中指定的规则改写查询。
+=======
+  - `true`（自 v3.3 变为默认值）：启用基于 External Catalog 的物化视图的查询改写。
+  - `false`：禁用基于 External Catalog 的物化视图的查询改写。
+
+  由于无法保证基表和基于 External Catalog 的物化视图之间的数据强一致，因此默认情况下禁用此功能。启用此功能时，物化视图将根据 `query_rewrite_consistency` 中指定的规则改写查询。
+- `enable_query_rewrite`：是否使用物化视图进行查询改写。当存在大量物化视图时，基于物化视图的查询改写可能会影响优化器的耗时。通过此属性，您可以控制是否允许使用物化视图进行查询改写。该功能自 v3.3.0 起支持。有效值：
+  - `default`（默认）：系统将不会针对物化视图执行语义检查，但只有 SPJG 类型的物化视图可以用于查询改写。请注意，如果启用了基于文本的查询改写，非 SPJG 类型的物化视图也可以用于查询改写。
+  - `true`：系统将在创建或修改物化视图时执行语义检查。如果物化视图不符合查询改写的条件（即，物化视图的定义不是 SPJG 类型的查询），则会返回失败信息。
+  - `false`：物化视图将不会用于查询改写。
+- [Preview] `transparent_mv_rewrite_mode`：为 **直接针对物化视图的查询** 指定透明改写模式。此功能从 v3.3.0 版本开始支持。有效值如下：
+  - `false`（默认，与早期版本行为兼容）：直接针对物化视图的查询不会被改写，仅返回物化视图中现有的数据。根据物化视图的刷新状态（数据一致性），其结果可能与直接执行物化视图定义查询的结果不同。
+  - `true`：直接针对物化视图的查询将被改写，并返回最新数据，结果与物化视图定义查询的一致。请注意，当物化视图处于失效（Inactive）状态或不支持透明查询改写时，这些查询将路由至物化视图定义查询执行。
+  - `transparent_or_error`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回错误。
+  - `transparent_or_default`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回物化视图中现有的数据。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **query_statement**（必填）
 
 创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。从 v3.1.6 版本开始，StarRocks 支持使用 Common Table Expression (CTE) 创建异步物化视图。
 
+<<<<<<< HEAD
 > **注意**
 >
 > 异步物化视图暂不支持基于使用 List 分区的基表创建。
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### 查询异步物化视图
 
 异步物化视图本质是一张实体表。您可以将其作为普通表进行任何**除直接导入数据**以外的操作。

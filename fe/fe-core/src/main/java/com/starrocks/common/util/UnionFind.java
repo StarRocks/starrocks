@@ -79,6 +79,13 @@ public class UnionFind<T> {
         return eqGroupMap.getOrDefault(groupId, Collections.emptySet());
     }
 
+<<<<<<< HEAD
+=======
+    public Collection<Set<T>> getAllGroups() {
+        return Collections.unmodifiableCollection(eqGroupMap.values());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void union(T lhs, T rhs) {
         add(lhs, rhs);
         Integer lhsGroupIdx = element2Group.get(lhs);
@@ -109,4 +116,23 @@ public class UnionFind<T> {
             eqGroupMap.get(groupIdx).remove(key);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public void clear() {
+        element2Group.clear();
+        eqGroupMap.clear();
+    }
+
+    public UnionFind<T> copy() {
+        UnionFind<T> copied = new UnionFind<>();
+        for (Map.Entry<T, Integer> e : element2Group.entrySet()) {
+            copied.element2Group.put(e.getKey(), e.getValue());
+        }
+        for (Map.Entry<Integer, Set<T>> e : eqGroupMap.entrySet()) {
+            copied.eqGroupMap.put(e.getKey(), Sets.newHashSet(e.getValue()));
+        }
+        return copied;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

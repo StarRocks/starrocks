@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     p_brand,
@@ -29,25 +30,39 @@ order by
     p_brand,
     p_type,
     p_size ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F05)
   DOP: 16
   INSTANCES
     INSTANCE(0-F05#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F04)
   DOP: 16
   INSTANCES
     INSTANCE(1-F04#0)
       DESTINATIONS: 0-F05#0
+<<<<<<< HEAD
       BE: 10003
+=======
+      BE: 10001
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     INSTANCE(2-F04#1)
       DESTINATIONS: 0-F05#0
       BE: 10002
     INSTANCE(3-F04#2)
       DESTINATIONS: 0-F05#0
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -249,5 +264,9 @@ PLAN FRAGMENT 3
      tabletList=1487,1489,1491,1493,1495,1497,1499,1501,1503,1505 ...
      cardinality=1
      avgRowSize=105.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

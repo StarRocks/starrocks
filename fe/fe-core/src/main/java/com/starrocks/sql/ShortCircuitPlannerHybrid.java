@@ -48,7 +48,11 @@ public class ShortCircuitPlannerHybrid {
             }
 
             for (Column column : table.getFullSchema()) {
+<<<<<<< HEAD
                 if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName())) {
+=======
+                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getColumnId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return false;
                 }
             }

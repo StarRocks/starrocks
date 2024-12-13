@@ -25,7 +25,11 @@ Creates an external catalog. You can use external catalogs to query data in exte
 ## Syntax
 
 ```SQL
+<<<<<<< HEAD
 CREATE EXTERNAL CATALOG <catalog_name>
+=======
+CREATE EXTERNAL CATALOG [IF NOT EXISTS] <catalog_name>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [COMMENT <comment>]
 PROPERTIES ("key"="value", ...)
 ```
@@ -44,6 +48,10 @@ Example 1: Create a Hive catalog named `hive_metastore_catalog`. The correspondi
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_metastore_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Hive"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
    "type"="hive", 
    "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
@@ -54,6 +62,10 @@ Example 2: Create a Hive catalog named `hive_glue_catalog`. The corresponding Hi
 
 ```SQL
 CREATE EXTERNAL CATALOG hive_glue_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Hive"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
     "type"="hive", 
     "hive.metastore.type"="glue",
@@ -67,6 +79,10 @@ Example 3: Create an Iceberg catalog named `iceberg_metastore_catalog`. The corr
 
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_metastore_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Iceberg"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
     "type"="iceberg",
     "iceberg.catalog.type"="hive",
@@ -78,6 +94,10 @@ Example 4: Create an Iceberg catalog named `iceberg_glue_catalog`. The correspon
 
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_glue_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Iceberg"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
     "type"="iceberg", 
     "iceberg.catalog.type"="glue",
@@ -91,6 +111,10 @@ Example 5: Create a Hudi catalog named `hudi_metastore_catalog`. The correspondi
 
 ```SQL
 CREATE EXTERNAL CATALOG hudi_metastore_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Hudi"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
     "type"="hudi",
     "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
@@ -101,6 +125,10 @@ Example 6: Create a Hudi catalog named `hudi_glue_catalog`. The corresponding Hu
 
 ```SQL
 CREATE EXTERNAL CATALOG hudi_glue_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Hudi"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
     "type"="hudi", 
     "hive.metastore.type"="glue",
@@ -114,6 +142,10 @@ Example 7: Create a Delta Lake catalog named `delta_metastore_catalog`. The corr
 
 ```SQL
 CREATE EXTERNAL CATALOG delta_metastore_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Delta"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
     "type"="deltalake",
     "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
@@ -124,6 +156,10 @@ Example 8: Create a Delta Lake catalog named `delta_glue_catalog`. The correspon
 
 ```SQL
 CREATE EXTERNAL CATALOG delta_glue_catalog
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Delta"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES(
     "type"="deltalake", 
     "hive.metastore.type"="glue",

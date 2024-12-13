@@ -15,6 +15,10 @@
 #include "table_function_table_sink_operator.h"
 
 #include <boost/algorithm/string.hpp>
+<<<<<<< HEAD
+=======
+#include <utility>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
@@ -188,11 +192,18 @@ TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partiti
     tableInfo.schema = _parquet_file_schema;
     tableInfo.compress_type = _compression_type;
     tableInfo.cloud_conf = _cloud_conf;
+<<<<<<< HEAD
     tableInfo.max_file_size = _max_file_size;
+=======
+    if (_write_single_file) {
+        tableInfo.max_file_size = -1;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return tableInfo;
 }
 
 TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
+<<<<<<< HEAD
         const int32_t id, const string& path, const string& file_format, const TCompressionType::type& compression_type,
         const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
         const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names,
@@ -206,6 +217,21 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
           _column_names(column_names),
           _partition_column_names(partition_column_names),
           _max_file_size(max_file_size),
+=======
+        const int32_t id, string path, string file_format, const TCompressionType::type& compression_type,
+        std::vector<ExprContext*> output_exprs, std::vector<ExprContext*> partition_exprs,
+        std::vector<std::string> column_names, std::vector<std::string> partition_column_names, bool write_single_file,
+        const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx)
+        : OperatorFactory(id, "table_function_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
+          _path(std::move(path)),
+          _file_format(std::move(file_format)),
+          _compression_type(compression_type),
+          _output_exprs(std::move(output_exprs)),
+          _partition_exprs(std::move(partition_exprs)),
+          _column_names(std::move(column_names)),
+          _partition_column_names(std::move(partition_column_names)),
+          _write_single_file(write_single_file),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _cloud_conf(cloud_conf),
           _fragment_ctx(fragment_ctx) {}
 
@@ -233,10 +259,17 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 OperatorPtr TableFunctionTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+<<<<<<< HEAD
     return std::make_shared<TableFunctionTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _path,
                                                             _file_format, _compression_type, _output_exprs,
                                                             _partition_exprs, _partition_column_names, _max_file_size,
                                                             _cloud_conf, _fragment_ctx, _parquet_file_schema);
+=======
+    return std::make_shared<TableFunctionTableSinkOperator>(
+            this, _id, _plan_node_id, driver_sequence, _path, _file_format, _compression_type, _output_exprs,
+            _partition_exprs, _partition_column_names, _write_single_file, _cloud_conf, _fragment_ctx,
+            _parquet_file_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void TableFunctionTableSinkOperatorFactory::close(RuntimeState* state) {

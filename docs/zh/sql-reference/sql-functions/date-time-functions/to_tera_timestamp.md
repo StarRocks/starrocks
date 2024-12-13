@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_tera_timestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 根据指定的格式解析输入的时间日期字符串，并转换为 DATETIME 类型的值。
 

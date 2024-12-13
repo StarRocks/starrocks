@@ -19,8 +19,15 @@
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
+<<<<<<< HEAD
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
+=======
+#include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group.h"
+#include "runtime/runtime_state.h"
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::pipeline {
 
 ChunkSource::ChunkSource(ScanOperator* scan_op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
@@ -87,11 +94,19 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
+<<<<<<< HEAD
         if (time_spent_ns >= YIELD_MAX_TIME_SPENT) {
             break;
         }
 
         if (running_wg != nullptr && time_spent_ns >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+=======
+        if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {
+            break;
+        }
+
+        if (running_wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT &&
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
             break;
         }

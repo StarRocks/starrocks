@@ -25,6 +25,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
@@ -72,4 +76,13 @@ public class AnalyzeDropDbTest {
             Assert.assertTrue(e.getMessage().contains("Can't drop database"));
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDropSystem() throws Exception {
+        analyzeFail("DROP database `information_schema`", "Access denied;");
+        analyzeFail("DROP Database `sys`", "Access denied;");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

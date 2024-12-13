@@ -81,8 +81,16 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
     private void assertPlans(String query, boolean equals, String... patterns) throws Exception {
         connectContext.getSessionVariable().setEnableUKFKOpt(false);
         String planDisabled = getFragmentPlan(query);
+<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableUKFKOpt(true);
         String planEnabled = getFragmentPlan(query);
+=======
+        System.out.println(planDisabled);
+        System.out.println("===================");
+        connectContext.getSessionVariable().setEnableUKFKOpt(true);
+        String planEnabled = getFragmentPlan(query);
+        System.out.println(planEnabled);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (equals) {
             Assert.assertEquals(planDisabled, planEnabled);
         } else {
@@ -173,7 +181,12 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ4() throws Exception {
+<<<<<<< HEAD
         assertPlans(Q04, true);
+=======
+        assertPlans(Q04, false, "group by: \\d+: c_customer_id, \\d+: c_first_name, \\d+: c_last_name, " +
+                "\\d+: c_preferred_cust_flag, \\d+: c_birth_country, \\d+: c_login, \\d+: c_email_address, \\d+: d_year");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -208,7 +221,12 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ11() throws Exception {
+<<<<<<< HEAD
         assertPlans(Q11, true);
+=======
+        assertPlans(Q11, false, "group by: \\d+: c_customer_id, \\d+: c_first_name, \\d+: c_last_name, " +
+                "\\d+: c_preferred_cust_flag, \\d+: c_birth_country, \\d+: c_login, \\d+: c_email_address, \\d+: d_year");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -270,8 +288,15 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ23() throws Exception {
+<<<<<<< HEAD
         assertPlans(Q23_1, false, "[0-9]+: ss_customer_sk = [0-9]+: c_customer_sk");
         assertPlans(Q23_2, false, "[0-9]+: ss_customer_sk = [0-9]+: c_customer_sk");
+=======
+        assertPlans(Q23_1, false, "[0-9]+: ss_customer_sk = [0-9]+: c_customer_sk",
+                "[0-9]+: i_item_sk = [0-9]+: ss_item_sk");
+        assertPlans(Q23_2, false, "[0-9]+: ss_customer_sk = [0-9]+: c_customer_sk",
+                "[0-9]+: i_item_sk = [0-9]+: ss_item_sk");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

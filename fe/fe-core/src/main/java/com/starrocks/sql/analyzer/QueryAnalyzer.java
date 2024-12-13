@@ -14,6 +14,10 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -22,19 +26,39 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.BoolLiteral;
+<<<<<<< HEAD
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+=======
+import com.starrocks.analysis.CaseExpr;
+import com.starrocks.analysis.CaseWhenClause;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.LiteralExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
+=======
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ConnectorView;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -51,7 +75,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+<<<<<<< HEAD
 import com.starrocks.privilege.SecurityPolicyRewriteRule;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -65,6 +92,12 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionNames;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.PivotAggregation;
+import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PivotValue;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -87,13 +120,24 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+<<<<<<< HEAD
+=======
+import java.util.LinkedList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
 import java.util.stream.Collectors;
 
+=======
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.analyzer.AstToStringBuilder.getAliasName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_OP_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.BINLOG_SEQ_ID_COLUMN_NAME;
@@ -117,7 +161,11 @@ public class QueryAnalyzer {
         new Visitor().process(node, parent);
     }
 
+<<<<<<< HEAD
     private class GeneratedColumnExprMappingCollector extends AstVisitor<Void, Scope> {
+=======
+    private class GeneratedColumnExprMappingCollector implements AstVisitor<Void, Scope> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public GeneratedColumnExprMappingCollector() {
         }
 
@@ -210,7 +258,11 @@ public class QueryAnalyzer {
             Table table = tableRelation.getTable();
             Map<Expr, SlotRef> generatedExprToColumnRef = new HashMap<>();
             for (Column column : table.getBaseSchema()) {
+<<<<<<< HEAD
                 Expr generatedColumnExpression = column.generatedColumnExpr();
+=======
+                Expr generatedColumnExpression = column.getGeneratedColumnExpr(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (generatedColumnExpression != null) {
                     SlotRef slotRef = new SlotRef(null, column.getName());
                     ExpressionAnalyzer.analyzeExpression(generatedColumnExpression, new AnalyzeState(), scope, session);
@@ -272,7 +324,11 @@ public class QueryAnalyzer {
         }
     }
 
+<<<<<<< HEAD
     private class Visitor extends AstVisitor<Scope, Scope> {
+=======
+    private class Visitor implements AstVisitor<Scope, Scope> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Visitor() {
         }
 
@@ -362,6 +418,10 @@ public class QueryAnalyzer {
             Scope sourceScope = process(resolvedRelation, scope);
             sourceScope.setParent(scope);
 
+<<<<<<< HEAD
+=======
+            selectRelation.accept(new RewriteAliasVisitor(sourceScope, session), null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             SelectAnalyzer selectAnalyzer = new SelectAnalyzer(session);
             selectAnalyzer.analyze(
                     analyzeState,
@@ -416,11 +476,29 @@ public class QueryAnalyzer {
                     join.setLateral(true);
                 }
                 return join;
+<<<<<<< HEAD
             } else if (relation instanceof FileTableFunctionRelation) {
                 FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
                 Table table = resolveTableFunctionTable(tableFunctionRelation.getProperties());
                 tableFunctionRelation.setTable(table);
                 return relation;
+=======
+            } else if (relation instanceof PivotRelation) {
+                PivotRelation pivotRelation = (PivotRelation) relation;
+                pivotRelation.setQuery(resolveTableRef(pivotRelation.getQuery(), scope, aliasSet));
+                return pivotRelation;
+            } else if (relation instanceof FileTableFunctionRelation) {
+                FileTableFunctionRelation tableFunctionRelation = (FileTableFunctionRelation) relation;
+                Table table = resolveTableFunctionTable(
+                        tableFunctionRelation.getProperties(), tableFunctionRelation.getPushDownSchemaFunc());
+                TableFunctionTable tableFunctionTable = (TableFunctionTable) table;
+                if (tableFunctionTable.isListFilesOnly()) {
+                    return convertFileTableFunctionRelation(tableFunctionTable);
+                } else {
+                    tableFunctionRelation.setTable(table);
+                    return relation;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else if (relation instanceof TableRelation) {
                 TableRelation tableRelation = (TableRelation) relation;
                 TableName tableName = tableRelation.getName();
@@ -457,7 +535,11 @@ public class QueryAnalyzer {
                 }
 
                 TableName resolveTableName = relation.getResolveTableName();
+<<<<<<< HEAD
                 MetaUtils.normalizationTableName(session, resolveTableName);
+=======
+                resolveTableName.normalization(session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (aliasSet.contains(resolveTableName)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
                             relation.getResolveTableName().getTbl());
@@ -491,23 +573,38 @@ public class QueryAnalyzer {
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
+<<<<<<< HEAD
                 } else if (table instanceof HiveView) {
                     HiveView hiveView = (HiveView) table;
                     QueryStatement queryStatement = hiveView.getQueryStatement();
                     View view = new View(hiveView.getId(), hiveView.getName(), hiveView.getFullSchema(),
                             Table.TableType.HIVE_VIEW);
                     view.setInlineViewDefWithSqlMode(hiveView.getInlineViewDef(), 0);
+=======
+                } else if (table instanceof ConnectorView) {
+                    ConnectorView connectorView = (ConnectorView) table;
+                    QueryStatement queryStatement = connectorView.getQueryStatement();
+                    View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
+                            connectorView.getType());
+                    view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     ViewRelation viewRelation = new ViewRelation(tableName, view, queryStatement);
                     viewRelation.setAlias(tableRelation.getAlias());
 
                     r = viewRelation;
                 } else {
+<<<<<<< HEAD
                     if (tableRelation.getTemporalClause() != null) {
                         if (table.getType() != Table.TableType.MYSQL) {
                             throw unsupportedException(
                                     "Unsupported table type for temporal clauses: " + table.getType() +
                                             "; only external MYSQL tables support temporal clauses");
                         }
+=======
+                    if (tableRelation.getQueryPeriodString() != null && !table.isTemporal()) {
+                        throw unsupportedException("Unsupported table type for temporal clauses, table type: " +
+                                table.getType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
 
                     if (table.isSupported()) {
@@ -548,6 +645,30 @@ public class QueryAnalyzer {
             }
         }
 
+<<<<<<< HEAD
+=======
+        // convert FileTableFunctionRelation to ValuesRelation if only list files
+        private ValuesRelation convertFileTableFunctionRelation(TableFunctionTable table) {
+            List<Column> columns = table.getFullSchema();
+            List<String> columnNames = columns.stream().map(Column::getName).collect(Collectors.toList());
+            List<Type> outputColumnTypes = columns.stream().map(Column::getType).collect(Collectors.toList());
+            List<List<Expr>> rows = Lists.newArrayList();
+            for (List<String> fileInfo : table.listFilesAndDirs()) {
+                Preconditions.checkState(columns.size() == fileInfo.size());
+                List<Expr> row = Lists.newArrayList();
+                for (int i = 0; i < columns.size(); ++i) {
+                    try {
+                        row.add(LiteralExpr.create(fileInfo.get(i), columns.get(i).getType()));
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
+                rows.add(row);
+            }
+            return new ValuesRelation(rows, columnNames, outputColumnTypes);
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public Scope visitTable(TableRelation node, Scope outerScope) {
             TableName tableName = node.getResolveTableName();
@@ -620,10 +741,17 @@ public class QueryAnalyzer {
 
                 if (table.isHiveTable()) {
                     HiveTable hiveTable = (HiveTable) table;
+<<<<<<< HEAD
                     session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(),
                             hiveTable.getTableName());
                     HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
                             hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getTableName());
+=======
+                    session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getCatalogDBName(),
+                            hiveTable.getCatalogTableName());
+                    HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(
+                            hiveTable.getResourceName(), hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     hiveMetaStoreTableDumpInfo.setPartColumnNames(hiveTable.getPartitionColumnNames());
                     hiveMetaStoreTableDumpInfo.setDataColumnNames(hiveTable.getDataColumnNames());
                     Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().
@@ -1083,6 +1211,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitValues(ValuesRelation node, Scope scope) {
+<<<<<<< HEAD
             AnalyzeState analyzeState = new AnalyzeState();
 
             List<Expr> firstRow = node.getRow(0);
@@ -1109,6 +1238,41 @@ public class QueryAnalyzer {
                 fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
                         node.getResolveTableName(),
                         rows.get(0).get(fieldIdx)));
+=======
+            Type[] outputTypes;
+            List<List<Expr>> rows = node.getRows();
+            List<Type> outputColumnTypes = node.getOutputColumnTypes();
+            if (!outputColumnTypes.isEmpty()) {
+                outputTypes = outputColumnTypes.toArray(new Type[0]);
+            } else {
+                Preconditions.checkState(!rows.isEmpty());
+                AnalyzeState analyzeState = new AnalyzeState();
+
+                List<Expr> firstRow = node.getRow(0);
+                firstRow.forEach(e -> analyzeExpression(e, analyzeState, scope));
+                outputTypes = firstRow.stream().map(Expr::getType).toArray(Type[]::new);
+                for (List<Expr> row : rows) {
+                    if (row.size() != firstRow.size()) {
+                        throw new SemanticException("Values have unequal number of columns");
+                    }
+                    for (int fieldIdx = 0; fieldIdx < row.size(); ++fieldIdx) {
+                        analyzeExpression(row.get(fieldIdx), analyzeState, scope);
+                        Type commonType =
+                                TypeManager.getCommonSuperType(outputTypes[fieldIdx], row.get(fieldIdx).getType());
+                        if (!commonType.isValid()) {
+                            throw new SemanticException(String.format("Incompatible return types '%s' and '%s'",
+                                    outputTypes[fieldIdx], row.get(fieldIdx).getType()));
+                        }
+                        outputTypes[fieldIdx] = commonType;
+                    }
+                }
+            }
+
+            List<Field> fields = new ArrayList<>();
+            for (int fieldIdx = 0; fieldIdx < outputTypes.length; ++fieldIdx) {
+                fields.add(new Field(node.getColumnOutputNames().get(fieldIdx), outputTypes[fieldIdx],
+                        node.getResolveTableName(), rows.isEmpty() ? null : rows.get(0).get(fieldIdx)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             Scope valuesScope = new Scope(RelationId.of(node), new RelationFields(fields));
@@ -1117,6 +1281,122 @@ public class QueryAnalyzer {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Scope visitPivotRelation(PivotRelation node, Scope context) {
+            AnalyzeState analyzeState = new AnalyzeState();
+            Scope queryScope = process(node.getQuery(), context);
+
+            List<Pair<String, Expr>> aggAliasExprs = new ArrayList<>();
+            for (PivotAggregation pivotAggregation : node.getAggregateFunctions()) {
+                analyzeExpression(pivotAggregation.getFunctionCallExpr(), analyzeState, queryScope);
+                if (!pivotAggregation.getFunctionCallExpr().isAggregateFunction()) {
+                    throw new SemanticException("Measure expression in PIVOT must use aggregate function");
+                }
+                String alias = pivotAggregation.getAlias() == null
+                        ? getAliasName(pivotAggregation.getFunctionCallExpr(), false, false)
+                        : pivotAggregation.getAlias();
+                aggAliasExprs.add(new Pair<>(alias, pivotAggregation.getFunctionCallExpr()));
+            }
+
+            for (SlotRef column : node.getPivotColumns()) {
+                analyzeExpression(column, analyzeState, queryScope);
+            }
+            List<Type> types = node.getPivotColumns().stream()
+                    .map(SlotRef::getType)
+                    .collect(Collectors.toList());
+
+            List<String> valueAliases = new ArrayList<>();
+            for (PivotValue pivotValue : node.getPivotValues()) {
+                for (int i = 0; i < pivotValue.getExprs().size(); i++) {
+                    Expr expr = pivotValue.getExprs().get(i);
+                    analyzeExpression(expr, analyzeState, queryScope);
+                    if (!Type.canCastTo(expr.getType(), types.get(i))) {
+                        throw new SemanticException("Pivot value type %s is not compatible with pivot column type %s",
+                                expr.getType(), types.get(i));
+                    }
+                }
+                String alias = pivotValue.getAlias();
+                if (alias == null) {
+                    if (pivotValue.getExprs().size() == 1) {
+                        alias = getAliasName(pivotValue.getExprs().get(0), false, false);
+                    } else {
+                        alias = "{" + Joiner.on(",")
+                                .join(pivotValue.getExprs().stream()
+                                        .map(e -> getAliasName(e, false, false))
+                                        .collect(Collectors.toList())) + "}";
+                    }
+                }
+                valueAliases.add(alias);
+
+                // construct agg(case when)
+                for (int i = 0; i < node.getAggregateFunctions().size(); i++) {
+                    PivotAggregation pivotAggregation = node.getAggregateFunctions().get(i);
+                    List<Expr> predicates = new ArrayList<>();
+                    for (int j = 0; j < node.getPivotColumns().size(); j++) {
+                        predicates.add(new BinaryPredicate(
+                                BinaryType.EQ,
+                                node.getPivotColumns().get(j),
+                                pivotValue.getExprs().get(j)));
+                    }
+
+                    Expr whenExpr;
+                    if (predicates.size() > 1) {
+                        whenExpr = new CompoundPredicate(
+                                CompoundPredicate.Operator.AND, predicates.get(0), predicates.get(1));
+                        for (int j = 2; j < predicates.size(); j++) {
+                            whenExpr = new CompoundPredicate(
+                                    CompoundPredicate.Operator.AND, whenExpr, predicates.get(j));
+                        }
+                    } else {
+                        whenExpr = predicates.get(0);
+                    }
+
+                    // special case: count(), count(*)
+                    Expr thenExpr = pivotAggregation.getFunctionCallExpr().getChild(0) == null
+                            ? new IntLiteral(1) : pivotAggregation.getFunctionCallExpr().getChild(0);
+                    CaseWhenClause caseWhenClause =
+                            new CaseWhenClause(whenExpr, thenExpr);
+                    List<CaseWhenClause> clauses = Lists.newArrayList(caseWhenClause);
+
+                    CaseExpr caseWhen = new CaseExpr(null, clauses, null);
+                    FunctionCallExpr functionCallExpr = new FunctionCallExpr(
+                            pivotAggregation.getFunctionCallExpr().getFnName(), Lists.newArrayList(caseWhen));
+                    analyzeExpression(functionCallExpr, analyzeState, queryScope);
+                    node.addRewrittenAggFunction(functionCallExpr);
+                }
+            }
+
+            List<Field> queryFields = queryScope.getRelationFields().getAllFields();
+            Set<String> usedColumns = node.getUsedColumns().keySet();
+            ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
+            ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+            for (Field field : queryFields) {
+                if (!usedColumns.contains(field.getName())) {
+                    outputExpressionBuilder.add(field.getOriginExpression());
+                    outputFields.add(field);
+                    Expr expr = field.getOriginExpression().clone();
+                    analyzeExpression(expr, analyzeState, queryScope);
+                    node.addGroupByKey(expr);
+                }
+            }
+
+            for (String valueAlias : valueAliases) {
+                for (Pair<String, Expr> pair : aggAliasExprs) {
+                    Expr aggExpr = pair.second;
+                    String name = aggAliasExprs.size() == 1 ? valueAlias : valueAlias + "_" + pair.first;
+                    outputFields.add(new Field(name, aggExpr.getType(), null, aggExpr, true, aggExpr.isNullable()));
+                }
+            }
+
+            Scope scope = new Scope(RelationId.of(node), new RelationFields(outputFields.build()));
+            scope.setParent(queryScope);
+            node.setScope(scope);
+            return scope;
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Scope visitTableFunction(TableFunctionRelation node, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
             List<Expr> args = node.getFunctionParams().exprs();
@@ -1129,8 +1409,17 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "Table Function");
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
+<<<<<<< HEAD
 
             Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+=======
+            List<String> names = node.getFunctionParams().getExprsNames();
+            String[] namesArray = null;
+            if (names != null && !names.isEmpty()) {
+                namesArray = names.toArray(String[]::new);
+            }
+            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {
@@ -1138,10 +1427,31 @@ public class QueryAnalyzer {
             }
 
             if (fn == null) {
+<<<<<<< HEAD
                 throw new SemanticException("Unknown table function '%s(%s)'", node.getFunctionName().getFunction(),
                         Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
             }
 
+=======
+                if (namesArray == null) {
+                    throw new SemanticException("Unknown table function '%s(%s)'", node.getFunctionName().getFunction(),
+                            Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
+                } else {
+                    throw new SemanticException("Unknown table function '%s(%s)', the function doesn't support named " +
+                            "arguments or has invalid arguments",
+                            node.getFunctionName().getFunction(), node.getFunctionParams().getNamedArgStr());
+                }
+            }
+
+            if (namesArray != null) {
+                Preconditions.checkState(fn.hasNamedArg());
+                node.getFunctionParams().reorderNamedArgAndAppendDefaults(fn);
+            } else if (node.getFunctionParams().exprs().size() < fn.getNumArgs()) {
+                node.getFunctionParams().appendPositionalDefaultArgExprs(fn);
+            }
+            Preconditions.checkState(node.getFunctionParams().exprs().size() == fn.getNumArgs());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!(fn instanceof TableFunction)) {
                 throw new SemanticException("'%s(%s)' is not table function", node.getFunctionName().getFunction(),
                         Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
@@ -1199,10 +1509,17 @@ public class QueryAnalyzer {
 
     }
 
+<<<<<<< HEAD
     private Table resolveTable(TableRelation tableRelation) {
         TableName tableName = tableRelation.getName();
         try {
             MetaUtils.normalizationTableName(session, tableName);
+=======
+    public Table resolveTable(TableRelation tableRelation) {
+        TableName tableName = tableRelation.getName();
+        try {
+            tableName.normalization(session);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             String catalogName = tableName.getCatalog();
             String dbName = tableName.getDb();
             String tbName = tableName.getTbl();
@@ -1213,12 +1530,22 @@ public class QueryAnalyzer {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
             }
+<<<<<<< HEAD
             Database database;
             try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
                 database = metadataMgr.getDb(catalogName, dbName);
             }
 
             MetaUtils.checkDbNullAndReport(database, dbName);
+=======
+
+            Database db;
+            try (Timer ignored = Tracers.watchScope("AnalyzeDatabase")) {
+                db = metadataMgr.getDb(catalogName, dbName);
+            }
+
+            MetaUtils.checkDbNullAndReport(db, dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Table table = null;
             if (tableRelation.isSyncMVQuery()) {
@@ -1229,6 +1556,7 @@ public class QueryAnalyzer {
                         Table mvTable = materializedIndex.first;
                         Preconditions.checkState(mvTable != null);
                         Preconditions.checkState(mvTable instanceof OlapTable);
+<<<<<<< HEAD
                         try {
                             // Add read lock to avoid concurrent problems.
                             database.readLock();
@@ -1246,6 +1574,25 @@ public class QueryAnalyzer {
             } else {
                 try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
                     table = metadataMgr.getTable(catalogName, dbName, tbName);
+=======
+                        // Add read lock to avoid concurrent problems.
+                        OlapTable mvOlapTable = new OlapTable(mvTable.getType());
+                        ((OlapTable) mvTable).copyOnlyForQuery(mvOlapTable);
+                        // Copy the necessary olap table meta to avoid changing original meta;
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getIndexId());
+                        table = mvOlapTable;
+                    }
+                }
+            } else {
+                // treat it as a temporary table first
+                try (Timer ignored = Tracers.watchScope("AnalyzeTemporaryTable")) {
+                    table = metadataMgr.getTemporaryTable(session.getSessionId(), catalogName, db.getId(), tbName);
+                }
+                if (table == null) {
+                    try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                        table = metadataMgr.getTable(catalogName, dbName, tbName);
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -1272,7 +1619,11 @@ public class QueryAnalyzer {
                         Partition partition = table.getPartition(partitionName, isTemp);
                         if (partition == null) {
                             throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
+<<<<<<< HEAD
                                         table.getName());
+=======
+                                    table.getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         }
                     }
                 }
@@ -1284,9 +1635,15 @@ public class QueryAnalyzer {
         }
     }
 
+<<<<<<< HEAD
     private Table resolveTableFunctionTable(Map<String, String> properties) {
         try {
             return new TableFunctionTable(properties);
+=======
+    private Table resolveTableFunctionTable(Map<String, String> properties, Consumer<TableFunctionTable> pushDownSchemaFunc) {
+        try {
+            return new TableFunctionTable(properties, pushDownSchemaFunc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (DdlException e) {
             throw new StorageAccessException(e);
         }
@@ -1309,4 +1666,122 @@ public class QueryAnalyzer {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    // Support alias referring to select item
+    // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1
+    // Note: alias in where clause is not handled now
+    // eg: select trim(c1) as a, trim(c2) as b, concat(a,',', b) from t1 where a != 'x'
+    private static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
+        private final Map<String, Expr> aliases = new HashMap<>();
+        private final Set<String> aliasesMaybeAmbiguous = new HashSet<>();
+        private final Map<String, Expr> resolvedAliases = new HashMap<>();
+        private final LinkedList<String> resolvingAlias = new LinkedList<>();
+        private final Scope sourceScope;
+        private final ConnectContext session;
+
+        public RewriteAliasVisitor(Scope sourceScope, ConnectContext session) {
+            this.sourceScope = sourceScope;
+            this.session = session;
+        }
+
+        @Override
+        public Expr visitExpression(Expr expr, Void context) {
+            for (int i = 0; i < expr.getChildren().size(); ++i) {
+                expr.setChild(i, visit(expr.getChild(i)));
+            }
+            return expr;
+        }
+
+        @Override
+        public Expr visitSlot(SlotRef slotRef, Void context) {
+            // We treat it as column name rather than alias when table name is specified
+            if (slotRef.getTblNameWithoutAnalyzed() != null) {
+                return slotRef;
+            }
+            // Alias is case-insensitive
+            String ref = slotRef.getColumnName().toLowerCase();
+            Expr e = aliases.get(ref);
+            // Ignore slot rewrite if the `slotRef` is not in alias map
+            if (e == null) {
+                return slotRef;
+            }
+            // If alias is same with table column name where this alias is defined, we directly use table column name.
+            // eg: DATE(pt) as pt
+            if (ref.equals(resolvingAlias.peekLast())) {
+                return slotRef;
+            }
+            // If alias is same with table column name, we directly use table column name.
+            // Otherwise, we treat it as alias.
+            // It behaves the same as that in `SelectAnalyzer.RewriteAliasVisitor`
+            // eg: select trim(t1a) as t1c, concat(t1c,','),t1c from test_all_type
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
+                    !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
+                return slotRef;
+            }
+            // Referring to a duplicated alias is ambiguous
+            if (aliasesMaybeAmbiguous.contains(ref)) {
+                throw new SemanticException("Column " + ref + " is ambiguous", slotRef.getPos());
+            }
+            // Use short circuit to avoid duplicated resolving of same alias
+            if (resolvedAliases.containsKey(ref)) {
+                return resolvedAliases.get(ref);
+            }
+            if (resolvingAlias.contains(ref)) {
+                throw new SemanticException("Cyclic aliases: " + ref, slotRef.getPos());
+            }
+
+            // Use resolvingAliases to detect cyclic aliases
+            resolvingAlias.add(ref);
+            e = visit(e);
+            resolvedAliases.put(ref, e);
+            resolvingAlias.removeLast();
+            return e;
+        }
+
+        @Override
+        public Expr visitSelect(SelectRelation selectRelation, Void context) {
+            // Collect alias in select relation
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                String alias = item.getAlias();
+                if (item.getAlias() == null) {
+                    continue;
+                }
+
+                // Alias is case-insensitive
+                Expr lastAssociatedExpr = aliases.putIfAbsent(alias.toLowerCase(), item.getExpr());
+                if (lastAssociatedExpr != null) {
+                    // Duplicate alias is allowed, eg: select a.v1 as v, a.v2 as v from t0 a,
+                    // But it should be ambiguous when the alias is used in the order by expr,
+                    // eg: select a.v1 as v, a.v2 as v from t0 a order by v
+                    aliasesMaybeAmbiguous.add(alias.toLowerCase());
+                }
+            }
+            if (aliases.isEmpty()) {
+                return null;
+            }
+            for (SelectListItem item : selectRelation.getSelectList().getItems()) {
+                if (item.getExpr() == null) {
+                    continue;
+                }
+                if (item.getAlias() == null) {
+                    item.setExpr(visit(item.getExpr()));
+                    continue;
+                }
+                // Alias is case-insensitive
+                String alias = item.getAlias().toLowerCase();
+                resolvingAlias.add(alias);
+                // Can't use computeIfAbsent here due to resolvedAliases is also modified in `visitSlot`,
+                // otherwise `ConcurrentModificationException` will be thrown
+                Expr rewrittenExpr = resolvedAliases.containsKey(alias) && !aliasesMaybeAmbiguous.contains(alias)
+                        ? resolvedAliases.get(alias) : visit(item.getExpr());
+                resolvedAliases.putIfAbsent(alias, rewrittenExpr);
+                item.setExpr(rewrittenExpr);
+                resolvingAlias.removeLast();
+            }
+            return null;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

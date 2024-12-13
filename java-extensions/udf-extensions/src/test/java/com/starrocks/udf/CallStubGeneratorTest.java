@@ -14,8 +14,13 @@
 
 package com.starrocks.udf;
 
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Test;
+=======
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -86,7 +91,11 @@ public class CallStubGeneratorTest {
         assert batchCall != null;
         batchCall.invoke(null, testSize, sum, state, inputs);
 
+<<<<<<< HEAD
         Assert.assertEquals(expect, state.val);
+=======
+        Assertions.assertEquals(expect, state.val);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -118,7 +127,11 @@ public class CallStubGeneratorTest {
         }
 
         batchCall.invoke(null, testSize, concat, state, inputs1, inputs2);
+<<<<<<< HEAD
         Assert.assertEquals(expect, state.val);
+=======
+        Assertions.assertEquals(expect, state.val);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static class ScalarAdd {
@@ -153,7 +166,11 @@ public class CallStubGeneratorTest {
 
         final String[] res = (String[])batchCall.invoke(null, testSize, concat, inputs1, inputs2);
         for (int i = 0; i < testSize; i++) {
+<<<<<<< HEAD
             Assert.assertEquals(expects[i], res[i]);
+=======
+            Assertions.assertEquals(expects[i], res[i]);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

@@ -18,6 +18,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "storage/row_store_encoder.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 

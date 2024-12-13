@@ -17,6 +17,11 @@
 #include <memory>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "runtime/memory/column_allocator.h"
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 class DecimalV2Value;
@@ -36,11 +41,23 @@ class Column;
 class Schema;
 struct ProtobufChunkMeta;
 
+<<<<<<< HEAD
 // We may change the Buffer implementation in the future.
 template <typename T>
 using Buffer = std::vector<T>;
 
 class ArrayColumn;
+=======
+template <typename T>
+class ColumnAllocator;
+
+// We may change the Buffer implementation in the future.
+template <typename T>
+using Buffer = std::vector<T, ColumnAllocator<T>>;
+
+class ArrayColumn;
+class ArrayViewColumn;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class MapColumn;
 class StructColumn;
 class NullableColumn;
@@ -107,6 +124,16 @@ using ChunkPtr = std::shared_ptr<Chunk>;
 using ChunkUniquePtr = std::unique_ptr<Chunk>;
 using Chunks = std::vector<ChunkPtr>;
 
+<<<<<<< HEAD
+=======
+class SegmentedColumn;
+class SegmentedChunk;
+using SegmentedColumnPtr = std::shared_ptr<SegmentedColumn>;
+using SegmentedColumns = std::vector<SegmentedColumnPtr>;
+using SegmentedChunkPtr = std::shared_ptr<SegmentedChunk>;
+using SegmentedChunkWeakPtr = std::weak_ptr<SegmentedChunk>;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 using SchemaPtr = std::shared_ptr<Schema>;
 
 using Fields = std::vector<std::shared_ptr<Field>>;

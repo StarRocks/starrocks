@@ -32,12 +32,21 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 ## Usage notes
 
+<<<<<<< HEAD
 - The file formats of Iceberg that StarRocks supports are Parquet and ORC:
 
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
 - Iceberg catalogs support v1 tables. Additionally, Iceberg catalogs support ORC-formatted v2 tables from StarRocks v3.0 onwards and support Parquet-formatted v2 tables from StarRocks v3.1 onwards.
+=======
+Take note of the following points when you use StarRocks to query data from Iceberg:
+
+| **File format** | **Compression format**                                   | **Iceberg table version**                                           |
+| --------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| Parquet         | SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION      | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.1 onwards in which queries on these v2 tables support position deletes. In v3.1.10, v3.2.5, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
+| ORC             | ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION | <ul><li>v1 tables: supported. </li><li>v2 tables: supported from StarRocks v3.0 onwards in which queries on these v2 tables support position deletes. In v3.1.8, v3.2.3, v3.3 and their later versions, queries on v2 tables also support equality deletes. </li></ul> |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Integration preparation
 
@@ -235,20 +244,37 @@ Description: The secret key of your AWS IAM user. If you use the IAM user-based 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 </TabItem>
+<<<<<<< HEAD
 <TabItem value="TABULAR" label="Tabular">
 
 ##### Tabular
 
 If you use Tabular as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
+=======
+<TabItem value="REST" label="REST">
+
+##### REST
+
+If you use REST as metastore, you must specify the metastore type as REST (`"iceberg.catalog.type" = "rest"`). Configure `MetastoreParams` as follows:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ```SQL
 "iceberg.catalog.type" = "rest",
 "iceberg.catalog.uri" = "<rest_server_api_endpoint>",
+<<<<<<< HEAD
 "iceberg.catalog.credential" = "<credential>",
 "iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
 ```
 
 `MetastoreParams` for Tabular:
+=======
+"iceberg.catalog.security" = "oauth2",
+"iceberg.catalog.oauth2.credential" = "<credential>",
+"iceberg.catalog.warehouse" = "<identifier_or_path_to_warehouse>"
+```
+
+`MetastoreParams` for REST catalog:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ###### iceberg.catalog.type
 
@@ -258,18 +284,63 @@ Description: The type of metastore that you use for your Iceberg cluster. Set th
 ###### iceberg.catalog.uri
 
 Required: Yes
+<<<<<<< HEAD
 Description: The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      
 
 ###### iceberg.catalog.credential
 
 Required: Yes
 Description: The authentication information of the Tabular service.
+=======
+Description: The URI of the REST service endpoint. Example: `https://api.tabular.io/ws`. 
+
+###### iceberg.catalog.security
+
+Required: No
+
+Description: The type of authorization protocol to use. Default: `NONE`. Valid value: `OAUTH2`, which requires either a `token` or `credential`.
+
+###### iceberg.catalog.oauth2.token
+
+Required: No
+
+Description: The bearer token used for interactions with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
+
+###### iceberg.catalog.oauth2.credential
+
+Required: No
+
+Description: The credential to exchange for a token in the OAuth2 client credentials flow with the server. A `token` or `credential` is required for `OAUTH2` authorization protocol. Example: `AbCdEf123456`.
+
+###### iceberg.catalog.oauth2.scope
+
+Required: No
+
+Description: Scope to be used when communicating with the REST Catalog. Applicable only when `credential` is used.
+
+###### iceberg.catalog.oauth2.server-uri
+
+Required: No
+
+Description: The endpoint to retrieve access token from OAuth2 Server.
+
+###### iceberg.catalog.vended-credentials-enabled
+
+Required: No
+
+Description: Whether to support querying objects under nested namespace. Default: `true`.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ###### iceberg.catalog.warehouse
 
 Required: No
 Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
 
+<<<<<<< HEAD
+=======
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
 ```SQL
@@ -283,6 +354,37 @@ PROPERTIES
     "iceberg.catalog.warehouse" = "sandbox"
 );
 ```
+<<<<<<< HEAD
+=======
+The following example creates an Iceberg catalog named `smith_polaris` that uses Polaris as metastore:
+
+```sql
+CREATE EXTERNAL CATALOG smith_polaris 
+PROPERTIES (   
+    "iceberg.catalog.uri"  = "http://xxx.xx.xx.xxx:8181/api/catalog", 
+    "type"  =  "iceberg",   
+    "iceberg.catalog.type"  =  "rest",   
+    "iceberg.catalog.warehouse" = "starrocks_catalog",
+    "iceberg.catalog.security" = "oauth2",
+    "iceberg.catalog.oauth2.credential" = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL'
+ );
+
+# `ns1.ns2.tpch_namespace` is a nested namespace
+create table smith_polaris.`ns1.ns2.tpch_namespace`.tbl (c1 string);
+
+mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
++------+
+| c1   |
++------+
+| 1    |
+| 2    |
+| 3    |
++------+
+3 rows in set (0.34 sec)
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 </TabItem>
 
 </Tabs>
@@ -593,12 +695,25 @@ Description: The service account that you want to impersonate.
 
 #### MetadataUpdateParams
 
+<<<<<<< HEAD
 A set of parameters about how StarRocks caches the metadata of Hive. This parameter set is optional.
 
 Currently, this parameter set contains only one parameter, `enable_iceberg_metadata_cache`, which specifies whether to cache pointers and partition names for Iceberg tables. This parameter is supported from v3.2.1 onwards:
 
 - From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used.
 - In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
+=======
+A set of parameters about how StarRocks update the cache of the Iceberg metadata. This parameter set is optional.
+
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance. You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+
+| **Parameter**                                 | **Default**           | **Description**                                              |
+| :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
+| enable_iceberg_metadata_cache                 | true                  | Whether to cache Iceberg-related metadata, including Table Cache, Partition Name Cache, and the Data File Cache and Delete Data File Cache in Manifest. |
+| iceberg_manifest_cache_with_column_statistics | false                 | Whether to cache the statistics of columns.                  |
+| iceberg_manifest_cache_max_num                | 100000                | The maximum number of Manifest files that can be cached.     |
+| refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | The minimum Manifest file length that triggers a Data File Cache refresh. |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Examples
 
@@ -934,7 +1049,11 @@ PROPERTIES
  
  ---
 
+<<<<<<< HEAD
 ## Using your catalog
+=======
+## Use your catalog
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### View Iceberg catalogs
 
@@ -1326,6 +1445,7 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 - StarRocks first attempts to retrieve the requested metadata from the memory. If the metadata cannot be hit in the memory, StarRock attempts to retrieve the metadata from the disks. The metadata that StarRocks has retrieved from the disks will be loaded into the memory. If the metadata cannot be hit in the disks either, StarRock retrieves the metadata from the remote storage and caches the retrieved metadata in the memory.
 - StarRocks writes the metadata evicted out of the memory into the disks, but it directly discards the metadata evicted out of the disks.
 
+<<<<<<< HEAD
 #### Iceberg metadata caching parameters
 
 ##### enable_iceberg_metadata_disk_cache
@@ -1369,3 +1489,84 @@ Description: The amount of time after which a cache entry on disk expires counti
 Unit: Bytes
 Default value: `8388608`, equivalent to 8 MB
 Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
+=======
+From v3.3.3 onwards, StarRocks supports the [periodic metadata refresh strategy](#appendix-periodic-metadata-refresh-strategy). You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+
+#### FE Configurations on Iceberg metadata caching
+
+##### enable_iceberg_metadata_disk_cache
+
+- Unit: N/A
+- Default value: `false`
+- Description: Specifies whether to enable the disk cache.
+
+##### iceberg_metadata_cache_disk_path
+
+- Unit: N/A
+- Default value: `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"`
+- Description: The save path of cached metadata files on disk.
+
+##### iceberg_metadata_disk_cache_capacity
+
+- Unit: Bytes
+- Default value: `2147483648`, equivalent to 2 GB
+- Description: The maximum size of cached metadata allowed on disk.
+
+##### iceberg_metadata_memory_cache_capacity
+
+- Unit: Bytes
+- Default value: `536870912`, equivalent to 512 MB
+- Description: The maximum size of cached metadata allowed in memory.
+
+##### iceberg_metadata_memory_cache_expiration_seconds
+
+- Unit: Seconds  
+- Default value: `86500`
+- Description: The amount of time after which a cache entry in memory expires counting from its last access.
+
+##### iceberg_metadata_disk_cache_expiration_seconds
+
+- Unit: Seconds  
+- Default value: `604800`, equivalent to one week
+- Description: The amount of time after which a cache entry on disk expires counting from its last access.
+
+##### iceberg_metadata_cache_max_entry_size
+
+- Unit: Bytes
+- Default value: `8388608`, equivalent to 8 MB
+- Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.
+
+##### enable_background_refresh_connector_metadata
+
+- Unit: -
+- Default value: true
+- Description: Whether to enable the periodic Iceberg metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Iceberg cluster, and refreshes the cached metadata of the frequently accessed Iceberg catalogs to perceive data changes. `true` indicates to enable the Iceberg metadata cache refresh, and `false` indicates to disable it.
+
+##### background_refresh_metadata_interval_millis
+
+- Unit: Millisecond
+- Default value: 600000
+- Description: The interval between two consecutive Iceberg metadata cache refreshes. - Unit: millisecond.
+
+##### background_refresh_metadata_time_secs_since_last_access_sec
+
+- Unit: Second
+- Default value: 86400
+- Description: The expiration time of an Iceberg metadata cache refresh task. For the Iceberg catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Iceberg catalog that has not been accessed, StarRocks will not refresh its cached metadata.
+
+## Appendix: Periodic Metadata Refresh Strategy
+
+- **Distributed Plan for Large volume of Metadata**
+
+  To handle large volume of metadata effectively, StarRocks employs a distributed approach using multiple BE and CN nodes. This method leverages the parallel computing capabilities of modern query engines, which can distribute tasks such as reading, decompressing, and filtering manifest files across multiple nodes. By processing these manifest files in parallel, the time required for metadata retrieval is significantly reduced, leading to faster job planning. This is particularly beneficial for large queries involving numerous manifest files, as it eliminates single-point bottlenecks and enhances overall query execution efficiency.
+
+- **Local Plan for Small volume of Metadata**
+
+  For smaller queries, where the repeated decompression and parsing of manifest files can introduce unnecessary delays, a different strategy is employed. StarRocks caches deserialized memory objects, especially Avro files, to address this issue. By storing these deserialized files in memory, the system can bypass the decompression and parsing stages for subsequent queries. This caching mechanism allows direct access to the required metadata, significantly reducing retrieval times. As a result, the system becomes more responsive and better suited to meet high query demands and materialized view rewriting needs.
+
+- **Adaptive Metadata Retrieval Strategy** (Default)
+
+  StarRocks is designed to automatically select the appropriate metadata retrieval method based on various factors, including the number of FE and BE/CN nodes, their CPU core counts, and the number of manifest files required for the current query. This adaptive approach ensures that the system dynamically optimizes metadata retrieval without the need for manual adjustment of metadata-related parameters. By doing so, StarRocks provides a seamless experience, balancing between distributed and local plans to achieve optimal query performance under different conditions.
+
+You can adjust the Iceberg metadata caching plan using the system variable [`plan_mode`](../../sql-reference/System_variable.md#plan_mode).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

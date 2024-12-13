@@ -134,7 +134,11 @@ public:
         auto val_col = col.values_column();
 
         if (key_col->has_null()) {
+<<<<<<< HEAD
             return Status::NotSupported("key of Map should not be nullable");
+=======
+            return Status::NotSupported("key of Map should not be null");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         if (key_col->is_nullable()) {
             key_col = ColumnHelper::as_column<NullableColumn>(key_col)->data_column();
@@ -216,6 +220,7 @@ private:
 
 // Cast nested type(including struct/map/* to json)
 // TODO(murphy): optimize the performance with columnwise-casting
+<<<<<<< HEAD
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
     ColumnBuilder<TYPE_JSON> column_builder(column->size());
     vpack::Builder json_builder;
@@ -230,6 +235,40 @@ StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column) {
         JsonValue json(json_builder.slice());
         column_builder.append(std::move(json));
     }
+=======
+StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_throw_exception) {
+    ColumnBuilder<TYPE_JSON> column_builder(column->size());
+    vpack::Builder json_builder;
+    if (allow_throw_exception) {
+        for (int row = 0; row < column->size(); row++) {
+            if (column->is_null(row)) {
+                column_builder.append_null();
+                continue;
+            }
+            json_builder.clear();
+            RETURN_IF_ERROR(CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder));
+            JsonValue json(json_builder.slice());
+            column_builder.append(std::move(json));
+        }
+    } else {
+        for (int row = 0; row < column->size(); row++) {
+            if (column->is_null(row)) {
+                column_builder.append_null();
+                continue;
+            }
+            json_builder.clear();
+            auto st = CastColumnItemVisitor::cast_datum_to_json(column, row, "", &json_builder);
+            if (!st.ok()) {
+                column_builder.append_null();
+                continue;
+            }
+
+            JsonValue json(json_builder.slice());
+            column_builder.append(std::move(json));
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return column_builder.build(false);
 }
 

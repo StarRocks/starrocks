@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # rtrim
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Removes the trailing spaces or specified characters from the end (right) of the `str` argument. Removing specified characters are supported from StarRocks 2.5.0.
 

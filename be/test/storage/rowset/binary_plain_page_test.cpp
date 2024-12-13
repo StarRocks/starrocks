@@ -99,14 +99,22 @@ public:
 
         size = 1024;
         auto column1 = BinaryColumn::create();
+<<<<<<< HEAD
         page_decoder.seek_to_position_in_page(2);
+=======
+        ASSERT_OK(page_decoder.seek_to_position_in_page(2));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         status = page_decoder.next_batch(&size, column1.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(1, size);
         ASSERT_EQ("StarRocks", column1->get_data()[0]);
 
         auto column2 = BinaryColumn::create();
+<<<<<<< HEAD
         page_decoder.seek_to_position_in_page(0);
+=======
+        ASSERT_OK(page_decoder.seek_to_position_in_page(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SparseRange<> read_range;
         read_range.add(Range<>(0, 1));
         read_range.add(Range<>(2, 3));

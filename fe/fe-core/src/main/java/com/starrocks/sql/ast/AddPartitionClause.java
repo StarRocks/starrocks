@@ -18,6 +18,10 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 
 // clause which is used to add partition
@@ -29,6 +33,12 @@ public class AddPartitionClause extends AlterTableClause {
     // true if this is to add a temporary partition
     private final boolean isTempPartition;
 
+<<<<<<< HEAD
+=======
+    //Object Resolved by Analyzer
+    private List<PartitionDesc> resolvedPartitionDescList;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public PartitionDesc getPartitionDesc() {
         return partitionDesc;
     }
@@ -61,10 +71,23 @@ public class AddPartitionClause extends AlterTableClause {
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.isTempPartition = isTempPartition;
+<<<<<<< HEAD
         this.needTableStable = false;
     }
 
     @Override
+=======
+    }
+
+    public List<PartitionDesc> getResolvedPartitionDescList() {
+        return resolvedPartitionDescList;
+    }
+
+    public void setResolvedPartitionDescList(List<PartitionDesc> resolvedPartitionDescList) {
+        this.resolvedPartitionDescList = resolvedPartitionDescList;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, String> getProperties() {
         return this.properties;
     }

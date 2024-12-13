@@ -41,6 +41,10 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.FrontendOptions;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -317,7 +321,11 @@ public class RepositoryTest {
             List<List<String>> infos = repo.getSnapshotInfos(snapshotName, timestamp, null);
             Assert.assertEquals(2, infos.size());
 
+<<<<<<< HEAD
         } catch (AnalysisException e) {
+=======
+        } catch (SemanticException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             e.printStackTrace();
             Assert.fail();
         }

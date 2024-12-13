@@ -34,6 +34,10 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Config;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -43,6 +47,10 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.Assertions;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -61,6 +69,10 @@ public class SelectStmtTest {
     @BeforeAll
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+<<<<<<< HEAD
+=======
+        Config.show_execution_groups = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FeConstants.showFragmentCost = false;
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
@@ -99,17 +111,76 @@ public class SelectStmtTest {
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ";
+<<<<<<< HEAD
+=======
+
+        String createTableWithPrimaryKey = "CREATE TABLE db1.t_with_pk (" +
+                "user_id INT," +
+                "value INT) " +
+                "PRIMARY KEY (user_id) " +
+                "PROPERTIES('replication_num' = '1');";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
                 .withTable(createBaseAllStmtStr)
                 .withTable(createDateTblStmtStr)
                 .withTable(createPratitionTableStr)
+<<<<<<< HEAD
                 .withTable(createTable1);
+=======
+                .withTable(createTable1)
+                .withTable(createTableWithPrimaryKey);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FeConstants.enablePruneEmptyOutputScan = false;
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    void testPivot() throws Exception {
+        String sql = "select * from t0 pivot (sum(c1) for c2 in (1, 2, 3)) order by c0";
+        String columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals("c0,1,2,3", columns);
+
+        sql = "select * from t0 pivot (sum(c1) for c2 in (1 as a, 2 as b, 3)) order by c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals("c0,a,b,3", columns);
+
+        sql = "select * from t0 pivot (sum(c1), avg(c1) as avg for c2 in (1 as a, 2 as b, 3)) order by c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals("c0,a_sum(db1.t0.c1),a_avg,b_sum(db1.t0.c1),b_avg,3_sum(db1.t0.c1),3_avg", columns);
+
+        sql = "select * from t0 pivot (sum(c1) as sum, avg(c1) as avg for c2 in (1 as a, 2 as b, 3)) order by c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals( "c0,a_sum,a_avg,b_sum,b_avg,3_sum,3_avg", columns);
+
+        sql = "select * from t0 join tbl1 "
+                + "pivot (sum(t0.c1) as s, avg(t0.c2) as a "
+                + "for (k1, k2) "
+                + "in (('a', 'a'), ('b', 'b'), ('c', 'c'))) order by t0.c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals(
+                "c0,k3,k4,{'a','a'}_s,{'a','a'}_a,{'b','b'}_s,{'b','b'}_a,{'c','c'}_s,{'c','c'}_a", columns);
+
+        sql = "select * from t0 join tbl1 "
+                + "pivot (sum(t0.c1) as s, avg(t0.c2) as a "
+                + "for (k1, k2) "
+                + "in (('a', 'a') as aa, ('b', 'b') as bb, ('c', 'c') as cc, ('d', 'd') as dd)) order by t0.c0";
+        columns = String.join(",",
+                UtFrameUtils.getPlanAndFragment(starRocksAssert.getCtx(), sql).second.getColNames());
+        Assertions.assertEquals(
+                "c0,k3,k4,aa_s,aa_a,bb_s,bb_a,cc_s,cc_a,dd_s,dd_a", columns);
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void testGroupByConstantExpression() throws Exception {
         String sql = "SELECT k1 - 4*60*60 FROM baseall GROUP BY k1 - 4*60*60";
         starRocksAssert.query(sql).explainQuery();
@@ -166,7 +237,11 @@ public class SelectStmtTest {
                         "nullable_tuples:[false], conjuncts:[TExpr(nodes:[TExprNode(node_type:BINARY_PRED, " +
                         "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BOOLEAN))]), " +
                         "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:INT, " +
+<<<<<<< HEAD
                         "has_nullable_child:true, is_nullable:true, is_monotonic:false)";
+=======
+                        "has_nullable_child:true, is_nullable:true, is_monotonic:false,";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(expectString));
     }
@@ -245,7 +320,11 @@ public class SelectStmtTest {
                 "select * from db1.tbl1 where not(k1 <=> k2)",
                 "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
         };
+<<<<<<< HEAD
         Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
+=======
+        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*", Pattern.CASE_INSENSITIVE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
@@ -626,4 +705,28 @@ public class SelectStmtTest {
                 "     limit: 1\n" +
                 "     cardinality: 1\n"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    void testDistinctCountOnPrimaryKey() throws Exception {
+        String insertData = "INSERT INTO t0 VALUES (1,0),(2,1),(3,0),(4,1);";
+        starRocksAssert.query(insertData);
+        String sql = "SELECT CASE WHEN(value = 1) THEN 'A' ELSE 'B' END as flag, COUNT(DISTINCT user_id) " +
+                "FROM db1.t_with_pk " +
+                "GROUP BY 1";
+
+        String plan = starRocksAssert.query(sql).explainQuery();
+
+        Assert.assertTrue(plan, plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1: user_id)\n" +
+                "  |  group by: 3: case\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: user_id\n" +
+                "  |  <slot 3> : if(2: value = 1, 'A', 'B')\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

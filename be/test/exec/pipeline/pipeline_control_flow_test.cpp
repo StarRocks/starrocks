@@ -257,7 +257,11 @@ public:
         return std::make_shared<TestSourceOperator>(this, _id, _plan_node_id, driver_sequence, _chunk_num, _chunk_size,
                                                     _counter, _pending_finish_cnt);
     }
+<<<<<<< HEAD
     SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+=======
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     size_t _chunk_num;
@@ -382,7 +386,11 @@ TEST_F(TestPipelineControlFlow, test_two_operatories) {
         op_factories.push_back(
                 std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
 
+<<<<<<< HEAD
         _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories));
+=======
+        _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories, exec_group.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
     start_test();
@@ -411,7 +419,11 @@ TEST_F(TestPipelineControlFlow, test_three_operatories) {
         op_factories.push_back(
                 std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
 
+<<<<<<< HEAD
         _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories));
+=======
+        _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories, exec_group.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
     start_test();
@@ -449,7 +461,11 @@ TEST_F(TestPipelineControlFlow, test_multi_operators) {
             op_factories.push_back(
                     std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
 
+<<<<<<< HEAD
             _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories));
+=======
+            _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories, exec_group.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         };
 
         start_test();
@@ -481,7 +497,11 @@ TEST_F(TestPipelineControlFlow, test_full_chunk_size) {
         op_factories.push_back(
                 std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
 
+<<<<<<< HEAD
         _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories));
+=======
+        _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories, exec_group.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
     start_test();
@@ -511,7 +531,11 @@ TEST_F(TestPipelineControlFlow, test_multi_chunks) {
         op_factories.push_back(
                 std::make_shared<TestSinkOperatorFactory>(next_operator_id(), next_plan_node_id(), sinkCounter));
 
+<<<<<<< HEAD
         _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories));
+=======
+        _pipelines.push_back(std::make_shared<Pipeline>(next_pipeline_id(), op_factories, exec_group.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
     start_test();

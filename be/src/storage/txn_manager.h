@@ -90,6 +90,7 @@ public:
 
     ~TxnManager() = default;
 
+<<<<<<< HEAD
     [[nodiscard]] Status prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
                                      TTransactionId transaction_id, const PUniqueId& load_id);
 
@@ -103,11 +104,30 @@ public:
 
     // persist_tablet_related_txns persists the tablets' meta and make it crash-safe.
     [[nodiscard]] Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);
+=======
+    Status prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                       const PUniqueId& load_id);
+
+    Status commit_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                      const PUniqueId& load_id, const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+
+    Status publish_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                       int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0,
+                       bool is_double_write = false);
+
+    Status publish_overwrite_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
+                                 TTransactionId transaction_id, int64_t version, const RowsetSharedPtr& rowset,
+                                 uint32_t wait_time);
+
+    // persist_tablet_related_txns persists the tablets' meta and make it crash-safe.
+    Status persist_tablet_related_txns(const std::vector<TabletSharedPtr>& tablets);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // persist metadata of affected_dirs and make it crash-safe
     void flush_dirs(std::unordered_set<DataDir*>& affected_dirs);
 
     // delete the txn from manager if it is not committed(not have a valid rowset)
+<<<<<<< HEAD
     [[nodiscard]] Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet,
                                       TTransactionId transaction_id, bool with_log = true);
 
@@ -126,12 +146,36 @@ public:
     // delete the txn from manager if it is not committed(not have a valid rowset)
     [[nodiscard]] Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
                                       SchemaHash schema_hash, const TabletUid& tablet_uid, bool with_log = true);
+=======
+    Status rollback_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
+                        bool with_log = true);
+
+    Status delete_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id);
+
+    // add a txn to manager
+    // partition id is useful in publish version stage because version is associated with partition
+    Status prepare_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                       SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id);
+
+    Status commit_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                      SchemaHash schema_hash, const TabletUid& tablet_uid, const PUniqueId& load_id,
+                      const RowsetSharedPtr& rowset_ptr, bool is_recovery);
+
+    // delete the txn from manager if it is not committed(not have a valid rowset)
+    Status rollback_txn(TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                        SchemaHash schema_hash, const TabletUid& tablet_uid, bool with_log = true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // remove the txn from txn manager
     // delete the related rowset if it is not null
     // delete rowset related data if it is not null
+<<<<<<< HEAD
     [[nodiscard]] Status delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id,
                                     TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid);
+=======
+    Status delete_txn(KVStore* meta, TPartitionId partition_id, TTransactionId transaction_id, TTabletId tablet_id,
+                      SchemaHash schema_hash, const TabletUid& tablet_uid);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                  int64_t* partition_id, std::set<int64_t>* transaction_ids);

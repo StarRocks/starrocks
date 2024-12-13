@@ -390,6 +390,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: v3.1
 -->
 
+<<<<<<< HEAD
+=======
+<!--
+##### log_register_and_unregister_query_id
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Server
 
 ##### frontend_address
@@ -407,9 +421,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: String
 - Unit: -
 - Is mutable: No
+<<<<<<< HEAD
 - Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
 - Introduced in: -
 
+=======
+- Description: Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an available IP address of the server will be randomly selected. From v3.3.0, StarRocks supports deployment based on IPv6. If the server has both IPv4 and IPv6 addresses, and this parameter is not specified, the system uses an IPv4 address by default. You can change this behavior by setting `net_use_ipv6_when_priority_networks_empty` to `true`.
+- Introduced in: -
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: A boolean value to control whether to use IPv6 addresses preferentially when `priority_networks` is not specified. `true` indicates to allow the system to use an IPv6 address preferentially when the server that hosts the node has both IPv4 and IPv6 addresses and `priority_networks` is not specified.
+- Introduced in: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### http_port
 
 - Default: 8030
@@ -637,6 +666,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Specifies whether asynchronous I/O is enabled for the FE node.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### mysql_service_nio_enable_keep_alive
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Enable TCP Keep-Alive for MySQL connections. Useful for long-idled connections behind load balancers.
+- Introduced in: -
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### mysql_service_io_threads_num
 
 - Default: 4
@@ -1070,6 +1111,45 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the metadata recovery mode. When this mode is enabled, if part of the cluster metadata is lost, it can be restored based on the information from BE. Currently, only the version information of partitions can be restored.
 - Introduced in: v3.3.0
 
+<<<<<<< HEAD
+=======
+##### black_host_history_sec
+
+- Default: 2 * 60
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The time duration for retaining historical connection failures of BE nodes in the BE Blacklist. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- Default: 5
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold of connection failures allowed for a blacklisted BE node. If a BE node is added to the BE Blacklist automatically, StarRocks will assess its connectivity and judge whether it can be removed from the BE Blacklist. Within `black_host_history_sec`, only if a blacklisted BE node has fewer connection failures than the threshold set in `black_host_connect_failures_within_time`, it can be removed from the BE Blacklist.
+- Introduced in: v3.3.0
+
+#### lock_manager_enabled
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to enable the lock manager. The lock manager performs central management for locks. For example, it can control whether to refine the granularity of metadata locks from the database level to the table level.
+- Introduced in: v3.3.0
+
+##### lock_manager_enable_using_fine_granularity_lock
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether to refine the granularity of metadata locks from the database level to the table level. After metadata locks are refined to the table level, lock conflicts and contentions can be reduced, which improves load and query concurrency. This parameter only takes effect when `lock_manager_enabled` is enabled.
+- Introduced in: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### enable_legacy_compatibility_for_replication
 
 - Default: false
@@ -1165,6 +1245,31 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Introduced in: v3.2.0
 
 <!--
+<<<<<<< HEAD
+=======
+##### enable_show_materialized_views_include_all_task_runs
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### materialized_view_min_refresh_interval
+
+- Default: 60
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### skip_whole_phase_lock_mv_limit
 
 - Default: 5
@@ -1229,6 +1334,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
 
+<<<<<<< HEAD
+=======
+##### enable_active_materialized_view_schema_strict_check
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to strictly check the length consistency of data types when activating an inactive materialized view. When this item is set to `false`, the activation of the materialized view is not affected if the length of the data types has changed in the base table.
+- Introduced in: v3.3.4
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 <!--
 ##### mv_active_checker_interval_seconds
 
@@ -1241,6 +1358,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### default_mv_partition_refresh_number
+
+- Default: 1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### mv_auto_analyze_async
 
 - Default: true
@@ -1836,6 +1967,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### stream_load_max_txn_num_per_be
+
+- Default: -1
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### prepared_transaction_default_timeout_second
 
 - Default: 86400
@@ -2300,9 +2445,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
+<<<<<<< HEAD
 - Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md).
 - Introduced in: v3.2.3
 
+=======
+- Description: Whether to enable the [hybrid row-column storage](../../table_design/hybrid_table.md) feature.
+- Introduced in: v3.2.3
+
+#### enable_experimental_gin
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to enable the [full-text inverted index](../../table_design/indexes/inverted_index.md) feature.
+- Introduced in: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### storage_usage_soft_limit_percent
 
 - Default: 90
@@ -2354,7 +2514,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_fast_schema_evolution
 
+<<<<<<< HEAD
 - Default: false
+=======
+- Default: true
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -2363,7 +2527,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **NOTE**
 >
+<<<<<<< HEAD
 > - StarRocks shared-data clusters do not support this parameter.
+=======
+> - StarRocks shared-data clusters supports this parameter from v3.3.0.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 > - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
 
 ##### recover_with_empty_tablet
@@ -2648,6 +2816,54 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+##### max_automatic_partition_number
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of automatically created partitions.
+- Introduced in: v3.1
+
+##### auto_partition_max_creation_number_per_load
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of partitions can be created in a table (with Expression Partitioning strategy) by a loading task.
+- Introduced in: v3.3.2
+
+##### max_partition_number_per_table
+
+- Default: 100000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of partitions can be created in a table.
+- Introduced in: v3.3.2
+
+##### max_bucket_number_per_partition
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of buckets can be created in a partition.
+- Introduced in: v3.3.2
+
+##### max_column_number_per_table
+
+- Default: 10000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of columns can be created in a table.
+- Introduced in: v3.3.2
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Shared-data
 
 ##### run_mode
@@ -2909,6 +3125,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### lake_compaction_default_timeout_second
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### lake_autovacuum_max_previous_versions
 
 - Default: 0
@@ -3009,6 +3239,27 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The table list of which compaction is disabled in shared-data mode. The format is `tableId1;tableId2`, seperated by semicolon, for example, `12345;98765`.
 - Introduced in: v3.1.11
 
+<<<<<<< HEAD
+=======
+##### lake_enable_balance_tablets_between_workers
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to balance the number of tablets among Compute Nodes during the tablet migration of cloud-native tables in a shared-data cluster. `true` indicates to balance the tablets among Compute Nodes, and `false` indicates to disabling this feature.
+- Introduced in: v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- Default: 0.15
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
+- Introduced in: v3.3.4
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Other
 
 ##### tmp_dir
@@ -3103,7 +3354,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 <!--
 ##### lake_enable_batch_publish_version 
 
+<<<<<<< HEAD
 - Default: false
+=======
+- Default: true
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
@@ -3371,6 +3626,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### authorization_enable_column_level_privilege
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### authentication_chain
 
 - Default: {AUTHENTICATION_CHAIN_MECHANISM_NATIVE}
@@ -3511,9 +3780,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
 ##### max_automatic_partition_number
 
 - Default: 4096
+=======
+##### max_partition_number_per_table
+
+- Default: 100000
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Type: Long
 - Unit: -
 - Is mutable: Yes
@@ -4382,9 +4657,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
 ##### stream_load_profile_collect_second
 
 - Default: 10
+=======
+##### load_profile_collect_threshold_second
+
+- Default: 0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
@@ -4627,10 +4908,66 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### lock_manager_enable_resolve_deadlock
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lock_manager_enable_loading_using_fine_granularity_lock
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### lock_manager_dead_lock_detection_delay_time_ms
+
+- Default: 3000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+<!--
+##### refresh_dictionary_cache_thread_num
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description:
+- Introduced in: -
+-->
+
+##### replication_interval_ms
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The minimum time interval at which the replication tasks are scheduled.
+- Introduced in: v3.3.5
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### replication_max_parallel_table_count
 
 - Default: 100
 - Type: Int
+<<<<<<< HEAD
 - Unit:
 - Is mutable: Yes
 - Description:
@@ -4658,6 +4995,39 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description:
 - Introduced in: -
 -->
+=======
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_replica_count
+
+- Default: 10240
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of tablet replicas allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- Default: 1048576
+- Type: Int
+- Unit: MB
+- Is mutable: Yes
+- Description: The maximum size of data allowed for concurrent synchronization.
+- Introduced in: v3.3.5
+
+##### replication_transaction_timeout_sec
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The timeout duration for synchronization tasks.
+- Introduced in: v3.3.5
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### jdbc_meta_default_cache_enable
 

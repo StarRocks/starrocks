@@ -14,13 +14,20 @@
 
 package com.starrocks.load.pipe;
 
+<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.common.CloseableLock;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -37,7 +44,10 @@ import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +63,10 @@ public class PipeManager {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
+<<<<<<< HEAD
     @SerializedName(value = "pipes")
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private Map<PipeId, Pipe> pipeMap = new ConcurrentHashMap<>();
     private Map<Pair<Long, String>, PipeId> nameToId = new ConcurrentHashMap<>();
 
@@ -186,7 +199,11 @@ public class PipeManager {
     }
 
     private Pair<Long, String> resolvePipeNameUnlock(PipeName name) {
+<<<<<<< HEAD
         long dbId = GlobalStateMgr.getCurrentState().mayGetDb(name.getDbName())
+=======
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(name.getDbName())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .map(Database::getId)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_NO_DB_ERROR));
         return Pair.create(dbId, name.getPipeName());
@@ -232,6 +249,7 @@ public class PipeManager {
     }
 
     //============================== RAW CRUD ===========================================
+<<<<<<< HEAD
     public Pair<String, Integer> toJson() {
         try {
             lock.readLock().lock();
@@ -240,6 +258,8 @@ public class PipeManager {
             lock.readLock().unlock();
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public List<Pipe> getAllPipesOfDb(long dbId) {
         try {
@@ -319,12 +339,21 @@ public class PipeManager {
         }
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         try {
             lock.readLock().lock();
             final int cnt = 1 + pipeMap.size();
             SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.PIPE_MGR, cnt);
             writer.writeJson(pipeMap.size());
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        try {
+            lock.readLock().lock();
+            final int cnt = 1 + pipeMap.size();
+            SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.PIPE_MGR, cnt);
+            writer.writeInt(pipeMap.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Pipe pipe : pipeMap.values()) {
                 writer.writeJson(pipe);
             }

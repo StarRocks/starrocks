@@ -20,14 +20,26 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -64,6 +76,7 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultSharedDataWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
+<<<<<<< HEAD
                                        boolean preferComputeNode,
                                        int numUsedComputeNodes,
                                        ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
@@ -73,6 +86,30 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
             return new DefaultSharedDataWorkerProvider(idToComputeNode, filterAvailableWorkers(idToComputeNode));
+=======
+                                               boolean preferComputeNode,
+                                               int numUsedComputeNodes,
+                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                                               long warehouseId) {
+
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+            List<Long> computeNodeIds = warehouseManager.getAllComputeNodeIds(warehouseId);
+            computeNodeIds.forEach(nodeId -> builder.put(nodeId,
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
+            ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("idToComputeNode: {}", idToComputeNode);
+            }
+
+            ImmutableMap<Long, ComputeNode> availableComputeNodes = filterAvailableWorkers(idToComputeNode);
+            if (availableComputeNodes.isEmpty()) {
+                Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
+                throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
+            }
+
+            return new DefaultSharedDataWorkerProvider(idToComputeNode, availableComputeNodes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -186,7 +223,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     private void reportWorkerNotFoundException(long workerId) throws NonRecoverableException {
         throw new NonRecoverableException(
+<<<<<<< HEAD
                 FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + this);
+=======
+                FeConstants.getNodeNotFoundError(true) + " nodeId: " + workerId + " " + computeNodesToString(false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -217,7 +258,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
             startPos = (startPos + 1) % allComputeNodeIds.size();
             long buddyId = allComputeNodeIds.get(startPos);
             if (buddyId != workerId && availableID2ComputeNode.containsKey(buddyId) &&
+<<<<<<< HEAD
                     !SimpleScheduler.isInBlacklist(buddyId)) {
+=======
+                    !SimpleScheduler.isInBlocklist(buddyId)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return buddyId;
             }
         }
@@ -226,11 +271,29 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         StringBuilder out = new StringBuilder("compute node: ");
         id2ComputeNode.forEach((backendID, backend) -> out.append(
                 String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
                         backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
                         SimpleScheduler.isInBlacklist(backendID))));
+=======
+        return computeNodesToString(true);
+    }
+
+    private String computeNodesToString(boolean allowNormalNodes) {
+        StringBuilder out = new StringBuilder("compute node: ");
+
+        id2ComputeNode.forEach((backendID, backend) -> {
+            if (allowNormalNodes || !backend.isAlive() || !availableID2ComputeNode.containsKey(backendID) ||
+                    SimpleScheduler.isInBlocklist(backendID)) {
+                out.append(
+                        String.format("[%s alive: %b, available: %b, inBlacklist: %b] ", backend.getHost(),
+                                backend.isAlive(), availableID2ComputeNode.containsKey(backendID),
+                                SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return out.toString();
     }
 
@@ -253,7 +316,11 @@ public class DefaultSharedDataWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> filterAvailableWorkers(ImmutableMap<Long, ComputeNode> workers) {
         ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
         for (Map.Entry<Long, ComputeNode> entry : workers.entrySet()) {
+<<<<<<< HEAD
             if (entry.getValue().isAlive() && !SimpleScheduler.isInBlacklist(entry.getKey())) {
+=======
+            if (entry.getValue().isAlive() && !SimpleScheduler.isInBlocklist(entry.getKey())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 builder.put(entry);
             }
         }

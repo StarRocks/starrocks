@@ -26,7 +26,15 @@ WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
 ]
 ```
 
+<<<<<<< HEAD
 Parameters in brackets [] is optional.
+=======
+:::note
+
+Since v3.3, `SHOW MATERIALIZED VIEWS` command will track the state of all task_runs if a refresh task consists of multiple partitions/task_runs to refresh. Only when all task_runs are success, `last_refresh_state` will return `SUCCESS`.
+
+:::
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## Parameters
 

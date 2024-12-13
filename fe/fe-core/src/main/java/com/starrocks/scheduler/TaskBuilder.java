@@ -15,7 +15,10 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
@@ -38,12 +41,21 @@ import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.warehouse.Warehouse;
+<<<<<<< HEAD
 import org.apache.commons.collections.MapUtils;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+=======
+
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import static com.starrocks.scheduler.TaskRun.MV_ID;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
 public class TaskBuilder {
@@ -70,6 +82,12 @@ public class TaskBuilder {
         } else if (submitTaskStmt.getCreateTableAsSelectStmt() != null) {
             taskNamePrefix = "ctas-";
             taskSource = Constants.TaskSource.CTAS;
+<<<<<<< HEAD
+=======
+        } else if (submitTaskStmt.getDataCacheSelectStmt() != null) {
+            taskNamePrefix = "DataCacheSelect-";
+            taskSource = Constants.TaskSource.DATACACHE_SELECT;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             throw new SemanticException("Submit task statement is not supported");
         }
@@ -79,12 +97,34 @@ public class TaskBuilder {
         Task task = new Task(taskName);
         task.setSource(taskSource);
         task.setCreateTime(System.currentTimeMillis());
+<<<<<<< HEAD
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
         task.setProperties(submitTaskStmt.getProperties());
         task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
         task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
         task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
+=======
+        task.setCatalogName(submitTaskStmt.getCatalogName());
+        task.setDbName(submitTaskStmt.getDbName());
+        task.setDefinition(submitTaskStmt.getSqlText());
+
+        Map<String, String> taskProperties = Maps.newHashMap();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(context.getCurrentWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
+        // the property of submit task has higher priority
+        taskProperties.putAll(submitTaskStmt.getProperties());
+        task.setProperties(taskProperties);
+
+        task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
+        task.setSchedule(submitTaskStmt.getSchedule());
+        task.setType(submitTaskStmt.getSchedule() != null ? Constants.TaskType.PERIODICAL : Constants.TaskType.MANUAL);
+        if (submitTaskStmt.getSchedule() == null) {
+            task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         handleSpecialTaskProperties(task);
         return task;
@@ -95,6 +135,7 @@ public class TaskBuilder {
      */
     private static void handleSpecialTaskProperties(Task task) {
         Map<String, String> properties = task.getProperties();
+<<<<<<< HEAD
         if (MapUtils.isEmpty(properties)) {
             return;
         }
@@ -114,6 +155,14 @@ public class TaskBuilder {
 
         toRemove.forEach(properties::remove);
         properties.putAll(toAdd);
+=======
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE_NAME)) {
+                Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
+                Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
@@ -152,12 +201,27 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
+<<<<<<< HEAD
         Map<String, String> taskProperties = Maps.newHashMap();
         taskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
                 String.valueOf(materializedView.getId()));
         taskProperties.putAll(materializedView.getProperties());
 
         task.setProperties(taskProperties);
+=======
+
+        Map<String, String> taskProperties = Maps.newHashMap();
+        taskProperties.put(MV_ID, String.valueOf(materializedView.getId()));
+        // Don't put mv table properties into task properties since mv refresh doesn't need them, and the properties
+        // will cause task run's meta-data too large.
+        // In PropertyAnalyzer.analyzeMVProperties, it removed the warehouse property, because
+        // it only keeps session started properties
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                .getWarehouse(materializedView.getWarehouseId());
+        taskProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouse.getName());
+        task.setProperties(taskProperties);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
@@ -175,7 +239,11 @@ public class TaskBuilder {
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
         String mvId = String.valueOf(materializedView.getId());
+<<<<<<< HEAD
         previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID, mvId);
+=======
+        previousTaskProperties.put(MV_ID, mvId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         task.setProperties(previousTaskProperties);
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));

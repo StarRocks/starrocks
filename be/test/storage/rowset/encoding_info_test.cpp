@@ -88,6 +88,19 @@ TEST_F(EncodingInfoTest, number_types_supports_dict_encoding) {
     EXPECT_EQ(true, supports_dict_encoding(TYPE_VARCHAR));
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(EncodingInfoTest, enable_non_string_column_dict_encoding) {
+    EXPECT_EQ(false, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 0.7;
+    EXPECT_EQ(true, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 1;
+    EXPECT_EQ(true, enable_non_string_column_dict_encoding());
+    config::dictionary_encoding_ratio_for_non_string_column = 0;
+    EXPECT_EQ(false, enable_non_string_column_dict_encoding());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(EncodingInfoTest, get_default_encoding_number_types) {
     for (auto logicType : _number_types_supports_dict_encoding) {
         EXPECT_EQ(BIT_SHUFFLE, EncodingInfo::get_default_encoding(logicType, false));
@@ -100,6 +113,23 @@ TEST_F(EncodingInfoTest, get_default_encoding_number_types) {
         ASSERT_TRUE(status.ok());
         EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
     }
+<<<<<<< HEAD
+=======
+
+    config::dictionary_encoding_ratio_for_non_string_column = 0.7;
+    for (auto logicType : _number_types_supports_dict_encoding) {
+        EXPECT_EQ(DICT_ENCODING, EncodingInfo::get_default_encoding(logicType, false));
+        const EncodingInfo* encoding_info;
+        auto status = EncodingInfo::get(logicType, DEFAULT_ENCODING, &encoding_info);
+        ASSERT_TRUE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+
+        status = EncodingInfo::get(logicType, DICT_ENCODING, &encoding_info);
+        ASSERT_TRUE(status.ok());
+        EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
+    }
+    config::dictionary_encoding_ratio_for_non_string_column = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(EncodingInfoTest, default_encoding) {

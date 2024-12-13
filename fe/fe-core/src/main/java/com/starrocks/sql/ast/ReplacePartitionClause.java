@@ -57,7 +57,10 @@ public class ReplacePartitionClause extends AlterTableClause {
         super(AlterOpType.REPLACE_PARTITION, pos);
         this.partitionNames = partitionNames;
         this.tempPartitionNames = tempPartitionNames;
+<<<<<<< HEAD
         this.needTableStable = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.properties = properties;
     }
 
@@ -93,7 +96,10 @@ public class ReplacePartitionClause extends AlterTableClause {
         this.useTempPartitionName = useTempPartitionName;
     }
 
+<<<<<<< HEAD
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, String> getProperties() {
         return this.properties;
     }

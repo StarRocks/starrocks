@@ -26,12 +26,20 @@
 namespace starrocks {
 
 RollingAsyncParquetWriter::RollingAsyncParquetWriter(
+<<<<<<< HEAD
         TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile,
+=======
+        TableInfo tableInfo, std::vector<ExprContext*> output_expr_ctxs, RuntimeProfile* parent_profile,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func, RuntimeState* state,
         int32_t driver_id)
         : _table_info(std::move(tableInfo)),
           _max_file_size(_table_info.max_file_size),
+<<<<<<< HEAD
           _output_expr_ctxs(output_expr_ctxs),
+=======
+          _output_expr_ctxs(std::move(output_expr_ctxs)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _parent_profile(parent_profile),
           _commit_func(std::move(commit_func)),
           _state(state),
@@ -48,7 +56,11 @@ Status RollingAsyncParquetWriter::init() {
     ASSIGN_OR_RETURN(auto compression_codec,
                      parquet::ParquetBuildHelper::convert_compression_type(_table_info.compress_type));
     builder.compression(compression_codec);
+<<<<<<< HEAD
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
+=======
+    builder.version(::parquet::ParquetVersion::PARQUET_2_6);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _properties = builder.build();
 
     return Status::OK();

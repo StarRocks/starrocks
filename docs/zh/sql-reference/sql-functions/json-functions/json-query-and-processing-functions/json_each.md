@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_each
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。
 

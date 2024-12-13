@@ -36,8 +36,13 @@
 
 #include <cstddef>
 
+<<<<<<< HEAD
 #include "storage/rowset/page_handle.h"
 
+=======
+#include "io/seekable_input_stream.h"
+#include "storage/rowset/page_handle.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 class FileSystem;
@@ -49,7 +54,11 @@ class PageBuilderOptions {
 public:
     uint32_t data_page_size = DEFAULT_PAGE_SIZE;
 
+<<<<<<< HEAD
     uint32_t dict_page_size = DEFAULT_PAGE_SIZE;
+=======
+    uint32_t dict_page_size = config::dictionary_page_size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class IndexReadOptions {
@@ -59,7 +68,12 @@ public:
     // for lake tablet
     LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
+<<<<<<< HEAD
     RandomAccessFile* read_file = nullptr;
+=======
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     OlapReaderStatistics* stats = nullptr;
 };
 

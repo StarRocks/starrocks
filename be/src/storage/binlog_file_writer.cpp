@@ -550,7 +550,11 @@ StatusOr<std::shared_ptr<BinlogFileWriter>> BinlogFileWriter::reopen(int64_t fil
             std::make_shared<BinlogFileWriter>(file_id, file_path, page_size, compression_type);
     Status status = writer->init(previous_meta);
     if (!status.ok()) {
+<<<<<<< HEAD
         writer->close(false);
+=======
+        (void)writer->close(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG(WARNING) << "Failed to reopen writer: " << file_path << ", " << status;
         return status;
     }

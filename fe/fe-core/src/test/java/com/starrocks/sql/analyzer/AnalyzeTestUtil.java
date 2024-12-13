@@ -15,9 +15,18 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+=======
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.utframe.StarRocksAssert;
@@ -179,6 +188,10 @@ public class AnalyzeTestUtil {
                 "  `pk` bigint NOT NULL COMMENT \"\",\n" +
                 "  `v1` string NOT NULL COMMENT \"\",\n" +
                 "  `v2` int NOT NULL,\n" +
+<<<<<<< HEAD
+=======
+                "  `v4` int NOT NULL,\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  `v3` array<int> not null" +
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk`)\n" +
@@ -321,6 +334,13 @@ public class AnalyzeTestUtil {
         return connectContext;
     }
 
+<<<<<<< HEAD
+=======
+    public static void setConnectContext(ConnectContext ctx) {
+        connectContext = ctx;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static StarRocksAssert getStarRocksAssert() {
         return starRocksAssert;
     }
@@ -372,10 +392,34 @@ public class AnalyzeTestUtil {
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
+<<<<<<< HEAD
         } catch (ParsingException | SemanticException | UnsupportedException e) {
+=======
+        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public static void analyzeSetUserVariableFail(String originStmt, String exceptMessage) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable().getSqlMode()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            SetStmt setStmt = (SetStmt) statementBase;
+            SetStmtAnalyzer.calcuteUserVariable((UserVariable) setStmt.getSetListItems().get(0));
+            Assert.fail("Miss semantic error exception");
+        } catch (ParsingException | SemanticException | UnsupportedException e) {
+            if (!exceptMessage.equals("")) {
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+            }
+        } catch (Exception e) {
+            Assert.fail("analyze exception: " + e);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

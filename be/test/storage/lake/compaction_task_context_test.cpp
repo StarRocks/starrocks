@@ -43,7 +43,11 @@ public:
 protected:
     // Implement a mock version of CompactionTaskCallback if needed
     std::shared_ptr<CompactionTaskCallback> callback;
+<<<<<<< HEAD
     CompactionTaskContext context{123, 456, 789, false, callback};
+=======
+    CompactionTaskContext context{123, 456, 789, false, false, callback};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void SetUp() override {
         // Initialize your context or mock callback here if necessary
@@ -62,7 +66,11 @@ TEST_F(CompactionTaskContextTest, test_calculation) {
 
     OlapReaderStatistics reader_stats;
     reader_stats.io_ns_remote = 200;
+<<<<<<< HEAD
     reader_stats.io_ns_local_disk = 300;
+=======
+    reader_stats.io_ns_read_local_disk = 300;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     reader_stats.segment_init_ns = 400;
     reader_stats.column_iterator_init_ns = 500;
     reader_stats.io_count_local_disk = 600;

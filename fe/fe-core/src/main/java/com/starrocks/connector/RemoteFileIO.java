@@ -15,10 +15,22 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+
+import java.io.IOException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 
 public interface RemoteFileIO {
 
     Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey);
+<<<<<<< HEAD
+=======
+
+    FileStatus[] getFileStatus(Path... files) throws IOException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

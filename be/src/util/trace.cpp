@@ -43,6 +43,7 @@ namespace starrocks {
 
 __thread Trace* Trace::threadlocal_trace_;
 
+<<<<<<< HEAD
 Trace::Trace()
 
 {
@@ -52,6 +53,8 @@ Trace::Trace()
     // arena_->SetMaxBufferSize(4096);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Struct which precedes each entry in the trace.
 struct TraceEntry {
     MicrosecondsInt64 timestamp_micros;

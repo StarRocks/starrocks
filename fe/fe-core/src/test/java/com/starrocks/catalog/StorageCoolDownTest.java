@@ -142,7 +142,11 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+<<<<<<< HEAD
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("site_access_datetime_with_1_day_ttl_less_than");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -159,7 +163,11 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_datetime_with_1_day_ttl_less_than";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -200,7 +208,11 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+<<<<<<< HEAD
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("site_access_date_upper_lower_ttl");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -217,7 +229,11 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_date_upper_lower_ttl";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -250,7 +266,11 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+<<<<<<< HEAD
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("site_access_date_with_1_day_ttl_start_end");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -267,7 +287,11 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_date_with_1_day_ttl_start_end";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -303,7 +327,11 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+<<<<<<< HEAD
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("site_access_date_with_1_day_ttl_less_than");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -320,7 +348,11 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_date_with_1_day_ttl_less_than";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -356,7 +388,11 @@ public class StorageCoolDownTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+<<<<<<< HEAD
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test")
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("site_access_with_max_partition");
 
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
@@ -373,7 +409,11 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_with_max_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 }

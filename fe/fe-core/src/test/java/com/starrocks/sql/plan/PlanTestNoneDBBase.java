@@ -32,6 +32,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.SessionVariableConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -42,15 +46,23 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import kotlin.text.Charsets;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.CollectionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+<<<<<<< HEAD
 import org.junit.Rule;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.rules.ErrorCollector;
 import org.junit.rules.ExpectedException;
+=======
+import org.junit.jupiter.params.provider.Arguments;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -64,6 +76,10 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
+=======
+import java.util.StringJoiner;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -77,6 +93,7 @@ public class PlanTestNoneDBBase {
     public static ConnectContext connectContext;
     public static StarRocksAssert starRocksAssert;
 
+<<<<<<< HEAD
     @Rule
     public ExpectedException expectedEx = ExpectedException.none();
 
@@ -85,6 +102,11 @@ public class PlanTestNoneDBBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+=======
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        Config.show_execution_groups = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // disable checking tablets
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;
@@ -93,6 +115,11 @@ public class PlanTestNoneDBBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+        connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
@@ -118,6 +145,19 @@ public class PlanTestNoneDBBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void assertContainsAny(String text, String... pattern) {
+        boolean contains = false;
+        for (String s : pattern) {
+            contains |= text.contains(s);
+        }
+        if (!contains) {
+            Assert.fail(text);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final String NORMAL_PLAN_PREDICATE_PREFIX = "PREDICATES:";
     private static final String LOWER_NORMAL_PLAN_PREDICATE_PREFIX = "predicates:";
     private static final String LOGICAL_PLAN_SCAN_PREFIX = "SCAN ";
@@ -226,17 +266,26 @@ public class PlanTestNoneDBBase {
 
     public static void assertContains(String text, List<String> patterns) {
         for (String s : patterns) {
+<<<<<<< HEAD
             Assert.assertTrue(text, text.contains(s));
+=======
+            Assert.assertTrue(s + "\n" + text, text.contains(s));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     public void assertCContains(String text, String... pattern) {
+<<<<<<< HEAD
         try {
             for (String s : pattern) {
                 Assert.assertTrue(text, text.contains(s));
             }
         } catch (Error error) {
             collector.addError(error);
+=======
+        for (String s : pattern) {
+            Assert.assertTrue(text, text.contains(s));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -252,14 +301,22 @@ public class PlanTestNoneDBBase {
 
     public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
+<<<<<<< HEAD
             partition.getBaseIndex().setRowCount(rowCount);
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
     public static void setPartitionStatistics(OlapTable table, String partitionName, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             if (partition.getName().equals(partitionName)) {
+<<<<<<< HEAD
                 partition.getBaseIndex().setRowCount(rowCount);
+=======
+                partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(rowCount);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -337,13 +394,24 @@ public class PlanTestNoneDBBase {
         return sql;
     }
 
+<<<<<<< HEAD
     public void runFileUnitTest(String filename, boolean debug) {
+=======
+    public void runFileUnitTest(String sqlBase, String filename, boolean debug) {
+        List<Throwable> errorCollector = Lists.newArrayList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
 
         String mode = "";
         String tempStr;
+<<<<<<< HEAD
         StringBuilder sql = new StringBuilder();
+=======
+        int nth = StringUtils.isBlank(sqlBase) ? 0 : -1;
+
+        StringBuilder sql = new StringBuilder(sqlBase);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StringBuilder result = new StringBuilder();
         StringBuilder fragment = new StringBuilder();
         StringBuilder comment = new StringBuilder();
@@ -379,7 +447,10 @@ public class PlanTestNoneDBBase {
 
         Pattern regex = Pattern.compile("\\[plan-(\\d+)]");
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+<<<<<<< HEAD
             int nth = 0;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             while ((tempStr = reader.readLine()) != null) {
                 if (tempStr.startsWith("/*")) {
                     isComment = true;
@@ -421,6 +492,10 @@ public class PlanTestNoneDBBase {
                     case "[sql]":
                         sql = new StringBuilder();
                         mode = "sql";
+<<<<<<< HEAD
+=======
+                        nth = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         continue;
                     case "[result]":
                         result = new StringBuilder();
@@ -452,6 +527,7 @@ public class PlanTestNoneDBBase {
                         mode = "scheduler";
                         continue;
                     case "[end]":
+<<<<<<< HEAD
                         Pair<String, ExecPlan> pair = null;
                         try {
                             pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
@@ -521,14 +597,30 @@ public class PlanTestNoneDBBase {
                             }
                         } catch (Error error) {
                             collector.addError(new Throwable(nth + " plan " + "\n" + sql, error));
+=======
+                        if (executeSqlByMode(sql, nth, comment, exceptString,
+                                hasResult, result,
+                                hasFragment, fragment,
+                                hasFragmentStatistics, fragmentStatistics,
+                                isDump, dumpInfoString,
+                                hasScheduler, schedulerString,
+                                isEnumerate, planCount, planEnumerate,
+                                isDebug, writer, errorCollector)) {
+                            continue;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         }
 
                         hasResult = false;
                         hasFragment = false;
                         hasFragmentStatistics = false;
                         isDump = false;
+<<<<<<< HEAD
                         comment = new StringBuilder();
                         hasScheduler = false;
+=======
+                        hasScheduler = false;
+                        comment = new StringBuilder();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         continue;
                 }
 
@@ -567,12 +659,32 @@ public class PlanTestNoneDBBase {
             e.printStackTrace();
             Assert.fail();
         }
+<<<<<<< HEAD
+=======
+
+        if (CollectionUtils.isNotEmpty(errorCollector)) {
+            StringJoiner joiner = new StringJoiner("\n");
+            errorCollector.stream().forEach(e -> joiner.add(e.getMessage()));
+            Assert.fail(joiner.toString());
+        }
+    }
+
+    public void runFileUnitTest(String filename, boolean debug) {
+        runFileUnitTest("", filename, debug);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void runFileUnitTest(String filename) {
         runFileUnitTest(filename, false);
     }
 
+<<<<<<< HEAD
+=======
+    public void runFileUnitTest(String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile, false);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean executeSqlByMode(StringBuilder sql, int nth, StringBuilder comment,
                                      StringBuilder exceptString,
                                      boolean hasResult, StringBuilder result,
@@ -581,7 +693,12 @@ public class PlanTestNoneDBBase {
                                      boolean isDump, StringBuilder dumpInfoString,
                                      boolean hasScheduler, StringBuilder schedulerString,
                                      boolean isEnumerate, int planCount, StringBuilder planEnumerate,
+<<<<<<< HEAD
                                      boolean isDebug, BufferedWriter debugWriter) throws Exception {
+=======
+                                     boolean isDebug, BufferedWriter debugWriter,
+                                     List<Throwable> errorCollector) throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Pair<String, Pair<ExecPlan, String>> pair = null;
         QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
         String logModule = debugOptions.isEnableQueryTraceLog() ? "MV" : "";
@@ -656,7 +773,13 @@ public class PlanTestNoneDBBase {
                 connectContext.getSessionVariable().setUseNthExecPlan(0);
             }
         } catch (Error error) {
+<<<<<<< HEAD
             collector.addError(new Throwable(nth + " plan " + "\n" + sql, error));
+=======
+            StringBuilder message = new StringBuilder();
+            message.append(nth).append(" plan ").append("\n").append(sql).append("\n").append(error.getMessage());
+            errorCollector.add(new Throwable(message.toString(), error));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return false;
     }
@@ -678,7 +801,11 @@ public class PlanTestNoneDBBase {
             if (!comment.trim().isEmpty()) {
                 writer.append(comment).append("\n");
             }
+<<<<<<< HEAD
             if (nthPlan <= 1) {
+=======
+            if (nthPlan == 0) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 writer.append("[sql]\n");
                 writer.append(sql.trim());
             }
@@ -761,7 +888,10 @@ public class PlanTestNoneDBBase {
 
     private static int extractInstancesFromSchedulerPlan(String[] lines, int startIndex, Map<Long, String> instances) {
         int i = startIndex;
+<<<<<<< HEAD
         StringBuilder builder = new StringBuilder();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long beId = -1;
         for (; i < lines.length; i++) {
             String line = lines[i];
@@ -770,6 +900,7 @@ public class PlanTestNoneDBBase {
                 break;
             } else if (trimLine.startsWith("INSTANCE(")) { // Start a new instance.
                 if (beId != -1) {
+<<<<<<< HEAD
                     instances.put(beId, builder.toString());
                     beId = -1;
                     builder = new StringBuilder();
@@ -777,6 +908,12 @@ public class PlanTestNoneDBBase {
             } else { // Still in this instance.
                 builder.append(line).append("\n");
 
+=======
+                    instances.put(beId / 10, beId / 10 + "");
+                    beId = -1;
+                }
+            } else { // Still in this instance.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Pattern beIdPattern = Pattern.compile("^\\s*BE: (\\d+)$");
                 Matcher matcher = beIdPattern.matcher(line);
 
@@ -787,7 +924,12 @@ public class PlanTestNoneDBBase {
         }
 
         if (beId != -1) {
+<<<<<<< HEAD
             instances.put(beId, builder.toString());
+=======
+            // ignore comparing the BE id
+            instances.put(beId / 10, beId / 10 + "");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return i;
@@ -856,7 +998,11 @@ public class PlanTestNoneDBBase {
 
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
+<<<<<<< HEAD
         return globalStateMgr.getDb("test").getTable(t);
+=======
+        return globalStateMgr.getLocalMetastore().getDb("test").getTable(t);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public OlapTable getOlapTable(String t) {

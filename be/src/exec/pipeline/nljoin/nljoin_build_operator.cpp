@@ -53,8 +53,12 @@ Status NLJoinBuildOperator::set_finishing(RuntimeState* state) {
 }
 
 Status NLJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+<<<<<<< HEAD
     _cross_join_context->append_build_chunk(_driver_sequence, chunk);
     return Status::OK();
+=======
+    return _cross_join_context->append_build_chunk(_driver_sequence, chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 size_t NLJoinBuildOperator::output_amplification_factor() const {

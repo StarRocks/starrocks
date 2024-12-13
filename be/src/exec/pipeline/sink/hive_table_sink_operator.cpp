@@ -56,12 +56,15 @@ bool HiveTableSinkOperator::is_finished() const {
         if (!writer.second->closed()) {
             return false;
         }
+<<<<<<< HEAD
 
         auto st = writer.second->get_io_status();
         if (!st.ok()) {
             LOG(WARNING) << "cancel fragment: " << st.message();
             _fragment_ctx->cancel(st);
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return true;

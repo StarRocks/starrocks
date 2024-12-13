@@ -28,7 +28,11 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
+<<<<<<< HEAD
 class ColocateJoinTest extends PlanTestBase {
+=======
+public class ColocateJoinTest extends PlanTestBase {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -48,7 +52,10 @@ class ColocateJoinTest extends PlanTestBase {
                 "\"colocate_with\" = \"colocate_group_1\"" +
                 ");");
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("colocateJoinOnceSqls")
     void testColocateJoinOnce(String sql) throws Exception {
@@ -231,5 +238,8 @@ class ColocateJoinTest extends PlanTestBase {
 
         return pairs.stream().map(e -> Arguments.of(e));
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

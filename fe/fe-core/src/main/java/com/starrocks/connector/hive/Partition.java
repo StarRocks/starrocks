@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.connector.hive;
 
 import com.google.gson.JsonObject;
@@ -52,7 +55,12 @@ public class Partition implements PartitionInfo {
         return parameters;
     }
 
+<<<<<<< HEAD
     public RemoteFileInputFormat getInputFormat() {
+=======
+    @Override
+    public RemoteFileInputFormat getFileFormat() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return inputFormat;
     }
 
@@ -60,6 +68,10 @@ public class Partition implements PartitionInfo {
         return textFileFormatDesc;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getFullPath() {
         return fullPath;
     }

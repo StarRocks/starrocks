@@ -17,6 +17,10 @@ package com.starrocks.connector;
 import com.starrocks.connector.config.ConnectorConfig;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.metadata.TableMetaConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,7 +51,12 @@ public class ConnectorFactory {
 
             InformationSchemaConnector informationSchemaConnector =
                     new InformationSchemaConnector(context.getCatalogName());
+<<<<<<< HEAD
             return new CatalogConnector(lazyConnector, informationSchemaConnector);
+=======
+            TableMetaConnector tableMetaConnector = new TableMetaConnector(context.getCatalogName(), context.getType());
+            return new CatalogConnector(lazyConnector, informationSchemaConnector, tableMetaConnector);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             LOG.error(String.format("create [%s] connector failed", context.getType()), e);
             throw new StarRocksConnectorException(e.getMessage(), e);

@@ -94,32 +94,54 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
                 new HashDistributionDesc(rightColumns, SHUFFLE_JOIN));
 
         PhysicalPropertySet leftRequiredPropertySet =
+<<<<<<< HEAD
                 new PhysicalPropertySet(new DistributionProperty(leftDistribution));
         PhysicalPropertySet rightRequiredPropertySet =
                 new PhysicalPropertySet(new DistributionProperty(rightDistribution));
+=======
+                new PhysicalPropertySet(DistributionProperty.createProperty(leftDistribution));
+        PhysicalPropertySet rightRequiredPropertySet =
+                new PhysicalPropertySet(DistributionProperty.createProperty(rightDistribution));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return Lists.newArrayList(leftRequiredPropertySet, rightRequiredPropertySet);
     }
 
     protected PhysicalPropertySet createPropertySetByDistribution(DistributionSpec distributionSpec) {
+<<<<<<< HEAD
         DistributionProperty distributionProperty = new DistributionProperty(distributionSpec);
+=======
+        DistributionProperty distributionProperty = DistributionProperty.createProperty(distributionSpec);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new PhysicalPropertySet(distributionProperty);
     }
 
     protected DistributionProperty createShuffleAggProperty(List<DistributionCol> partitionColumns) {
+<<<<<<< HEAD
         return new DistributionProperty(DistributionSpec.createHashDistributionSpec(
+=======
+        return DistributionProperty.createProperty(DistributionSpec.createHashDistributionSpec(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 new HashDistributionDesc(partitionColumns, HashDistributionDesc.SourceType.SHUFFLE_AGG)));
     }
 
     protected PhysicalPropertySet createShuffleAggPropertySet(List<DistributionCol> partitions) {
         HashDistributionDesc desc = new HashDistributionDesc(partitions, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+<<<<<<< HEAD
         DistributionProperty property = new DistributionProperty(DistributionSpec.createHashDistributionSpec(desc));
+=======
+        DistributionProperty property = DistributionProperty.createProperty(DistributionSpec.createHashDistributionSpec(desc));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new PhysicalPropertySet(property);
     }
 
     protected PhysicalPropertySet createGatherPropertySet() {
         DistributionProperty distributionProperty =
+<<<<<<< HEAD
                 new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
+=======
+                DistributionProperty.createProperty(DistributionSpec.createGatherDistributionSpec());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new PhysicalPropertySet(distributionProperty);
     }
 

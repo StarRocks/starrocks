@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_base64
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 bitmap 转换为 Base64 字符串。该函数从 2.5 版本开始支持。
 

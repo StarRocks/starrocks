@@ -14,10 +14,20 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+<<<<<<< HEAD
 #include <sstream>
 
 #include "column/chunk.h"
 #include "common/statusor.h"
+=======
+#include <random>
+#include <sstream>
+
+#include "column/chunk.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "exec/pipeline/adaptive/event.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
@@ -28,6 +38,10 @@
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
+<<<<<<< HEAD
+=======
+#include "gen_cpp/InternalService_types.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -46,7 +60,11 @@ PipelineDriver::~PipelineDriver() noexcept {
     check_operator_close_states("deleting pipeline drivers");
 }
 
+<<<<<<< HEAD
 void PipelineDriver::check_operator_close_states(std::string func_name) {
+=======
+void PipelineDriver::check_operator_close_states(const std::string& func_name) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_driver_id == -1) { // in test cases
         return;
     }
@@ -57,8 +75,15 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
             ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
                << " fragment_id="
                << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()));
+<<<<<<< HEAD
             auto msg = fmt::format("{} close operator {}-{} failed, may leak resources when {}, please reflect to SR",
                                    ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
+=======
+            auto msg = fmt::format(
+                    "{} close operator {}-{} failed, may leak resources when {}, please report an issue at "
+                    "https://github.com/StarRocks/starrocks/issues/new/choose.",
+                    ss.str(), op->get_raw_name(), op->get_plan_node_id(), func_name);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG(ERROR) << msg;
             DCHECK(false) << msg;
         }
@@ -66,6 +91,15 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+<<<<<<< HEAD
+=======
+    DeferOp defer([&]() {
+        if (this->_state != DriverState::READY) {
+            LOG(WARNING) << to_readable_string() << " prepare failed";
+        }
+    });
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _runtime_state = runtime_state;
 
     auto* prepare_timer = ADD_TIMER_WITH_THRESHOLD(_runtime_profile, "DriverPrepareTime", 1_ms);
@@ -155,8 +189,14 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     if (!all_local_rf_set.empty()) {
         _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
     }
+<<<<<<< HEAD
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
 
+=======
+    size_t subscribe_filter_sequence = source_op->get_driver_sequence();
+    _local_rf_holders =
+            fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set, subscribe_filter_sequence);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (use_cache) {
         ssize_t cache_op_idx = -1;
         query_cache::CacheOperatorPtr cache_op = nullptr;
@@ -198,7 +238,11 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
 
     // Driver has no dependencies always sets _all_dependencies_ready to true;
+<<<<<<< HEAD
     _all_dependencies_ready = _dependencies.empty();
+=======
+    _all_dependencies_ready = _dependencies.empty() && !_pipeline->pipeline_event()->need_wait_dependencies_finished();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Driver has no local rf to wait for completion always sets _all_local_rf_ready to true;
     _all_local_rf_ready = _local_rf_holders.empty();
     // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
@@ -221,6 +265,7 @@ void PipelineDriver::update_peak_driver_queue_size_counter(size_t new_value) {
     }
 }
 
+<<<<<<< HEAD
 static inline bool is_multilane(pipeline::OperatorPtr& op) {
     if (dynamic_cast<query_cache::MultilaneOperator*>(op.get()) != nullptr) {
         return true;
@@ -233,6 +278,8 @@ static inline bool is_multilane(pipeline::OperatorPtr& op) {
     return false;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
@@ -289,6 +336,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+<<<<<<< HEAD
+=======
+                    curr_op->update_exec_stats(runtime_state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -310,14 +361,21 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 // operator
                 StatusOr<ChunkPtr> maybe_chunk;
                 {
+<<<<<<< HEAD
                     SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(curr_op);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     SCOPED_TIMER(curr_op->_pull_timer);
                     QUERY_TRACE_SCOPED(curr_op->get_name(), "pull_chunk");
                     maybe_chunk = curr_op->pull_chunk(runtime_state);
                 }
                 return_status = maybe_chunk.status();
                 if (!return_status.ok() && !return_status.is_end_of_file()) {
+<<<<<<< HEAD
                     curr_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
+=======
+                    curr_op->common_metrics()->add_info_string("ErrorMsg", std::string(return_status.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
                     return return_status;
                 }
@@ -339,9 +397,16 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                                                 to_readable_string()));
                         }
 
+<<<<<<< HEAD
                         total_rows_moved += row_num;
                         {
                             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(next_op);
+=======
+                        maybe_chunk.value()->check_or_die();
+
+                        total_rows_moved += row_num;
+                        {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             SCOPED_TIMER(next_op->_push_timer);
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, maybe_chunk.value());
@@ -357,7 +422,12 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         }
 
                         if (!return_status.ok() && !return_status.is_end_of_file()) {
+<<<<<<< HEAD
                             next_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
+=======
+                            next_op->common_metrics()->add_info_string("ErrorMsg",
+                                                                       std::string(return_status.message()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             LOG(WARNING) << "push_chunk returns not ok status " << return_status.to_string();
                             return return_status;
                         }
@@ -377,6 +447,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         _update_scan_statistics(runtime_state);
                         RETURN_IF_ERROR(return_status = _mark_operator_finishing(curr_op, runtime_state));
                     }
+<<<<<<< HEAD
+=======
+                    curr_op->update_exec_stats(runtime_state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     _adjust_memory_usage(runtime_state, query_mem_tracker.get(), next_op, nullptr);
                     RELEASE_RESERVED_GUARD();
                     RETURN_IF_ERROR(return_status = _mark_operator_finishing(next_op, runtime_state));
@@ -411,6 +485,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         _first_unfinished = new_first_unfinished;
 
         if (sink_operator()->is_finished()) {
+<<<<<<< HEAD
+=======
+            sink_operator()->update_exec_stats(runtime_state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             finish_operators(runtime_state);
             set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
             return _state;
@@ -443,7 +521,11 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     }
 }
 
+<<<<<<< HEAD
 void PipelineDriver::check_short_circuit() {
+=======
+Status PipelineDriver::check_short_circuit() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int last_finished = -1;
     for (int i = _first_unfinished; i < _operators.size() - 1; i++) {
         if (_operators[i]->is_finished()) {
@@ -452,12 +534,21 @@ void PipelineDriver::check_short_circuit() {
     }
 
     if (last_finished == -1) {
+<<<<<<< HEAD
         return;
     }
 
     _mark_operator_finishing(_operators[last_finished + 1], _runtime_state);
     for (auto i = _first_unfinished; i <= last_finished; ++i) {
         _mark_operator_finished(_operators[i], _runtime_state);
+=======
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(_mark_operator_finishing(_operators[last_finished + 1], _runtime_state));
+    for (auto i = _first_unfinished; i <= last_finished; ++i) {
+        RETURN_IF_ERROR(_mark_operator_finished(_operators[i], _runtime_state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     _first_unfinished = last_finished + 1;
 
@@ -465,6 +556,22 @@ void PipelineDriver::check_short_circuit() {
         finish_operators(_runtime_state);
         set_driver_state(is_still_pending_finish() ? DriverState::PENDING_FINISH : DriverState::FINISH);
     }
+<<<<<<< HEAD
+=======
+
+    return Status::OK();
+}
+
+bool PipelineDriver::dependencies_block() {
+    if (_all_dependencies_ready) {
+        return false;
+    }
+    auto pipline_event = _pipeline->pipeline_event();
+    _all_dependencies_ready =
+            std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); }) &&
+            (!pipline_event->need_wait_dependencies_finished() || pipline_event->dependencies_finished());
+    return !_all_dependencies_ready;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 bool PipelineDriver::need_report_exec_state() {
@@ -504,11 +611,20 @@ void PipelineDriver::mark_precondition_not_ready() {
     }
 }
 
+<<<<<<< HEAD
 void PipelineDriver::mark_precondition_ready(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
         op->set_precondition_ready(runtime_state);
         submit_operators();
     }
+=======
+void PipelineDriver::mark_precondition_ready() {
+    for (auto& op : _operators) {
+        op->set_precondition_ready(_runtime_state);
+        submit_operators();
+    }
+    _precondition_prepared = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void PipelineDriver::start_timers() {
@@ -537,19 +653,40 @@ void PipelineDriver::submit_operators() {
 
 void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
+<<<<<<< HEAD
         _mark_operator_finished(op, runtime_state);
+=======
+        WARN_IF_ERROR(_mark_operator_finished(op, runtime_state),
+                      fmt::format("finish pipeline driver error [driver={}]", to_readable_string()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+<<<<<<< HEAD
     for (auto& op : _operators) {
         _mark_operator_cancelled(op, runtime_state);
+=======
+    if (this->query_ctx()->is_query_expired()) {
+        if (_has_log_cancelled.exchange(true) == false) {
+            VLOG_ROW << "begin to cancel operators for " << to_readable_string();
+        }
+    }
+    for (auto& op : _operators) {
+        WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
+                      fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
     for (auto& op : _operators) {
+<<<<<<< HEAD
         _mark_operator_closed(op, runtime_state);
+=======
+        WARN_IF_ERROR(_mark_operator_closed(op, runtime_state),
+                      fmt::format("close pipeline driver error [driver={}]", to_readable_string()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     check_operator_close_states("closing pipeline drivers");
 }
@@ -560,6 +697,21 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
 
     if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
 
+<<<<<<< HEAD
+=======
+    if (UNLIKELY(state->spill_mode() == TSpillMode::RANDOM)) {
+        // random spill mode
+        // if the random number is less than the spill ratio, then convert to low-memory mode
+        // otherwise, do nothing
+        static thread_local std::mt19937_64 generator{std::random_device{}()};
+        static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+        if (distribution(generator) < state->spill_rand_ratio()) {
+            mem_resource_mgr.to_low_memory_mode();
+        }
+        return;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // try to release buffer if memusage > mid level threhold
     _try_to_release_buffer(state, op);
 
@@ -686,10 +838,22 @@ void PipelineDriver::_update_driver_level_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
+<<<<<<< HEAD
     ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
        << " fragment_id="
        << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
        << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+=======
+    std::string block_reasons = "";
+    if (_state == PRECONDITION_BLOCK) {
+        block_reasons = const_cast<PipelineDriver*>(this)->get_preconditions_block_reasons();
+    }
+    ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
+       << " fragment_id="
+       << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
+       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << block_reasons
+       << ", operator-chain: [";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();
@@ -743,7 +907,10 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
+<<<<<<< HEAD
         SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finishing");
@@ -761,7 +928,10 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
     VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
+<<<<<<< HEAD
         SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
         QUERY_TRACE_SCOPED(op->get_name(), "set_finished");
@@ -775,7 +945,11 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
         LOG(WARNING) << fmt::format(
                 "[Driver] failed to finish operator called by cancelling operator [fragment_id={}] [driver={}] "
                 "[operator={}] [error={}]",
+<<<<<<< HEAD
                 print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(), res.get_error_msg());
+=======
+                print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(), res.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {
@@ -785,7 +959,10 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
+<<<<<<< HEAD
         SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         op_state = OperatorStage::CANCELLED;
         return op->set_cancelled(state);
     }
@@ -807,7 +984,10 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
 
     VLOG_ROW << msg;
     {
+<<<<<<< HEAD
         SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
         QUERY_TRACE_SCOPED(op->get_name(), "close");

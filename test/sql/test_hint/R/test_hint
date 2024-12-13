@@ -11,7 +11,10 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -31,7 +34,10 @@ DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
 PROPERTIES (
 "colocate_with" = "group1",
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
@@ -67,8 +73,12 @@ INSERT INTO t1 (c0, c1, c2, c3) VALUES
 insert into all_type values('2021-01-01', '2021-01-01 12:00:01.123', 111111, -1.23, 1.54654, 120.26, '测试 test"', '测试\'', ['测试', '测试', 'abc'] );
 -- result:
 -- !result
+<<<<<<< HEAD
 insert /*+ set_user_variable(@a = (select max(c3) from t1)) */ into t2 select /*+ set_user_variable(@b = (select min(c1) from t1)) */
 c0, @b, c2, @a from t1;
+=======
+insert into t2 select c0, 'a', c2, 60 from t1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 -- !result
 select @a, @b from t1;
@@ -161,7 +171,11 @@ properties (
     "partition_refresh_number" = "1"
 ) as select /*+ set_user_variable(@c = (select min(c3) from t1)) */ * from t1;
 -- result:
+<<<<<<< HEAD
 E: (1064, 'Unexpected exception: unsupported user variable hint in Materialized view for now.')
+=======
+E: (1064, 'unsupported user variable hint in Materialized view for now.')
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 set @test = (select date_col from all_type);
 -- result:
@@ -331,4 +345,89 @@ c	1
 f	1
 b	1
 None	1
+<<<<<<< HEAD
+=======
+-- !result
+set @aVar = 5, @bVar = @aVar + 1, @cVar = @bVar + 1;
+-- result:
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+5	6	7
+-- !result
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @bVar + 1;
+-- result:
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+6	7	8
+-- !result
+set @aVar = 6, @bVar = @aVar + 1, @cVar = @eVar + 1;
+-- result:
+-- !result
+select @aVar, @bVar, @cVar;
+-- result:
+6	7	None
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = 5, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+-- result:
+5	6
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = 6, @bVarHint = @aVarHint + 1) */  @aVarHint, @bVarHint;
+-- result:
+6	7
+-- !result
+
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+-- result:
+-- !result
+select @xVar, @yVar, @zVar;
+-- result:
+1	None	1
+-- !result
+set @xVar = 1, @yVar = @zVar+1, @zVar = 1;
+-- result:
+-- !result
+select @xVar, @yVar, @zVar;
+-- result:
+1	2	1
+-- !result
+create table cities (
+    city_id int NOT NULL,
+     population int NOT NULL,
+    city string NOT NULL
+   ) PRIMARY KEY (city_id)
+DISTRIBUTED BY HASH(city_id);
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(1, 2000,"beijing");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(2, 2000,"shanghai");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(3, 2000,"guangzhou");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(4, 1000,"shenzhen");
+-- result:
+-- !result
+insert into cities(city_id, population, city) values(5, 2000, "chengdu");
+-- result:
+-- !result
+select /*+ SET_USER_VARIABLE (@aVarHint = (select max(population) from cities), @bVarHint = (select  max(city_id) from cities where population =  @aVarHint)) */  @aVarHint, @bVarHint;
+-- result:
+2000	5
+-- !result
+select @aVarHint, @bVarHint;
+-- result:
+None	None
+-- !result
+set @secondVar=@firstVar+1, @thirdVar=@secondVar + 1 + @aVarHint;
+-- result:
+-- !result
+select @secondVar,@thirdVar;
+-- result:
+None	None
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result

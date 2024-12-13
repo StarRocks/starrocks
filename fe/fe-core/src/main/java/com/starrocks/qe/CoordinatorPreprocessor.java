@@ -18,8 +18,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+<<<<<<< HEAD
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.catalog.ResourceGroupMgr;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
@@ -36,6 +42,10 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -73,6 +83,10 @@ public class CoordinatorPreprocessor {
     private final ConnectContext connectContext;
 
     private final JobSpec jobSpec;
+<<<<<<< HEAD
+=======
+    private final boolean enablePhasedSchedule;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final ExecutionDAG executionDAG;
 
     private final WorkerProvider.Factory workerProviderFactory;
@@ -80,18 +94,33 @@ public class CoordinatorPreprocessor {
 
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
+<<<<<<< HEAD
     public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+=======
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec, boolean enablePhasedSchedule) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.connectContext = Preconditions.checkNotNull(context);
         this.jobSpec = jobSpec;
+<<<<<<< HEAD
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
                 sessionVariable.getComputationFragmentSchedulingPolicy());
+=======
+        this.enablePhasedSchedule = enablePhasedSchedule;
+        this.executionDAG = ExecutionDAG.build(jobSpec);
+
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
@@ -104,6 +133,7 @@ public class CoordinatorPreprocessor {
 
         this.connectContext = context;
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
+<<<<<<< HEAD
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
@@ -111,6 +141,17 @@ public class CoordinatorPreprocessor {
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
                 sessionVariable.getComputationFragmentSchedulingPolicy());
         
+=======
+        this.enablePhasedSchedule = false;
+        this.executionDAG = ExecutionDAG.build(jobSpec);
+
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
         for (ScanNode scan : scanNodes) {
@@ -204,9 +245,16 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+<<<<<<< HEAD
         workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
                 sessionVariable.getComputationFragmentSchedulingPolicy());
+=======
+        workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }
@@ -236,7 +284,11 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
     void computeFragmentInstances() throws UserException {
+=======
+    void computeFragmentInstances() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }
@@ -248,9 +300,25 @@ public class CoordinatorPreprocessor {
 
         validateExecutionDAG();
 
+<<<<<<< HEAD
         executionDAG.finalizeDAG();
     }
 
+=======
+        executionDAG.prepareCaptureVersion(enablePhasedSchedule);
+        executionDAG.finalizeDAG();
+    }
+
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws
+            StarRocksException {
+        execFragment.getScanRangeAssignment().clear();
+        for (FragmentInstance instance : execFragment.getInstances()) {
+            instance.resetAllScanRanges();
+        }
+        fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void validateExecutionDAG() throws StarRocksPlannerException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPreorder()) {
             DataSink sink = execFragment.getPlanFragment().getSink();
@@ -289,12 +357,19 @@ public class CoordinatorPreprocessor {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
             return null;
         }
+<<<<<<< HEAD
         SessionVariable sessionVariable = connect.getSessionVariable();
+=======
+
+        final ResourceGroupMgr resourceGroupMgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
+        final SessionVariable sessionVariable = connect.getSessionVariable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
+<<<<<<< HEAD
             resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
             if (rgName.equalsIgnoreCase(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME)) {
                 ResourceGroup defaultMVResourceGroup = new ResourceGroup();
@@ -303,19 +378,34 @@ public class CoordinatorPreprocessor {
                 defaultMVResourceGroup.setVersion(ResourceGroup.DEFAULT_MV_VERSION);
                 resourceGroup = defaultMVResourceGroup.toThrift();
             }
+=======
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(rgName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
+<<<<<<< HEAD
             resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
+=======
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(workgroupId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // 3. if the specified resource group not exist try to use the default one
         if (resourceGroup == null) {
             Set<Long> dbIds = connect.getCurrentSqlDbIds();
+<<<<<<< HEAD
             resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
                     connect, queryType, dbIds);
+=======
+            resourceGroup = resourceGroupMgr.chooseResourceGroup(connect, queryType, dbIds);
+        }
+
+        if (resourceGroup == null) {
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (resourceGroup != null) {

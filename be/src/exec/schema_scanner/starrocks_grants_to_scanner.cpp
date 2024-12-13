@@ -23,6 +23,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         //   name,       type,          size
+<<<<<<< HEAD
         {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
         {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
@@ -30,6 +31,15 @@ SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
         {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), true},
+=======
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 StarrocksGrantsToScanner::StarrocksGrantsToScanner(TGrantsToType::type type)

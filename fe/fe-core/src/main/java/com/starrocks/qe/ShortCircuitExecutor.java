@@ -18,13 +18,23 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+=======
+import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.system.Backend;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TScanRangeLocations;
 
@@ -34,7 +44,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
+<<<<<<< HEAD
 import java.util.Random;
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class ShortCircuitExecutor {
 
@@ -50,26 +64,45 @@ public class ShortCircuitExecutor {
 
     protected final boolean enableProfile;
 
+<<<<<<< HEAD
+=======
+    protected final String protocol;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected ShortCircuitResult result = null;
 
     protected Map<String, RuntimeProfile> perBeExecutionProfile;
 
+<<<<<<< HEAD
     private static final Random RANDOM = new Random(); // NOSONAR
 
     protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
                                    List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
                                    boolean isBinaryRow, boolean enableProfile) {
+=======
+    protected final WorkerProvider workerProvider;
+
+    protected ShortCircuitExecutor(ConnectContext context, PlanFragment planFragment,
+                                   List<TScanRangeLocations> scanRangeLocations, TDescriptorTable tDescriptorTable,
+                                   boolean isBinaryRow,
+                                   boolean enableProfile, String protocol, WorkerProvider workerProvider) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.context = context;
         this.planFragment = planFragment;
         this.scanRangeLocations = scanRangeLocations;
         this.tDescriptorTable = tDescriptorTable;
         this.isBinaryRow = isBinaryRow;
         this.enableProfile = enableProfile;
+<<<<<<< HEAD
+=======
+        this.protocol = protocol;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (enableProfile) {
             this.perBeExecutionProfile = new HashMap<>();
         } else {
             this.perBeExecutionProfile = Collections.emptyMap();
         }
+<<<<<<< HEAD
     }
 
     public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments,
@@ -78,17 +111,35 @@ public class ShortCircuitExecutor {
         boolean isEmpty = scanNodes.isEmpty();
         List<TScanRangeLocations> scanRangeLocations = isEmpty ?
                 ImmutableList.of() : scanNodes.get(0).getScanRangeLocations(0);
+=======
+        this.workerProvider = workerProvider;
+    }
+
+    public static ShortCircuitExecutor create(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                                              TDescriptorTable tDescriptorTable, boolean isBinaryRow, boolean enableProfile,
+                                              String protocol,
+                                              WorkerProvider workerProvider) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (fragments.size() != 1 || !fragments.get(0).isShortCircuit()) {
             return null;
         }
 
+<<<<<<< HEAD
         if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
             return new ShortCircuitHybridExecutor(context, fragments.get(0), scanRangeLocations,
                     tDescriptorTable, isBinaryRow, enableProfile);
+=======
+        boolean isEmpty = scanNodes.isEmpty();
+        if (!isEmpty && scanNodes.get(0) instanceof OlapScanNode) {
+            List<TScanRangeLocations> scanRangeLocations = scanNodes.get(0).getScanRangeLocations(0);
+            return new ShortCircuitHybridExecutor(context, fragments.get(0), scanRangeLocations, tDescriptorTable, isBinaryRow,
+                    enableProfile, protocol, workerProvider);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }
 
+<<<<<<< HEAD
     public void exec() {
         throw new StarRocksPlannerException("Not implement ShortCircuit Executor class", ErrorType.INTERNAL_ERROR);
     }
@@ -100,11 +151,30 @@ public class ShortCircuitExecutor {
         } else {
             return collections.get(RANDOM.nextInt(collections.size()));
         }
+=======
+    public void exec() throws Exception {
+        throw new StarRocksPlannerException("Not implement ShortCircuit Executor class", ErrorType.INTERNAL_ERROR);
+    }
+
+    protected static Optional<Backend> pick(Set<Long> backendId, Map<Long, Backend> aliveBackends) {
+        for (Long beId : backendId) {
+            Optional<Backend> backend = Optional.ofNullable(aliveBackends.get(beId));
+            if (backend.isPresent()) {
+                return backend;
+            }
+        }
+
+        return Optional.empty();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public RowBatch getNext() {
         Preconditions.checkNotNull(result);
+<<<<<<< HEAD
         return result.getRowBatches().poll();
+=======
+        return result.getRowBatches().size() == 0 ? new RowBatch() : result.getRowBatches().poll();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public RuntimeProfile buildQueryProfile(boolean needMerge) {

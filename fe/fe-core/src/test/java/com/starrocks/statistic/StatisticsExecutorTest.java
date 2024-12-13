@@ -18,9 +18,17 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+=======
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -71,9 +79,16 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
         Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
         partition.updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0_stats");
+        Partition partition = new ArrayList<>(t0.getPartitions()).get(0);
+        partition.getDefaultPhysicalPartition()
+                .updateVisibleVersion(2, LocalDateTime.of(2022, 1, 1, 1, 1, 1)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .atZone(Clock.systemDefaultZone().getZone()).toEpochSecond() * 1000);
         setTableStatistics(t0, 20000000);
     }
@@ -87,8 +102,14 @@ public class StatisticsExecutorTest extends PlanTestBase {
             }
         };
 
+<<<<<<< HEAD
         Database database = connectContext.getGlobalStateMgr().getDb("test");
         OlapTable table = (OlapTable) database.getTable("t0_stats");
+=======
+        Database database = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t0_stats");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Long> partitionIdList =
                 table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
@@ -96,7 +117,12 @@ public class StatisticsExecutorTest extends PlanTestBase {
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
                 StatsConstants.AnalyzeType.SAMPLE,
                 StatsConstants.ScheduleType.SCHEDULE,
+<<<<<<< HEAD
                 Maps.newHashMap());
+=======
+                Maps.newHashMap()
+        );
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String sql = "insert into test.t0 values(1,2,3)";
         ConnectContext context = StatisticUtils.buildConnectContext();
@@ -137,6 +163,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
             @Mock
             public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
                 Assert.assertEquals(
+<<<<<<< HEAD
                         "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
                                 "cast(min(cast(min as string)) as string) FROM external_column_statistics " +
@@ -145,6 +172,16 @@ public class StatisticsExecutorTest extends PlanTestBase {
                                 "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
                                 "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint)) as string), " +
                                 "cast(min(cast(min as bigint)) as string) " +
+=======
+                        "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as string)) as string), " +
+                                "cast(min(cast(min as string)) as string), max(update_time) FROM external_column_statistics " +
+                                "WHERE table_uuid = \"hive0.partitioned_db.t1.0\" " +
+                                "and column_name in (\"c2\") GROUP BY table_uuid, column_name UNION ALL " +
+                                "SELECT cast(8 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
+                                "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as bigint)) as string), " +
+                                "cast(min(cast(min as bigint)) as string), max(update_time) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 "FROM external_column_statistics WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
                                 " and column_name in (\"c1\") GROUP BY table_uuid, column_name", sql);
                 return Lists.newArrayList();
@@ -193,7 +230,11 @@ public class StatisticsExecutorTest extends PlanTestBase {
         };
         String sql = "analyze table hive0.partitioned_db.t1 update histogram on c1";
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess(sql);
+<<<<<<< HEAD
         StmtExecutor executor = new StmtExecutor(connectContext, sql);
+=======
+        StmtExecutor executor = new StmtExecutor(connectContext, stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         AnalyzeStatus pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
@@ -207,7 +248,11 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         sql = "analyze table hive0.partitioned_db.t1";
         stmt = (AnalyzeStmt) analyzeSuccess(sql);
+<<<<<<< HEAD
         executor = new StmtExecutor(connectContext, sql);
+=======
+        executor = new StmtExecutor(connectContext, stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         pendingStatus = new ExternalAnalyzeStatus(1, "", "", "",
                 "test123", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.SCHEDULE, Maps.newHashMap(), LocalDateTime.MIN);
@@ -217,6 +262,53 @@ public class StatisticsExecutorTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCollectStatistics() {
+        ExternalAnalyzeStatus status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col2"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+
+        Database database = new Database(1, "test_db");
+        Table table = HiveTable.builder().setTableName("test_table").build();
+        StatisticsCollectJob statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col2"),
+                Lists.newArrayList(Type.INT, Type.INT),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,  Maps.newHashMap());
+
+        new MockUp<ExternalFullStatisticsCollectJob>() {
+            @Mock
+            public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+            }
+        };
+
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+
+        ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 2);
+        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col1"));
+        Assert.assertTrue(externalBasicStatsMeta.getColumnStatsMetaMap().containsKey("col2"));
+
+        status = new ExternalAnalyzeStatus(1, "test_catalog",
+                "test_db", "test_table",
+                "test123", Lists.newArrayList("col1", "col3"), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+        statisticsCollectJob = new ExternalFullStatisticsCollectJob("test_catalog",
+                database, table, List.of(), Lists.newArrayList("col1", "col3"),
+                Lists.newArrayList(Type.INT, Type.STRING),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE,  Maps.newHashMap());
+        statisticExecutor.collectStatistics(connectContext, statisticsCollectJob, status, false);
+        externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                getExternalTableBasicStatsMeta("test_catalog", "test_db", "test_table");
+        Assert.assertEquals(externalBasicStatsMeta.getColumns(), Lists.newArrayList("col1", "col3"));
+        Assert.assertEquals(externalBasicStatsMeta.getColumnStatsMetaMap().size(), 3);
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testDropHistogramStmt() {
         new MockUp<StatisticExecutor>() {
             @Mock

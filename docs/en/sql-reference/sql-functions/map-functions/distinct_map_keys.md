@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # distinct_map_keys
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Removes duplicate keys from a map, because keys in a map must be unique in terms of semantics. This function keeps only the last value for identical keys, called LAST WIN. This function is used when querying MAP data from external tables if there are duplicate keys in maps. StarRocks internal tables natively remove duplicate keys in maps.
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # mod
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The modulus function that returns the remainder of `dividend` divided by `divisor`.
 

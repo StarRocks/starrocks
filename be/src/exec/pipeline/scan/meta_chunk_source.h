@@ -24,7 +24,12 @@ namespace starrocks::pipeline {
 
 class MetaChunkSource final : public ChunkSource {
 public:
+<<<<<<< HEAD
     MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel, MetaScanContextPtr scan_ctx);
+=======
+    MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                    const MetaScanContextPtr& scan_ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~MetaChunkSource() override;
 

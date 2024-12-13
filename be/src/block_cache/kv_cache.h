@@ -39,7 +39,11 @@ using DataCacheMetrics = DummyCacheMetrics;
 using DataCacheStatus = DummyCacheStatus;
 #endif
 
+<<<<<<< HEAD
 enum class DataCacheEngineType { STARCACHE, CACHELIB };
+=======
+enum class DataCacheEngineType { STARCACHE };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class KvCache {
 public:
@@ -61,11 +65,20 @@ public:
 
     virtual Status read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) = 0;
 
+<<<<<<< HEAD
+=======
+    virtual bool exist(const std::string& key) const = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove(const std::string& key) = 0;
 
     // Update the datacache memory quota.
+<<<<<<< HEAD
     virtual Status update_mem_quota(size_t quota_bytes) = 0;
+=======
+    virtual Status update_mem_quota(size_t quota_bytes, bool flush_to_disk) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Update the datacache disk space infomation, such as disk quota or disk path.
     virtual Status update_disk_spaces(const std::vector<DirSpace>& spaces) = 0;
@@ -79,6 +92,11 @@ public:
     virtual Status shutdown() = 0;
 
     virtual DataCacheEngineType engine_type() = 0;
+<<<<<<< HEAD
+=======
+
+    virtual std::shared_ptr<starcache::StarCache> starcache_instance() = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

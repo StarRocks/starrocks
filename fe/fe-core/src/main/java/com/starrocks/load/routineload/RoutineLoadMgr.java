@@ -46,13 +46,23 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -62,6 +72,10 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
@@ -69,16 +83,30 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
+<<<<<<< HEAD
 import com.starrocks.warehouse.Warehouse;
+=======
+import com.starrocks.transaction.TxnCommitAttachment;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
+import com.starrocks.warehouse.WarehouseLoadStatusInfo;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+=======
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -93,15 +121,31 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
     private static final int MEMORY_JOB_SAMPLES = 10;
 
+<<<<<<< HEAD
     // be => running tasks num
     private Map<Long, Integer> beTasksNum = Maps.newHashMap();
     private Map<Long, Set<Long>> nodeToJobs = Maps.newHashMap();
     private ReentrantLock slotLock = new ReentrantLock();
 
+=======
+    // warehouse ==> {be : running tasks num}
+    private Map<Long, Map<Long, Integer>> warehouseNodeTasksNum = Maps.newHashMap();
+    private ReentrantLock slotLock = new ReentrantLock();
+
+    // warehouse ==> {nodeId : {jobId}}
+    private Map<Long, Map<Long, Set<Long>>> warehouseNodeToJobs = Maps.newHashMap();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // routine load job meta
     private Map<Long, RoutineLoadJob> idToRoutineLoadJob = Maps.newConcurrentMap();
     private Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newConcurrentMap();
 
+<<<<<<< HEAD
+=======
+    protected final WarehouseLoadInfoBuilder warehouseLoadStatusInfoBuilder =
+            new WarehouseLoadInfoBuilder();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
 
     private void writeLock() {
@@ -121,15 +165,25 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public RoutineLoadMgr() {
+<<<<<<< HEAD
+=======
+        warehouseNodeTasksNum.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, Maps.newHashMap());
+        warehouseNodeToJobs.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, Maps.newHashMap());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // returns -1 if there is no available be
     // find the node with the fewest tasks
+<<<<<<< HEAD
     public long takeBeTaskSlot(long jobId) {
+=======
+    public long takeBeTaskSlot(long warehouseId, long jobId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         slotLock.lock();
         try {
             long nodeId = -1L;
             int minTasksNum = Integer.MAX_VALUE;
+<<<<<<< HEAD
             // find the node with the fewest tasks and does not contain the job
             for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
                 if (entry.getValue() < Config.max_routine_load_task_num_per_be
@@ -145,14 +199,44 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 for (Map.Entry<Long, Integer> entry : beTasksNum.entrySet()) {
                     if (entry.getValue() < Config.max_routine_load_task_num_per_be
                             && entry.getValue() < minTasksNum) {
+=======
+            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
+            Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouseId);
+            if (nodeMap != null && nodeToJobs != null) {
+                // find the node with the fewest tasks and does not contain the job
+                for (Map.Entry<Long, Integer> entry : nodeMap.entrySet()) {
+                    if (entry.getValue() < Config.max_routine_load_task_num_per_be
+                            && entry.getValue() < minTasksNum
+                            && (nodeToJobs.get(entry.getKey()) == null
+                            || !nodeToJobs.get(entry.getKey()).contains(jobId))) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         nodeId = entry.getKey();
                         minTasksNum = entry.getValue();
                     }
                 }
+<<<<<<< HEAD
             }
             if (nodeId != -1) {
                 beTasksNum.put(nodeId, minTasksNum + 1);
                 nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet()).add(jobId);
+=======
+                // if there is no available be, find the node with the fewest tasks
+                if (nodeId == -1) {
+                    for (Map.Entry<Long, Integer> entry : nodeMap.entrySet()) {
+                        if (entry.getValue() < Config.max_routine_load_task_num_per_be
+                                && entry.getValue() < minTasksNum) {
+                            nodeId = entry.getKey();
+                            minTasksNum = entry.getValue();
+                        }
+                    }
+                }
+                if (nodeId != -1) {
+                    nodeMap.put(nodeId, minTasksNum + 1);
+                    nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet()).add(jobId);
+                    warehouseNodeTasksNum.put(warehouseId, nodeMap);
+                    warehouseNodeToJobs.put(warehouseId, nodeToJobs);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return nodeId;
         } finally {
@@ -160,6 +244,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public long takeNodeById(long jobId, long nodeId) {
         slotLock.lock();
         try {
@@ -167,6 +252,17 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             Set<Long> jobs = nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet());
             if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
                 beTasksNum.put(nodeId, taskNum + 1);
+=======
+    public long takeNodeById(long warehouseId, long jobId, long nodeId) {
+        slotLock.lock();
+        try {
+            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
+            Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouseId);
+            Integer taskNum = nodeMap.get(nodeId);
+            Set<Long> jobs = nodeToJobs.computeIfAbsent(nodeId, k -> Sets.newHashSet());
+            if (taskNum != null && taskNum < Config.max_routine_load_task_num_per_be) {
+                nodeMap.put(nodeId, taskNum + 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 jobs.add(jobId);
                 return nodeId;
             } else {
@@ -177,6 +273,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public void releaseBeTaskSlot(long jobId, long nodeId) {
         slotLock.lock();
         try {
@@ -186,6 +283,19 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                     beTasksNum.put(nodeId, tasksNum - 1);
                 } else {
                     beTasksNum.put(nodeId, 0);
+=======
+    public void releaseBeTaskSlot(long warehouseId, long jobId, long nodeId) {
+        slotLock.lock();
+        try {
+            Map<Long, Integer> nodeMap = warehouseNodeTasksNum.get(warehouseId);
+            Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouseId);
+            if (nodeMap.containsKey(nodeId)) {
+                int tasksNum = nodeMap.get(nodeId);
+                if (tasksNum > 0) {
+                    nodeMap.put(nodeId, tasksNum - 1);
+                } else {
+                    nodeMap.put(nodeId, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             if (nodeToJobs.containsKey(nodeId)) {
@@ -200,6 +310,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     public void updateBeTaskSlot() {
         slotLock.lock();
         try {
+<<<<<<< HEAD
             List<Long> aliveNodeIds = new ArrayList<>();
             // TODO: need to refactor after be split into cn + dn
             if (RunMode.isSharedDataMode()) {
@@ -219,19 +330,80 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 if (!beTasksNum.containsKey(nodeId)) {
                     beTasksNum.put(nodeId, 0);
                     nodeToJobs.put(nodeId, Sets.newHashSet());
+=======
+            // TODO: need to refactor after be split into cn + dn
+            List<Long> finalAliveNodeIds = new ArrayList<>();
+            // collect all nodes group by warehouse
+            if (RunMode.isSharedDataMode()) {
+                for (Warehouse warehouse : GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllWarehouses()) {
+                    List<Long> allComputeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                            .getAllComputeNodeIds(warehouse.getId());
+                    List<Long> aliveNodeIds = new ArrayList<>();
+                    for (long nodeId : allComputeNodeIds) {
+                        ComputeNode node =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
+                        if (node != null && node.isAlive()) {
+                            aliveNodeIds.add(nodeId);
+                        }
+                    }
+
+                    finalAliveNodeIds.addAll(aliveNodeIds);
+
+                    // add new nodes
+                    Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(warehouse.getId());
+                    if (nodesInfo == null) {
+                        nodesInfo = new HashMap<>();
+                        warehouseNodeTasksNum.put(warehouse.getId(), nodesInfo);
+                    }
+                    Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(warehouse.getId());
+                    if (nodeToJobs == null) {
+                        nodeToJobs = new HashMap<>();
+                        warehouseNodeToJobs.put(warehouse.getId(), nodeToJobs);
+                    }
+                    for (Long nodeId : aliveNodeIds) {
+                        if (!nodesInfo.containsKey(nodeId)) {
+                            nodesInfo.put(nodeId, 0);
+                            nodeToJobs.put(nodeId, Sets.newHashSet());
+                        }
+                    }
+                }
+            } else {
+                finalAliveNodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true));
+                // add new nodes
+                for (Long nodeId : finalAliveNodeIds) {
+                    Map<Long, Integer> nodesInfo = warehouseNodeTasksNum.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    Map<Long, Set<Long>> nodeToJobs = warehouseNodeToJobs.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+                    if (!nodesInfo.containsKey(nodeId)) {
+                        nodesInfo.put(nodeId, 0);
+                        nodeToJobs.put(nodeId, Sets.newHashSet());
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
             // remove not alive be
+<<<<<<< HEAD
             List<Long> finalAliveNodeIds = aliveNodeIds;
             beTasksNum.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
             nodeToJobs.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
+=======
+            for (Map<Long, Integer> nodesInfo : warehouseNodeTasksNum.values()) {
+                nodesInfo.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
+            }
+            for (Map<Long, Set<Long>> nodeToJobs : warehouseNodeToJobs.values()) {
+                nodeToJobs.keySet().removeIf(nodeId -> !finalAliveNodeIds.contains(nodeId));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             slotLock.unlock();
         }
     }
 
+<<<<<<< HEAD
     public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws UserException {
+=======
+    public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = null;
         LoadDataSourceType type = LoadDataSourceType.valueOf(createRoutineLoadStmt.getTypeName());
         switch (type) {
@@ -242,13 +414,18 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 routineLoadJob = PulsarRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException("Unknown data source type: " + type);
+=======
+                throw new StarRocksException("Unknown data source type: " + type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }
 
+<<<<<<< HEAD
     @VisibleForTesting
     public Map<Long, Integer> getBeTasksNum() {
         return beTasksNum;
@@ -263,6 +440,29 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         slotLock.lock();
         try {
             beNum = getBeTasksNum().size();
+=======
+    public Map<Long, Integer> getNodeTasksNum() {
+        return warehouseNodeTasksNum.get(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+    }
+
+    @VisibleForTesting
+    public Map<Long, Integer> getNodeTasksNum(long warehouseId) {
+        return warehouseNodeTasksNum.get(warehouseId);
+    }
+
+    public Map<Long, Set<Long>> getNodeToJobs(long warehouseId) {
+        return warehouseNodeToJobs.get(warehouseId);
+    }
+
+    public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
+        int nodeNum = 0;
+        slotLock.lock();
+        try {
+            Map<Long, Integer> nodeTasksNum = getNodeTasksNum(routineLoadJob.getWarehouseId());
+            if (nodeTasksNum != null) {
+                nodeNum = nodeTasksNum.size();
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             slotLock.unlock();
         }
@@ -273,10 +473,17 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 throw new DdlException("Name " + routineLoadJob.getName() + " already used in db "
                         + dbName);
             }
+<<<<<<< HEAD
             long maxConcurrentTasks = beNum * Config.max_routine_load_task_num_per_be;
             // When calculating the used slots, we only consider Jobs in the NEED_SCHEDULE and RUNNING states.
             List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
                         RoutineLoadJob.JobState.RUNNING));
+=======
+            long maxConcurrentTasks = nodeNum * Config.max_routine_load_task_num_per_be;
+            // When calculating the used slots, we only consider Jobs in the NEED_SCHEDULE and RUNNING states.
+            List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
+                    RoutineLoadJob.JobState.RUNNING));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             long curTaskNum = 0;
             for (RoutineLoadJob job : jobs) {
                 curTaskNum += job.calculateCurrentConcurrentTaskNum();
@@ -285,7 +492,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             if (curTaskNum + newTaskNum > maxConcurrentTasks) {
                 throw new DdlException("Current routine load tasks is " + curTaskNum + ". "
                         + "The new job need " + newTaskNum + " tasks. "
+<<<<<<< HEAD
                         + "But we only support " + beNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
+=======
+                        + "But we only support " + nodeNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         + "Please modify FE config max_routine_load_task_num_per_be if you want more job");
             }
             unprotectedAddJob(routineLoadJob);
@@ -313,7 +524,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
         routineLoadJobList.add(routineLoadJob);
         // add txn state callback in factory
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+=======
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!Config.enable_dict_optimize_routine_load) {
             IDictManager.getInstance().disableGlobalDict(routineLoadJob.getTableId());
         }
@@ -347,7 +562,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void pauseRoutineLoadJob(PauseRoutineLoadStmt pauseRoutineLoadStmt)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(pauseRoutineLoadStmt.getDbFullName(),
                 pauseRoutineLoadStmt.getName());
 
@@ -360,7 +579,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 "routine load job has been paused by user").build());
     }
 
+<<<<<<< HEAD
     public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws UserException {
+=======
+    public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(resumeRoutineLoadStmt.getDbFullName(),
                 resumeRoutineLoadStmt.getName());
 
@@ -377,7 +600,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void stopRoutineLoadJob(StopRoutineLoadStmt stopRoutineLoadStmt)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(stopRoutineLoadStmt.getDbFullName(),
                 stopRoutineLoadStmt.getName());
         routineLoadJob.updateState(RoutineLoadJob.JobState.STOPPED,
@@ -407,10 +634,21 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     public int getClusterIdleSlotNum() {
         slotLock.lock();
         try {
+<<<<<<< HEAD
             return beTasksNum.values()
                     .stream()
                     .reduce(0,
                             (acc, num) -> acc + Config.max_routine_load_task_num_per_be - num);
+=======
+            int result = 0;
+            for (Map<Long, Integer> nodeMap : warehouseNodeTasksNum.values()) {
+                result += nodeMap.values()
+                        .stream()
+                        .reduce(0,
+                                (acc, num) -> acc + Config.max_routine_load_task_num_per_be - num);
+            }
+            return result;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             slotLock.unlock();
         }
@@ -452,7 +690,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 sortRoutineLoadJob(result);
             } else {
                 long dbId = 0L;
+<<<<<<< HEAD
                 Database database = GlobalStateMgr.getCurrentState().getDb(dbFullName);
+=======
+                Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbFullName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (database == null) {
                     throw new MetaNotFoundException("failed to find database by dbFullName " + dbFullName);
                 }
@@ -600,9 +842,17 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         if (dbToNameToRoutineLoadJob.get(routineLoadJob.getDbId()).isEmpty()) {
             dbToNameToRoutineLoadJob.remove(routineLoadJob.getDbId());
         }
+<<<<<<< HEAD
     }
 
     public void updateRoutineLoadJob() throws UserException {
+=======
+
+        warehouseLoadStatusInfoBuilder.withRemovedJob(routineLoadJob);
+    }
+
+    public void updateRoutineLoadJob() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         readLock();
         try {
             for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
@@ -626,7 +876,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         RoutineLoadJob job = getJob(operation.getId());
         try {
             job.updateState(operation.getJobState(), null, true /* is replay */);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error("should not happened", e);
         }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, operation.getId())
@@ -635,10 +889,34 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 .build());
     }
 
+<<<<<<< HEAD
     /**
      * Enter of altering a routine load job
      */
     public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws UserException {
+=======
+    public void setRoutineLoadJobOtherMsg(String reason, TxnCommitAttachment txnCommitAttachment) {
+        if (!(txnCommitAttachment instanceof RLTaskTxnCommitAttachment)) {
+            return;
+        }
+        RLTaskTxnCommitAttachment rLTaskTxnCommitAttachment = (RLTaskTxnCommitAttachment) txnCommitAttachment;
+        long jobId = rLTaskTxnCommitAttachment.getJobId();
+        if (jobId == 0) {
+            return;
+        }
+        RoutineLoadJob routineLoadJob = getJob(jobId);
+        if (routineLoadJob != null && reason != null) {
+            String otherMsg = String.format("The %s task failed due to: %s",
+                    DebugUtil.printId(rLTaskTxnCommitAttachment.getTaskId()), reason);
+            routineLoadJob.setOtherMsg(otherMsg);
+        }
+    }
+
+    /**
+     * Enter of altering a routine load job
+     */
+    public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob job = checkPrivAndGetJob(stmt.getDbName(), stmt.getLabel());
         if (job.getState() != RoutineLoadJob.JobState.PAUSED) {
             throw new DdlException("Only supports modification of PAUSED jobs");
@@ -651,7 +929,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 stmt.getDataSourceProperties(), stmt.getOrigStmt(), false);
     }
 
+<<<<<<< HEAD
     public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws UserException, IOException {
+=======
+    public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws StarRocksException, IOException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RoutineLoadJob job = getJob(log.getJobId());
         Preconditions.checkNotNull(job, log.getJobId());
 
@@ -694,6 +976,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         List<RoutineLoadJob> jobs = map.computeIfAbsent(routineLoadJob.getName(), k -> Lists.newArrayList());
         jobs.add(routineLoadJob);
         if (!routineLoadJob.getState().isFinalState()) {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         }
     }
@@ -713,6 +996,16 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         final int cnt = 1 + idToRoutineLoadJob.size();
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);
         writer.writeJson(idToRoutineLoadJob.size());
+=======
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+        }
+    }
+
+    public void saveRoutineLoadJobsV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        final int cnt = 1 + idToRoutineLoadJob.size();
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.ROUTINE_LOAD_MGR, cnt);
+        writer.writeInt(idToRoutineLoadJob.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (RoutineLoadJob loadJob : idToRoutineLoadJob.values()) {
             writer.writeJson(loadJob);
         }
@@ -721,6 +1014,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
 
     public void loadRoutineLoadJobsV2(SRMetaBlockReader reader)
             throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int size = reader.readInt();
         while (size-- > 0) {
             RoutineLoadJob routineLoadJob = reader.readJson(RoutineLoadJob.class);
@@ -731,6 +1025,24 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             }
 
             putJob(routineLoadJob);
+=======
+        reader.readCollection(RoutineLoadJob.class, routineLoadJob -> {
+            if (routineLoadJob.needRemove()) {
+                LOG.info("discard expired job [{}]", routineLoadJob.getId());
+                return;
+            }
+
+            putJob(routineLoadJob);
+        });
+    }
+
+    public Map<Long, WarehouseLoadStatusInfo> getWarehouseLoadInfo() {
+        readLock();
+        try {
+            return warehouseLoadStatusInfoBuilder.buildFromJobs(idToRoutineLoadJob.values());
+        } finally {
+            readUnlock();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

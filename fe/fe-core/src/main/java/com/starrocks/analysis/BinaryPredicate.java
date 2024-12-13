@@ -35,12 +35,19 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.TypeManager;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.sql.ast.AstVisitor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -167,6 +174,7 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
     }
 
+<<<<<<< HEAD
     private static boolean canCompareDate(PrimitiveType t1, PrimitiveType t2) {
         if (t1.isDateType()) {
             return t2.isDateType() || t2.isStringType();
@@ -262,6 +270,8 @@ public class BinaryPredicate extends Predicate implements Writable {
         return slotIsleft;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /*
      * the follow persistence code is only for TableFamilyDeleteInfo.
      * Maybe useless
@@ -316,6 +326,24 @@ public class BinaryPredicate extends Predicate implements Writable {
         return binaryPredicate;
     }
 
+<<<<<<< HEAD
+=======
+    public Pair<SlotRef, Expr> createSlotAndLiteralPair() {
+        Expr leftExpr = getChild(0);
+        Expr rightExpr = getChild(1);
+        if (leftExpr instanceof SlotRef && (rightExpr instanceof Parameter) &&
+                (((Parameter) rightExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) leftExpr;
+            return Pair.create(slot, ((Parameter) rightExpr).getExpr());
+        } else if (rightExpr instanceof SlotRef && (leftExpr instanceof Parameter) &&
+                (((Parameter) leftExpr).getExpr() instanceof LiteralExpr)) {
+            SlotRef slot = (SlotRef) rightExpr;
+            return Pair.create(slot, ((Parameter) leftExpr).getExpr());
+        }
+        return null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Objects.hashCode(op);

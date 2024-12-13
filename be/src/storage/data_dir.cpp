@@ -306,7 +306,15 @@ Status DataDir::load() {
             return s;
         }
         for (auto tablet_id : tablet_ids) {
+<<<<<<< HEAD
             _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+=======
+            Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+            if (!s.ok()) {
+                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
+                return s;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
         tablet_ids.clear();
@@ -325,7 +333,11 @@ Status DataDir::load() {
     if (!load_tablet_status.ok()) {
         LOG(FATAL) << "there is failure when scan rockdb tablet metas, quit process"
                    << ". loaded tablet: " << tablet_ids.size() << " error tablet: " << failed_tablet_ids.size()
+<<<<<<< HEAD
                    << ", path: " << _path << " error: " << load_tablet_status.get_error_msg()
+=======
+                   << ", path: " << _path << " error: " << load_tablet_status.message()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                    << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     } else {
         LOG(INFO) << "load tablet from meta finished"
@@ -346,7 +358,15 @@ Status DataDir::load() {
             tablet->set_tablet_schema_into_rowset_meta()) {
             TabletMetaPB tablet_meta_pb;
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
+<<<<<<< HEAD
             TabletMetaManager::save(this, tablet_meta_pb);
+=======
+            Status s = TabletMetaManager::save(this, tablet_meta_pb);
+            if (!s.ok()) {
+                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.message();
+                return s;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -432,7 +452,11 @@ Status DataDir::load() {
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
+<<<<<<< HEAD
                      << "/" << total_rowset_count << " error: " << load_rowset_status.get_error_msg()
+=======
+                     << "/" << total_rowset_count << " error: " << load_rowset_status.message()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                      << " duration: " << (MonotonicMillis() - load_rowset_start) << "ms";
     } else {
         LOG(INFO) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count

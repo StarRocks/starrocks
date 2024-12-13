@@ -76,9 +76,13 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
     std::unique_ptr<Column> pk_column;
+<<<<<<< HEAD
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
+=======
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RowsetReleaseGuard guard(rowset->shared_from_this());
     OlapReaderStatistics stats;
@@ -88,7 +92,11 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     }
 
     auto& itrs = res.value();
+<<<<<<< HEAD
     CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+=======
+    RETURN_ERROR_IF_FALSE(itrs.size() == rowset->num_segments(), "itrs.size != num_segments");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tracker = update_manager->compaction_state_mem_tracker();
@@ -119,7 +127,11 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
             }
         }
         itr->close();
+<<<<<<< HEAD
         CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
+=======
+        RETURN_ERROR_IF_FALSE(col->size() == num_rows, "read segment: iter rows != num rows");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     dest = std::move(col);
     TRY_CATCH_BAD_ALLOC(dest->raw_data());

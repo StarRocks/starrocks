@@ -48,7 +48,10 @@ public abstract class AlterTableColumnClause extends AlterTableClause {
         this.rollupName = rollupName;
     }
 
+<<<<<<< HEAD
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, String> getProperties() {
         return this.properties;
     }

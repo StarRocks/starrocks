@@ -244,14 +244,22 @@ public class TypeTest {
         // map<int,struct<c1:int,cc1:string>>
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+<<<<<<< HEAD
                 new StructField("cc1", ScalarType.createDefaultExternalTableString())
+=======
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ));
         MapType mapType =
                 new MapType(ScalarType.createType(PrimitiveType.INT), c1);
         String json = GsonUtils.GSON.toJson(mapType);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isMapType());
+<<<<<<< HEAD
         Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1048576)>>", deType.toString());
+=======
+        Assert.assertEquals("MAP<INT,struct<c1 int(11), cc1 varchar(1073741824)>>", deType.toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Make sure select fields are false when initialized
         Assert.assertFalse(deType.selectedFields[0]);
         Assert.assertFalse(deType.selectedFields[1]);
@@ -262,7 +270,11 @@ public class TypeTest {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+<<<<<<< HEAD
                 new StructField("cc1", ScalarType.createDefaultExternalTableString())
+=======
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ));
         StructType root = new StructType(Lists.newArrayList(
                 new StructField("struct_test", ScalarType.createType(PrimitiveType.INT), "comment test"),
@@ -271,7 +283,11 @@ public class TypeTest {
         String json = GsonUtils.GSON.toJson(root);
         Type deType = GsonUtils.GSON.fromJson(json, Type.class);
         Assert.assertTrue(deType.isStructType());
+<<<<<<< HEAD
         Assert.assertEquals("struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1048576)>>",
+=======
+        Assert.assertEquals("struct<struct_test int(11) COMMENT 'comment test', c1 struct<c1 int(11), cc1 varchar(1073741824)>>",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 deType.toString());
         // test initialed fieldMap by ctor in deserializer.
         Assert.assertEquals(1, ((StructType) deType).getFieldPos("c1"));

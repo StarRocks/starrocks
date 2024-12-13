@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -25,6 +26,11 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.DdlException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.HdfsEnvironment;
@@ -42,12 +48,17 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+=======
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class FileTable extends Table {
@@ -65,7 +76,11 @@ public class FileTable extends Table {
     private static final ImmutableMap<String, RemoteFileInputFormat> SUPPORTED_FORMAT = ImmutableMap.of(
             "parquet", RemoteFileInputFormat.PARQUET,
             "orc", RemoteFileInputFormat.ORC,
+<<<<<<< HEAD
             "text", RemoteFileInputFormat.TEXT,
+=======
+            "text", RemoteFileInputFormat.TEXTFILE,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             "avro", RemoteFileInputFormat.AVRO,
             "rctext", RemoteFileInputFormat.RCTEXT,
             "rcbinary", RemoteFileInputFormat.RCBINARY,
@@ -107,6 +122,10 @@ public class FileTable extends Table {
         fileProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getTableLocation() {
         return fileProperties.get(JSON_KEY_FILE_PATH);
     }
@@ -129,7 +148,11 @@ public class FileTable extends Table {
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
+<<<<<<< HEAD
         RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
+=======
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         boolean enableWildCards = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_ENABLE_WILDCARDS, "false"));
 
         try {
@@ -157,7 +180,11 @@ public class FileTable extends Table {
 
         RemoteFileInputFormat format = getFileFormat();
         TextFileFormatDesc textFileFormatDesc = null;
+<<<<<<< HEAD
         if (format.equals(RemoteFileInputFormat.TEXT)) {
+=======
+        if (format.equals(RemoteFileInputFormat.TEXTFILE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             textFileFormatDesc = new TextFileFormatDesc(
                     fileProperties.getOrDefault(JSON_KEY_COLUMN_SEPARATOR, "\t"),
                     fileProperties.getOrDefault(JSON_KEY_ROW_DELIMITER, "\n"),
@@ -212,6 +239,7 @@ public class FileTable extends Table {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -242,6 +270,8 @@ public class FileTable extends Table {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void onReload() {
     }
 

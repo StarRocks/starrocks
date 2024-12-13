@@ -17,8 +17,21 @@
 
 package com.starrocks.rpc;
 
+<<<<<<< HEAD
+=======
+import com.baidu.bjf.remoting.protobuf.annotation.Protobuf;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.baidu.bjf.remoting.protobuf.annotation.ProtobufClass;
 
 @ProtobufClass
 public class PExecShortCircuitRequest extends AttachmentRequest {
+<<<<<<< HEAD
+=======
+    @Protobuf(order = 1, required = false)
+    String attachmentProtocol;
+
+    public void setAttachmentProtocol(String attachmentProtocol) {
+        this.attachmentProtocol = attachmentProtocol;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

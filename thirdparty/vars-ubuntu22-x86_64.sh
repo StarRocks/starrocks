@@ -28,7 +28,14 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux-ubuntu22-x86_64"
 JINDOSDK_MD5SUM="52236053391091591c2d09684791e810"
 
 # starcache
+<<<<<<< HEAD
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.7/starcache-ubuntu22_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="126571ffe6918ef183edabe782bc71bc"
+=======
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.4.0-rc01/starcache-ubuntu22_amd64.tar.gz"
+STARCACHE_NAME="starcache.tar.gz"
+STARCACHE_SOURCE="starcache"
+STARCACHE_MD5SUM="ae0c0bac189630bf2f506c8aa47f6e29"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

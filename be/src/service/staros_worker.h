@@ -27,6 +27,10 @@
 #include "common/status.h"
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
+<<<<<<< HEAD
+=======
+#include "starcache/star_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -108,7 +112,11 @@ private:
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;
+<<<<<<< HEAD
 void init_staros_worker();
+=======
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void shutdown_staros_worker();
 void update_staros_starcache();
 

@@ -132,7 +132,11 @@ public class FileTableTest {
             FileTable fileTable = (FileTable) table;
             Assert.assertEquals("file_tbl", fileTable.getName());
             Assert.assertEquals(hdfsPath, fileTable.getTableLocation());
+<<<<<<< HEAD
             Assert.assertEquals(RemoteFileInputFormat.TEXT, fileTable.getFileFormat());
+=======
+            Assert.assertEquals(RemoteFileInputFormat.TEXTFILE, fileTable.getFileFormat());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals(hdfsPath, fileTable.getFileProperties().get("path"));
             Assert.assertEquals("text", fileTable.getFileProperties().get("format"));
         }
@@ -149,7 +153,11 @@ public class FileTableTest {
             @Override
             public List<RemoteFileDesc> getFileDescsFromHdfs() throws DdlException {
                 List<RemoteFileDesc> fileDescList = new ArrayList<>();
+<<<<<<< HEAD
                 RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null, null);
+=======
+                RemoteFileDesc fileDesc = new RemoteFileDesc("aa", "snappy", 0, 0, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fileDescList.add(fileDesc);
                 return fileDescList;
             }

@@ -32,7 +32,11 @@ You can use the simple authentication method to establish connections with your 
 
 ## Use INSERT+FILES()
 
+<<<<<<< HEAD
 This method is available from v3.1 onwards and currently supports only the Parquet and ORC file formats.
+=======
+This method is available from v3.1 onwards and currently supports only the Parquet, ORC, and CSV (from v3.3.0 onwards) file formats.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Advantages of INSERT+FILES()
 

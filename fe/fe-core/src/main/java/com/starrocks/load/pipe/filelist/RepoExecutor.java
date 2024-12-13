@@ -21,8 +21,13 @@ import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
+=======
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -33,6 +38,10 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.ListUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,7 +96,10 @@ public class RepoExecutor {
         try {
             ConnectContext context = createConnectContext();
 
+<<<<<<< HEAD
             // TODO: use json sink protocol, instead of statistic protocol
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
@@ -115,10 +127,19 @@ public class RepoExecutor {
         try {
             ConnectContext context = createConnectContext();
 
+<<<<<<< HEAD
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Analyzer.analyze(parsedStmt, context);
             AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
             DDLStmtExecutor.execute(parsedStmt, context);
+=======
+            List<StatementBase> parsedStmts = SqlParser.parse(sql, context.getSessionVariable());
+            for (var parsedStmt : ListUtils.emptyIfNull(parsedStmts)) {
+                Analyzer.analyze(parsedStmt, context);
+                GlobalStateMgr.getCurrentState().getDdlStmtExecutor().execute(parsedStmt, context);
+            }
+            AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             LOG.error("execute DDL error: {}", sql, e);
             throw new RuntimeException(e);

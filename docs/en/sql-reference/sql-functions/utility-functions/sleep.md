@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sleep
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Delays the execution of an operation for a specified period of time (in seconds) and returns a BOOLEAN value to indicate whether the sleep is completed without interruption. `1` is returned if the sleep is completed without interruption. Otherwise, `0` is returned.
 

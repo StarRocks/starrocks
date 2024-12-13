@@ -1,0 +1,357 @@
+-- name: test_resource_group_exclusive_cpu_cores_not_borrowing_cpu @sequential
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+insert into __row_util_base select * from __row_util_base; -- 80000
+insert into __row_util_base select * from __row_util_base; -- 160000
+insert into __row_util_base select * from __row_util_base; -- 320000
+insert into __row_util_base select * from __row_util_base; -- 640000
+insert into __row_util_base select * from __row_util_base; -- 1280000
+
+create table t1 (
+    k1 int
+)
+duplicate key(k1)
+distributed by hash(k1) buckets 32
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgd1_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgd2_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'exclusive_cpu_cores' = '2', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgn1_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'cpu_weight' = '3', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+CREATE RESOURCE GROUP rgn2_${uuid0} 
+    TO ( user='user_${uuid0}' ) 
+    WITH ( 'cpu_weight' = '3', 'mem_limit' = '0.99' );
+-- result:
+-- !result
+update information_schema.be_configs set value = "false" where name= "enable_resource_group_cpu_borrowing";
+-- result:
+-- !result
+SELECT count(1)
+FROM 
+    t1 
+    join [broadcast] t1 t2 on t1.k1 = t2.k1
+    join [bucket] t1 t3 on t1.k1 = t3.k1
+    join [colocate] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+SELECT count(1)
+FROM 
+    t1 
+    join [broadcast] t1 t2 on t1.k1 = t2.k1
+    join [bucket] t1 t3 on t1.k1 = t3.k1
+    join [colocate] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+SELECT count(1)
+FROM 
+    t1 
+    join [broadcast] t1 t2 on t1.k1 = t2.k1
+    join [bucket] t1 t3 on t1.k1 = t3.k1
+    join [colocate] t1 t4 on t1.k1 = t4.k1
+    join [shuffle] t1 t5 on t1.k1 = t5.k1;
+-- result:
+1280000
+-- !result
+
+CONCURRENCY {
+-- thread name 1:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 2:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 3:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 4:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 5:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+} END CONCURRENCY
+
+
+CONCURRENCY {
+-- thread name 21:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 22:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgd2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 23:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn1_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 24:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT /*+SET_VAR(resource_group='rgn2_${uuid0}')*/ count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+-- thread name 25:
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+shell: mysql -h${mysql_host} -P${mysql_port} -u${mysql_user} --password='${mysql_password}'  --comments -e "use ${db[0]};SELECT count(1) FROM t1 join [broadcast] t1 t2 on t1.k1 = t2.k1 join [bucket] t1 t3 on t1.k1 = t3.k1 join [colocate] t1 t4 on t1.k1 = t4.k1 join [shuffle] t1 t5 on t1.k1 = t5.k1;"
+-- result:
+0
+count(1)
+1280000
+-- !result
+
+} END CONCURRENCY
+
+DROP RESOURCE GROUP rgd1_${uuid0};
+-- result:
+-- !result
+DROP RESOURCE GROUP rgd2_${uuid0};
+-- result:
+-- !result
+DROP RESOURCE GROUP rgn1_${uuid0};
+-- result:
+-- !result
+DROP RESOURCE GROUP rgn2_${uuid0};
+-- result:
+-- !result
+update information_schema.be_configs set value = "true" where name= "enable_resource_group_cpu_borrowing";
+-- result:
+-- !result

@@ -20,6 +20,10 @@
 #include <sstream>
 
 #include "column/array_column.h"
+<<<<<<< HEAD
+=======
+#include "column/array_view_column.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -28,7 +32,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/constexpr.h"
 #include "common/statusor.h"
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
@@ -168,7 +175,16 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         if constexpr (independent_lambda_expr) {
             cur_chunk->append_column(captured_column, slot_id);
         } else {
+<<<<<<< HEAD
             cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+=======
+            if (captured_column->is_array()) {
+                auto view_column = ArrayViewColumn::from_array_column(captured_column);
+                cur_chunk->append_column(view_column->replicate(aligned_offsets->get_data()), slot_id);
+            } else {
+                cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -200,6 +216,16 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
                 tmp_chunk->check_or_die();
+<<<<<<< HEAD
+=======
+                for (auto& column : tmp_chunk->columns()) {
+                    // because not all functions can handle ArrayViewColumn correctly, we need to convert it back to ArrayColumn first.
+                    // in the future, this copy can be removed when we solve this problem.
+                    if (column->is_array_view()) {
+                        column = ArrayViewColumn::to_array_column(column);
+                    }
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col->check_or_die();
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
@@ -389,9 +415,16 @@ std::string ArrayMapExpr::debug_string() const {
 
 int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
     int num = Expr::get_slot_ids(slot_ids);
+<<<<<<< HEAD
     for (const auto& [slot_id, _] : _outer_common_exprs) {
         slot_ids->push_back(slot_id);
         num++;
+=======
+    for (const auto& [slot_id, expr] : _outer_common_exprs) {
+        slot_ids->push_back(slot_id);
+        num++;
+        num += (expr->get_slot_ids(slot_ids));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return num;
 }

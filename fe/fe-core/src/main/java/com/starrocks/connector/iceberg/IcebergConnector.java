@@ -14,11 +14,21 @@
 
 package com.starrocks.connector.iceberg;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.connector.Connector;
+import com.starrocks.connector.ConnectorContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
@@ -33,15 +43,24 @@ import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static org.apache.iceberg.util.ThreadPools.newWorkerPool;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
+<<<<<<< HEAD
     public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
     @Deprecated
     public static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
@@ -50,22 +69,38 @@ public class IcebergConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;
     private final String catalogName;
     private IcebergCatalog icebergNativeCatalog;
     private ExecutorService icebergJobPlanningExecutor;
     private ExecutorService refreshOtherFeExecutor;
+<<<<<<< HEAD
+=======
+    private final IcebergCatalogProperties icebergCatalogProperties;
+    private final ConnectorProperties connectorProperties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public IcebergConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
+<<<<<<< HEAD
     }
 
     private IcebergCatalog buildIcebergNativeCatalog() {
         IcebergCatalogType nativeCatalogType = getNativeCatalogType();
+=======
+        this.icebergCatalogProperties = new IcebergCatalogProperties(properties);
+        this.connectorProperties = new ConnectorProperties(ConnectorType.ICEBERG, properties);
+    }
+
+    private IcebergCatalog buildIcebergNativeCatalog() {
+        IcebergCatalogType nativeCatalogType = icebergCatalogProperties.getCatalogType();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Configuration conf = hdfsEnvironment.getConfiguration();
 
         if (Config.enable_iceberg_custom_worker_thread) {
@@ -88,6 +123,7 @@ public class IcebergConnector implements Connector {
         }
     }
 
+<<<<<<< HEAD
     private IcebergCatalogType getNativeCatalogType() {
         String nativeCatalogTypeStr = properties.get(ICEBERG_CATALOG_TYPE);
         if (Strings.isNullOrEmpty(nativeCatalogTypeStr)) {
@@ -104,6 +140,12 @@ public class IcebergConnector implements Connector {
     public ConnectorMetadata getMetadata() {
         return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
                 buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor());
+=======
+    @Override
+    public ConnectorMetadata getMetadata() {
+        return new IcebergMetadata(catalogName, hdfsEnvironment, getNativeCatalog(),
+                buildIcebergJobPlanningExecutor(), buildRefreshOtherFeExecutor(), icebergCatalogProperties, connectorProperties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // In order to be compatible with the catalog created with the wrong configuration,
@@ -111,6 +153,7 @@ public class IcebergConnector implements Connector {
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
+<<<<<<< HEAD
             boolean enableMetadataCache;
             if (properties.containsKey("enable_iceberg_metadata_cache")) {
                 enableMetadataCache = Boolean.parseBoolean(properties.get("enable_iceberg_metadata_cache"));
@@ -121,6 +164,12 @@ public class IcebergConnector implements Connector {
             if (enableMetadataCache && !isResourceMappingCatalog(catalogName)) {
                 long ttl = Long.parseLong(properties.getOrDefault("iceberg_meta_cache_ttl_sec", "1800"));
                 nativeCatalog = new CachingIcebergCatalog(nativeCatalog, ttl, buildBackgroundJobPlanningExecutor());
+=======
+
+            if (icebergCatalogProperties.enableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
+                nativeCatalog = new CachingIcebergCatalog(catalogName, nativeCatalog,
+                        icebergCatalogProperties, buildBackgroundJobPlanningExecutor());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                         .registerCachingIcebergCatalog(catalogName, nativeCatalog);
             }
@@ -131,9 +180,14 @@ public class IcebergConnector implements Connector {
 
     private ExecutorService buildIcebergJobPlanningExecutor() {
         if (icebergJobPlanningExecutor == null) {
+<<<<<<< HEAD
             int poolSize = Math.max(2, Integer.parseInt(properties.getOrDefault("iceberg_job_planning_thread_num",
                     String.valueOf(Config.iceberg_worker_num_threads))));
             icebergJobPlanningExecutor = newWorkerPool(catalogName + "-sr-iceberg-worker-pool", poolSize);
+=======
+            icebergJobPlanningExecutor = newWorkerPool(catalogName + "-sr-iceberg-worker-pool",
+                    icebergCatalogProperties.getIcebergJobPlanningThreadNum());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return icebergJobPlanningExecutor;
@@ -141,18 +195,28 @@ public class IcebergConnector implements Connector {
 
     public ExecutorService buildRefreshOtherFeExecutor() {
         if (refreshOtherFeExecutor == null) {
+<<<<<<< HEAD
             int threadSize = Math.max(2, Integer.parseInt(
                     properties.getOrDefault("refresh-other-fe-iceberg-cache-thread-num", "4")));
             refreshOtherFeExecutor = newWorkerPool(catalogName + "-refresh-others-fe-iceberg-metadata-cache", threadSize);
+=======
+            refreshOtherFeExecutor = newWorkerPool(catalogName + "-refresh-others-fe-iceberg-metadata-cache",
+                    icebergCatalogProperties.getRefreshOtherFeIcebergCacheThreadNum());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return refreshOtherFeExecutor;
     }
 
     private ExecutorService buildBackgroundJobPlanningExecutor() {
+<<<<<<< HEAD
         int defaultPoolSize = Math.max(2, Runtime.getRuntime().availableProcessors() / 8);
         int backgroundIcebergJobPlanningThreadPoolSize = Integer.parseInt(properties.getOrDefault(
                 "background_iceberg_job_planning_thread_num", String.valueOf(defaultPoolSize)));
         return newWorkerPool(catalogName + "-background-iceberg-worker-pool", backgroundIcebergJobPlanningThreadPoolSize);
+=======
+        return newWorkerPool(catalogName + "-background-iceberg-worker-pool",
+                icebergCatalogProperties.getBackgroundIcebergJobPlanningThreadNum());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -165,4 +229,22 @@ public class IcebergConnector implements Connector {
             refreshOtherFeExecutor.shutdown();
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return icebergCatalogProperties.enableIcebergMetadataCache() && icebergNativeCatalog != null;
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return icebergNativeCatalog.estimateCount();
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return icebergNativeCatalog.getSamples();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

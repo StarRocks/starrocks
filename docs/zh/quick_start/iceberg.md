@@ -277,6 +277,10 @@ df.writeTo("demo.nyc.greentaxis").create()
 
 ```sql
 CREATE EXTERNAL CATALOG 'iceberg'
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Apache Iceberg on MinIO"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES
 (
   "type"="iceberg",
@@ -287,7 +291,11 @@ PROPERTIES
   "aws.s3.secret_key"="password",
   "aws.s3.endpoint"="http://minio:9000",
   "aws.s3.enable_path_style_access"="true",
+<<<<<<< HEAD
   "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"
+=======
+  "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"  
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 ```
 
@@ -318,7 +326,11 @@ SHOW CATALOGS;
 | Catalog         | Type     | Comment                                                          |
 +-----------------+----------+------------------------------------------------------------------+
 | default_catalog | Internal | An internal catalog contains this cluster's self-managed tables. |
+<<<<<<< HEAD
 | iceberg         | Iceberg  | NULL                                                             |
+=======
+| iceberg         | Iceberg  | External catalog to Apache Iceberg on MinIO                      |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 +-----------------+----------+------------------------------------------------------------------+
 2 rows in set (0.03 sec)
 ```

@@ -52,6 +52,10 @@ import java.io.DataOutputStream;
 import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+<<<<<<< HEAD
+=======
+import java.util.Collection;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +70,10 @@ public class TaskManagerTest {
     private static StarRocksAssert starRocksAssert;
     private static final ExecuteOption DEFAULT_MERGE_OPTION = makeExecuteOption(true, false);
     private static final ExecuteOption DEFAULT_NO_MERGE_OPTION = makeExecuteOption(false, false);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setUp() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -160,7 +168,10 @@ public class TaskManagerTest {
             LOG.info("SubmitTaskRegularTest is waiting for TaskRunState retryCount:" + retryCount);
         }
         Assert.assertEquals(Constants.TaskRunState.SUCCESS, state);
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -238,7 +249,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -247,7 +261,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun2.getStatus().setPriority(10);
 
         taskRunManager.arrangeTaskRun(taskRun1, false);
@@ -266,6 +283,10 @@ public class TaskManagerTest {
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
         task.setDefinition("select 1");
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long taskId = 1;
 
         TaskRun taskRun1 = TaskRunBuilder
@@ -275,7 +296,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -284,7 +308,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun2.getStatus().setPriority(10);
 
         taskRunManager.arrangeTaskRun(taskRun2, false);
@@ -314,7 +341,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now + 10);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -323,7 +353,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun2.getStatus().setPriority(0);
 
         taskRunManager.arrangeTaskRun(taskRun1, false);
@@ -353,7 +386,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now + 10);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -362,7 +398,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun2.getStatus().setPriority(0);
 
         taskRunManager.arrangeTaskRun(taskRun2, false);
@@ -381,6 +420,10 @@ public class TaskManagerTest {
 
         TaskRunManager taskRunManager = new TaskRunManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         long taskId = 1;
 
@@ -391,7 +434,10 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun1.getStatus().setPriority(0);
 
         TaskRun taskRun2 = TaskRunBuilder
@@ -400,7 +446,10 @@ public class TaskManagerTest {
                 .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun2.getStatus().setPriority(10);
 
         TaskRun taskRun3 = TaskRunBuilder
@@ -409,7 +458,10 @@ public class TaskManagerTest {
                 .build();
         taskRun3.setTaskId(taskId);
         taskRun3.initStatus("3", now + 10);
+<<<<<<< HEAD
         taskRun3.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRun3.getStatus().setPriority(10);
 
         taskRunManager.arrangeTaskRun(taskRun2, false);
@@ -417,7 +469,11 @@ public class TaskManagerTest {
         taskRunManager.arrangeTaskRun(taskRun3, false);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+<<<<<<< HEAD
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+=======
+        Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(taskRuns != null);
         Assert.assertEquals(3, taskRuns.size());
     }
@@ -426,6 +482,10 @@ public class TaskManagerTest {
     public void testReplayUpdateTaskRunOutOfOrder() {
         TaskManager taskManager = new TaskManager();
         Task task = new Task("test");
+<<<<<<< HEAD
+=======
+        task.setDefinition("select 1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskManager.replayCreateTask(task);
         long taskId = 1;
 
@@ -433,12 +493,18 @@ public class TaskManagerTest {
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
+<<<<<<< HEAD
         taskRun1.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
+<<<<<<< HEAD
         taskRun2.getStatus().setDefinition("select 1");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskManager.replayCreateTaskRun(taskRun2.getStatus());
         taskManager.replayCreateTaskRun(taskRun1.getStatus());
 
@@ -500,6 +566,10 @@ public class TaskManagerTest {
 
     @Test
     public void testForceGC() {
+<<<<<<< HEAD
+=======
+        Config.enable_task_history_archive = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TaskRunManager taskRunManager = new TaskRunManager();
         for (int i = 0; i < 100; i++) {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
@@ -509,8 +579,14 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
+<<<<<<< HEAD
         Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getAllHistory().size());
         Config.task_runs_max_history_number = 10000;
+=======
+        Assert.assertEquals(20, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+        Config.task_runs_max_history_number = 10000;
+        Config.enable_task_history_archive = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -524,7 +600,11 @@ public class TaskManagerTest {
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
+<<<<<<< HEAD
         Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getAllHistory().size());
+=======
+        Assert.assertEquals(10, taskRunManager.getTaskRunHistory().getInMemoryHistory().size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.task_runs_max_history_number = 10000;
     }
 
@@ -556,7 +636,11 @@ public class TaskManagerTest {
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
         ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
         executeOption.setSync(isSync);
+<<<<<<< HEAD
         return  executeOption;
+=======
+        return executeOption;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private TaskRun makeTaskRun(long taskId, Task task, ExecuteOption executeOption) {
@@ -585,7 +669,11 @@ public class TaskManagerTest {
         Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
 
         TaskRunScheduler taskRunScheduler = taskRunManager.getTaskRunScheduler();
+<<<<<<< HEAD
         List<TaskRun> taskRuns = Lists.newArrayList(taskRunScheduler.getPendingTaskRunsByTaskId(taskId));
+=======
+        Collection<TaskRun> taskRuns = taskRunScheduler.getPendingTaskRunsByTaskId(taskId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(taskRuns != null);
         Assert.assertEquals(2, taskRunScheduler.getPendingQueueCount());
         Assert.assertEquals(2, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
@@ -633,6 +721,10 @@ public class TaskManagerTest {
         Assert.assertEquals(Config.task_runs_queue_length, taskRunScheduler.getPendingTaskRunsByTaskId(taskId).size());
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testTaskEquality() {
         Task task1 = new Task("test");
@@ -805,4 +897,24 @@ public class TaskManagerTest {
         taskRunManager.killTaskRun(1L, true);
         Assert.assertEquals(0, taskRunScheduler.getRunningTaskCount());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTaskRunDefinition() {
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 1;
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
+        long now = System.currentTimeMillis();
+        taskRun.setTaskId(taskId);
+        taskRun.initStatus("1", now + 10);
+        taskRun.getStatus().setPriority(0);
+        TaskRunStatus taskRunStatus = taskRun.getStatus();
+        Assert.assertEquals(taskRunStatus.getDefinition(), "select 1");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

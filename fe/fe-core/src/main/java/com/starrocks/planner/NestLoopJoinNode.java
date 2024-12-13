@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
@@ -55,7 +58,12 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
      * Build the filter if inner table contains only one row, which is a common case for scalar subquery
      */
     @Override
+<<<<<<< HEAD
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
+=======
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
             return;
         }
@@ -78,7 +86,14 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
 
+<<<<<<< HEAD
                 if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
+=======
+                RuntimeFilterPushDownContext rfPushDownCtx =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCtx, left, probePartitionByExprs)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }

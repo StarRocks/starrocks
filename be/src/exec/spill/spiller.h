@@ -25,6 +25,10 @@
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
+<<<<<<< HEAD
+=======
+#include "exec/spill/executor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
@@ -39,6 +43,11 @@
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
 
+<<<<<<< HEAD
+=======
+#define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define RETURN_TRUE_IF_SPILL_TASK_ERROR(spiller) \
     if (!(spiller)->task_status().ok()) {        \
         return true;                             \
@@ -63,16 +72,35 @@ public:
     RuntimeProfile::Counter* flush_timer = nullptr;
     // disk io time during flush
     RuntimeProfile::Counter* write_io_timer = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* local_write_io_timer = nullptr;
+    RuntimeProfile::Counter* remote_write_io_timer = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // time spent to restore data from Spiller, which includes the time to try to get data from buffer and drive the next prefetch
     RuntimeProfile::Counter* restore_from_buffer_timer = nullptr;
     // disk io time during restore
     RuntimeProfile::Counter* read_io_timer = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* local_read_io_timer = nullptr;
+    RuntimeProfile::Counter* remote_read_io_timer = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // the number of rows restored from Spiller
     RuntimeProfile::Counter* restore_rows = nullptr;
     // data bytes flushed to disk
     RuntimeProfile::Counter* flush_bytes = nullptr;
+<<<<<<< HEAD
     // data bytes restored from disk
     RuntimeProfile::Counter* restore_bytes = nullptr;
+=======
+    RuntimeProfile::Counter* local_flush_bytes = nullptr;
+    RuntimeProfile::Counter* remote_flush_bytes = nullptr;
+    // data bytes restored from disk
+    RuntimeProfile::Counter* restore_bytes = nullptr;
+    RuntimeProfile::Counter* local_restore_bytes = nullptr;
+    RuntimeProfile::Counter* remote_restore_bytes = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // time spent to serialize data before flush it to disk
     RuntimeProfile::Counter* serialize_timer = nullptr;
     // time spent to deserialize data after read it from disk
@@ -99,11 +127,33 @@ public:
 
     // the number of blocks created
     RuntimeProfile::Counter* block_count = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* local_block_count = nullptr;
+    RuntimeProfile::Counter* remote_block_count = nullptr;
+
+    // the number of read io count
+    RuntimeProfile::Counter* read_io_count = nullptr;
+    RuntimeProfile::Counter* local_read_io_count = nullptr;
+    RuntimeProfile::Counter* remote_read_io_count = nullptr;
+
+    // the number of compact table
+    RuntimeProfile::Counter* compact_count = nullptr;
+    RuntimeProfile::Counter* compact_block_count = nullptr;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
     RuntimeProfile::Counter* restore_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_restore_io_task_count = nullptr;
+<<<<<<< HEAD
+=======
+
+    RuntimeProfile::Counter* mem_table_finalize_timer = nullptr;
+    RuntimeProfile::Counter* flush_task_yield_times = nullptr;
+    RuntimeProfile::Counter* restore_task_yield_times = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // major spill interfaces
@@ -121,13 +171,20 @@ public:
     const SpillProcessMetrics& metrics() { return _metrics; }
 
     // set partitions for spiller only works when spiller has partitioned spill writer
+<<<<<<< HEAD
     Status set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
     // init partition by `num_partitions`
     Status set_partition(RuntimeState* state, size_t num_partitions);
+=======
+    void set_partition(const std::vector<const SpillPartitionInfo*>& parititons);
+    // init partition by `num_partitions`
+    void set_partition(RuntimeState* state, size_t num_partitions);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks
     // MemGuard: interface for record/update memory usage in io tasks
+<<<<<<< HEAD
     template <class TaskExecutor, class MemGuard>
     Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
 
@@ -142,6 +199,22 @@ public:
     // trigger a restore task
     template <class TaskExecutor, class MemGuard>
     Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+=======
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
+
+    template <class TaskExecutor = spill::IOTaskExecutor, class Processer, class MemGuard>
+    Status partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
+                             Processer&& processer, MemGuard&& guard);
+
+    // restore chunk from spilled chunks
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard);
+
+    // trigger a restore task
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool is_full() { return _writer->is_full(); }
 
@@ -149,18 +222,30 @@ public:
 
     // all data has been sent
     // prepared for as read
+<<<<<<< HEAD
     template <class TaskExecutor, class MemGuard>
     Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
     template <class MemGuard>
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
                                    const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
+=======
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status flush(RuntimeState* state, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, const MemGuard& guard) {
+        auto flush_call_back = [this, callback, state, guard]() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto defer = DeferOp([&]() { guard.scoped_end(); });
             RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
+<<<<<<< HEAD
                 RETURN_IF_ERROR(trigger_restore(state, executor, guard));
+=======
+                RETURN_IF_ERROR(trigger_restore<TaskExecutor>(state, guard));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return Status::OK();
         };
@@ -211,11 +296,21 @@ public:
 
     Status reset_state(RuntimeState* state);
 
+<<<<<<< HEAD
+=======
+    size_t max_sorted_block_cnt() const { return _max_sorted_block_cnt; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     Status _acquire_input_stream(RuntimeState* state);
 
     Status _decrease_running_flush_tasks();
 
+<<<<<<< HEAD
+=======
+    void _init_max_block_nums();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     SpillProcessMetrics _metrics;
     SpilledOptions _opts;
@@ -235,8 +330,12 @@ private:
 
     std::shared_ptr<spill::Serde> _serde;
     spill::BlockManager* _block_manager = nullptr;
+<<<<<<< HEAD
     std::shared_ptr<spill::BlockGroup> _block_group;
 
+=======
+    size_t _max_sorted_block_cnt = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::atomic_bool _is_cancel = false;
 };
 

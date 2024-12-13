@@ -62,6 +62,10 @@
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
+<<<<<<< HEAD
+=======
+#include "util/network_util.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
@@ -405,9 +409,15 @@ Status EngineCloneTask::_clone_copy(DataDir& data_dir, const string& local_data_
             continue;
         }
 
+<<<<<<< HEAD
         std::string download_url = strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", src.host,
                                                        src.http_port, HTTP_REQUEST_PREFIX, token, snapshot_path,
                                                        _clone_req.tablet_id, _clone_req.schema_hash);
+=======
+        std::string download_url = strings::Substitute(
+                "http://$0$1?token=$2&type=V2&file=$3/$4/$5/", get_host_port(src.host, src.http_port),
+                HTTP_REQUEST_PREFIX, token, snapshot_path, _clone_req.tablet_id, _clone_req.schema_hash);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         st = _download_files(&data_dir, download_url, local_path);
         (void)_release_snapshot(src.host, src.be_port, snapshot_path);
@@ -615,7 +625,11 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
         std::string local_file_path = local_path + file_name;
 
+<<<<<<< HEAD
         VLOG(1) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+=======
+        VLOG(2) << "Downloading " << remote_file_url << " to " << local_path << ". bytes=" << file_size
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 << " timeout=" << estimate_timeout;
 
         auto download_cb = [&remote_file_url, estimate_timeout, &local_file_path, file_size](HttpClient* client) {
@@ -796,7 +810,11 @@ Status EngineCloneTask::_finish_clone(Tablet* tablet, const string& clone_dir, i
 
     // clear linked files if errors happen
     if (!res.ok()) {
+<<<<<<< HEAD
         fs::remove(linked_success_files);
+=======
+        (void)fs::remove(linked_success_files);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     return res;
@@ -944,7 +962,12 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     }
     auto snapshot_meta = std::move(res).value();
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, clone_dir));
+=======
+    RETURN_IF_ERROR(
+            SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, clone_dir, tablet->tablet_schema()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // check all files in /clone and /tablet
     std::set<std::string> clone_files;

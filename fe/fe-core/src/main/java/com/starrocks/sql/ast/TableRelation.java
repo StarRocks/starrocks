@@ -47,8 +47,19 @@ public class TableRelation extends Relation {
     private final List<Long> tabletIds;
     private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
+<<<<<<< HEAD
     // optional temporal clause for external MySQL tables that support this syntax
     private String temporalClause;
+=======
+    // used for mysql external table
+    private String queryPeriodString;
+
+    // used for time travel
+    private QueryPeriod queryPeriod;
+
+    // TABLE SAMPLE
+    private TableSampleClause sampleClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private Expr partitionPredicate;
 
@@ -56,6 +67,11 @@ public class TableRelation extends Relation {
 
     private List<String> pruneScanColumns = Collections.emptyList();
 
+<<<<<<< HEAD
+=======
+    private long gtid = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TableRelation(TableName name) {
         super(name.getPos());
         this.name = name;
@@ -198,12 +214,37 @@ public class TableRelation extends Relation {
         return name.toString();
     }
 
+<<<<<<< HEAD
     public void setTemporalClause(String temporalClause) {
         this.temporalClause = temporalClause;
     }
 
     public String getTemporalClause() {
         return this.temporalClause;
+=======
+    public String getQueryPeriodString() {
+        return queryPeriodString;
+    }
+
+    public void setQueryPeriodString(String queryPeriodString) {
+        this.queryPeriodString = queryPeriodString;
+    }
+
+    public QueryPeriod getQueryPeriod() {
+        return queryPeriod;
+    }
+
+    public void setQueryPeriod(QueryPeriod queryPeriod) {
+        this.queryPeriod = queryPeriod;
+    }
+
+    public TableSampleClause getSampleClause() {
+        return sampleClause;
+    }
+
+    public void setSampleClause(TableSampleClause sampleClause) {
+        this.sampleClause = sampleClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setGeneratedExprToColumnRef(Map<Expr, SlotRef> generatedExprToColumnRef) {
@@ -213,4 +254,16 @@ public class TableRelation extends Relation {
     public Map<Expr, SlotRef> getGeneratedExprToColumnRef() {
         return generatedExprToColumnRef;
     }
+<<<<<<< HEAD
 }
+=======
+
+    public void setGtid(long gtid) {
+        this.gtid = gtid;
+    }
+
+    public long getGtid() {
+        return gtid;
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

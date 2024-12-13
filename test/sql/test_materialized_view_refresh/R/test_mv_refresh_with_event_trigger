@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 -- name: test_mv_refresh_with_event_trigger
+=======
+-- name: test_mv_refresh_with_event_trigger @slow
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 create database db_${uuid0};
 -- result:
 -- !result
@@ -55,6 +59,7 @@ PARTITION p20201022 VALUES [("2020-10-22"), ("2020-10-23"))
 DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3;
 -- result:
 -- !result
+<<<<<<< HEAD
 INSERT INTO t1 VALUES ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 -- result:
 -- !result
@@ -77,6 +82,18 @@ INSERT INTO t2 VALUES ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,
 -- result:
 -- !result
 INSERT INTO t2 VALUES ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+=======
+INSERT INTO t1 VALUES ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+INSERT INTO t2 VALUES ('2020-10-10','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
@@ -99,6 +116,7 @@ union all
 select * from t1;
 -- result:
 -- !result
+<<<<<<< HEAD
 INSERT INTO t1 VALUES ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
 -- result:
 -- !result
@@ -121,6 +139,20 @@ INSERT INTO t2 VALUES ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,
 -- result:
 -- !result
 INSERT INTO t2 VALUES ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+=======
+INSERT INTO t1 VALUES ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+INSERT INTO t2 VALUES ('2020-10-10','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+INSERT INTO t2 VALUES ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 -- !result
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv1")
@@ -129,7 +161,11 @@ None
 -- !result
 select count(1) from test_mv1;
 -- result:
+<<<<<<< HEAD
 8
+=======
+16
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_async_materialized_view_finish("db_${uuid0}", "test_mv2")
 -- result:
@@ -137,6 +173,7 @@ None
 -- !result
 select count(1) from test_mv2;
 -- result:
+<<<<<<< HEAD
 12
 -- !result
 drop materialized view test_mv1;
@@ -149,5 +186,10 @@ drop table t1;
 -- result:
 -- !result
 drop table t2;
+=======
+16
+-- !result
+drop database db_${uuid0} force;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- result:
 -- !result

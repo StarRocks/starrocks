@@ -135,7 +135,11 @@ public:
 
     template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
+<<<<<<< HEAD
         _convert_type_set.emplace(std::make_pair(from_type, to_type));
+=======
+        _convert_type_set.emplace(from_type, to_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 private:
@@ -216,9 +220,21 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
+<<<<<<< HEAD
 Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
     DCHECK(_where_expr != nullptr);
     ColumnPtr filter_col = _where_expr->evaluate(chunk.get()).value();
+=======
+StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
+    DCHECK(_where_expr != nullptr);
+    auto res = _where_expr->evaluate(chunk.get());
+    if (!res.ok()) {
+        std::stringstream ss;
+        ss << "execute where expr failed: " << res.status().message();
+        return Status::InternalError(ss.str());
+    }
+    ColumnPtr filter_col = std::move(res.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t size = filter_col->size();
     Buffer<uint8_t> filter(size, 0);
@@ -247,7 +263,16 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         }
         if (_where_expr) {
+<<<<<<< HEAD
             auto filter = _execute_where_expr(base_chunk);
+=======
+            auto res = _execute_where_expr(base_chunk);
+            if (!res.ok()) {
+                LOG(WARNING) << res.status();
+                return false;
+            }
+            auto filter = std::move(res.value());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // If no filtered rows are left, return directly
             if (SIMD::count_nonzero(filter) == 0) {
                 base_chunk->set_num_rows(0);
@@ -554,10 +579,14 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
     RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
                                          where_expr, has_delete_predicates, sc_sorting, sc_directly,
                                          generated_column_idxs));
+<<<<<<< HEAD
     if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         return parse_request_for_pk(base_schema, new_schema, sc_sorting, sc_directly);
     }
     return Status::OK();
+=======
+    return parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,
@@ -720,6 +749,21 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             } else if (new_column.has_bitmap_index() != ref_column.has_bitmap_index()) {
                 *sc_directly = true;
                 return Status::OK();
+<<<<<<< HEAD
+=======
+            } else if (new_schema->has_index(new_column.unique_id(), GIN) !=
+                       base_schema->has_index(ref_column.unique_id(), GIN)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), NGRAMBF) !=
+                       base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), VECTOR) !=
+                       base_schema->has_index(ref_column.unique_id(), VECTOR)) {
+                *sc_directly = true;
+                return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -735,9 +779,15 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_schema,
                                                const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
                                                bool* sc_directly) {
+=======
+Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema,
+                                                     const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
+                                                     bool* sc_directly) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;

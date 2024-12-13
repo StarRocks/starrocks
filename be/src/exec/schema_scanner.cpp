@@ -23,6 +23,10 @@
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_configs_scanner.h"
+<<<<<<< HEAD
+=======
+#include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
@@ -49,6 +53,10 @@
 #include "exec/schema_scanner/schema_tables_scanner.h"
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 #include "exec/schema_scanner/schema_tasks_scanner.h"
+<<<<<<< HEAD
+=======
+#include "exec/schema_scanner/schema_temp_tables_scanner.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
 #include "exec/schema_scanner/schema_views_scanner.h"
@@ -102,7 +110,11 @@ Status SchemaScanner::init_schema_scanner_state(RuntimeState* state) {
     _ss_state.ip = *(_param->ip);
     _ss_state.port = _param->port;
     _ss_state.timeout_ms = state->query_options().query_timeout * 1000;
+<<<<<<< HEAD
     VLOG(1) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
+=======
+    VLOG(2) << "ip=" << _ss_state.ip << ", port=" << _ss_state.port << ", timeout=" << _ss_state.timeout_ms;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _ss_state.param = _param;
     return Status::OK();
 }
@@ -203,10 +215,21 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablePipes>();
     case TSchemaTableType::SYS_FE_LOCKS:
         return std::make_unique<SysFeLocks>();
+<<<<<<< HEAD
     case TSchemaTableType::SYS_FE_MEMORY_USAGE:
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_PARTITIONS_META:
         return std::make_unique<SchemaPartitionsMetaScanner>();
+=======
+    case TSchemaTableType::SCH_BE_DATACACHE_METRICS:
+        return std::make_unique<SchemaBeDataCacheMetricsScanner>();
+    case TSchemaTableType::SCH_PARTITIONS_META:
+        return std::make_unique<SchemaPartitionsMetaScanner>();
+    case TSchemaTableType::SYS_FE_MEMORY_USAGE:
+        return std::make_unique<SysFeMemoryUsage>();
+    case TSchemaTableType::SCH_TEMP_TABLES:
+        return std::make_unique<SchemaTempTablesScanner>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
@@ -227,11 +250,15 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
 
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
+<<<<<<< HEAD
         auto type_desc = TypeDescriptor(_columns[i].type);
         if (_columns[i].type == LogicalType::TYPE_VARCHAR || _columns[i].type == LogicalType::TYPE_CHAR) {
             type_desc.len = _columns[i].size;
         }
 
+=======
+        const TypeDescriptor& type_desc = _columns[i].type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         t_slot_desc.__set_id(i + 1);
         t_slot_desc.__set_slotType(type_desc.to_thrift());
         t_slot_desc.__set_colName(_columns[i].name);
@@ -343,7 +370,11 @@ bool SchemaScanner::_parse_expr_predicate(Expr* conjunct, const std::string& col
     auto literal_col = literal_col_status.value();
     Slice padded_value(literal_col->get(0).get_slice());
     result = padded_value.to_string();
+<<<<<<< HEAD
     VLOG(1) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
+=======
+    VLOG(2) << "schema scaner parse expr value:" << result << ", col_name:" << col_name << ", slot_id=" << slot_id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             << ", result_child_idx=" << result_child_idx;
     return true;
 }

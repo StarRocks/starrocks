@@ -46,7 +46,13 @@ import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
 import com.starrocks.analysis.MultiInPredicate;
+=======
+import com.starrocks.analysis.MatchExpr;
+import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
@@ -60,10 +66,20 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+<<<<<<< HEAD
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+=======
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Dictionary;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -76,11 +92,15 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.TableFunction;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
@@ -88,11 +108,20 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DictionaryGetExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -100,11 +129,14 @@ import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TDictQueryExpr;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -125,7 +157,10 @@ import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpressi
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class ExpressionAnalyzer {
+<<<<<<< HEAD
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
@@ -378,7 +413,11 @@ public class ExpressionAnalyzer {
         }
     }
 
+<<<<<<< HEAD
     public static class Visitor extends AstVisitor<Void, Scope> {
+=======
+    public static class Visitor implements AstVisitor<Void, Scope> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private static final List<String> ADD_DATE_FUNCTIONS = Lists.newArrayList(FunctionSet.DATE_ADD,
                 FunctionSet.ADDDATE, FunctionSet.DAYS_ADD, FunctionSet.TIMESTAMPADD);
         private static final List<String> SUB_DATE_FUNCTIONS =
@@ -445,7 +484,11 @@ public class ExpressionAnalyzer {
 
             if (node.getType().isStructType()) {
                 // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
+<<<<<<< HEAD
                 node.setCol(resolvedField.getField().getName());
+=======
+                node.setColumnName(resolvedField.getField().getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 node.setLabel(resolvedField.getField().getName());
 
                 if (resolvedField.getField().getTmpUsedStructFieldPos().size() > 0) {
@@ -643,7 +686,11 @@ public class ExpressionAnalyzer {
             predicateBaseAndCheck(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+<<<<<<< HEAD
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+=======
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             for (Type type : list) {
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -661,7 +708,12 @@ public class ExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
+<<<<<<< HEAD
             Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
+=======
+            Type compatibleType =
+                    TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -846,13 +898,21 @@ public class ExpressionAnalyzer {
 
             List<Expr> queryExpressions = Lists.newArrayList();
             node.collect(arg -> arg instanceof Subquery, queryExpressions);
+<<<<<<< HEAD
             if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+=======
+            if (!queryExpressions.isEmpty() && node.getChildren().size() > 2) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 throw new SemanticException("In Predicate only support literal expression list", node.getPos());
             }
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
+<<<<<<< HEAD
             Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+=======
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             if (compatibleType == Type.INVALID) {
                 throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
@@ -861,7 +921,11 @@ public class ExpressionAnalyzer {
 
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
+<<<<<<< HEAD
                 if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+=======
+                if (type.isJsonType() && !queryExpressions.isEmpty()) { // TODO: enable it after support join on JSON
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -956,6 +1020,29 @@ public class ExpressionAnalyzer {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        @Override
+        public Void visitMatchExpr(MatchExpr node, Scope scope) {
+            Type type1 = node.getChild(0).getType();
+            Type type2 = node.getChild(1).getType();
+
+            if (!type1.isStringType() && !type1.isNull()) {
+                throw new SemanticException("left operand of MATCH must be of type STRING with NOT NULL");
+            }
+
+            if (!(node.getChild(0) instanceof SlotRef)) {
+                throw new SemanticException("left operand of MATCH must be column ref");
+            }
+
+            if (!(node.getChild(1) instanceof StringLiteral) || type2.isNull()) {
+                throw new SemanticException("right operand of MATCH must be of type StringLiteral with NOT NULL");
+            }
+
+            return null;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // 1. set type = Type.BOOLEAN
         // 2. check child type is metric
         private void predicateBaseAndCheck(Predicate node) {
@@ -993,12 +1080,16 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitFunctionCall(FunctionCallExpr node, Scope scope) {
+<<<<<<< HEAD
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (node.isNondeterministicBuiltinFnName()) {
                 ExprId exprId = analyzeState.getNextNondeterministicId();
                 node.setNondeterministicId(exprId);
             }
+<<<<<<< HEAD
 
             Function fn;
             String fnName = node.getFnName().getFunction();
@@ -1169,6 +1260,14 @@ public class ExpressionAnalyzer {
                 fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
             }
 
+=======
+            Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            String fnName = node.getFnName().getFunction();
+            // check fn & throw exception direct if analyze failed
+            checkFunction(fnName, node, argumentTypes);
+            // get function by function expression and argument types
+            Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (fn == null) {
                 String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
@@ -1176,6 +1275,7 @@ public class ExpressionAnalyzer {
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
                 throw new SemanticException(msg, node.getPos());
             }
+<<<<<<< HEAD
 
             if (fn instanceof TableFunction) {
                 throw new SemanticException("Table function cannot be used in expression", node.getPos());
@@ -1204,6 +1304,8 @@ public class ExpressionAnalyzer {
                 }
             }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
@@ -1263,6 +1365,7 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 case FunctionSet.ARRAY_SORTBY:
+<<<<<<< HEAD
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have 2 array inputs or lambda functions, " +
                                 "but really have " + node.getChildren().size() + " inputs",
@@ -1277,6 +1380,40 @@ public class ExpressionAnalyzer {
                         throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
                                 " should be an array or a lambda function, but real type is " +
                                 node.getChild(1).getType().toSql(), node.getPos());
+=======
+                    int nodeChildrenSize = node.getChildren().size();
+                    if (nodeChildrenSize < 2) {
+                        throw new SemanticException(
+                                fnName + " should have at least 2 inputs inputs or lambda functions, " +
+                                        "but really have " + node.getChildren().size() + " inputs",
+                                node.getPos());
+                    }
+                    if (nodeChildrenSize == 2) {
+                        if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                            throw new SemanticException(fnName + "'s first input " + node.getChild(0).toSql() +
+                                    " should be an array or a lambda function, but real type is " +
+                                    node.getChild(0).getType().toSql(), node.getPos());
+                        }
+                        if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                            throw new SemanticException(fnName + "'s second input " + node.getChild(1).toSql() +
+                                    " should be an array or a lambda function, but real type is " +
+                                    node.getChild(1).getType().toSql(), node.getPos());
+                        }
+                    } else {
+                        for (Expr expr : node.getChildren()) {
+                            if (!expr.getType().isArrayType()) {
+                                throw new SemanticException(
+                                        "function args must be array, but real type is " + expr.getType().toSql(),
+                                        node.getPos());
+                            }
+                            if (!(expr.getType().canOrderBy() || expr.getType().isJsonType())) {
+                                throw new SemanticException(
+                                        "function args must be can be order by orderable type or json type, but real type is " +
+                                                expr.getType().toSql(),
+                                        node.getPos());
+                            }
+                        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                     break;
                 case FunctionSet.ARRAY_GENERATE:
@@ -1393,6 +1530,10 @@ public class ExpressionAnalyzer {
                     break;
                 }
                 case FunctionSet.ARRAY_CONTAINS_ALL:
+<<<<<<< HEAD
+=======
+                case FunctionSet.ARRAY_CONTAINS_SEQ:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case FunctionSet.ARRAYS_OVERLAP: {
                     if (node.getChildren().size() != 2) {
                         throw new SemanticException(fnName + " should have only two inputs", node.getPos());
@@ -1449,6 +1590,7 @@ public class ExpressionAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         private Function getStrToDateFunction(FunctionCallExpr node, Type[] argumentTypes) {
             /*
              * @TODO: Determine the return type of this function
@@ -1519,15 +1661,20 @@ public class ExpressionAnalyzer {
             return Expr.getBuiltinFunction(FunctionSet.ARRAY_GENERATE, argumentTypes,
                     Function.CompareMode.IS_SUPERTYPE_OF);
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters", node.getPos());
             }
+<<<<<<< HEAD
             if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
                 throw new SemanticException("grouping functions only support column", node.getPos());
             }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;
@@ -1678,6 +1825,12 @@ public class ExpressionAnalyzer {
             } else if (funcType.equalsIgnoreCase(FunctionSet.CATALOG)) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
+<<<<<<< HEAD
+=======
+            } else if (funcType.equalsIgnoreCase(FunctionSet.SESSION_ID)) {
+                node.setType(Type.VARCHAR);
+                node.setStrValue(session.getSessionId().toString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return null;
         }
@@ -1685,7 +1838,11 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
+<<<<<<< HEAD
                 VariableMgr.fillValue(session.getSessionVariable(), node);
+=======
+                GlobalStateMgr.getCurrentState().getVariableMgr().fillValue(session.getSessionVariable(), node);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!Strings.isNullOrEmpty(node.getName()) &&
                         node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
                     node.setType(Type.VARCHAR);
@@ -1703,7 +1860,17 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitUserVariableExpr(UserVariableExpr node, Scope context) {
+<<<<<<< HEAD
             UserVariable userVariable = session.getUserVariable(node.getName());
+=======
+            UserVariable userVariable;
+            if (session.getUserVariablesCopyInWrite() == null) {
+                userVariable = session.getUserVariable(node.getName());
+            } else {
+                userVariable = session.getUserVariableCopyInWrite(node.getName());
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (userVariable == null) {
                 node.setValue(NullLiteral.create(Type.STRING));
             } else {
@@ -1743,11 +1910,19 @@ public class ExpressionAnalyzer {
                 throw new SemanticException("dict_mapping function first param table_name should be 'db.tbl' or 'tbl' format");
             }
 
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
             if (db == null) {
                 throw new SemanticException("Database %s is not found", tableName.getDb());
             }
             Table table = db.getTable(tableName.getTbl());
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getDb());
+            }
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName.getTbl());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", tableName.getTbl());
             }
@@ -1872,7 +2047,11 @@ public class ExpressionAnalyzer {
             dictQueryExpr.setTbl_name(tableName.getTbl());
 
             Map<Long, Long> partitionVersion = new HashMap<>();
+<<<<<<< HEAD
             dictTable.getPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+=======
+            dictTable.getAllPhysicalPartitions().forEach(p -> partitionVersion.put(p.getId(), p.getVisibleVersion()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             dictQueryExpr.setPartition_version(partitionVersion);
 
             List<String> keyFields = keyColumns.stream().map(Column::getName).collect(Collectors.toList());
@@ -1894,6 +2073,125 @@ public class ExpressionAnalyzer {
         public Void visitParameterExpr(Parameter node, Scope context) {
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Void visitDictionaryGetExpr(DictionaryGetExpr node, Scope context) {
+            List<Expr> params = node.getChildren();
+            if (params.size() < 2) {
+                throw new SemanticException("dictionary_get function get illegal param list");
+            }
+
+            if (!(params.get(0) instanceof StringLiteral)) {
+                throw new SemanticException("dictionary_get function first param dictionary_name should be string literal");
+            }
+
+            String dictionaryName = ((StringLiteral) params.get(0)).getValue();
+            if (!GlobalStateMgr.getCurrentState().getDictionaryMgr().isExist(dictionaryName)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " does not exist");
+            }
+            Dictionary dictionary = GlobalStateMgr.getCurrentState().getDictionaryMgr().getDictionaryByName(dictionaryName);
+
+            if (!node.getSkipStateCheck()) {
+                if (dictionary.getState() == Dictionary.DictionaryState.CANCELLED) {
+                    throw new SemanticException("dictionary: " + dictionaryName + " is in CANCELLED state");
+                }
+
+                if (dictionary.getState() == Dictionary.DictionaryState.UNINITIALIZED) {
+                    throw new SemanticException("dictionary: " + dictionaryName + " is in UNINITIALIZED state");
+                }
+
+                if (dictionary.getReadLatest() && dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
+                    throw new SemanticException("dictionary_read_latest is ON, dictionary: " +
+                            dictionaryName + " is in REFRESHING state");
+                }
+            }
+
+            List<String> dictionaryKeys = dictionary.getKeys();
+            int dictionaryKeysSize = dictionaryKeys.size();
+            int paramDictionaryKeysSize = params.size() - 1;
+            if (!(paramDictionaryKeysSize == dictionaryKeysSize || paramDictionaryKeysSize == dictionaryKeysSize + 1)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " has expected keys size: " +
+                                            Integer.toString(dictionaryKeysSize) + " keys: " +
+                                            "[" + String.join(", ", dictionaryKeys) + "]" +
+                                            " plus null_if_not_exist flag(optional)" +
+                                            " but param given: " + Integer.toString(paramDictionaryKeysSize));
+            }
+
+            if (paramDictionaryKeysSize == dictionaryKeysSize + 1 && !(params.get(params.size() - 1) instanceof BoolLiteral)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " has invalid parameter for `null_if_not_exist` "
+                                            + "invalid parameter: " + params.get(params.size() - 1).toString());
+            }
+
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
+            if (table == null) {
+                throw new SemanticException("dict table %s is not found", table.getName());
+            }
+
+            List<Column> schema = table.getFullSchema();
+            List<Type> paramType = new ArrayList<>();
+            List<Column> keysColumn = new ArrayList<>();
+            paramType.add(Type.VARCHAR);
+            for (String key : dictionaryKeys) {
+                for (int i = 0; i < schema.size(); ++i) {
+                    if (key.equals(schema.get(i).getName())) {
+                        keysColumn.add(schema.get(i));
+                        paramType.add(schema.get(i).getType());
+                    }
+                }
+            }
+
+            List<String> dictionaryValues = dictionary.getValues();
+            List<Column> valuesColumn = new ArrayList<>();
+            for (String value : dictionaryValues) {
+                for (int i = 0; i < schema.size(); ++i) {
+                    if (value.equals(schema.get(i).getName())) {
+                        valuesColumn.add(schema.get(i));
+                    }
+                }
+            }
+
+            for (int i = 0; i < keysColumn.size(); ++i) {
+                Expr parmExpr = params.get(i + 1);
+                Column column = keysColumn.get(i);
+                if (!column.getType().equals(parmExpr.getType())) {
+                    if (!Type.canCastTo(column.getType(), parmExpr.getType())) {
+                        throw new SemanticException("column type " + column.getType().toSql()
+                                + " cast from " + parmExpr.getType().toSql() + " is invalid.");
+                    } else {
+                        parmExpr = new CastExpr(column.getType(), parmExpr);
+                        params.set(i + 1, parmExpr);
+                        node.getChildren().set(i + 1, parmExpr);
+                    }
+                }
+            }
+
+            boolean nullIfNotExist = (paramDictionaryKeysSize == dictionaryKeysSize + 1) ?
+                                     ((BoolLiteral) params.get(params.size() - 1)).getValue() : false;
+            node.setNullIfNotExist(nullIfNotExist);
+            node.setDictionaryId(dictionary.getDictionaryId());
+            node.setDictionaryTxnId(GlobalStateMgr.getCurrentState().getDictionaryMgr().
+                    getLastSuccessTxnId(dictionary.getDictionaryId()));
+            node.setKeySize(dictionary.getKeys().size());
+
+            ArrayList<StructField> structFields = new ArrayList<>(valuesColumn.size());
+            for (Column column : valuesColumn) {
+                String fieldName = column.getName();
+                Type fieldType = column.getType();
+                structFields.add(new StructField(fieldName, fieldType));
+            }
+            StructType returnType = new StructType(structFields);
+            node.setType(returnType);
+            return null;
+        }
+
+        @Override
+        public Void visitNamedArgument(NamedArgument node, Scope context) {
+            return null;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     static class IgnoreSlotVisitor extends Visitor {

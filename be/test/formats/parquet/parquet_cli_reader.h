@@ -35,7 +35,17 @@ public:
         _scanner_ctx->stats = _scan_stats.get();
         _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     }
+<<<<<<< HEAD
     ~ParquetCLIReader() = default;
+=======
+    ~ParquetCLIReader() {
+        _file_reader = nullptr;
+        _file = nullptr;
+        _scanner_ctx = nullptr;
+        _scan_stats = nullptr;
+        _chunk = nullptr;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status init() {
         if (_file == nullptr) {
@@ -46,6 +56,7 @@ public:
 
         // create temporary reader to load schema.
         FileMetaData* file_metadata = nullptr;
+<<<<<<< HEAD
         std::shared_ptr<FileReader> reader =
                 std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
         {
@@ -57,6 +68,17 @@ public:
             RETURN_IF_ERROR(reader->init(&ctx));
             file_metadata = reader->get_file_metadata();
         }
+=======
+        HdfsScannerContext ctx;
+        HdfsScanStats stats;
+        ctx.stats = &stats;
+        ctx.scan_range = scan_range;
+        ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        std::shared_ptr<FileReader> reader =
+                std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
+        RETURN_IF_ERROR(reader->init(&ctx));
+        file_metadata = reader->get_file_metadata();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         std::vector<SlotDesc> slot_descs;
         std::vector<TypeDescriptor> column_types;
@@ -78,7 +100,11 @@ public:
         _make_column_info_vector(tuple_desc, &_scanner_ctx->materialized_columns);
         _scanner_ctx->scan_range = scan_range;
 
+<<<<<<< HEAD
         _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
+=======
+        _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(_file_reader->init(_scanner_ctx.get()));
 
         return Status::OK();
@@ -216,10 +242,16 @@ private:
         tuple_desc_builder.build(&table_desc_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
         CHECK(DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
         RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+=======
+        DescriptorTbl* tbl = nullptr;
+        CHECK(DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size).ok());
+        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return row_desc->tuple_descriptors()[0];
     }
 
@@ -247,11 +279,18 @@ private:
     }
 
     const std::string _filepath;
+<<<<<<< HEAD
     const std::unique_ptr<RandomAccessFile> _file;
     const std::shared_ptr<HdfsScannerContext> _scanner_ctx;
     const std::shared_ptr<HdfsScanStats> _scan_stats;
 
     std::shared_ptr<FileReader> _file_reader;
+=======
+    std::shared_ptr<FileReader> _file_reader;
+    std::unique_ptr<RandomAccessFile> _file;
+    std::shared_ptr<HdfsScannerContext> _scanner_ctx;
+    std::shared_ptr<HdfsScanStats> _scan_stats;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_ptr<Chunk> _chunk;
     ObjectPool _pool;
 };

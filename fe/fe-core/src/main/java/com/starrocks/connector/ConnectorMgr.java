@@ -17,9 +17,18 @@ package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
 
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.memory.MemoryTrackable;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -40,6 +49,11 @@ public class ConnectorMgr {
             if (connector == null) {
                 return null;
             }
+<<<<<<< HEAD
+=======
+        } catch (StarRocksConnectorException e) {
+            throw e;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             readUnlock();
         }
@@ -108,4 +122,27 @@ public class ConnectorMgr {
         this.connectorLock.writeLock().unlock();
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, MemoryTrackable> getMemTrackers() {
+        Map<String, MemoryTrackable> memoryTrackers = new HashMap<>();
+        readLock();
+        try {
+            for (Map.Entry<String, CatalogConnector> connectorEntry : connectors.entrySet()) {
+                CatalogConnector catalogConnector = connectorEntry.getValue();
+                if (!catalogConnector.supportMemoryTrack()) {
+                    continue;
+                }
+
+                String catalogName = connectorEntry.getKey();
+                String connectorClassName = catalogConnector.normalConnectorClassName();
+                String labelName = connectorClassName + "." + catalogName;
+                memoryTrackers.put(labelName, catalogConnector);
+            }
+        } finally {
+            readUnlock();
+        }
+        return memoryTrackers;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

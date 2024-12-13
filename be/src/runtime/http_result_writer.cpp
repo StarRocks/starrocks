@@ -30,9 +30,14 @@ namespace starrocks {
 
 HttpResultWriter::HttpResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                    RuntimeProfile* parent_profile, TResultSinkFormatType::type format_type)
+<<<<<<< HEAD
         : _sinker(sinker),
           _output_expr_ctxs(output_expr_ctxs),
           _parent_profile(parent_profile),
+=======
+        : BufferControlResultWriter(sinker, parent_profile),
+          _output_expr_ctxs(output_expr_ctxs),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           _format_type(format_type) {}
 
 Status HttpResultWriter::init(RuntimeState* state) {
@@ -44,6 +49,7 @@ Status HttpResultWriter::init(RuntimeState* state) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void HttpResultWriter::_init_profile() {
     _append_chunk_timer = ADD_TIMER(_parent_profile, "AppendChunkTime");
     _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
@@ -51,6 +57,8 @@ void HttpResultWriter::_init_profile() {
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // transform one row into json format
 Status HttpResultWriter::_transform_row_to_json(const Columns& result_columns, int idx) {
     int num_columns = result_columns.size();
@@ -72,11 +80,14 @@ Status HttpResultWriter::append_chunk(Chunk* chunk) {
     return Status::NotSupported("HttpResultWriter doesn't support non-pipeline engine");
 }
 
+<<<<<<< HEAD
 Status HttpResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
@@ -146,6 +157,7 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
     return results;
 }
 
+<<<<<<< HEAD
 StatusOr<bool> HttpResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     SCOPED_TIMER(_result_send_timer);
     size_t num_rows = 0;
@@ -167,4 +179,6 @@ StatusOr<bool> HttpResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
     return status;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

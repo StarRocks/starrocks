@@ -194,10 +194,13 @@ bool StructColumn::append_nulls(size_t count) {
     return true;
 }
 
+<<<<<<< HEAD
 bool StructColumn::append_strings(const Buffer<Slice>& strs) {
     return false;
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 size_t StructColumn::append_numbers(const void* buff, size_t length) {
     return -1;
 }
@@ -447,12 +450,20 @@ void StructColumn::swap_column(Column& rhs) {
     // _field_names dont need swap
 }
 
+<<<<<<< HEAD
 bool StructColumn::capacity_limit_reached(std::string* msg) const {
     bool res = false;
     for (const auto& column : _fields) {
         res = res || column->capacity_limit_reached(msg);
     }
     return res;
+=======
+Status StructColumn::capacity_limit_reached() const {
+    for (const auto& column : _fields) {
+        RETURN_IF_ERROR(column->capacity_limit_reached());
+    }
+    return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void StructColumn::check_or_die() const {

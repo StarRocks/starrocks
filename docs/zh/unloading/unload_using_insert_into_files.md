@@ -12,8 +12,12 @@ displayed_sidebar: docs
 
 > **说明**
 >
+<<<<<<< HEAD
 > - 使用 INSERT INTO FILES 导出数据不支持将数据导出至本地文件系统。
 > - 当前，INSERT INTO FILES 仅支持以 Parquet 文件格式导出数据。
+=======
+> 使用 INSERT INTO FILES 导出数据不支持将数据导出至本地文件系统。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 准备工作
 

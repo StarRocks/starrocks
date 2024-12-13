@@ -14,6 +14,7 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <exec/hdfs_scanner.h>
 
 #include <boost/algorithm/string.hpp>
@@ -22,6 +23,11 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
+=======
+#include <orc/OrcFile.hh>
+
+#include "exec/hdfs_scanner.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "io/shared_buffered_input_stream.h"
 namespace starrocks {
 

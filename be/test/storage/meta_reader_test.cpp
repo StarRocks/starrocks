@@ -20,6 +20,10 @@
 
 #include "column/fixed_length_column.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/rowset/segment_writer.h"
 #include "testutil/assert.h"
 
@@ -36,21 +40,44 @@ public:
         col->set_is_nullable(false);
         _tablet_schema = TabletSchema::create(schema_pb);
 
+<<<<<<< HEAD
         std::string segment_name = "segment_meta_collector_test.dat";
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(segment_name));
         WritableFileOptions options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(options, segment_name));
+=======
+        _segment_name = "segment_meta_collector_test.dat";
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(_segment_name));
+        auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
+        WritableFileOptions options{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                                    .encryption_info = encryption_pair.info};
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(options, _segment_name));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SegmentWriter writer(std::move(wf), 0, _tablet_schema, SegmentWriterOptions());
         EXPECT_OK(writer.init());
         uint64_t file_size, index_size, footer_pos;
         EXPECT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
 
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(_segment, Segment::open(fs, FileInfo{segment_name}, 0, _tablet_schema));
     }
 
 protected:
     TabletSchemaCSPtr _tablet_schema;
     SegmentSharedPtr _segment;
+=======
+        FileInfo file_info{.path = _segment_name, .encryption_meta = encryption_pair.encryption_meta};
+        ASSIGN_OR_ABORT(_segment, Segment::open(fs, file_info, 0, _tablet_schema));
+    }
+
+    ~SegmentMetaCollecterTest() { fs::delete_file(_segment_name); }
+
+protected:
+    std::string _segment_name;
+    TabletSchemaCSPtr _tablet_schema;
+    SegmentSharedPtr _segment;
+    std::string _segment_encryption_meta;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 TEST_F(SegmentMetaCollecterTest, test_init) {
@@ -60,7 +87,11 @@ TEST_F(SegmentMetaCollecterTest, test_init) {
     SegmentMetaCollecterParams params;
     EXPECT_FALSE(collecter.init(&params).ok());
 
+<<<<<<< HEAD
     params.fields.emplace_back("count");
+=======
+    params.fields.emplace_back("rows");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     EXPECT_FALSE(collecter.init(&params).ok());
 
     params.field_type.emplace_back(LogicalType::TYPE_INT);
@@ -83,12 +114,20 @@ TEST_F(SegmentMetaCollecterTest, test_open_and_collect) {
     EXPECT_FALSE(collecter.open().ok());
 
     SegmentMetaCollecterParams params;
+<<<<<<< HEAD
     params.fields.emplace_back("count");
+=======
+    params.fields.emplace_back("rows");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     params.field_type.emplace_back(LogicalType::TYPE_INT);
     params.cids.emplace_back(0);
     params.read_page.emplace_back(false);
     params.tablet_schema = _tablet_schema;
     EXPECT_OK(collecter.init(&params));
+<<<<<<< HEAD
+=======
+    EXPECT_OK(collecter.open());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::vector<Column*> columns;
     EXPECT_FALSE(collecter.collect(&columns).ok());

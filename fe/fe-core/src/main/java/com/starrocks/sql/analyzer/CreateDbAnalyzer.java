@@ -15,7 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -38,11 +41,15 @@ public class CreateDbAnalyzer {
             statement.setCatalogName(catalogName);
         }
 
+<<<<<<< HEAD
         try {
             MetaUtils.checkCatalogExistAndReport(catalogName);
         } catch (AnalysisException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
+=======
+        MetaUtils.checkCatalogExistAndReport(catalogName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, String> properties = statement.getProperties();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {

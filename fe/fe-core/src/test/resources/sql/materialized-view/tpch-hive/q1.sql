@@ -23,9 +23,17 @@ order by
 [result]
 TOP-N (order by [[9: l_returnflag ASC NULLS FIRST, 10: l_linestatus ASC NULLS FIRST]])
     TOP-N (order by [[9: l_returnflag ASC NULLS FIRST, 10: l_linestatus ASC NULLS FIRST]])
+<<<<<<< HEAD
         AGGREGATE ([GLOBAL] aggregate [{116: sum=sum(116: sum), 117: sum=sum(117: sum), 118: sum=sum(118: sum), 119: sum=sum(119: sum), 120: count=sum(120: count), 121: count=sum(121: count), 122: sum=sum(122: sum), 123: count=sum(123: count), 124: count=sum(124: count)}] group by [[40: l_returnflag, 41: l_linestatus]] having [null]
             EXCHANGE SHUFFLE[40, 41]
                 AGGREGATE ([LOCAL] aggregate [{116: sum=sum(42: sum_qty), 117: sum=sum(44: sum_base_price), 118: sum=sum(48: sum_disc_price), 119: sum=sum(49: sum_charge), 120: count=sum(43: count_qty), 121: count=sum(45: count_base_price), 122: sum=sum(46: sum_discount), 123: count=sum(47: count_discount), 124: count=sum(50: count_order)}] group by [[40: l_returnflag, 41: l_linestatus]] having [null]
                     SCAN (mv[lineitem_agg_mv1] columns[39: l_shipdate, 40: l_returnflag, 41: l_linestatus, 42: sum_qty, 43: count_qty, 44: sum_base_price, 45: count_base_price, 46: sum_discount, 47: count_discount, 48: sum_disc_price, 49: sum_charge, 50: count_order] predicate[39: l_shipdate <= 1998-12-01])
 [end]
 
+=======
+        AGGREGATE ([GLOBAL] aggregate [{113: count=sum(113: count), 103: sum=sum(103: sum), 104: sum=sum(104: sum), 105: sum=sum(105: sum), 106: sum=sum(106: sum), 107: sum=sum(107: sum), 108: count=sum(108: count), 109: sum=sum(109: sum), 110: count=sum(110: count), 111: sum=sum(111: sum), 112: count=sum(112: count)}] group by [[29: l_returnflag, 30: l_linestatus]] having [null]
+            EXCHANGE SHUFFLE[29, 30]
+                AGGREGATE ([LOCAL] aggregate [{113: count=sum(39: count_order), 103: sum=sum(31: sum_qty), 104: sum=sum(33: sum_base_price), 105: sum=sum(37: sum_disc_price), 106: sum=sum(38: sum_charge), 107: sum=sum(31: sum_qty), 108: count=sum(32: count_qty), 109: sum=sum(33: sum_base_price), 110: count=sum(34: count_base_price), 111: sum=sum(35: sum_discount), 112: count=sum(36: count_discount)}] group by [[29: l_returnflag, 30: l_linestatus]] having [null]
+                    SCAN (mv[lineitem_agg_mv1] columns[28: l_shipdate, 29: l_returnflag, 30: l_linestatus, 31: sum_qty, 32: count_qty, 33: sum_base_price, 34: count_base_price, 35: sum_discount, 36: count_discount, 37: sum_disc_price, 38: sum_charge, 39: count_order] predicate[28: l_shipdate <= 1998-12-01])
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -9,8 +9,12 @@ CREATE TABLE `t1` (
 DUPLICATE KEY(`v4`, `v5`, v6)
 DISTRIBUTED BY HASH(`v4`) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
     "replication_num" = "1",
     "in_memory" = "false"
+=======
+    "replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 INSERT INTO `t1` (`v4`, `v5`, `v6`) VALUES (1, 10, 100);
 INSERT INTO `t1` (`v4`, `v5`, `v6`) VALUES (2, 20, 200);
@@ -26,8 +30,12 @@ CREATE TABLE `t2` (
 DUPLICATE KEY(`c4`, `c5`, c6)
 DISTRIBUTED BY HASH(`c4`) BUCKETS 3
 PROPERTIES (
+<<<<<<< HEAD
     "replication_num" = "1",
     "in_memory" = "false"
+=======
+    "replication_num" = "1"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 
 INSERT INTO `t2` (`c4`, `c5`, `c6`) VALUES (1, 1009, 10009);

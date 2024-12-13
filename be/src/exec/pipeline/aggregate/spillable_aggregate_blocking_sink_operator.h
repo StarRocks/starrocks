@@ -77,6 +77,11 @@ private:
     void _add_streaming_chunk(ChunkPtr chunk);
 
     std::function<StatusOr<ChunkPtr>()> _build_spill_task(RuntimeState* state, bool should_spill_hash_table = true);
+<<<<<<< HEAD
+=======
+
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     std::queue<ChunkPtr> _streaming_chunks;
@@ -86,7 +91,10 @@ private:
     int32_t _continuous_low_reduction_chunk_num = 0;
 
     bool _is_finished = false;
+<<<<<<< HEAD
     DECLARE_ONCE_DETECTOR(_set_finishing_once);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeProfile::Counter* _hash_table_spill_times = nullptr;
 

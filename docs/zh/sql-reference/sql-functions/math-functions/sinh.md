@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # sinh
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算输入数值的双曲正弦值。
 

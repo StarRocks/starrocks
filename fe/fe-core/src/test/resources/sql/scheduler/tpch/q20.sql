@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -36,12 +37,18 @@ where
   and n_name = 'ARGENTINA'
 order by
     s_name ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F09)
   DOP: 16
   INSTANCES
     INSTANCE(0-F09#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -143,6 +150,7 @@ PLAN FRAGMENT 3(F06)
   INSTANCES
     INSTANCE(7-F06#0)
       DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
+<<<<<<< HEAD
       BE: 10003
     INSTANCE(8-F06#1)
       DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
@@ -150,6 +158,15 @@ PLAN FRAGMENT 3(F06)
     INSTANCE(9-F06#2)
       DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
       BE: 10001
+=======
+      BE: 10001
+    INSTANCE(8-F06#1)
+      DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
+      BE: 10003
+    INSTANCE(9-F06#2)
+      DESTINATIONS: 6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1,6-F03#2,4-F03#0,5-F03#1
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 4(F05)
   DOP: 16
@@ -372,5 +389,9 @@ PLAN FRAGMENT 5
      tabletList=1360
      cardinality=1
      avgRowSize=29.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

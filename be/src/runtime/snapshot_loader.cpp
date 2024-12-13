@@ -50,6 +50,11 @@
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/clucene/clucene_plugin.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
@@ -105,7 +110,11 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
+<<<<<<< HEAD
                << "broker addr: " << upload.broker_addr << ". msg: " << status.get_error_msg();
+=======
+               << "broker addr: " << upload.broker_addr << ". msg: " << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -252,7 +261,11 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
+<<<<<<< HEAD
                << "broker addr: " << download.broker_addr << ". msg: " << status.get_error_msg();
+=======
+               << "broker addr: " << download.broker_addr << ". msg: " << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -407,8 +420,12 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             std::string new_name;
             Status st = _replace_tablet_id(local_file, remote_tablet_id, &new_name);
             if (!st.ok()) {
+<<<<<<< HEAD
                 LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.get_error_msg()
                              << ". ignore it";
+=======
+                LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.message() << ". ignore it";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 continue;
             }
             VLOG(2) << "new file name after replace tablet id: " << new_name;
@@ -495,6 +512,10 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     }
     snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
 
+<<<<<<< HEAD
+=======
+    // Do not need to copy GIN in pk table because it does not support GIN now
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path));
 
     if (overwrite) {
@@ -660,6 +681,14 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
             }
             std::string full_src_path = snapshot_path + "/" + file;
             std::string full_dest_path = tablet_path + "/" + file;
+<<<<<<< HEAD
+=======
+            if (_end_with(file, "ivt")) {
+                RETURN_IF_ERROR(FileSystem::Default()->rename_file(full_src_path, full_dest_path));
+                VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
+                continue;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
                 LOG(WARNING) << "failed to link file from " << full_src_path << " to " << full_dest_path
                              << ", err: " << std::strerror(errno);
@@ -851,6 +880,10 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+<<<<<<< HEAD
+=======
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -906,7 +939,11 @@ Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_p
     Status status = FileSystem::Default()->get_children(local_path, local_files);
     if (!status.ok()) {
         std::stringstream ss;
+<<<<<<< HEAD
         ss << "failed to list files in local path: " << local_path << ", msg: " << status.get_error_msg();
+=======
+        ss << "failed to list files in local path: " << local_path << ", msg: " << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG(WARNING) << ss.str();
         return status;
     }
@@ -939,6 +976,10 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+<<<<<<< HEAD
+=======
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
@@ -997,7 +1038,15 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         *new_file_name = ss.str();
         return Status::OK();
     } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
+<<<<<<< HEAD
                _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt")) {
+=======
+               _end_with(file_name, ".del") || _end_with(file_name, ".cols") || _end_with(file_name, ".upt") ||
+               _end_with(file_name, ".vi")) {
+        *new_file_name = file_name;
+        return Status::OK();
+    } else if (CLucenePlugin::is_index_files(file_name)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         *new_file_name = file_name;
         return Status::OK();
     } else {

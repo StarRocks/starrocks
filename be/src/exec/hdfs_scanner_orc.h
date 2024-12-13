@@ -17,9 +17,15 @@
 #include <orc/OrcFile.hh>
 
 #include "exec/hdfs_scanner.h"
+<<<<<<< HEAD
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/utils.h"
+=======
+#include "formats/disk_range.hpp"
+#include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_input_stream.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 

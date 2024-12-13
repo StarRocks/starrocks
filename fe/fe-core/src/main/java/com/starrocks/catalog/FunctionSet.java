@@ -37,11 +37,22 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableSortedSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.combinator.AggStateCombinator;
+import com.starrocks.catalog.combinator.AggStateMergeCombinator;
+import com.starrocks.catalog.combinator.AggStateUnionCombinator;
+import com.starrocks.catalog.combinator.AggStateUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -105,8 +116,14 @@ public class FunctionSet {
     public static final String UTC_TIME = "utc_time";
     public static final String LOCALTIME = "localtime";
     public static final String LOCALTIMESTAMP = "localtimestamp";
+<<<<<<< HEAD
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String WEEK = "week";
+=======
+
+    public static final String WEEK = "week";
+    public static final String WEEKOFYEAR = "weekofyear";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
     public static final String HOURS_DIFF = "hours_diff";
@@ -149,6 +166,14 @@ public class FunctionSet {
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
 
+<<<<<<< HEAD
+=======
+    // Vector Index functions:
+    public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_COSINE_SIMILARITY_NORM = "approx_cosine_similarity_norm";
+    public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Geo functions:
     public static final String ST_ASTEXT = "st_astext";
     public static final String ST_ASWKT = "st_aswkt";
@@ -214,13 +239,22 @@ public class FunctionSet {
     public static final String JSON_OBJECT = "json_object";
     public static final String PARSE_JSON = "parse_json";
     public static final String JSON_QUERY = "json_query";
+<<<<<<< HEAD
     public static final String JSON_EXIST = "json_exists";
     public static final String JSON_EACH = "json_each";
+=======
+    public static final String JSON_EXISTS = "json_exists";
+    public static final String JSON_EACH = "json_each";
+    public static final String GET_JSON_BOOL = "get_json_bool";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String GET_JSON_DOUBLE = "get_json_double";
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
+<<<<<<< HEAD
     public static final String JSON_EXISTS = "json_exists";
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String JSON_LENGTH = "json_length";
 
     // Matching functions:
@@ -240,6 +274,11 @@ public class FunctionSet {
     public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
+<<<<<<< HEAD
+=======
+    public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
+    public static final String DS_HLL_COUNT_DISTINCT = "ds_hll_count_distinct";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -254,6 +293,10 @@ public class FunctionSet {
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String PERCENTILE_DISC = "percentile_disc";
+<<<<<<< HEAD
+=======
+    public static final String LC_PERCENTILE_DISC = "percentile_disc_lc";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String RETENTION = "retention";
     public static final String STDDEV = "stddev";
     public static final String STDDEV_POP = "stddev_pop";
@@ -281,6 +324,11 @@ public class FunctionSet {
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
     public static final String HISTOGRAM = "histogram";
+<<<<<<< HEAD
+=======
+    public static final String FLAT_JSON_META = "flat_json_meta";
+    public static final String MANN_WHITNEY_U_TEST = "mann_whitney_u_test";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -458,6 +506,12 @@ public class FunctionSet {
     public static final String MAP_FROM_ARRAYS = "map_from_arrays";
     public static final String MAP_KEYS = "map_keys";
     public static final String MAP_SIZE = "map_size";
+<<<<<<< HEAD
+=======
+
+    public static final String MAP_AGG = "map_agg";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
 
@@ -469,6 +523,13 @@ public class FunctionSet {
     public static final String STRUCT = "struct";
     public static final String NAMED_STRUCT = "named_struct";
 
+<<<<<<< HEAD
+=======
+    public static final String NGRAM_SEARCH = "ngram_search";
+    public static final String NGRAM_SEARCH_CASE_INSENSITIVE = "ngram_search_case_insensitive";
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
@@ -491,11 +552,19 @@ public class FunctionSet {
     public static final String SECONDS_SUB = "seconds_sub";
     public static final String MILLISECONDS_ADD = "milliseconds_add";
     public static final String MILLISECONDS_SUB = "milliseconds_sub";
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // table function
     public static final String UNNEST = "unnest";
     public static final String UNNEST_BITMAP = "unnest_bitmap";
 
     public static final String CONNECTION_ID = "connection_id";
+<<<<<<< HEAD
+=======
+    public static final String SESSION_ID = "session_id";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final String CATALOG = "catalog";
 
@@ -511,6 +580,13 @@ public class FunctionSet {
 
     public static final String CURRENT_ROLE = "current_role";
 
+<<<<<<< HEAD
+=======
+    public static final String AGG_STATE_SUFFIX = "_state";
+    public static final String AGG_STATE_UNION_SUFFIX = "_union";
+    public static final String AGG_STATE_MERGE_SUFFIX = "_merge";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =
@@ -597,6 +673,10 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+<<<<<<< HEAD
+=======
+                    .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .add(FunctionSet.MD5_SUM_NUMERIC)
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
@@ -619,6 +699,16 @@ public class FunctionSet {
                     .add(SLEEP)
                     .build();
 
+<<<<<<< HEAD
+=======
+    public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
+            ImmutableSet.<String>builder()
+                    .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_COSINE_SIMILARITY_NORM)
+                    .add(APPROX_L2_DISTANCE)
+                    .build();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Only use query cache if these time function can be reduced into a constant
     // date/datetime value after applying FoldConstantRule, otherwise BE would yield
     // non-deterministic result when these function is delivered to BE.
@@ -645,6 +735,11 @@ public class FunctionSet {
             .build();
 
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
+<<<<<<< HEAD
+=======
+            .add(FunctionSet.LEAD)
+            .add(FunctionSet.LAG)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)
             .add(FunctionSet.CUME_DIST)
@@ -707,11 +802,19 @@ public class FunctionSet {
             .add(ARRAY_SLICE)
             .add(ARRAY_CONTAINS)
             .add(ARRAY_CONTAINS_ALL)
+<<<<<<< HEAD
+=======
+            .add(ARRAY_CONTAINS_SEQ)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             .add(ARRAY_POSITION)
             .build();
 
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
             .add(CONNECTION_ID)
+<<<<<<< HEAD
+=======
+            .add(SESSION_ID)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             .add(CATALOG)
             .add(DATABASE)
             .add(SCHEMA)
@@ -729,6 +832,38 @@ public class FunctionSet {
                 return new ArrayType(new StructType(fields, true));
             };
 
+<<<<<<< HEAD
+=======
+    public static final Set<String> INDEX_ONLY_FUNCTIONS =
+            ImmutableSet.<String>builder().add().add(NGRAM_SEARCH).add(NGRAM_SEARCH_CASE_INSENSITIVE).build();
+
+    // Unsupported functions for agg state combinator.
+    public static final Set<String> UNSUPPORTED_AGG_STATE_FUNCTIONS =
+            new ImmutableSortedSet.Builder<>(String.CASE_INSENSITIVE_ORDER)
+                    // TODO: Add unsupported functions here.
+                    .add(GROUP_CONCAT) // Unsupported function
+                    // UNSUPPORTED functions
+                    .add(COUNT_IF) // count_if is a syntax sugar in fe
+                    .add(HLL_RAW) // hll_raw use `hll` as input, use existed `hll_union` instead
+                    // Internal functions are not supported.
+                    .add(FLAT_JSON_META)
+                    .add(EXCHANGE_BYTES)
+                    .add(EXCHANGE_SPEED)
+                    .add(FIRST_VALUE_REWRITE)
+                    .add(HISTOGRAM)
+                    .add(DICT_MERGE)
+                    // Functions with constant contexts in be are not supported.
+                    .add(WINDOW_FUNNEL)
+                    .add(APPROX_TOP_K)
+                    .add(INTERSECT_COUNT)
+                    .add(LC_PERCENTILE_DISC)
+                    .add(MAP_AGG)
+                    .build();
+
+    public static final Set<String> RANK_RALATED_FUNCTIONS =
+            ImmutableSet.<String>builder().add().add(ROW_NUMBER).add(RANK).add(DENSE_RANK).build();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
     }
@@ -883,6 +1018,12 @@ public class FunctionSet {
 
     public Function getFunction(Function desc, Function.CompareMode mode) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
+<<<<<<< HEAD
+=======
+        if (desc.hasNamedArg() && fns != null && !fns.isEmpty()) {
+            fns = fns.stream().filter(Function::hasNamedArg).collect(Collectors.toList());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (fns == null || fns.isEmpty()) {
             return null;
         }
@@ -931,12 +1072,46 @@ public class FunctionSet {
     }
 
     /**
+<<<<<<< HEAD
      * Adds a builtin to this database. The function must not already exist.
+=======
+     * Adds a builtin scalar function to this database. The function must not already exist.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     public void addBuiltin(Function fn) {
         addBuiltInFunction(fn);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Adds a builtin aggregate function to this database. The function must not already exist.
+     */
+    public void addBuiltin(AggregateFunction aggFunc) {
+        addBuiltInFunction(aggFunc);
+
+        if (AggStateUtils.isSupportedAggStateFunction(aggFunc)) {
+            // register `_state` combinator
+            AggStateCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            // register `_merge`/`_union` combinator for aggregate functions
+            AggStateUnionCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+            AggStateMergeCombinator.of(aggFunc).stream().forEach(this::addBuiltInFunction);
+        }
+    }
+
+    public static String getAggStateName(String name) {
+        return String.format("%s%s", name, AGG_STATE_SUFFIX);
+    }
+
+    public static String getAggStateUnionName(String name) {
+        return String.format("%s%s", name, AGG_STATE_UNION_SUFFIX);
+    }
+
+    public static String getAggStateMergeName(String name) {
+        return String.format("%s%s", name, AGG_STATE_MERGE_SUFFIX);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Populate all the aggregate builtins in the globalStateMgr.
     // null symbols indicate the function does not need that step of the evaluation.
     // An empty symbol indicates a TODO for the BE to implement the function.
@@ -1024,6 +1199,22 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
+<<<<<<< HEAD
+=======
+            // ds_hll_count_distinct(col)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k, tgt_type)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // HLL_RAW
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
                     Lists.newArrayList(t), Type.HLL, Type.VARBINARY,
@@ -1068,6 +1259,12 @@ public class FunctionSet {
         // Percentile
         registerBuiltinPercentileAggFunction();
 
+<<<<<<< HEAD
+=======
+        // map_agg
+        registerBuiltinMapAggFunction();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
                 Lists.newArrayList(Type.HLL), Type.BIGINT, Type.HLL,
@@ -1162,6 +1359,18 @@ public class FunctionSet {
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
         addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
+<<<<<<< HEAD
+=======
+        // flat json meta
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.JSON),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_STRUCT),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_MAP),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.ANY_ARRAY),
+                Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR, false, false, false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
@@ -1200,6 +1409,25 @@ public class FunctionSet {
                     Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
+<<<<<<< HEAD
+=======
+
+        // causal inference functions.
+        registerBuiltinHypothesisTestingFunctions();
+    }
+
+    private void registerBuiltinHypothesisTestingFunctions() {
+        // mann_whitney_u_test
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR, Type.BIGINT), Type.JSON,
+                Type.VARBINARY, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN, Type.VARCHAR), Type.JSON,
+                Type.VARBINARY, false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(MANN_WHITNEY_U_TEST,
+                Lists.newArrayList(Type.DOUBLE, Type.BOOLEAN), Type.JSON,
+                Type.VARBINARY, false, false, false));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void registerBuiltinSumAggFunction(String name) {
@@ -1279,6 +1507,31 @@ public class FunctionSet {
                 false, false, false));
     }
 
+<<<<<<< HEAD
+=======
+    private void registerBuiltinMapAggFunction() {
+        for (ScalarType keyType : Type.getNumericTypes()) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                        false, false, false));
+        }
+        for (ScalarType keyType : Type.STRING_TYPES) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                        false, false, false));
+        }
+
+        for (ScalarType keyType : Type.DATE_TYPES) {
+                addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                        Lists.newArrayList(keyType, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                        false, false, false));
+        }
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MAP_AGG,
+                Lists.newArrayList(Type.TIME, Type.ANY_ELEMENT), Type.ANY_MAP, null,
+                false, false, false));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void registerBuiltinArrayUniqueAggFunction() {
         // array_unique_agg mapping array_agg_distinct while array as input.
         for (ScalarType type : Type.getNumericTypes()) {
@@ -1403,6 +1656,14 @@ public class FunctionSet {
                     Lists.newArrayList(type, Type.DOUBLE), type, Type.VARBINARY,
                     false, false, false));
         }
+<<<<<<< HEAD
+=======
+        for (Type type : SORTABLE_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.LC_PERCENTILE_DISC,
+                    Lists.newArrayList(type, Type.DOUBLE), type, Type.VARBINARY,
+                    false, false, false));
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void registerBuiltinApproxTopKWindowFunction() {
@@ -1437,5 +1698,8 @@ public class FunctionSet {
         }
         return builtinFunctions;
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

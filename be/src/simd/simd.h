@@ -16,7 +16,14 @@
 
 #include <cstdint>
 #include <cstring>
+<<<<<<< HEAD
 #include <vector>
+=======
+#include <type_traits>
+#include <vector>
+
+#include "column/column.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef __SSE2__
 #include <emmintrin.h>
 #elif defined(__ARM_NEON) && defined(__aarch64__)
@@ -26,6 +33,7 @@
 
 namespace SIMD {
 
+<<<<<<< HEAD
 // Count the number of zeros of 8-bit signed integers.
 inline size_t count_zero(const int8_t* data, size_t size) {
     size_t count = 0;
@@ -34,6 +42,18 @@ inline size_t count_zero(const int8_t* data, size_t size) {
 #if defined(__SSE2__) && defined(__POPCNT__)
     const __m128i zero16 = _mm_setzero_si128();
     const int8_t* end64 = data + (size / 64 * 64);
+=======
+// Count the number of zeros of 8-bit integers.
+template <typename T>
+inline typename std::enable_if<std::is_same<T, int8_t>::value || std::is_same<T, uint8_t>::value, size_t>::type
+count_zero(const T* data, size_t size) {
+    size_t count = 0;
+    const T* end = data + size;
+
+#if defined(__SSE2__) && defined(__POPCNT__)
+    const __m128i zero16 = _mm_setzero_si128();
+    const T* end64 = data + (size / 64 * 64);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (; data < end64; data += 64) {
         count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_epi8(_mm_cmpeq_epi8(
@@ -56,14 +76,27 @@ inline size_t count_zero(const int8_t* data, size_t size) {
     return count;
 }
 
+<<<<<<< HEAD
 inline size_t count_zero(const uint32_t* data, size_t size) {
     size_t count = 0;
     const uint32_t* end = data + size;
+=======
+// Count the number of zeros of 32-bit integers.
+template <typename T>
+inline typename std::enable_if<std::is_same<T, int32_t>::value || std::is_same<T, uint32_t>::value, size_t>::type
+count_zero(const T* data, size_t size) {
+    size_t count = 0;
+    const T* end = data + size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #if defined(__SSE2__) && defined(__POPCNT__)
     // count per 16 int
     const __m128i zero16 = _mm_setzero_si128();
+<<<<<<< HEAD
     const uint32_t* end16 = data + (size / 16 * 16);
+=======
+    const T* end16 = data + (size / 16 * 16);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     for (; data < end16; data += 16) {
         count += __builtin_popcountll(static_cast<uint64_t>(_mm_movemask_ps(_mm_cvtepi32_ps(_mm_cmpeq_epi32(
@@ -86,6 +119,7 @@ inline size_t count_zero(const uint32_t* data, size_t size) {
     return count;
 }
 
+<<<<<<< HEAD
 inline size_t count_zero(const std::vector<uint32_t>& nums) {
     return count_zero(nums.data(), nums.size());
 }
@@ -132,6 +166,42 @@ inline size_t count_nonzero(const std::vector<int8_t>& list) {
 // NOTE: memchr is much faster than a plain SIMD implementation
 template <class T>
 inline static size_t find_byte(const std::vector<T>& list, size_t start, size_t count, T byte) {
+=======
+template <typename Container, typename T = typename Container::value_type>
+inline size_t count_zero(const Container& nums) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
+    return count_zero(nums.data(), nums.size());
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline size_t count_zero(const Container& nums, size_t size) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
+    return count_zero(nums.data(), size);
+}
+
+template <typename T>
+inline size_t count_nonzero(const T* data, size_t size) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
+    return size - count_zero(data, size);
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline size_t count_nonzero(const Container& nums) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t) || sizeof(T) == sizeof(uint32_t)),
+                  "only 8-bit or 32-bit integral types are supported");
+    return count_nonzero(nums.data(), nums.size());
+}
+
+// NOTE: memchr is much faster than a plain SIMD implementation
+template <typename Container, typename T = typename Container::value_type>
+inline static size_t find_byte(const Container& list, size_t start, size_t count, T byte) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (start >= list.size()) {
         return start;
     }
@@ -143,8 +213,16 @@ inline static size_t find_byte(const std::vector<T>& list, size_t start, size_t 
     return (T*)p - list.data();
 }
 
+<<<<<<< HEAD
 template <class T>
 inline static size_t find_byte(const std::vector<T>& list, size_t start, T byte) {
+=======
+template <typename Container, typename T = typename Container::value_type>
+inline static size_t find_byte(const Container& list, size_t start, T byte) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (start >= list.size()) {
         return start;
     }
@@ -156,6 +234,7 @@ inline static size_t find_byte(const std::vector<T>& list, size_t start, T byte)
 }
 
 // Find position for zero byte, return size of list if not found
+<<<<<<< HEAD
 inline size_t find_zero(const std::vector<uint8_t>& list, size_t start) {
     return find_byte<uint8_t>(list, start, 0);
 }
@@ -189,6 +268,61 @@ inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start) {
 }
 
 inline bool contain_nonzero(const std::vector<uint8_t>& list, size_t start, size_t count) {
+=======
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_zero(const Container& list, size_t start) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, static_cast<T>(0));
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_zero(const Container& list, size_t start, size_t count) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, count, static_cast<T>(0));
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_nonzero(const Container& list, size_t start) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, static_cast<T>(1));
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline size_t find_nonzero(const Container& list, size_t start, size_t count) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_byte(list, start, count, static_cast<T>(1));
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_zero(const Container& list) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_zero(list, 0) < list.size();
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_nonzero(const Container& list) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_nonzero(list, 0) < list.size();
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_nonzero(const Container& list, size_t start) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+    return find_nonzero(list, start) < list.size();
+}
+
+template <typename Container, typename T = typename Container::value_type>
+inline bool contain_nonzero(const Container& list, size_t start, size_t count) {
+    static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
+                  "only 8-bit integral types are supported");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t pos = find_nonzero(list, start, count);
     return pos < list.size() && pos < start + count;
 }

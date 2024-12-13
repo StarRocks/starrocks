@@ -45,6 +45,10 @@
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
+<<<<<<< HEAD
+=======
+#include "storage/index/index_descriptor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
@@ -86,12 +90,21 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // copy the contents of the slice `nullmap` into the slice `encoded values`, but the cost of copying is still not small.
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
+<<<<<<< HEAD
+=======
+    meta->set_compression_level(_tablet_schema->compression_level());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
     if (column.type() == TYPE_JSON) {
         JsonMetaPB* json_meta = meta->mutable_json_meta();
         json_meta->set_format_version(kJsonMetaDefaultFormatVersion);
+<<<<<<< HEAD
+=======
+        json_meta->set_is_flat(false);
+        json_meta->set_has_remain(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     for (uint32_t i = 0; i < column.subcolumn_count(); ++i) {
@@ -126,6 +139,10 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         if (footer->has_short_key_index_page()) {
             *_footer.mutable_short_key_index_page() = footer->short_key_index_page();
         }
+<<<<<<< HEAD
+=======
+        _verify_footer();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // in partial update, key columns have been written in partial segment
         // set _num_rows as _num_rows in partial segment
         _num_rows = footer->num_rows();
@@ -168,6 +185,26 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
         opts.need_bloom_filter = column.is_bf_column();
         opts.need_bitmap_index = column.has_bitmap_index();
+<<<<<<< HEAD
+=======
+        opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
+        opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
+
+        RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index) {
+            opts.standalone_index_file_paths.emplace(
+                    GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                                   _opts.segment_file_mark.rowset_id, _segment_id,
+                                                                   opts.tablet_index.at(GIN).index_id()));
+        } else if (opts.need_vector_index) {
+            opts.standalone_index_file_paths.emplace(
+                    IndexType::VECTOR,
+                    IndexDescriptor::vector_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
+                                                            _opts.segment_file_mark.rowset_id, _segment_id,
+                                                            opts.tablet_index.at(IndexType::VECTOR).index_id()));
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (column.type() == LogicalType::TYPE_ARRAY) {
             if (opts.need_bloom_filter) {
                 return Status::NotSupported("Do not support bloom filter for array type");
@@ -185,6 +222,11 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
+<<<<<<< HEAD
+=======
+        opts.need_flat = config::enable_json_flat;
+        opts.is_compaction = _opts.is_compaction;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
@@ -222,6 +264,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
         _schema_without_full_row_column = std::make_unique<Schema>(_tablet_schema->schema(), cids);
     }
+<<<<<<< HEAD
+=======
+
+    _verify_footer();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -277,7 +325,15 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
+<<<<<<< HEAD
         *index_size += _wfile->size() - index_offset;
+=======
+        RETURN_IF_ERROR(column_writer->write_inverted_index());
+
+        uint64_t standalone_index_size = 0;
+        RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
+        *index_size += _wfile->size() - index_offset + standalone_index_size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // check global dict valid
         const auto& column = _tablet_schema->column(column_index);
@@ -325,6 +381,11 @@ Status SegmentWriter::_write_footer() {
     _footer.set_version(2);
     _footer.set_num_rows(_num_rows);
 
+<<<<<<< HEAD
+=======
+    _verify_footer();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     std::string footer_buf;
     if (!_footer.SerializeToString(&footer_buf)) {
@@ -392,4 +453,17 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+void SegmentWriter::_verify_footer() {
+#if !defined(NDEBUG) || defined(BE_TEST)
+    std::set<uint32_t> unique_ids;
+    for (auto&& col : _footer.columns()) {
+        [[maybe_unused]] auto [iter, ok] = unique_ids.emplace(col.unique_id());
+        CHECK(ok) << "Segment footer contains duplicate column id=" << col.unique_id() << ": " << _footer.DebugString();
+    }
+#endif
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

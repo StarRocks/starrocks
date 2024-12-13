@@ -16,6 +16,10 @@
 
 #include <algorithm>
 #include <cmath>
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -23,16 +27,27 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_factory.h"
+<<<<<<< HEAD
+=======
+#include "exprs/agg/aggregate_state_allocator.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/array_agg.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/sum.h"
+<<<<<<< HEAD
 #include "exprs/anyval_util.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
+=======
+#include "exprs/arithmetic_operation.h"
+#include "exprs/function_context.h"
+#include "gen_cpp/Data_types.h"
+#include "gen_cpp/Types_types.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "runtime/time_types.h"
@@ -43,6 +58,22 @@
 #include "util/unaligned_access.h"
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+// adaptor to TypeDescriptor
+struct UTRawType {
+    LogicalType type;
+    int precision;
+    int scale;
+    operator TypeDescriptor() {
+        TypeDescriptor type_desc;
+        type_desc.type = type;
+        type_desc.precision = precision;
+        type_desc.scale = scale;
+        return type_desc;
+    }
+};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 class AggregateTest : public testing::Test {
 public:
@@ -51,12 +82,27 @@ public:
     void SetUp() override {
         utils = new FunctionUtils();
         ctx = utils->get_fn_ctx();
+<<<<<<< HEAD
     }
     void TearDown() override { delete utils; }
+=======
+        _allocator = std::make_unique<CountingAllocatorWithHook>();
+        tls_agg_state_allocator = _allocator.get();
+    }
+    void TearDown() override {
+        delete utils;
+        tls_agg_state_allocator = nullptr;
+        _allocator.reset();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     FunctionUtils* utils{};
     FunctionContext* ctx{};
+<<<<<<< HEAD
+=======
+    std::unique_ptr<CountingAllocatorWithHook> _allocator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class ManagedAggrState {
@@ -115,7 +161,11 @@ template <>
 ColumnPtr gen_input_column1<Slice>() {
     auto column = BinaryColumn::create();
     std::vector<Slice> strings{{"ddd"}, {"ddd"}, {"eeeee"}, {"ff"}, {"ff"}, {"ddd"}};
+<<<<<<< HEAD
     column->append_strings(strings);
+=======
+    column->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return column;
 }
 
@@ -123,7 +173,11 @@ template <>
 ColumnPtr gen_input_column2<Slice>() {
     auto column2 = BinaryColumn::create();
     std::vector<Slice> strings2{{"kkk"}, {"k"}, {"kk"}, {"kkk"}};
+<<<<<<< HEAD
     column2->append_strings(strings2);
+=======
+    column2->append_strings(strings2.data(), strings2.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return column2;
 }
 
@@ -201,6 +255,11 @@ ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) 
 template <typename T, typename TResult>
 void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                        TResult update_result2, TResult merge_result) {
+<<<<<<< HEAD
+=======
+    int64_t mem_usage = 0;
+    ctx->set_mem_usage_counter(&mem_usage);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     using ResultColumn = typename ColumnTraits<TResult>::ColumnType;
     auto result_column = ResultColumn::create();
 
@@ -343,27 +402,45 @@ TEST_F(AggregateTest, test_decimal_sum) {
     {
         const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, 524076, 2499500, 3023576);
     }
     {
         const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, 524076, 2499500, 3023576);
     }
     {
         const auto* func = get_aggregate_function("decimal_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, 524076, 2499500, 3023576);
     }
@@ -405,9 +482,15 @@ TEST_F(AggregateTest, test_decimal_avg) {
     {
         const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 12});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 12});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 9);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 9);
@@ -417,9 +500,15 @@ TEST_F(AggregateTest, test_decimal_avg) {
     {
         const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 3);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 3);
@@ -429,9 +518,15 @@ TEST_F(AggregateTest, test_decimal_avg) {
     {
         const auto* func = get_aggregate_function("decimal_avg", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         auto update_result1 = decimal_div_integer<int128_t>(524076, 1026, 15);
         auto update_result2 = decimal_div_integer<int128_t>(2499500, 1000, 15);
@@ -663,7 +758,11 @@ void test_max_by_helper(FunctionContext* ctx, const char* max_by_name) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
+<<<<<<< HEAD
     varchar_column->append_strings(strings);
+=======
+    varchar_column->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -727,7 +826,11 @@ void test_min_by_helper(FunctionContext* ctx, const char* min_by_name) {
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"ccc"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
+<<<<<<< HEAD
     varchar_column->append_strings(strings);
+=======
+    varchar_column->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -784,8 +887,12 @@ TEST_F(AggregateTest, test_min_by_v2) {
 void test_max_by_with_nullable_aggregator_helper(FunctionContext* ctx, const char* max_by_name) {
     const AggregateFunction* func = get_aggregate_function(max_by_name, TYPE_VARCHAR, TYPE_INT, true);
     auto* ctx_with_args0 = FunctionContext::create_test_context(
+<<<<<<< HEAD
             {FunctionContext::TypeDesc{.type = TYPE_INT}, FunctionContext::TypeDesc{.type = TYPE_VARCHAR}},
             FunctionContext::TypeDesc{.type = TYPE_INT});
+=======
+            {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
 
     auto result_column = Int32Column::create();
@@ -796,7 +903,11 @@ void test_max_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
+<<<<<<< HEAD
     varchar_column->append_strings(strings);
+=======
+    varchar_column->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -812,9 +923,14 @@ void test_max_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
     //test nullable column
     func = get_aggregate_function(max_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, true);
     auto* ctx_with_args1 = FunctionContext::create_test_context(
+<<<<<<< HEAD
             {FunctionContext::TypeDesc{.type = TYPE_DOUBLE},
              FunctionContext::TypeDesc{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
             FunctionContext::TypeDesc{.type = TYPE_DOUBLE});
+=======
+            {UTRawType{.type = TYPE_DOUBLE}, UTRawType{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
+            UTRawType{.type = TYPE_DOUBLE});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
 
     aggr_state = ManagedAggrState::create(ctx_with_args1, func);
@@ -857,8 +973,12 @@ TEST_F(AggregateTest, test_max_by_v2_with_nullable_aggregator) {
 void test_min_by_with_nullable_aggregator_helper(FunctionContext* ctx, const char* min_by_name) {
     const AggregateFunction* func = get_aggregate_function(min_by_name, TYPE_VARCHAR, TYPE_INT, true);
     auto* ctx_with_args0 = FunctionContext::create_test_context(
+<<<<<<< HEAD
             {FunctionContext::TypeDesc{.type = TYPE_INT}, FunctionContext::TypeDesc{.type = TYPE_VARCHAR}},
             FunctionContext::TypeDesc{.type = TYPE_INT});
+=======
+            {UTRawType{.type = TYPE_INT}, UTRawType{.type = TYPE_VARCHAR}}, UTRawType{.type = TYPE_INT});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> gc_ctx0(ctx_with_args0);
 
     auto result_column = Int32Column::create();
@@ -869,7 +989,11 @@ void test_min_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
     }
     auto varchar_column = BinaryColumn::create();
     std::vector<Slice> strings{{"xxx"}, {"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}};
+<<<<<<< HEAD
     varchar_column->append_strings(strings);
+=======
+    varchar_column->append_strings(strings.data(), strings.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Columns columns;
     columns.emplace_back(int_column);
     columns.emplace_back(varchar_column);
@@ -885,9 +1009,14 @@ void test_min_by_with_nullable_aggregator_helper(FunctionContext* ctx, const cha
     //test nullable column
     func = get_aggregate_function(min_by_name, TYPE_DECIMALV2, TYPE_DOUBLE, true);
     auto* ctx_with_args1 = FunctionContext::create_test_context(
+<<<<<<< HEAD
             {FunctionContext::TypeDesc{.type = TYPE_DOUBLE},
              FunctionContext::TypeDesc{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
             FunctionContext::TypeDesc{.type = TYPE_DOUBLE});
+=======
+            {UTRawType{.type = TYPE_DOUBLE}, UTRawType{.type = TYPE_DECIMALV2, .precision = 38, .scale = 9}},
+            UTRawType{.type = TYPE_DOUBLE});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> gc_ctx1(ctx_with_args1);
 
     aggr_state = ManagedAggrState::create(ctx_with_args1, func);
@@ -1067,36 +1196,65 @@ TEST_F(AggregateTest, test_sum_distinct) {
 }
 
 TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
+<<<<<<< HEAD
     {
         const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+=======
+    int64_t mem_usage;
+    {
+        const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL32, TYPE_DECIMAL128, false,
+                                                  TFunctionBinaryType::BUILTIN, 3);
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL32, .precision = 9, .scale = 9}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 9});
+        mem_usage = 0;
+        ctx->set_mem_usage_counter(&mem_usage);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL32>(ctx, func, 523776, 2499500, 3023276);
     }
     {
         const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL64, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL64, .precision = 9, .scale = 3}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 3});
+        mem_usage = 0;
+        ctx->set_mem_usage_counter(&mem_usage);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL64>(ctx, func, 523776, 2499500, 3023276);
     }
     {
         const auto* func = get_aggregate_function("decimal_multi_distinct_sum", TYPE_DECIMAL128, TYPE_DECIMAL128, false,
                                                   TFunctionBinaryType::BUILTIN, 3);
+<<<<<<< HEAD
         auto* ctx = FunctionContext::create_test_context(
                 {FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
                 FunctionContext::TypeDesc{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+=======
+        auto* ctx =
+                FunctionContext::create_test_context({UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15}},
+                                                     UTRawType{.type = TYPE_DECIMAL128, .precision = 38, .scale = 15});
+        mem_usage = 0;
+        ctx->set_mem_usage_counter(&mem_usage);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::unique_ptr<FunctionContext> gc_ctx(ctx);
         test_decimal_agg_function<TYPE_DECIMAL128>(ctx, func, 523776, 2499500, 3023276);
     }
 }
 
 TEST_F(AggregateTest, test_window_funnel) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DATETIME)),
@@ -1104,6 +1262,13 @@ TEST_F(AggregateTest, test_window_funnel) {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT));
+=======
+    std::vector<TypeDescriptor> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_DATETIME),
+            TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_ARRAY)};
+
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("window_funnel", TYPE_DATETIME, TYPE_INT, false);
@@ -1336,11 +1501,18 @@ TEST_F(AggregateTest, test_group_concat) {
 }
 
 TEST_F(AggregateTest, test_group_concat_const_seperator) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* group_concat_function =
@@ -1382,10 +1554,16 @@ TEST_F(AggregateTest, test_group_concat_const_seperator) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1437,10 +1615,16 @@ TEST_F(AggregateTest, test_percentile_cont) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont_1) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1492,10 +1676,16 @@ TEST_F(AggregateTest, test_percentile_cont_1) {
 }
 
 TEST_F(AggregateTest, test_percentile_cont_2) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_cont", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1525,10 +1715,16 @@ TEST_F(AggregateTest, test_percentile_cont_2) {
 }
 
 TEST_F(AggregateTest, test_percentile_disc) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+                                             TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* func = get_aggregate_function("percentile_disc", TYPE_DOUBLE, TYPE_DOUBLE, false);
@@ -1677,12 +1873,19 @@ ColumnPtr gen_histogram_column() {
 }
 
 TEST_F(AggregateTest, test_histogram) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_DOUBLE)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+=======
+    std::vector<TypeDescriptor> arg_types = {
+            TypeDescriptor::from_logical_type(TYPE_BIGINT), TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_DOUBLE), TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* histogram_function = get_aggregate_function("histogram", TYPE_BIGINT, TYPE_VARCHAR, true);
@@ -1706,9 +1909,17 @@ TEST_F(AggregateTest, test_histogram) {
     raw_columns[1] = const1.get();
     raw_columns[2] = const2.get();
     raw_columns[3] = const3.get();
+<<<<<<< HEAD
     for (int i = 0; i < data_column->size(); ++i) {
         histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
     }
+=======
+    histogram_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                  state->state());
+    // for (int i = 0; i < data_column->size(); ++i) {
+    //     histogram_function->update(local_ctx.get(), raw_columns.data(), state->state(), i);
+    // }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto result_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     histogram_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
@@ -1828,11 +2039,18 @@ TEST_F(AggregateTest, test_any_value) {
 }
 
 TEST_F(AggregateTest, test_exchange_bytes) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_BIGINT));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_BIGINT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     const AggregateFunction* exchange_bytes_function =
@@ -1866,11 +2084,17 @@ TEST_F(AggregateTest, test_exchange_bytes) {
 }
 
 TEST_F(AggregateTest, test_array_aggV2) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_ARRAY));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     std::vector<bool> is_asc_order{0};
@@ -1912,10 +2136,17 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+<<<<<<< HEAD
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
         ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+=======
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
+        // data_columns in state are nullable
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -1937,6 +2168,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
                   0);
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
@@ -1979,10 +2217,17 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+<<<<<<< HEAD
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
         ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+=======
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
+        // data_columns in state are nullable
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2004,6 +2249,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],int:[2,9,5,7,6]}]"),
                   0);
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
@@ -2030,12 +2282,21 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+<<<<<<< HEAD
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
                          "['', 'bcd', 'cdrdfe', 'Datum()', 'esfg', NULL, NULL]"),
                   0);
         ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[2, 9, 5, 7, 6, 3, 3]"), 0);
+=======
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
+        // data_columns in state are nullable
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(),
+                         "['', 'bcd', 'cdrdfe', 'Datum()', 'esfg', NULL, NULL]"),
+                  0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[2, 9, 5, 7, 6, 3, 3]"), 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2057,6 +2318,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg',NULL,NULL],int:[2,9,5,7,6,3,3]}]"),
                   0);
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]"),
@@ -2085,10 +2353,17 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+<<<<<<< HEAD
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
         ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
+=======
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
+        // data_columns in state are nullable
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2108,6 +2383,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL,NULL],int:[3,3]}]"), 0);
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL],int:[3]}, {vchar:[NULL],int:[3]}]"),
@@ -2144,12 +2426,21 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+<<<<<<< HEAD
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
                          "[NULL, NULL, NULL, 'bcd', 'cdrdfe', NULL, 'esfg']"),
                   0);
         ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3, NULL, 9, NULL, 7, 6]"), 0);
+=======
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
+        // data_columns in state are nullable
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(),
+                         "[NULL, NULL, NULL, 'bcd', 'cdrdfe', NULL, 'esfg']"),
+                  0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3, NULL, 9, NULL, 7, 6]"), 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2171,6 +2462,13 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "[{vchar:[NULL,NULL,NULL,'bcd','cdrdfe',NULL,'esfg'],int:[3,3,NULL,9,NULL,7,6]}]"),
                   0);
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
@@ -2213,10 +2511,17 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
+<<<<<<< HEAD
         ASSERT_EQ(agg_state->data_columns->size(), 2);
         // data_columns in state are nullable
         ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
         ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+=======
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
+        // data_columns in state are nullable
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2238,6 +2543,12 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
                   0);
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
@@ -2253,12 +2564,20 @@ TEST_F(AggregateTest, test_array_aggV2) {
 }
 
 TEST_F(AggregateTest, test_group_concatV2) {
+<<<<<<< HEAD
     std::vector<FunctionContext::TypeDesc> arg_types = {
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR)),
             AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_INT))};
 
     auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+=======
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_ptr<RuntimeState> runtime_state = std::make_unique<RuntimeState>();
     std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     std::vector<bool> is_asc_order{0};
@@ -2329,6 +2648,13 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
@@ -2400,6 +2726,13 @@ TEST_F(AggregateTest, test_group_concatV2) {
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],sep:[',',',',',',',',','],int:[2,9,5,7,6]}]");
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
@@ -2455,6 +2788,13 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->size(), 1); // empty also need output
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(), "[NULL, NULL]");
@@ -2526,6 +2866,13 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
+<<<<<<< HEAD
+=======
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
@@ -2643,4 +2990,31 @@ TEST_F(AggregateTest, test_array_agg_nullable_distinct) {
     ASSERT_EQ(26, offsets->get_data().back());
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(AggregateTest, test_get_aggregate_function_by_type) {
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                 TypeDescriptor::from_logical_type(TYPE_INT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+        auto* array_agg_func =
+                get_aggregate_function("array_agg2", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(array_agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        auto* agg_func =
+                get_aggregate_function("group_concat", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
+    {
+        std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
+        auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+        auto* agg_func = get_aggregate_function("avg", return_type, arg_types, true, TFunctionBinaryType::BUILTIN);
+        ASSERT_TRUE(agg_func != nullptr);
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

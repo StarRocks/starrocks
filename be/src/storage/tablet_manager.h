@@ -59,7 +59,15 @@
 namespace starrocks {
 
 class Tablet;
+<<<<<<< HEAD
 class DataDir;
+=======
+class BaseTablet;
+using BaseTabletSharedPtr = std::shared_ptr<BaseTablet>;
+class DataDir;
+class BaseRowset;
+using BaseRowsetSharedPtr = std::shared_ptr<BaseRowset>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct TabletBasicInfo;
 class MetadataCache;
 

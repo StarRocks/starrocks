@@ -14,10 +14,17 @@
 
 package com.starrocks.alter;
 
+<<<<<<< HEAD
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
@@ -37,12 +44,19 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     @SerializedName(value = "metaValue")
     private boolean metaValue;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "persistentIndexType")
+    private String persistentIndexType;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // for deserialization
     public LakeTableAlterMetaJob() {
         super(JobType.SCHEMA_CHANGE);
     }
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
+<<<<<<< HEAD
                                  long timeoutMs, TTabletMetaType metaType, boolean metaValue) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.metaType = metaType;
@@ -53,14 +67,39 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     protected TabletMetadataUpdateAgentTask createTask(MaterializedIndex index, long nodeId, Set<Long> tablets) {
         return TabletMetadataUpdateAgentTaskFactory.createGenericBooleanPropertyUpdateTask(nodeId, tablets,
                 metaValue, metaType);
+=======
+                                 long timeoutMs, TTabletMetaType metaType, boolean metaValue,
+                                 String persistentIndexType) {
+        super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
+        this.metaType = metaType;
+        this.metaValue = metaValue;
+        this.persistentIndexType = persistentIndexType;
+    }
+
+    @Override
+    protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
+            MaterializedIndex index, long nodeId, Set<Long> tablets) {
+        return TabletMetadataUpdateAgentTaskFactory.createLakePersistentIndexUpdateTask(nodeId, tablets,
+                metaValue, persistentIndexType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     protected void updateCatalog(Database db, LakeTable table) {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+<<<<<<< HEAD
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                     String.valueOf(metaValue));
             table.getTableProperty().buildEnablePersistentIndex();
+=======
+            // re-use ENABLE_PERSISTENT_INDEX for both enable index and index's type.
+            table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
+                    String.valueOf(metaValue));
+            table.getTableProperty().buildEnablePersistentIndex();
+            table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE,
+                    String.valueOf(persistentIndexType));
+            table.getTableProperty().buildPersistentIndexType();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -69,6 +108,10 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         LakeTableAlterMetaJob other = (LakeTableAlterMetaJob) job;
         this.metaType = other.metaType;
         this.metaValue = other.metaValue;
+<<<<<<< HEAD
+=======
+        this.persistentIndexType = other.persistentIndexType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

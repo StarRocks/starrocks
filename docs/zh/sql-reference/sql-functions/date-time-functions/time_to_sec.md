@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # time_to_sec
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 `time` 时间值转换为秒数，转换公式为:
 

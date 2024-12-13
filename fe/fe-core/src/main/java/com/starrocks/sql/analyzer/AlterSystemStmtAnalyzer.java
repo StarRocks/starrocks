@@ -42,14 +42,24 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+<<<<<<< HEAD
 import java.util.HashSet;
+=======
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
+=======
+public class AlterSystemStmtAnalyzer implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String PROP_KEY_LOCATION = PropertyAnalyzer.PROPERTIES_LABELS_LOCATION;
     private static final Set<String> PROPS_SUPPORTED = new HashSet<>();
 
@@ -62,6 +72,7 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
             visit(((AlterSystemStmt) ddlStmt).getAlterClause(), session);
         } else if (ddlStmt instanceof CancelAlterSystemStmt) {
             CancelAlterSystemStmt stmt = (CancelAlterSystemStmt) ddlStmt;
+<<<<<<< HEAD
             try {
                 for (String hostPort : stmt.getHostPorts()) {
                     Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
@@ -69,12 +80,18 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
                 }
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("FRONTEND", e.getMessage()));
+=======
+            for (String hostPort : stmt.getHostPorts()) {
+                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                stmt.getHostPortPairs().add(pair);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
 
     @Override
     public Void visitComputeNodeClause(ComputeNodeClause computeNodeClause, ConnectContext context) {
+<<<<<<< HEAD
         try {
             for (String hostPort : computeNodeClause.getHostPorts()) {
                 Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
@@ -85,11 +102,20 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("COMPUTE NODE", e.getMessage()));
         }
+=======
+        for (String hostPort : computeNodeClause.getHostPorts()) {
+            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
+                    computeNodeClause instanceof AddComputeNodeClause && !FrontendOptions.isUseFqdn());
+            computeNodeClause.getHostPortPairs().add(pair);
+        }
+        Preconditions.checkState(!computeNodeClause.getHostPortPairs().isEmpty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return null;
     }
 
     @Override
     public Void visitBackendClause(BackendClause backendClause, ConnectContext context) {
+<<<<<<< HEAD
         try {
             for (String hostPort : backendClause.getHostPorts()) {
                 Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
@@ -100,11 +126,22 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("BACKEND", e.getMessage()));
         }
+=======
+        List<Pair<String, Integer>> hostPortPairs = new ArrayList<>();
+        for (String hostPort : backendClause.getHostPortsUnResolved()) {
+            Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort,
+                    backendClause instanceof AddBackendClause && !FrontendOptions.isUseFqdn());
+            hostPortPairs.add(pair);
+        }
+        backendClause.setHostPortPairs(hostPortPairs);
+        Preconditions.checkState(!hostPortPairs.isEmpty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return null;
     }
 
     @Override
     public Void visitFrontendClause(FrontendClause frontendClause, ConnectContext context) {
+<<<<<<< HEAD
         try {
             Pair<String, Integer> pair = SystemInfoService
                     .validateHostAndPort(frontendClause.getHostPort(),
@@ -117,6 +154,16 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("FRONTEND", e.getMessage()));
         }
+=======
+        Pair<String, Integer> pair = SystemInfoService
+                .validateHostAndPort(frontendClause.getHostPort(),
+                        (frontendClause instanceof AddFollowerClause
+                                || frontendClause instanceof AddObserverClause)
+                                && !FrontendOptions.isUseFqdn());
+        frontendClause.setHost(pair.first);
+        frontendClause.setPort(pair.second);
+        Preconditions.checkState(!Strings.isNullOrEmpty(frontendClause.getHost()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return null;
     }
 
@@ -141,12 +188,16 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
         if (clause.getBackendHostPort() == null) {
             checkModifyHostClause(clause.getSrcHost(), clause.getDestHost());
         } else {
+<<<<<<< HEAD
             try {
                 SystemInfoService
                         .validateHostAndPort(clause.getBackendHostPort(), false);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
             }
+=======
+            SystemInfoService.validateHostAndPort(clause.getBackendHostPort(), false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             analyzeBackendProperties(clause.getProperties());
         }
         return null;
@@ -195,6 +246,7 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitModifyBrokerClause(ModifyBrokerClause clause, ConnectContext context) {
         validateBrokerName(clause);
+<<<<<<< HEAD
         try {
             if (clause.getOp() != ModifyBrokerClause.ModifyOp.OP_DROP_ALL) {
                 for (String hostPort : clause.getHostPorts()) {
@@ -205,6 +257,14 @@ public class AlterSystemStmtAnalyzer extends AstVisitor<Void, ConnectContext> {
             }
         } catch (AnalysisException e) {
             throw new SemanticException(PARSER_ERROR_MSG.invalidHostOrPort("BROKER", e.getMessage()));
+=======
+        if (clause.getOp() != ModifyBrokerClause.ModifyOp.OP_DROP_ALL) {
+            for (String hostPort : clause.getHostPorts()) {
+                Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort, false);
+                clause.getHostPortPairs().add(pair);
+            }
+            Preconditions.checkState(!clause.getHostPortPairs().isEmpty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return null;
     }

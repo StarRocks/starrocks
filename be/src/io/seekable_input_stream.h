@@ -77,6 +77,18 @@ public:
     // object directly with a single GET OBJECT call, without the need
     // to first send a HEAD OBJECT request to get the object size.
     virtual StatusOr<std::string> read_all();
+<<<<<<< HEAD
+=======
+
+    virtual const std::string& filename() const { return _filename; };
+
+    virtual bool is_cache_hit() const { return false; };
+
+    virtual bool is_encrypted() const { return false; };
+
+protected:
+    std::string _filename = "";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SeekableInputStreamWrapper : public SeekableInputStream {
@@ -127,6 +139,11 @@ public:
 
     StatusOr<std::string> read_all() override { return _impl->read_all(); }
 
+<<<<<<< HEAD
+=======
+    bool is_encrypted() const override { return _impl->is_encrypted(); };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     SeekableInputStream* _impl;
     Ownership _ownership;

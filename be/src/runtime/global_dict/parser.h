@@ -15,6 +15,10 @@
 #pragma once
 
 #include <cstdint>
+<<<<<<< HEAD
+=======
+#include <map>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <vector>
 
 #include "column/column.h"
@@ -29,7 +33,13 @@ namespace starrocks {
 class RuntimeState;
 class ExprContext;
 class Expr;
+<<<<<<< HEAD
 class SlotDescriptor;
+=======
+class TExpr;
+class SlotDescriptor;
+class DictMappingExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct DictOptimizeContext {
     bool could_apply_dict_optimize = false;
@@ -52,6 +62,7 @@ public:
         _mutable_dict_maps = dict_maps;
     }
 
+<<<<<<< HEAD
     [[nodiscard]] Status rewrite_exprs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                                        const std::vector<SlotId>& target_slotids);
 
@@ -61,6 +72,19 @@ public:
 
     [[nodiscard]] Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx,
                                          int32_t targetSlotId);
+=======
+    Status init_dict_exprs(const std::map<int, TExpr>& exprs);
+
+    Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
+
+    Status rewrite_conjuncts(std::vector<ExprContext*>* conjuncts_ctxs);
+
+    Status eval_expression(ExprContext* conjunct, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
+
+    Status eval_dict_expr(SlotId id);
+
+    void close() noexcept;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx);
 
@@ -71,19 +95,35 @@ public:
                                    const std::map<int32_t, int32_t>& dict_slots_mapping,
                                    std::vector<SlotDescriptor*>* slot_descs);
 
+<<<<<<< HEAD
+=======
+    static void set_output_slot_id(std::vector<ExprContext*>* pexpr_ctxs, const std::vector<SlotId>& slot_id);
+
+    static void disable_open_rewrite(const std::vector<ExprContext*>* pexpr_ctxs);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     void _check_could_apply_dict_optimize(Expr* expr, DictOptimizeContext* dict_opt_ctx);
 
     // use code mapping rewrite expr
+<<<<<<< HEAD
     [[nodiscard]] Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, RuntimeState* state,
                                             const std::vector<SlotId>& slot_ids);
     [[nodiscard]] Status rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slot_id);
     [[nodiscard]] Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx,
                                            int32_t targetSlotId);
+=======
+    Status _rewrite_expr_ctxs(std::vector<ExprContext*>* expr_ctxs, const std::vector<SlotId>& slot_ids);
+    Status _eval_and_rewrite(ExprContext* ctx, Expr* expr, DictOptimizeContext* dict_opt_ctx, int32_t targetSlotId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeState* _runtime_state = nullptr;
     GlobalDictMaps* _mutable_dict_maps = nullptr;
     ObjectPool _free_pool;
+<<<<<<< HEAD
+=======
+    std::unordered_map<SlotId, ExprContext*> _dict_exprs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

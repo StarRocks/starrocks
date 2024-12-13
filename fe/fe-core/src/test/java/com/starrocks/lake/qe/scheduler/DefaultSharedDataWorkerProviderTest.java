@@ -25,11 +25,19 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.FragmentScanRangeAssignment;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.HostBlacklist;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.NormalBackendSelector;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
@@ -90,13 +98,21 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @BeforeClass
     public static void setUpTestSuite() {
+<<<<<<< HEAD
         SimpleScheduler.disableUpdateBlacklistThread();
+=======
+        SimpleScheduler.getHostBlacklist().disableAutoUpdate();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Before
     public void setUp() {
         // clear the block list
+<<<<<<< HEAD
         SimpleScheduler.clearBlacklist();
+=======
+        SimpleScheduler.getHostBlacklist().hostBlacklist.clear();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         factory = new DefaultSharedDataWorkerProvider.Factory();
 
         // Generate mock Workers
@@ -112,8 +128,13 @@ public class DefaultSharedDataWorkerProviderTest {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         new Expectations(warehouseManager) {
             {
+<<<<<<< HEAD
                 warehouseManager.getComputeNodesFromWarehouse();
                 result = ImmutableMap.copyOf(id2AllNodes);
+=======
+                warehouseManager.getAllComputeNodeIds(anyLong);
+                result = Lists.newArrayList(id2AllNodes.keySet());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
             }
         };
@@ -132,8 +153,14 @@ public class DefaultSharedDataWorkerProviderTest {
 
     private WorkerProvider newWorkerProvider() {
         return factory.captureAvailableWorkers(
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true, 
                 -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY);
+=======
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), true,
+                -1, ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static void testUsingWorkerHelper(WorkerProvider workerProvider, Long workerId) {
@@ -141,7 +168,11 @@ public class DefaultSharedDataWorkerProviderTest {
         Assert.assertTrue(workerProvider.getSelectedWorkerIds().contains(workerId));
     }
 
+<<<<<<< HEAD
     private List<Long> prepareNodeAliveAndBlock(SystemInfoService sysInfo) {
+=======
+    private List<Long> prepareNodeAliveAndBlock(SystemInfoService sysInfo, HostBlacklist blockList) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // for every even number of worker, take in turn to set to alive=false and inBlock=true.
         // [0:alive=false, 1, 2:inBlock=true, 3, 4:alive=false, ...]
         List<Long> availList = Lists.newArrayList(id2AllNodes.keySet());
@@ -152,7 +183,11 @@ public class DefaultSharedDataWorkerProviderTest {
                 if (flip) {
                     node.setAlive(false);
                 } else {
+<<<<<<< HEAD
                     SimpleScheduler.addToBlacklist(node.getId());
+=======
+                    blockList.add(node.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 flip = !flip;
                 availList.remove(node.getId());
@@ -168,9 +203,16 @@ public class DefaultSharedDataWorkerProviderTest {
         long inBlacklistBEId = 3L;
         long inBlacklistCNId = 13L;
 
+<<<<<<< HEAD
         SimpleScheduler.addToBlacklist(inBlacklistBEId);
         SimpleScheduler.addToBlacklist(inBlacklistCNId);
 
+=======
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+
+        blockList.add(inBlacklistBEId);
+        blockList.add(inBlacklistCNId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         id2Backend.get(deadBEId).setAlive(false);
         id2ComputeNode.get(deadCNId).setAlive(false);
 
@@ -178,7 +220,11 @@ public class DefaultSharedDataWorkerProviderTest {
         WorkerProvider workerProvider = newWorkerProvider();
 
         Optional<Long> maxId = id2Backend.keySet().stream().max(Comparator.naturalOrder());
+<<<<<<< HEAD
         Assert.assertTrue(maxId.isPresent());
+=======
+        Assert.assertFalse(maxId.isEmpty());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (long id : id2AllNodes.keySet()) {
             ComputeNode worker = workerProvider.getWorkerById(id);
             if (nonAvailableWorkerId.contains(id)) {
@@ -195,10 +241,18 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectWorker() throws UserException {
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo);
+=======
+    public void testSelectWorker() throws StarRocksException {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         WorkerProvider provider = newWorkerProvider();
 
         // intend to iterate the id out of the actual range.
@@ -215,9 +269,16 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @Test
     public void testGetAllWorkers() {
+<<<<<<< HEAD
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo);
+=======
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         WorkerProvider provider = newWorkerProvider();
         // allWorkers returns only available workers
         Collection<ComputeNode> allWorkers = provider.getAllWorkers();
@@ -237,7 +298,11 @@ public class DefaultSharedDataWorkerProviderTest {
 
     private static void testSelectNextWorkerHelper(WorkerProvider workerProvider,
                                                    Map<Long, ComputeNode> id2Worker)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<Long> selectedWorkers = new HashSet<>(id2Worker.size());
         for (int i = 0; i < id2Worker.size(); i++) {
             long workerId = workerProvider.selectNextWorker();
@@ -248,11 +313,20 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectNextWorker() throws UserException {
         SimpleScheduler.clearBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo);
+=======
+    public void testSelectNextWorker() throws StarRocksException {
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.hostBlacklist.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         { // test backend nodes only
             ImmutableMap.Builder<Long, ComputeNode> builder = new ImmutableMap.Builder<>();
             for (long backendId : id2Backend.keySet()) {
@@ -295,7 +369,30 @@ public class DefaultSharedDataWorkerProviderTest {
         { // test no available worker to select
             WorkerProvider workerProvider =
                     new DefaultSharedDataWorkerProvider(ImmutableMap.copyOf(id2AllNodes), ImmutableMap.of());
+<<<<<<< HEAD
             Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
+=======
+
+            Exception e = Assert.assertThrows(NonRecoverableException.class, workerProvider::selectNextWorker);
+            Assert.assertEquals(
+                    "Compute node not found. Check if any compute node is down. nodeId: -1 " +
+                            "compute node: [host#1 alive: true, available: false, inBlacklist: false] " +
+                            "[host#2 alive: false, available: false, inBlacklist: false] " +
+                            "[host#3 alive: true, available: false, inBlacklist: false] " +
+                            "[host#4 alive: true, available: false, inBlacklist: true] " +
+                            "[host#5 alive: true, available: false, inBlacklist: false] " +
+                            "[host#6 alive: false, available: false, inBlacklist: false] " +
+                            "[host#7 alive: true, available: false, inBlacklist: false] " +
+                            "[host#8 alive: true, available: false, inBlacklist: true] " +
+                            "[host#9 alive: true, available: false, inBlacklist: false] " +
+                            "[host#10 alive: false, available: false, inBlacklist: false] " +
+                            "[host#11 alive: true, available: false, inBlacklist: false] " +
+                            "[host#12 alive: true, available: false, inBlacklist: true] " +
+                            "[host#13 alive: true, available: false, inBlacklist: false] " +
+                            "[host#14 alive: false, available: false, inBlacklist: false] " +
+                            "[host#15 alive: true, available: false, inBlacklist: false] ",
+                    e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -324,10 +421,18 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @Test
     public void testIsDataNodeAvailable() {
+<<<<<<< HEAD
         SimpleScheduler.clearBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo);
+=======
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.hostBlacklist.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         WorkerProvider provider = newWorkerProvider();
 
         for (long id = -1; id < 16; id++) {
@@ -383,9 +488,15 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @Test
     public void testSelectBackupWorkerStable() {
+<<<<<<< HEAD
         SimpleScheduler.clearBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo);
+=======
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Optional<Long> unavail = id2AllNodes.keySet().stream().filter(x -> !availList.contains(x)).findAny();
         Assert.assertTrue(unavail.isPresent());
@@ -413,7 +524,11 @@ public class DefaultSharedDataWorkerProviderTest {
             }
             ++selectCount;
             // make it in blockList, so next time it will choose a different node
+<<<<<<< HEAD
             SimpleScheduler.addToBlacklist(alterNodeId);
+=======
+            blockList.add(alterNodeId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             selectedNodeId.add(alterNodeId);
         }
         // all nodes are in block list, no nodes can be selected anymore
@@ -496,9 +611,16 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @Test
     public void testNormalBackendSelectorWithSharedDataWorkerProvider() {
+<<<<<<< HEAD
         SimpleScheduler.clearBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo);
+=======
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.hostBlacklist.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         int bucketNum = 3;
         OlapScanNode scanNode = newOlapScanNode(1, bucketNum);
@@ -560,9 +682,16 @@ public class DefaultSharedDataWorkerProviderTest {
 
     @Test
     public void testCollocationBackendSelectorWithSharedDataWorkerProvider() {
+<<<<<<< HEAD
         SimpleScheduler.clearBlacklist();
         SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> availList = prepareNodeAliveAndBlock(sysInfo);
+=======
+        HostBlacklist blockList = SimpleScheduler.getHostBlacklist();
+        blockList.hostBlacklist.clear();
+        SystemInfoService sysInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<Long> availList = prepareNodeAliveAndBlock(sysInfo, blockList);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         int bucketNum = 6;
         OlapScanNode scanNode = newOlapScanNode(10, bucketNum);

@@ -15,7 +15,11 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
 public class NoAliveBackendException extends UserException {
+=======
+public class NoAliveBackendException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public NoAliveBackendException(String msg, Throwable cause) {
         super(msg, cause);
     }

@@ -28,6 +28,11 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.PartitionVersionRecoveryInfo;
 import com.starrocks.persist.PartitionVersionRecoveryInfo.PartitionVersion;
 import com.starrocks.server.GlobalStateMgr;
@@ -69,14 +74,25 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
         List<PartitionVersion> partitionsToRecover = new ArrayList<>();
         List<Long> dbIds = stateMgr.getLocalMetastore().getDbIds();
         for (long dbId : dbIds) {
+<<<<<<< HEAD
             Database database = stateMgr.getDb(dbId);
+=======
+            Database database = stateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (database == null || database.isSystemDatabase()) {
                 continue;
             }
 
+<<<<<<< HEAD
             database.readLock();
             try {
                 for (Table table : database.getTables()) {
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(database.getId(), LockType.READ);
+            try {
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!table.isOlapTableOrMaterializedView()) {
                         continue;
                     }
@@ -168,7 +184,11 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                     }
                 }
             } finally {
+<<<<<<< HEAD
                 database.readUnlock();
+=======
+                locker.unLockDatabase(database.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
@@ -183,14 +203,26 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
 
     public void recoverPartitionVersion(PartitionVersionRecoveryInfo recoveryInfo) {
         for (PartitionVersion version : recoveryInfo.getPartitionVersions()) {
+<<<<<<< HEAD
             Database database = GlobalStateMgr.getCurrentState().getDb(version.getDbId());
+=======
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(version.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (database == null) {
                 LOG.warn("recover partition version failed, db is null, versionInfo: {}", version);
                 continue;
             }
+<<<<<<< HEAD
             database.writeLock();
             try {
                 Table table = database.getTable(version.getTableId());
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(database.getId(), LockType.WRITE);
+            try {
+                Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(database.getId(), version.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (table == null) {
                     LOG.warn("recover partition version failed, table is null, versionInfo: {}", version);
                     continue;
@@ -239,7 +271,11 @@ public class MetaRecoveryDaemon extends FrontendDaemon {
                 removeUnRecoveredPartitions(new UnRecoveredPartition(database.getFullName(),
                         table.getName(), partition.getName(), physicalPartition.getId(), null));
             } finally {
+<<<<<<< HEAD
                 database.writeUnlock();
+=======
+                locker.unLockDatabase(database.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }

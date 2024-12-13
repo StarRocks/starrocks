@@ -57,10 +57,17 @@ public class FragmentScanRangeAssignment extends
             for (Integer scanNodeId : placement.keySet()) {
                 ArrayList<TScanRangeParams> scanRangeParams = new ArrayList<>(placement.get(scanNodeId));
                 Collections.sort(scanRangeParams);
+<<<<<<< HEAD
                 TMemoryBuffer transport = new TMemoryBuffer(1024 * 1024);
                 TBinaryProtocol protocol = new TBinaryProtocol(transport);
                 String output;
                 try {
+=======
+                String output;
+                try {
+                    TMemoryBuffer transport = new TMemoryBuffer(1024 * 1024);
+                    TBinaryProtocol protocol = new TBinaryProtocol(transport);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     for (TScanRangeParams param : scanRangeParams) {
                         param.write(protocol);
                     }

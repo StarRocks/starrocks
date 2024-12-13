@@ -34,7 +34,10 @@ namespace starrocks::lake {
 Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
+<<<<<<< HEAD
     _tablet_schema = _tablet.get_schema();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (auto& rowset : _input_rowsets) {
         _total_num_rows += rowset->num_rows();
         _total_data_size += rowset->data_size();
@@ -48,8 +51,13 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool,
                                                      true /** is compaction**/));
+=======
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer_with_schema(kVertical, _txn_id, max_rows_per_segment, flush_pool,
+                                                                 true /** is compaction**/, _tablet_schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -87,8 +95,14 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     auto op_compaction = txn_log->mutable_op_compaction();
     txn_log->set_tablet_id(_tablet.id());
     txn_log->set_txn_id(_txn_id);
+<<<<<<< HEAD
     RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get(),
                                                  _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS));
+=======
+    RETURN_IF_ERROR(fill_compaction_segment_info(op_compaction, writer.get()));
+    op_compaction->set_compact_version(_tablet.metadata()->version());
+    RETURN_IF_ERROR(execute_index_major_compaction(txn_log.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
@@ -118,12 +132,22 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
         LakeIOOptions lake_io_opts{.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache,
+<<<<<<< HEAD
                                    .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
         auto fill_meta_cache = true;
         ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
                 const auto* column_reader = segment->column(column_index);
+=======
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes,
+                                   .fill_metadata_cache = true};
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts));
+        for (auto& segment : segments) {
+            for (auto column_index : column_group) {
+                auto uid = _tablet_schema->column(column_index).unique_id();
+                const auto* column_reader = segment->column_with_uid(uid);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (column_reader == nullptr) {
                     continue;
                 }
@@ -148,13 +172,22 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
+<<<<<<< HEAD
     TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer);
+=======
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer,
+                        _tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
+<<<<<<< HEAD
+=======
+    reader_params.column_access_paths = &_column_access_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     reader_params.lake_io_opts = {config::lake_enable_vertical_compaction_fill_data_cache,
                                   config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));

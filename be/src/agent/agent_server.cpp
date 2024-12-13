@@ -69,6 +69,10 @@ const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
+<<<<<<< HEAD
+=======
+const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /* calculate real num threads
  * if num_threads > 0, return num_threads
@@ -111,6 +115,11 @@ public:
 
     ThreadPool* get_thread_pool(int type) const;
 
+<<<<<<< HEAD
+=======
+    void stop_task_worker_pool(TaskWorkerType type) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DISALLOW_COPY_AND_MOVE(Impl);
 
 private:
@@ -149,6 +158,10 @@ private:
     std::unique_ptr<ReportOlapTableTaskWorkerPool> _report_tablet_workers;
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
     std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
+<<<<<<< HEAD
+=======
+    std::unique_ptr<ReportDataCacheMetricsTaskWorkerPool> _report_datacache_metrics_workers;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Compute node only need _report_resource_usage_workers and _report_task_workers
     const bool _is_compute_node;
@@ -195,8 +208,15 @@ void AgentServer::Impl::init_or_die() {
                                        max_publish_version_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_publish_version);
 #endif
+<<<<<<< HEAD
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(drop, 1, config::drop_tablet_worker_count, std::numeric_limits<int>::max(),
+=======
+        int real_drop_tablet_worker_count = (config::drop_tablet_worker_count > 0)
+                                                    ? config::drop_tablet_worker_count
+                                                    : std::max((int)(CpuInfo::num_cores() / 2), (int)1);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(drop, 1, real_drop_tablet_worker_count, std::numeric_limits<int>::max(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                        _thread_pool_drop);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(create_tablet, 1, config::create_tablet_worker_count,
@@ -290,6 +310,11 @@ void AgentServer::Impl::init_or_die() {
     }
     CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
                           REPORT_RESOURCE_USAGE_WORKER_COUNT)
+<<<<<<< HEAD
+=======
+    CREATE_AND_START_POOL(_report_datacache_metrics_workers, ReportDataCacheMetricsTaskWorkerPool,
+                          REPORT_DATACACHE_METRICS_WORKER_COUNT)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
@@ -331,6 +356,10 @@ void AgentServer::Impl::stop() {
         STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
+<<<<<<< HEAD
+=======
+    STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     STOP_POOL(REPORT_TASK, _report_task_workers);
 #undef STOP_POOL
 }
@@ -419,7 +448,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 #undef HANDLE_TYPE
 
         if (!ret_st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "fail to submit task. reason: " << ret_st.get_error_msg() << ", task: " << task;
+=======
+            LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // For now, all tasks in the batch share one status, so if any task
             // was failed to submit, we can only return error to FE(even when some
             // tasks have already been successfully submitted).
@@ -543,7 +576,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         default:
             ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
+<<<<<<< HEAD
             LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.get_error_msg();
+=======
+            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -564,7 +601,11 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             default:
                 ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
                                                                      TTaskType::PUSH, push_type));
+<<<<<<< HEAD
                 LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.get_error_msg();
+=======
+                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -636,6 +677,46 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
+<<<<<<< HEAD
+=======
+#define STOP_IF_NOT_NULL(worker_pool) \
+    if (worker_pool != nullptr) {     \
+        worker_pool->stop();          \
+    }
+
+void AgentServer::Impl::stop_task_worker_pool(TaskWorkerType type) const {
+    switch (type) {
+    case TaskWorkerType::PUSH:
+        STOP_IF_NOT_NULL(_push_workers);
+        break;
+    case TaskWorkerType::PUBLISH_VERSION:
+        STOP_IF_NOT_NULL(_publish_version_workers);
+        break;
+    case TaskWorkerType::DELETE:
+        STOP_IF_NOT_NULL(_delete_workers);
+        break;
+    case TaskWorkerType::REPORT_TASK:
+        STOP_IF_NOT_NULL(_report_task_workers);
+        break;
+    case TaskWorkerType::REPORT_DISK_STATE:
+        STOP_IF_NOT_NULL(_report_disk_state_workers);
+        break;
+    case TaskWorkerType::REPORT_OLAP_TABLE:
+        STOP_IF_NOT_NULL(_report_tablet_workers);
+        break;
+    case TaskWorkerType::REPORT_WORKGROUP:
+        STOP_IF_NOT_NULL(_report_workgroup_workers);
+        STOP_IF_NOT_NULL(_report_resource_usage_workers);
+        break;
+    case TaskWorkerType::REPORT_DATACACHE_METRICS:
+        STOP_IF_NOT_NULL(_report_datacache_metrics_workers);
+        break;
+    default:
+        break;
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     // TODO: more thread pools.
     ThreadPool* ret = nullptr;
@@ -747,6 +828,13 @@ ThreadPool* AgentServer::get_thread_pool(int type) const {
     return _impl->get_thread_pool(type);
 }
 
+<<<<<<< HEAD
+=======
+void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
+    return _impl->stop_task_worker_pool(type);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void AgentServer::init_or_die() {
     return _impl->init_or_die();
 }

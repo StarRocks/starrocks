@@ -16,12 +16,21 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.Collections;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static java.util.Objects.requireNonNull;
 
@@ -44,6 +53,11 @@ public abstract class ScalarOperator implements Cloneable {
 
     private List<String> hints = Collections.emptyList();
 
+<<<<<<< HEAD
+=======
+    private boolean isIndexOnlyFilter = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ScalarOperator(OperatorType opType, Type type) {
         this.opType = requireNonNull(opType, "opType is null");
         this.type = requireNonNull(type, "type is null");
@@ -112,6 +126,21 @@ public abstract class ScalarOperator implements Cloneable {
         this.fromPredicateRangeDerive = fromPredicateRangeDerive;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isIndexOnlyFilter() {
+        boolean result = isIndexOnlyFilter;
+        for (ScalarOperator child : getChildren()) {
+            result = result || child.isIndexOnlyFilter();
+        }
+        return result;
+    }
+
+    public void setIndexOnlyFilter(boolean indexOnlyFilter) {
+        isIndexOnlyFilter = indexOnlyFilter;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract List<ScalarOperator> getChildren();
 
     public abstract ScalarOperator getChild(int index);
@@ -197,15 +226,25 @@ public abstract class ScalarOperator implements Cloneable {
                 !((ConstantOperator) this).getBoolean();
     }
 
+<<<<<<< HEAD
     public boolean isConstantNullOrFalse() {
         return isConstantNull() || isConstantFalse();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isConstantTrue() {
         return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
                 ((ConstantOperator) this).getBoolean();
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isConstantNullOrFalse() {
+        return isConstantNull() || isConstantFalse();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setHints(List<String> hints) {
         this.hints = hints;
     }
@@ -274,4 +313,30 @@ public abstract class ScalarOperator implements Cloneable {
         }
         return false;
     }
+<<<<<<< HEAD
+=======
+
+    public static void updateLiteralPredicates(ScalarOperator predicate, List<Expr> exprs) {
+        if (predicate instanceof CompoundPredicateOperator) {
+            updateCompoundLiteralPredicate((CompoundPredicateOperator) predicate, exprs);
+        } else {
+            updateSingleLiteralPredicate(predicate, exprs.get(0));
+        }
+    }
+
+    private static void updateCompoundLiteralPredicate(CompoundPredicateOperator compoundPredicate, List<Expr> exprs) {
+        for (int i = 0; i < compoundPredicate.getChildren().size(); i++) {
+            updateSingleLiteralPredicate(compoundPredicate.getChild(i), exprs.get(i));
+        }
+    }
+
+    private static void updateSingleLiteralPredicate(ScalarOperator predicate, Expr expr) {
+        Object realObjectValue = ((LiteralExpr) expr).getRealObjectValue();
+        Optional<ConstantOperator> constantOperator =
+                new ConstantOperator(realObjectValue, expr.getType()).castTo(predicate.getChild(1).getType());
+        if (constantOperator.isPresent()) {
+            predicate.setChild(1, constantOperator.get());
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -15,7 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -31,7 +34,11 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+=======
+        connectContext.changeCatalogDb("hive0.partitioned_db");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

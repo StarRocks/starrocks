@@ -13,7 +13,14 @@ ENGINE=file
 PROPERTIES
 (
     "path" = "oss://${oss_bucket}/test_orc_use_column_names/${uuid0}/",
+<<<<<<< HEAD
     "format" = "orc"
+=======
+    "format" = "orc",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 
 select * from test_orc_column where c0 = '199994';
@@ -21,7 +28,14 @@ select * from test_orc_column where none_existed is not null;
 
 SELECT * FROM FILES(
      "path" = "oss://${oss_bucket}/test_orc_use_column_names/${uuid0}/multi_stripes.orc",
+<<<<<<< HEAD
      "format" = "orc"
+=======
+     "format" = "orc",
+     "aws.s3.access_key" = "${oss_ak}",
+     "aws.s3.secret_key" = "${oss_sk}",
+     "aws.s3.endpoint" = "${oss_endpoint}") where c0='199994';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 set orc_use_column_names = true;
 

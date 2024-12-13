@@ -42,6 +42,7 @@ namespace starrocks {
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
         std::unique_lock<std::mutex> l(_lock);
+<<<<<<< HEAD
         if (_cancelled) {
             return _err_st;
         }
@@ -49,10 +50,29 @@ Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
         _put_cond.wait(l, [&]() {
             return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
         });
+=======
+
+        _num_waiting_append_buffer += 1;
+        // if _buf_queue is empty, we append this buf without size check
+        _put_cond.wait(l, [&]() {
+            return _cancelled || _finished || _buf_queue.empty() ||
+                   _buffered_bytes + buf->remaining() <= _max_buffered_bytes;
+        });
+        _num_waiting_append_buffer -= 1;
+
+        if (_finished) {
+            return Status::CapacityLimitExceed("Stream load pipe is finished");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (_cancelled) {
             return _err_st;
         }
+<<<<<<< HEAD
+=======
+        _num_append_buffers += 1;
+        _append_buffer_bytes += buf->remaining();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _buffered_bytes += buf->remaining();
         _buf_queue.emplace_back(std::move(buf));
         _get_cond.notify_one();
@@ -78,7 +98,11 @@ Status StreamLoadPipe::append(const char* data, size_t size) {
     // need to allocate a new chunk, min chunk is 64k
     size_t chunk_size = std::max(_min_chunk_size, size - pos);
     chunk_size = BitUtil::RoundUpToPowerOfTwo(chunk_size);
+<<<<<<< HEAD
     _write_buf = ByteBuffer::allocate(chunk_size);
+=======
+    ASSIGN_OR_RETURN(_write_buf, ByteBuffer::allocate_with_tracker(chunk_size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _write_buf->put_bytes(data + pos, size - pos);
     return Status::OK();
 }
@@ -110,7 +134,11 @@ StatusOr<ByteBufferPtr> StreamLoadPipe::read() {
 StatusOr<ByteBufferPtr> StreamLoadPipe::no_block_read() {
     std::unique_lock<std::mutex> l(_lock);
 
+<<<<<<< HEAD
     _get_cond.wait_for(l, std::chrono::milliseconds(100),
+=======
+    _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                        [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
     // cancelled
@@ -177,13 +205,18 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
         if (_read_buf == nullptr || !_read_buf->has_remaining()) {
             std::unique_lock<std::mutex> l(_lock);
 
+<<<<<<< HEAD
             _get_cond.wait_for(l, std::chrono::milliseconds(100),
+=======
+            _get_cond.wait_for(l, std::chrono::milliseconds(_non_blocking_wait_ms),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                [&]() { return _cancelled || _finished || !_buf_queue.empty(); });
 
             // cancelled
             if (_cancelled) {
                 return _err_st;
             }
+<<<<<<< HEAD
             // finished
             if (_buf_queue.empty()) {
                 if (_finished) {
@@ -205,6 +238,13 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
                     }
                     return Status::TimedOut("stream load pipe time out");
                 }
+=======
+            if (_buf_queue.empty()) {
+                *data_size = bytes_read;
+                *eof = _finished && (bytes_read == 0);
+                bool timeout = (bytes_read == 0) && !_finished;
+                return timeout ? Status::TimedOut("stream load pipe time out") : Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             _read_buf = _buf_queue.front();
             _buf_queue.pop_front();
@@ -226,13 +266,21 @@ Status StreamLoadPipe::no_block_read(uint8_t* data, size_t* data_size, bool* eof
 Status StreamLoadPipe::finish() {
     if (_write_buf != nullptr) {
         _write_buf->flip();
+<<<<<<< HEAD
         _append(_write_buf);
+=======
+        RETURN_IF_ERROR(_append(_write_buf));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _write_buf.reset();
     }
     {
         std::lock_guard<std::mutex> l(_lock);
         _finished = true;
     }
+<<<<<<< HEAD
+=======
+    _put_cond.notify_all();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _get_cond.notify_all();
     return Status::OK();
 }
@@ -242,7 +290,11 @@ void StreamLoadPipe::cancel(const Status& status) {
         std::lock_guard<std::mutex> l(_lock);
         _cancelled = true;
         if (_err_st.ok()) {
+<<<<<<< HEAD
             _err_st = status;
+=======
+            _err_st = status.ok() ? Status::Cancelled("Cancelled with ok status") : status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     _get_cond.notify_all();
@@ -267,6 +319,7 @@ Status StreamLoadPipe::_append(const ByteBufferPtr& buf) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
     DCHECK(buf != nullptr && buf->has_remaining());
     if (_cancelled) {
@@ -278,6 +331,8 @@ Status StreamLoadPipe::_push_front_unlocked(const ByteBufferPtr& buf) {
     return Status::OK();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 CompressedStreamLoadPipeReader::CompressedStreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe,
                                                                TCompressionType::type compression_type)
         : StreamLoadPipeReader(std::move(pipe)), _compression_type(compression_type) {}
@@ -293,7 +348,11 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     }
 
     if (_decompressed_buffer == nullptr) {
+<<<<<<< HEAD
         _decompressed_buffer = ByteBuffer::allocate(buffer_size);
+=======
+        ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::allocate_with_tracker(buffer_size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
@@ -316,7 +375,11 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     while (!stream_end) {
         // buffer size grows exponentially
         buffer_size = buffer_size < MAX_DECOMPRESS_BUFFER_SIZE ? buffer_size * 2 : MAX_DECOMPRESS_BUFFER_SIZE;
+<<<<<<< HEAD
         auto piece = ByteBuffer::allocate(buffer_size);
+=======
+        ASSIGN_OR_RETURN(auto piece, ByteBuffer::allocate_with_tracker(buffer_size));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         RETURN_IF_ERROR(_decompressor->decompress(
                 reinterpret_cast<uint8_t*>(buf->ptr) + total_bytes_read, buf->remaining() - total_bytes_read,
                 &bytes_read, reinterpret_cast<uint8_t*>(piece->ptr), piece->capacity, &bytes_written, &stream_end));
@@ -332,7 +395,11 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
         if (_decompressed_buffer->remaining() < pieces_size) {
             // align to 1024 bytes.
             auto sz = ALIGN_UP(_decompressed_buffer->pos + pieces_size, 1024);
+<<<<<<< HEAD
             _decompressed_buffer = ByteBuffer::reallocate(_decompressed_buffer, sz);
+=======
+            ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::reallocate_with_tracker(_decompressed_buffer, sz));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         for (const auto& piece : pieces) {
             _decompressed_buffer->put_bytes(piece->ptr, piece->pos);
@@ -342,12 +409,16 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
     return _decompressed_buffer;
 }
 
+<<<<<<< HEAD
 StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file, bool non_blocking_read)
         : _pipe(std::move(file)) {
     if (non_blocking_read) {
         _pipe->set_non_blocking_read();
     }
 }
+=======
+StreamLoadPipeInputStream::StreamLoadPipeInputStream(std::shared_ptr<StreamLoadPipe> file) : _pipe(std::move(file)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 StreamLoadPipeInputStream::~StreamLoadPipeInputStream() {
     _pipe->close();

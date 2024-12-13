@@ -70,4 +70,11 @@ public class OriginStatement implements Writable {
     public String getOrigStmt() {
         return originStmt;
     }
+<<<<<<< HEAD
+=======
+
+    public int getIdx() {
+        return idx;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

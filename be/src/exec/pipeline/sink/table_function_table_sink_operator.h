@@ -36,7 +36,11 @@ public:
                                    const TCompressionType::type& compression_type,
                                    const std::vector<ExprContext*>& output_exprs,
                                    const std::vector<ExprContext*>& partition_exprs,
+<<<<<<< HEAD
                                    const std::vector<std::string>& partition_column_names, int64_t max_file_size,
+=======
+                                   const std::vector<std::string>& partition_column_names, bool write_single_file,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                    const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx,
                                    std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
             : Operator(factory, id, "table_function_table_sink", plan_node_id, false, driver_sequence),
@@ -46,7 +50,11 @@ public:
               _output_exprs(output_exprs),
               _partition_exprs(partition_exprs),
               _partition_column_names(partition_column_names),
+<<<<<<< HEAD
               _max_file_size(max_file_size),
+=======
+              _write_single_file(write_single_file),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               _cloud_conf(cloud_conf),
               _fragment_ctx(fragment_ctx),
               _parquet_file_schema(std::move(parquet_file_schema)) {}
@@ -89,7 +97,11 @@ private:
     const std::vector<ExprContext*> _output_exprs;
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<std::string> _partition_column_names;
+<<<<<<< HEAD
     const int _max_file_size;
+=======
+    const bool _write_single_file;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const TCloudConfiguration _cloud_conf;
     mutable FragmentContext* _fragment_ctx;
 
@@ -100,6 +112,7 @@ private:
 
 class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {
 public:
+<<<<<<< HEAD
     TableFunctionTableSinkOperatorFactory(const int32_t id, const string& path, const string& file_format,
                                           const TCompressionType::type& compression_type,
                                           const std::vector<ExprContext*>& output_exprs,
@@ -108,6 +121,15 @@ public:
                                           const std::vector<std::string>& partition_column_names,
                                           const int64_t max_file_size, const TCloudConfiguration& cloud_conf,
                                           FragmentContext* fragment_ctx);
+=======
+    TableFunctionTableSinkOperatorFactory(const int32_t id, string path, string file_format,
+                                          const TCompressionType::type& compression_type,
+                                          std::vector<ExprContext*> output_exprs,
+                                          std::vector<ExprContext*> partition_exprs,
+                                          std::vector<std::string> column_names,
+                                          std::vector<std::string> partition_column_names, bool write_single_file,
+                                          const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
 
@@ -125,7 +147,11 @@ private:
     const std::vector<ExprContext*> _partition_exprs;
     const std::vector<std::string> _column_names;
     const std::vector<std::string> _partition_column_names;
+<<<<<<< HEAD
     const int64_t _max_file_size = TableInfo::DEFAULT_MAX_FILE_SIZE;
+=======
+    const bool _write_single_file;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const TCloudConfiguration _cloud_conf;
     FragmentContext* _fragment_ctx;
 

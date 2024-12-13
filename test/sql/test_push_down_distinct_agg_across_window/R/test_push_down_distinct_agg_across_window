@@ -12,7 +12,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`TIME`) BUCKETS 1
 PROPERTIES(
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_format" = "default"
 );
 -- result:
@@ -59,4 +62,8 @@ select TIME, ceil(round(sum(`NUM`) OVER (PARTITION BY `TIME` ))) as N from t0
 ) select sum(murmur_hash3_32(TIME) + murmur_hash3_32(N)) as fingerprint from(select distinct TIME, N from temp)t1;
 -- result:
 -5805963690
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

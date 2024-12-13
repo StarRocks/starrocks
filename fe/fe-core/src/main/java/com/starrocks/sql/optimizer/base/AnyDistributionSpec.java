@@ -18,7 +18,13 @@ package com.starrocks.sql.optimizer.base;
 import java.util.Objects;
 
 public class AnyDistributionSpec extends DistributionSpec {
+<<<<<<< HEAD
     public AnyDistributionSpec() {
+=======
+
+    public static final AnyDistributionSpec INSTANCE = new AnyDistributionSpec();
+    private AnyDistributionSpec() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(DistributionType.ANY);
     }
 

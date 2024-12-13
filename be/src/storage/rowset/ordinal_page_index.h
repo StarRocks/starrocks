@@ -93,6 +93,11 @@ public:
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator seek_at_or_before(ordinal_t ordinal);
 
+<<<<<<< HEAD
+=======
+    OrdinalPageIndexIterator seek_by_page_index(int page_index);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // REQUIRES: the index data has been successfully `load()`ed into memory.
     OrdinalPageIndexIterator begin();
 
@@ -120,6 +125,11 @@ public:
         }
     }
 
+<<<<<<< HEAD
+=======
+    void print_debug_info();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     friend OrdinalPageIndexIterator;
 

@@ -20,9 +20,18 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+=======
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -142,4 +151,12 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        return fileIO.getFileStatus(files);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -45,7 +45,11 @@ class DeferOp {
 public:
     explicit DeferOp(DeferFunction func) : _func(std::move(func)) {}
 
+<<<<<<< HEAD
     ~DeferOp() noexcept { _func(); }
+=======
+    ~DeferOp() noexcept { (void)_func(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     DeferFunction _func;

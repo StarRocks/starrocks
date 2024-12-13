@@ -13,7 +13,10 @@ PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))
 DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_format" = "DEFAULT"
 );
 -- result:
@@ -25,7 +28,11 @@ desc bill_detail;
 -- result:
 bill_code	varchar(200)	NO	true		
 -- !result
+<<<<<<< HEAD
 explain select * from bill_detail where bill_code='JT2921712368984';
+=======
+[UC]explain select * from bill_detail where bill_code='JT2921712368984';
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select * from bill_detail where bill_code='JT2921712368984';
 -- result:
 JT2921712368984
@@ -47,7 +54,10 @@ PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))
 DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_format" = "DEFAULT"
 );
 -- result:
@@ -76,7 +86,10 @@ PARTITION p999 VALUES[('2921712368983'), ('2921712368985'))
 DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "storage_format" = "DEFAULT"
 );
 -- result:
@@ -87,4 +100,8 @@ insert into bill_detail values('JT2921712368984');
 select * from bill_detail where bill_code>='JT2921712368984';
 -- result:
 JT2921712368984
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

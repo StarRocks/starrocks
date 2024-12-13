@@ -72,6 +72,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
         }
     }
 
+<<<<<<< HEAD
     auto io_executor = _aggregator->spill_channel()->io_executor();
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
@@ -81,16 +82,32 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
     _aggregator->ref();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+=======
+    auto flush_function = [this](RuntimeState* state) {
+        auto& spiller = _aggregator->spiller();
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+    };
+
+    _aggregator->ref();
+    auto set_call_back_function = [this](RuntimeState* state) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
+<<<<<<< HEAD
                 state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
     };
 
     SpillProcessTasksBuilder task_builder(state, io_executor);
+=======
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+    };
+
+    SpillProcessTasksBuilder task_builder(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
@@ -166,7 +183,10 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
     bool ht_need_expansion = _aggregator->hash_map_variant().need_expand(chunk_size);
     const size_t max_mem_usage = state->spill_mem_table_size();
 
+<<<<<<< HEAD
     auto io_executor = _aggregator->spill_channel()->io_executor();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto spiller = _aggregator->spiller();
 
     // goal: control buffered data memory usage, aggregate data as much as possible before spill
@@ -265,6 +285,10 @@ Status SpillableAggregateBlockingSinkOperator::_try_to_spill_by_auto(RuntimeStat
 }
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
+<<<<<<< HEAD
+=======
+    RETURN_IF(_aggregator->hash_map_variant().size() == 0, Status::OK());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (should_spill_hash_table) {
         _aggregator->hash_map_variant().visit(
                 [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
@@ -322,8 +346,17 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
+<<<<<<< HEAD
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+=======
+    _spill_options->enable_block_compaction = state->spill_enable_compaction();
+    _spill_options->plan_node_id = _plan_node_id;
+    _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }

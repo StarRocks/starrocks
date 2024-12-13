@@ -21,6 +21,10 @@
 #include "io/seekable_input_stream.h"
 #include "util/bit_util.h"
 #include "util/raw_container.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 class StreamCompression;

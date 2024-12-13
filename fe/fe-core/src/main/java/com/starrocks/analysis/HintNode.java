@@ -14,7 +14,10 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -34,11 +37,16 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     public Scope getScope() {
         return Scope.QUERY;
     }
+<<<<<<< HEAD
     public abstract Map<String, String> getValue();
 
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
     }
+=======
+
+    public abstract Map<String, String> getValue();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Override
     public String toSql() {
@@ -59,11 +67,19 @@ public abstract class HintNode implements Comparable<HintNode>, ParseNode {
     public int compareTo(HintNode o) {
         return hintStr.compareTo(o.hintStr);
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public enum Scope {
         // the entire query
         QUERY,
         // part of a query. Like hint in select * from (select hint from tbl),
+<<<<<<< HEAD
         // we may want the hint only takes effect in the subquery in the futuer.
+=======
+        // we may want the hint only takes effect in the subquery in the future.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CLAUSE
     }
 }

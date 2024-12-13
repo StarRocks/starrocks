@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_orderkey,
@@ -21,12 +22,18 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F07)
   DOP: 16
   INSTANCES
     INSTANCE(0-F07#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -75,13 +82,21 @@ PLAN FRAGMENT 2(F05)
   INSTANCES
     INSTANCE(4-F05#0)
       DESTINATIONS: 1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1
+<<<<<<< HEAD
       BE: 10003
+=======
+      BE: 10001
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     INSTANCE(5-F05#1)
       DESTINATIONS: 1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1
       BE: 10002
     INSTANCE(6-F05#2)
       DESTINATIONS: 1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1,3-F00#2,1-F00#0,2-F00#1
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 3(F03)
   DOP: 16
@@ -281,5 +296,9 @@ PLAN FRAGMENT 4
      tabletList=1365,1367,1369,1371,1373,1375,1377,1379,1381,1383 ...
      cardinality=1
      avgRowSize=24.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

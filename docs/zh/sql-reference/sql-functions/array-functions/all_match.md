@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # all_match
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 判断数组中的所有元素是否都匹配谓词中 (predicate) 指定的条件。
 

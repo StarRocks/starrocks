@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_count,
@@ -19,6 +20,8 @@ group by
 order by
     custdist desc,
     c_count desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[21: count DESC NULLS LAST, 20: count DESC NULLS LAST]])
     TOP-N (order by [[21: count DESC NULLS LAST, 20: count DESC NULLS LAST]])

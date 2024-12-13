@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # least
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回多个输入参数中的最小值。
 

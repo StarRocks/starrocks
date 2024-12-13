@@ -89,6 +89,10 @@ OPTS=$(getopt \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'without-starcache' \
+<<<<<<< HEAD
+=======
+  -l 'with-brpc-keepalive' \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -111,6 +115,10 @@ WITH_AWS=OFF
 USE_STAROS=OFF
 WITH_GCOV=OFF
 WITH_STARCACHE=ON
+<<<<<<< HEAD
+=======
+WITH_BRPC_KEEPALIVE=OFF
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -123,6 +131,10 @@ while true; do
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
+<<<<<<< HEAD
+=======
+        --with-brpc-keepalive) WITH_BRPC_KEEPALIVE=ON; shift ;;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
         --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
@@ -141,6 +153,12 @@ CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+<<<<<<< HEAD
+=======
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -176,11 +194,20 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+<<<<<<< HEAD
             -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+=======
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
+<<<<<<< HEAD
+=======
+            -DWITH_BRPC_KEEPALIVE=${WITH_BRPC_KEEPALIVE} \
+            -DSTARROCKS_JIT_ENABLE=ON \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
@@ -228,6 +255,13 @@ else
 fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+<<<<<<< HEAD
+=======
+if [[ -n "$STARROCKS_GCC_HOME" ]] ; then
+    # add gcc lib64 into LD_LIBRARY_PATH because of dynamic link libstdc++ and libgcc
+    export LD_LIBRARY_PATH=$STARROCKS_GCC_HOME/lib64:$LD_LIBRARY_PATH
+fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
 if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then

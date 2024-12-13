@@ -20,6 +20,10 @@
 #include <cstring>
 #include <filesystem>
 
+<<<<<<< HEAD
+=======
+#include "block_cache/datacache_utils.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
@@ -33,8 +37,18 @@ protected:
 
     static void TearDownTestCase() {}
 
+<<<<<<< HEAD
     void SetUp() override {}
     void TearDown() override {}
+=======
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
+
+    bool _saved_enable_auto_adjust = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 TEST_F(BlockCacheTest, copy_to_iobuf) {
@@ -65,6 +79,7 @@ TEST_F(BlockCacheTest, copy_to_iobuf) {
     ASSERT_EQ(memcmp(result, expect, size), 0);
 }
 
+<<<<<<< HEAD
 TEST_F(BlockCacheTest, parse_cache_space_size_str) {
     const std::string cache_dir = "./block_disk_cache1";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
@@ -155,6 +170,8 @@ TEST_F(BlockCacheTest, parse_cache_space_paths) {
     fs::remove_all(cache_dir).ok();
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef WITH_STARCACHE
 TEST_F(BlockCacheTest, hybrid_cache) {
     const std::string cache_dir = "./block_disk_cache3";
@@ -223,6 +240,10 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     options.max_concurrent_inserts = 100000;
     options.max_flying_memory_mb = 100;
     options.engine = "starcache";
+<<<<<<< HEAD
+=======
+    options.inline_item_count_limit = 1000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
@@ -264,7 +285,11 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     const size_t block_size = 1024 * 1024;
 
     CacheOptions options;
+<<<<<<< HEAD
     options.mem_space_size = 1024;
+=======
+    options.mem_space_size = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t quota = 500 * 1024 * 1024;
     options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
@@ -354,7 +379,11 @@ TEST_F(BlockCacheTest, update_cache_quota) {
 
     {
         size_t new_mem_quota = 2 * 1024 * 1024;
+<<<<<<< HEAD
         ASSERT_TRUE(cache->update_mem_quota(new_mem_quota).ok());
+=======
+        ASSERT_TRUE(cache->update_mem_quota(new_mem_quota, false).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto metrics = cache->cache_metrics();
         ASSERT_EQ(metrics.mem_quota_bytes, new_mem_quota);
     }
@@ -412,7 +441,11 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
     }
 
     cache->shutdown();
+<<<<<<< HEAD
     clean_residual_datacache(cache_dir);
+=======
+    DataCacheUtils::clean_residual_datacache(cache_dir);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     {
         std::vector<std::string> files;
@@ -425,6 +458,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
 
 #endif
 
+<<<<<<< HEAD
 #ifdef WITH_CACHELIB
 TEST_F(BlockCacheTest, custom_lru_insertion_point) {
     std::unique_ptr<BlockCache> cache(new BlockCache);
@@ -461,4 +495,6 @@ TEST_F(BlockCacheTest, custom_lru_insertion_point) {
 }
 #endif
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

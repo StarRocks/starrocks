@@ -14,6 +14,7 @@
 
 #include "formats/parquet/stored_column_reader.h"
 
+<<<<<<< HEAD
 #include "column/column.h"
 #include "column_reader.h"
 #include "common/status.h"
@@ -28,6 +29,36 @@ namespace starrocks::parquet {
 class RepeatedStoredColumnReader : public StoredColumnReader {
 public:
     RepeatedStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReader(opts) {}
+=======
+#include <fmt/core.h>
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <sstream>
+#include <string>
+#include <utility>
+
+#include "column/column.h"
+#include "column_reader.h"
+#include "common/compiler_util.h"
+#include "common/logging.h"
+#include "common/status.h"
+#include "formats/parquet/level_codec.h"
+#include "formats/parquet/schema.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
+#include "simd/simd.h"
+
+namespace tparquet {
+class ColumnChunk;
+} // namespace tparquet
+
+namespace starrocks::parquet {
+
+class RepeatedStoredColumnReader : public StoredColumnReaderImpl {
+public:
+    RepeatedStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReaderImpl(opts) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~RepeatedStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
@@ -38,6 +69,7 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     void reset() override;
 
     Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
@@ -56,6 +88,29 @@ private:
     Status _decode_levels(size_t num_levels);
 
     void _delimit_rows(size_t* num_rows, size_t* num_levels_parsed);
+=======
+    void reset_levels() override;
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
+        _reader->def_level_decoder().get_levels(def_levels, num_levels);
+        _reader->rep_level_decoder().get_levels(rep_levels, num_levels);
+    }
+
+    Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) override;
+
+    void set_page_change_on_record_boundry() override { _page_change_on_record_boundry = true; }
+
+private:
+    // Try to decode enough levels in levels buffer, if there are no enough levels, will throw InternalError msg.
+    Status _decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels);
+
+    void _delimit_rows(const level_t* rep_levels, size_t* num_rows, size_t* num_levels_parsed);
+
+    void _consume_levels(size_t num_values) {
+        _reader->def_level_decoder().consume_levels(num_values);
+        _reader->rep_level_decoder().consume_levels(num_values);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status _next_page() override;
 
@@ -71,11 +126,15 @@ private:
 private:
     const ParquetField* _field = nullptr;
 
+<<<<<<< HEAD
     bool _eof = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool _meet_first_record = false;
 
     size_t _not_null_to_skip = 0;
 
+<<<<<<< HEAD
     //// Todo: cache decoded level in this layer is error-prone, move it to level_decoder
     size_t _levels_parsed = 0;
     size_t _levels_decoded = 0;
@@ -90,6 +149,19 @@ private:
 class OptionalStoredColumnReader : public StoredColumnReader {
 public:
     OptionalStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReader(opts) {}
+=======
+    // Use uint16_t instead of uint8_t to make it auto simd by compiler.
+    std::vector<uint16_t> _is_nulls;
+
+    // default is false, but if there is page index, it's true.
+    // so that we don't need check next page to know the last record in current page is finished.
+    bool _page_change_on_record_boundry = false;
+};
+
+class OptionalStoredColumnReader : public StoredColumnReaderImpl {
+public:
+    OptionalStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReaderImpl(opts) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~OptionalStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
@@ -101,6 +173,7 @@ public:
     }
 
     // Reset internal state and ready for next read_values
+<<<<<<< HEAD
     void reset() override;
 
     Status do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
@@ -110,6 +183,9 @@ public:
             return _read_records_only(num_records, content_type, dst);
         }
     }
+=======
+    void reset_levels() override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // If need_levels is set, client will get all levels through get_levels function.
     // If need_levels is not set, read_records may not records levels information, this will
@@ -120,6 +196,7 @@ public:
         // _needs_levels must be true
         DCHECK(_need_parse_levels);
 
+<<<<<<< HEAD
         *def_levels = &_def_levels[0];
         *rep_levels = nullptr;
         *num_levels = _levels_parsed;
@@ -142,10 +219,29 @@ private:
     Status _decode_levels(size_t num_levels);
     Status _read_records_only(size_t* num_records, ColumnContentType content_type, Column* dst);
     Status _read_records_and_levels(size_t* num_records, ColumnContentType content_type, Column* dst);
+=======
+        *rep_levels = nullptr;
+        _reader->def_level_decoder().get_levels(def_levels, num_levels);
+    }
+
+private:
+    Status _decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels);
+
+    void _consume_levels(size_t num_values) { _reader->def_level_decoder().consume_levels(num_values); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
                                   starrocks::Column* dst, bool append_default) override;
 
+<<<<<<< HEAD
+=======
+    void _append_default_levels(size_t row_nums) override {
+        if (_need_parse_levels) {
+            _reader->def_level_decoder().append_default_levels(row_nums);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const ParquetField* _field = nullptr;
 
     // When the flag is false, the information of levels does not need to be materialized,
@@ -153,6 +249,7 @@ private:
     // can be saved in decoding.
     bool _need_parse_levels = false;
 
+<<<<<<< HEAD
     bool _eof = false;
 
     size_t _levels_parsed = 0;
@@ -166,6 +263,15 @@ private:
 class RequiredStoredColumnReader : public StoredColumnReader {
 public:
     RequiredStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReader(opts) {}
+=======
+    // Use uint16_t instead of uint8_t to make it auto simd by compiler.
+    std::vector<uint16_t> _is_nulls;
+};
+
+class RequiredStoredColumnReader : public StoredColumnReaderImpl {
+public:
+    RequiredStoredColumnReader(const ColumnReaderOptions& opts) : StoredColumnReaderImpl(opts) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~RequiredStoredColumnReader() override = default;
 
     Status init(const ParquetField* field, const tparquet::ColumnChunk* chunk_metadata) {
@@ -176,9 +282,13 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     void reset() override {}
 
     Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override;
+=======
+    void reset_levels() override {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         *def_levels = nullptr;
@@ -193,6 +303,7 @@ private:
     const ParquetField* _field = nullptr;
 };
 
+<<<<<<< HEAD
 void RepeatedStoredColumnReader::reset() {
     _meet_first_record = false;
     size_t num_levels = _levels_decoded - _levels_parsed;
@@ -282,16 +393,31 @@ bool RepeatedStoredColumnReader::page_selected(size_t num_values) {
 void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_levels_parsed) {
     DCHECK_GT(_levels_decoded - _levels_parsed, 0);
     size_t levels_pos = _levels_parsed;
+=======
+void RepeatedStoredColumnReader::reset_levels() {
+    _reader->def_level_decoder().reset();
+    _reader->rep_level_decoder().reset();
+}
+
+void RepeatedStoredColumnReader::_delimit_rows(const level_t* rep_levels, size_t* num_rows, size_t* num_levels_parsed) {
+    size_t levels_pos = 0;
+    size_t avail_levels = *num_levels_parsed;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #ifndef NDEBUG
     std::stringstream ss;
     ss << "rep=[";
+<<<<<<< HEAD
     for (int i = levels_pos; i < _levels_decoded; ++i) {
         ss << ", " << _rep_levels[i];
     }
     ss << "], def=[";
     for (int i = levels_pos; i < _levels_decoded; ++i) {
         ss << ", " << _def_levels[i];
+=======
+    for (int i = levels_pos; i < avail_levels; ++i) {
+        ss << ", " << rep_levels[i];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     ss << "]";
     VLOG_FILE << ss.str();
@@ -299,25 +425,41 @@ void RepeatedStoredColumnReader::_delimit_rows(size_t* num_rows, size_t* num_lev
 
     if (!_meet_first_record) {
         _meet_first_record = true;
+<<<<<<< HEAD
         DCHECK_EQ(_rep_levels[levels_pos], 0);
+=======
+        DCHECK_EQ(rep_levels[levels_pos], 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         levels_pos++;
     }
 
     size_t rows_read = 0;
+<<<<<<< HEAD
     for (; levels_pos < _levels_decoded && rows_read < *num_rows; ++levels_pos) {
         rows_read += _rep_levels[levels_pos] == 0;
+=======
+    for (; levels_pos < avail_levels && rows_read < *num_rows; ++levels_pos) {
+        rows_read += rep_levels[levels_pos] == 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (rows_read == *num_rows) {
         // Notice, ++levels_pos in for-loop will take one step forward, so we need -1
         levels_pos--;
+<<<<<<< HEAD
         DCHECK_EQ(0, _rep_levels[levels_pos]);
+=======
+        // Had read enough rows, reset _meet_first_record for next read
+        _meet_first_record = false;
+        DCHECK_EQ(0, rep_levels[levels_pos]);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } // else {
       //  means  rows_read < *num_rows, levels_pos >= _levels_decoded,
       //  so we need to decode more levels to obtain a complete line or
       //  we have read all the records in this column chunk.
     // }
 
+<<<<<<< HEAD
     VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos - _levels_parsed;
     *num_rows = rows_read;
     *num_levels_parsed = levels_pos - _levels_parsed;
@@ -546,6 +688,41 @@ Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnCo
         update_read_context(records_to_read);
     }
     *num_records = records_read;
+=======
+    VLOG_FILE << "rows_reader=" << rows_read << ", level_parsed=" << levels_pos;
+    *num_rows = rows_read;
+    *num_levels_parsed = levels_pos;
+}
+
+Status RepeatedStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels) {
+    level_t* rep_levels = nullptr;
+    size_t avail_levels = _reader->rep_level_decoder().get_avail_levels(*num_rows, &rep_levels);
+    if (UNLIKELY(avail_levels == 0)) {
+        return Status::InternalError(fmt::format("num values left in cur page: {}, but no available rep levels",
+                                                 _num_values_left_in_cur_page));
+    }
+    if (UNLIKELY(avail_levels != _reader->def_level_decoder().get_avail_levels(*num_rows, def_levels))) {
+        return Status::InternalError("rep/def levels' length do not match");
+    }
+    _delimit_rows(rep_levels, num_rows, &avail_levels);
+    *num_levels_parsed = avail_levels;
+    _consume_levels(*num_levels_parsed);
+    return Status::OK();
+}
+
+void OptionalStoredColumnReader::reset_levels() {
+    _reader->def_level_decoder().reset();
+}
+
+Status OptionalStoredColumnReader::_decode_levels(size_t* num_rows, size_t* num_levels_parsed, level_t** def_levels) {
+    size_t avail_levels = _reader->def_level_decoder().get_avail_levels(*num_rows, def_levels);
+    if (UNLIKELY(avail_levels == 0 || *num_rows > avail_levels)) {
+        return Status::InternalError(
+                fmt::format("def levels need to parsed: {}, def levels parsed: {}", *num_rows, avail_levels));
+    }
+    *num_levels_parsed = std::min(*num_rows, avail_levels);
+    _consume_levels(*num_levels_parsed);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -568,6 +745,7 @@ Status StoredColumnReader::create(const ColumnReaderOptions& opts, const Parquet
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read,
                                      Column* dst) {
     *records_read = 0;
@@ -696,6 +874,9 @@ size_t StoredColumnReader::get_level_to_decode_batch_size(size_t row, size_t num
 }
 
 size_t StoredColumnReader::count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level) {
+=======
+size_t StoredColumnReaderImpl::count_not_null(level_t* def_levels, size_t num_parsed_levels, level_t max_def_level) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t count = 0;
     for (int i = 0; i < num_parsed_levels; ++i) {
         level_t def_level = def_levels[i];
@@ -706,20 +887,34 @@ size_t StoredColumnReader::count_not_null(level_t* def_levels, size_t num_parsed
     return count;
 }
 
+<<<<<<< HEAD
 Status StoredColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter,
                                       ColumnContentType content_type, Column* dst) {
     // reset() to prepare levels for new reading
     reset();
+=======
+Status StoredColumnReaderImpl::read_range(const Range<uint64_t>& range, const Filter* filter,
+                                          ColumnContentType content_type, Column* dst) {
+    // reset_levels() to prepare levels for new reading
+    reset_levels();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_read_cursor < range.begin()) {
         RETURN_IF_ERROR(_skip(range.begin() - _read_cursor));
     }
     return _read(range, filter, content_type, dst);
 }
 
+<<<<<<< HEAD
 Status StoredColumnReader::_skip(uint64_t rows_to_skip) {
     uint64_t skipped_row = 0;
     while (skipped_row < rows_to_skip) {
         uint64_t batch_to_skip = std::min(rows_to_skip - skipped_row, (uint64_t)10000);
+=======
+Status StoredColumnReaderImpl::_skip(uint64_t rows_to_skip) {
+    uint64_t skipped_row = 0;
+    while (skipped_row < rows_to_skip) {
+        uint64_t batch_to_skip = std::min(rows_to_skip - skipped_row, (uint64_t)BATCH_PROCESS_SIZE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         size_t batch_skipped = 0;
         while (batch_skipped < batch_to_skip) {
             if (_num_values_left_in_cur_page > 0) {
@@ -734,14 +929,24 @@ Status StoredColumnReader::_skip(uint64_t rows_to_skip) {
             }
         }
         skipped_row += batch_to_skip;
+<<<<<<< HEAD
         // reset() when batch_skipped completed, avoiding use too much memory
         reset();
+=======
+        // reset_levels() when batch_skipped completed, avoiding use too much memory
+        reset_levels();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Status StoredColumnReader::_read(const Range<uint64_t>& range, const starrocks::Filter* filter,
                                  starrocks::parquet::ColumnContentType content_type, starrocks::Column* dst) {
+=======
+Status StoredColumnReaderImpl::_read(const Range<uint64_t>& range, const starrocks::Filter* filter,
+                                     starrocks::parquet::ColumnContentType content_type, starrocks::Column* dst) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     uint64_t row_count = range.span_size();
     size_t row_readed = 0;
     while (row_readed < row_count) {
@@ -765,7 +970,11 @@ Status StoredColumnReader::_read(const Range<uint64_t>& range, const starrocks::
     return Status::OK();
 }
 
+<<<<<<< HEAD
 StatusOr<size_t> StoredColumnReader::_convert_row_to_value(size_t* row) {
+=======
+StatusOr<size_t> StoredColumnReaderImpl::_convert_row_to_value(size_t* row) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     *row = std::min(*row, _num_values_left_in_cur_page);
     return *row;
 }
@@ -775,6 +984,7 @@ StatusOr<size_t> RepeatedStoredColumnReader::_convert_row_to_value(size_t* row) 
     size_t parsed_row = 0;
     size_t target_row = *row;
     while (num_parsed_levels < _num_values_left_in_cur_page && parsed_row < target_row) {
+<<<<<<< HEAD
         size_t level_batch_size = get_level_to_decode_batch_size(target_row - parsed_row,
                                                                  _num_values_left_in_cur_page - num_parsed_levels,
                                                                  _levels_decoded, _levels_parsed);
@@ -803,6 +1013,15 @@ StatusOr<size_t> RepeatedStoredColumnReader::_convert_row_to_value(size_t* row) 
         _levels_parsed += level_parsed;
         num_parsed_levels += level_parsed;
         if (num_parsed_levels == _num_values_left_in_cur_page && _reader->is_last_page()) {
+=======
+        size_t row_to_parse = target_row - parsed_row;
+        level_t* def_levels = nullptr;
+        size_t level_parsed = 0;
+        RETURN_IF_ERROR(_decode_levels(&row_to_parse, &level_parsed, &def_levels));
+        num_parsed_levels += level_parsed;
+        if (num_parsed_levels == _num_values_left_in_cur_page &&
+            (_page_change_on_record_boundry || _reader->is_last_page())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             row_to_parse += 1;
             _meet_first_record = false;
         }
@@ -829,16 +1048,20 @@ Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
     } else {
         RETURN_IF_ERROR(_reader->load_page());
         _cur_page_loaded = true;
+<<<<<<< HEAD
         //// Todo: cache decoded level in this layer is error-prone, move it to level_decoder
         if (_levels_decoded != _levels_parsed) {
             _levels_parsed = 0;
             _levels_decoded = 0;
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         row_to_skip = _reader->num_values() - _num_values_left_in_cur_page;
     }
     size_t values_to_skip = 0;
     size_t row_skipped = 0;
     while (row_skipped < row_to_skip) {
+<<<<<<< HEAD
         size_t level_batch_size = get_level_to_decode_batch_size(
                 row_to_skip, row_to_skip - row_skipped + _num_values_left_in_cur_page, _levels_decoded, _levels_parsed);
         if (level_batch_size > 0) {
@@ -860,6 +1083,18 @@ Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
         row_skipped += skip_row;
         // reset() to avoiding using too much memory and prepare levels for new reading.
         reset();
+=======
+        level_t* def_levels = nullptr;
+        size_t level_parsed = 0;
+        size_t cur_to_skip = row_to_skip - row_skipped;
+        // skip batch by batch to avoid big memory alloc
+        size_t batch_to_skip = std::min(cur_to_skip, (size_t)BATCH_PROCESS_SIZE);
+        RETURN_IF_ERROR(_decode_levels(&batch_to_skip, &level_parsed, &def_levels));
+        values_to_skip += count_not_null(&def_levels[0], level_parsed, _field->max_def_level());
+        row_skipped += level_parsed;
+        // reset_levels() to avoiding using too much memory and prepare levels for new reading.
+        reset_levels();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return _reader->skip_values(values_to_skip);
 }
@@ -884,6 +1119,7 @@ Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
                                                           starrocks::Column* dst, bool append_default) {
     if (append_default) {
+<<<<<<< HEAD
         append_default_levels(num_values);
         dst->append_default(num_values);
         return Status::OK();
@@ -895,6 +1131,21 @@ Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
             _is_nulls[i] = _def_levels[_levels_parsed + i] < _field->max_def_level();
         }
         _levels_parsed += num_values;
+=======
+        _append_default_levels(num_values);
+        dst->append_default(num_values);
+        return Status::OK();
+    } else {
+        level_t* def_levels = nullptr;
+        size_t level_parsed = 0;
+        RETURN_IF_ERROR(_decode_levels(&num_values, &level_parsed, &def_levels));
+        DCHECK_EQ(num_values, level_parsed);
+        _is_nulls.resize(num_values);
+        // decode def levels
+        for (size_t i = 0; i < num_values; ++i) {
+            _is_nulls[i] = def_levels[i] < _field->max_def_level();
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return _reader->decode_values(num_values, &_is_nulls[0], content_type, dst);
     }
 }
@@ -904,8 +1155,14 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::Column* dst, bool append_default) {
     _is_nulls.resize(num_values);
     int null_pos = 0;
+<<<<<<< HEAD
     for (int i = 0; i < num_values; ++i) {
         level_t def_level = _def_levels[_levels_parsed - num_values + i];
+=======
+    level_t* def_levels = _reader->def_level_decoder().get_forward_levels(num_values);
+    for (int i = 0; i < num_values; ++i) {
+        level_t def_level = def_levels[i];
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _is_nulls[null_pos] = (def_level < _field->max_def_level());
         // if current def level < ancestor def level, the ancestor will be not defined too, so that we don't
         // need to add null value to this column. Otherwise, we need to add null value to this column.
@@ -922,12 +1179,21 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
 
 void RepeatedStoredColumnReader::_collect_not_null_values(size_t num_levels, bool lazy_flag) {
     if (lazy_flag) {
+<<<<<<< HEAD
         _not_null_to_skip +=
                 count_not_null(&_def_levels[_levels_parsed - num_levels], num_levels, _field->max_def_level());
     }
 }
 
 Status StoredColumnReader::_next_page() {
+=======
+        _not_null_to_skip += count_not_null(_reader->def_level_decoder().get_forward_levels(num_levels), num_levels,
+                                            _field->max_def_level());
+    }
+}
+
+Status StoredColumnReaderImpl::_next_page() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(_reader->next_page());
     RETURN_IF_ERROR(_reader->load_header());
     if (_reader->current_page_is_dict()) {
@@ -941,12 +1207,20 @@ Status StoredColumnReader::_next_page() {
 }
 
 Status RepeatedStoredColumnReader::_next_page() {
+<<<<<<< HEAD
     RETURN_IF_ERROR(StoredColumnReader::_next_page());
+=======
+    RETURN_IF_ERROR(StoredColumnReaderImpl::_next_page());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _not_null_to_skip = 0;
     return _reader->load_page();
 }
 
+<<<<<<< HEAD
 bool StoredColumnReader::_cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read) {
+=======
+bool StoredColumnReaderImpl::_cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (!filter) {
         return true;
     }
@@ -958,6 +1232,26 @@ bool StoredColumnReader::_cur_page_selected(size_t row_readed, const Filter* fil
 bool RepeatedStoredColumnReader::_cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read) {
     // for repeated column we can't judge the last row in the current page,
     // to_read is all complete row, row + 1 contains the last incomplete row
+<<<<<<< HEAD
     return StoredColumnReader::_cur_page_selected(row_readed, filter, to_read + 1);
+=======
+    return StoredColumnReaderImpl::_cur_page_selected(row_readed, filter, to_read + 1);
+}
+
+Status StoredColumnReaderImpl::load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
+    _reader->set_next_read_page_idx(cur_page_idx);
+    RETURN_IF_ERROR(_reader->seek_to_offset(offset));
+    RETURN_IF_ERROR(_reader->load_header());
+    _cur_page_loaded = false;
+    _num_values_left_in_cur_page = _reader->num_values();
+    _read_cursor = first_row;
+    return Status::OK();
+}
+
+Status RepeatedStoredColumnReader::load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
+    RETURN_IF_ERROR(StoredColumnReaderImpl::load_specific_page(cur_page_idx, offset, first_row));
+    _not_null_to_skip = 0;
+    return _reader->load_page();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 } // namespace starrocks::parquet

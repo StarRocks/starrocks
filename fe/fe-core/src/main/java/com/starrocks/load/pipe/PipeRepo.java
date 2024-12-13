@@ -14,10 +14,15 @@
 
 package com.starrocks.load.pipe;
 
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
+=======
+import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.PipeOpEntry;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -25,10 +30,14 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Map;
+=======
+import java.io.IOException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Repo: persistence for Pipe
@@ -64,6 +73,7 @@ public class PipeRepo {
         GlobalStateMgr.getCurrentState().getEditLog().logPipeOp(opEntry);
     }
 
+<<<<<<< HEAD
     public long saveImage(DataOutputStream output, long checksum) throws IOException {
         Pair<String, Integer> jsonAndChecksum = pipeManager.toJson();
         checksum ^= jsonAndChecksum.second;
@@ -96,6 +106,15 @@ public class PipeRepo {
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         pipeManager.save(dos);
+=======
+    public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+        reader.readCollection(Pipe.class, pipeManager::putPipe);
+        LOG.info("loaded {} pipes", pipeManager.getAllPipes().size());
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        pipeManager.save(imageWriter);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void replay(PipeOpEntry entry) {

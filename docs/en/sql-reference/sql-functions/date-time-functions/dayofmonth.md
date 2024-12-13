@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dayofmonth
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the day part in a date and returns a value that ranges from 1 to 31.
 

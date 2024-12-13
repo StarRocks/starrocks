@@ -78,7 +78,12 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             // functions with various data types do not need to implicit cast, such as following functions.
             if (fn.functionName().equals(FunctionSet.ARRAY_MAP) ||
                     fn.functionName().equals(FunctionSet.EXCHANGE_BYTES) ||
+<<<<<<< HEAD
                     fn.functionName().equals(FunctionSet.EXCHANGE_SPEED)) {
+=======
+                    fn.functionName().equals(FunctionSet.EXCHANGE_SPEED) ||
+                    fn.functionName().equals(FunctionSet.ARRAY_SORTBY)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return call;
             }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
@@ -122,7 +127,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate,
                                                 ScalarOperatorRewriteContext context) {
+<<<<<<< HEAD
         return castForBetweenAndIn(predicate);
+=======
+        return castForBetweenAndIn(predicate, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -172,7 +181,12 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
+<<<<<<< HEAD
         Type compatibleType = TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType(), type1, type2);
+=======
+        Type compatibleType =
+                TypeManager.getCompatibleTypeForBinary(predicate.getBinaryType().isRange(), type1, type2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (!type1.matchesType(compatibleType)) {
             addCastChild(compatibleType, predicate, 0);
@@ -190,6 +204,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         Type typeConstant = constant.getType();
         Type typeVariable = variable.getType();
 
+<<<<<<< HEAD
         if (typeVariable.isStringType() && typeConstant.isExactNumericType()) {
             if (ConnectContext.get() == null || SessionVariableConstants.DECIMAL.equalsIgnoreCase(
                     ConnectContext.get().getSessionVariable().getCboEqBaseType())) {
@@ -207,6 +222,40 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             // For like MySQL, convert to date type as much as possible
             addCastChild(variable.getType(), predicate, constantIndex);
             return Optional.of(predicate);
+=======
+        boolean checkStringCastToNumber = false;
+        if (typeVariable.isNumericType() && typeConstant.isStringType()) {
+            if (predicate.getBinaryType().isNotRangeComparison()) {
+                String baseType = ConnectContext.get() != null ?
+                        ConnectContext.get().getSessionVariable().getCboEqBaseType() : SessionVariableConstants.VARCHAR;
+                checkStringCastToNumber = SessionVariableConstants.DECIMAL.equals(baseType) ||
+                        SessionVariableConstants.DOUBLE.equals(baseType);
+            } else {
+                // range compare, base type must be double
+                checkStringCastToNumber = true;
+            }
+        }
+
+        // strict check, only support white check
+        if ((typeVariable.isNumericType() && typeConstant.isNumericType()) ||
+                (typeVariable.isNumericType() && typeConstant.isBoolean()) ||
+                (typeVariable.isDateType() && typeConstant.isNumericType()) ||
+                (typeVariable.isDateType() && typeConstant.isStringType()) ||
+                (typeVariable.isFixedPointType() && typeConstant.isStringType() &&
+                        predicate.getBinaryType() == BinaryType.EQ) ||
+                (typeVariable.isBoolean() && typeConstant.isStringType()) ||
+                checkStringCastToNumber) {
+
+            Optional<ScalarOperator> op = Utils.tryCastConstant(constant, variable.getType());
+            if (op.isPresent()) {
+                predicate.getChildren().set(constantIndex, op.get());
+                return Optional.of(predicate);
+            } else if (variable.getType().isDateType() && Type.canCastTo(constant.getType(), variable.getType())) {
+                // For like MySQL, convert to date type as much as possible
+                addCastChild(variable.getType(), predicate, constantIndex);
+                return Optional.of(predicate);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return Optional.empty();
@@ -228,7 +277,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+<<<<<<< HEAD
         return castForBetweenAndIn(predicate);
+=======
+        return castForBetweenAndIn(predicate, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -290,7 +343,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         return operator;
     }
 
+<<<<<<< HEAD
     private ScalarOperator castForBetweenAndIn(ScalarOperator predicate) {
+=======
+    private ScalarOperator castForBetweenAndIn(ScalarOperator predicate, boolean isBetween) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Type firstType = predicate.getChildren().get(0).getType();
         if (predicate.getChildren().stream().skip(1).allMatch(o -> firstType.matchesType(o.getType()))) {
             return predicate;
@@ -313,7 +370,11 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
+<<<<<<< HEAD
         Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(types);
+=======
+        Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(types, isBetween);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (int i = 0; i < predicate.getChildren().size(); i++) {
             Type childType = predicate.getChild(i).getType();
 

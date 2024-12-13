@@ -103,7 +103,11 @@ protected:
     void do_check(const std::vector<SchemaElement>& t_schemas, const std::vector<LevelInfo>& expected_levels) {
         SchemaDescriptor desc;
         auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
         ASSERT_TRUE(st.ok()) << st.get_error_msg();
+=======
+        ASSERT_TRUE(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         const auto& actual = _collect_flatten_levels(desc.get_parquet_fields());
         _check_flatten_levels(expected_levels, actual);
     }
@@ -1026,7 +1030,11 @@ TEST_F(ParquetSchemaTest, DuplicateFieldNames) {
 
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
     ASSERT_FALSE(st.ok()) << st.get_error_msg();
+=======
+    ASSERT_FALSE(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // The UT logic is copied from https://github.com/apache/arrow/blob/main/cpp/src/parquet/arrow/arrow_schema_test.cc
@@ -1078,7 +1086,11 @@ TEST_F(ParquetSchemaTest, ParquetMaps) {
 
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
     ASSERT_TRUE(st.ok()) << st.get_error_msg();
+=======
+    ASSERT_TRUE(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
@@ -1258,7 +1270,11 @@ TEST_F(ParquetSchemaTest, ParquetLists) {
 
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
     ASSERT_TRUE(st.ok()) << st.get_error_msg();
+=======
+    ASSERT_TRUE(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
@@ -1288,7 +1304,11 @@ TEST_F(ParquetSchemaTest, ParquetNestedSchema) {
 
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
     ASSERT_TRUE(st.ok()) << st.get_error_msg();
+=======
+    ASSERT_TRUE(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
@@ -1331,7 +1351,11 @@ TEST_F(ParquetSchemaTest, ParquetNestedSchema2) {
 
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
     ASSERT_TRUE(st.ok()) << st.get_error_msg();
+=======
+    ASSERT_TRUE(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
@@ -1368,7 +1392,11 @@ TEST_F(ParquetSchemaTest, ParquetRepeatedNestedSchema) {
 
     SchemaDescriptor desc;
     auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
     ASSERT_TRUE(st.ok()) << st.get_error_msg();
+=======
+    ASSERT_TRUE(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     check_flat_parquet_field(expected_fields, desc.get_parquet_fields());
 }
 
@@ -1636,8 +1664,13 @@ TEST_F(ParquetLevelsTest, ListErrors) {
 
         SchemaDescriptor desc;
         auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
         ASSERT_FALSE(st.ok()) << st.get_error_msg();
         ASSERT_EQ("LIST-annotated groups must not be repeated.", st.get_error_msg());
+=======
+        ASSERT_FALSE(st.ok()) << st.message();
+        ASSERT_EQ("LIST-annotated groups must not be repeated.", st.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         std::vector<SchemaElement> t_schemas;
@@ -1650,8 +1683,13 @@ TEST_F(ParquetLevelsTest, ListErrors) {
 
         SchemaDescriptor desc;
         auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
         ASSERT_FALSE(st.ok()) << st.get_error_msg();
         ASSERT_EQ("LIST-annotated groups must have a single child.", st.get_error_msg());
+=======
+        ASSERT_FALSE(st.ok()) << st.message();
+        ASSERT_EQ("LIST-annotated groups must have a single child.", st.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         std::vector<SchemaElement> t_schemas;
@@ -1663,8 +1701,13 @@ TEST_F(ParquetLevelsTest, ListErrors) {
 
         SchemaDescriptor desc;
         auto st = desc.from_thrift(t_schemas, true);
+<<<<<<< HEAD
         ASSERT_FALSE(st.ok()) << st.get_error_msg();
         ASSERT_EQ("Non-repeated nodes in a LIST-annotated group are not supported.", st.get_error_msg());
+=======
+        ASSERT_FALSE(st.ok()) << st.message();
+        ASSERT_EQ("Non-repeated nodes in a LIST-annotated group are not supported.", st.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

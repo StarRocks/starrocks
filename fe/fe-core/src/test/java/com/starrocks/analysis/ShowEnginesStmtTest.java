@@ -34,7 +34,11 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowEnginesStmt;
@@ -43,7 +47,11 @@ import org.junit.Test;
 
 public class ShowEnginesStmtTest {
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ShowEnginesStmt stmt = new ShowEnginesStmt();
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
         ShowResultSetMetaData metaData = stmt.getMetaData();

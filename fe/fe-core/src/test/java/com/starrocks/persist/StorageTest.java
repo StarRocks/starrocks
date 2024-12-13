@@ -115,12 +115,15 @@ public class StorageTest {
     public void testConstruct() {
         Storage storage1 = new Storage(1, "token", "test");
         Assert.assertEquals(1, storage1.getClusterID());
+<<<<<<< HEAD
         Assert.assertEquals("test", storage1.getMetaDir());
 
         Storage storage2 = new Storage(1, "token", 2, "test");
         Assert.assertEquals(1, storage2.getClusterID());
         Assert.assertEquals(2, storage2.getImageJournalId());
         Assert.assertEquals("test", storage2.getMetaDir());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -129,9 +132,12 @@ public class StorageTest {
         addFiles(0, 10);
 
         Storage storage = new Storage("storageTestDir");
+<<<<<<< HEAD
         Assert.assertEquals(966271669, storage.getClusterID());
         storage.setClusterID(1234);
         Assert.assertEquals(1234, storage.getClusterID());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals(0, storage.getImageJournalId());
 
         Assert.assertTrue(storage.getCurrentImageFile().equals(new File("storageTestDir/image.0")));
@@ -144,6 +150,7 @@ public class StorageTest {
         storage.setImageJournalId(100);
         Assert.assertEquals(100, storage.getImageJournalId());
 
+<<<<<<< HEAD
         Assert.assertEquals("storageTestDir", storage.getMetaDir());
         storage.setMetaDir("abcd");
         Assert.assertEquals("abcd", storage.getMetaDir());
@@ -153,6 +160,8 @@ public class StorageTest {
         File file = new File(storage.getMetaDir());
         Assert.assertEquals(0, file.list().length);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         deleteDir();
     }
 }

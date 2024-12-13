@@ -271,28 +271,48 @@ public class PropertyAnalyzerTest {
     @Test
     public void testDefaultTableCompression() throws AnalysisException {
         // No session
+<<<<<<< HEAD
         Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+=======
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Default in the session
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setThreadLocalInfo();
+<<<<<<< HEAD
         Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
 
         // Set in the session
         ctx.getSessionVariable().setDefaultTableCompression("zstd");
         Assert.assertEquals(TCompressionType.ZSTD, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of())));
+=======
+        Assert.assertEquals(TCompressionType.LZ4_FRAME, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
+
+        // Set in the session
+        ctx.getSessionVariable().setDefaultTableCompression("zstd");
+        Assert.assertEquals(TCompressionType.ZSTD, (PropertyAnalyzer.analyzeCompressionType(ImmutableMap.of()).first));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Set in the property
         Map<String, String> property = new HashMap<>();
         property.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "zlib");
+<<<<<<< HEAD
         Assert.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property)));
+=======
+        Assert.assertEquals(TCompressionType.ZLIB, (PropertyAnalyzer.analyzeCompressionType(property).first));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testPersistentIndexType() throws AnalysisException {
         // empty property
         Map<String, String> property = new HashMap<>();
+<<<<<<< HEAD
         Assert.assertEquals(TPersistentIndexType.LOCAL, PropertyAnalyzer.analyzePersistentIndexType(property));
+=======
+        Assert.assertEquals(TPersistentIndexType.CLOUD_NATIVE, PropertyAnalyzer.analyzePersistentIndexType(property));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<String, String> property2 = new HashMap<>();
         property2.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
@@ -319,6 +339,21 @@ public class PropertyAnalyzerTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testSingleLocationLabel() throws AnalysisException {
+        String[] testLocs = {"*", "a:*", "bcd_123:*", "123bcd_:val_123", "invalidFormat",
+                ":", "aa_123:*", "*:123", "a:b,c:d", "a: b", "  a  :  b  ", "   ", "a:b*"};
+        Boolean[] analyzeSuccess = {true, true, true, true, false, false, true, false, false, true, true, false, false};
+        int i = 0;
+        for (String loc : testLocs) {
+            String regex = PropertyAnalyzer.SINGLE_LOCATION_LABEL_REGEX;
+            Assert.assertEquals(Pattern.compile(regex).matcher(loc).matches(), analyzeSuccess[i++]);
+        }
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testAnalyzeVersionInfo() {
         new MockUp<RunMode>() {
             @Mock
@@ -334,6 +369,7 @@ public class PropertyAnalyzerTest {
                     PropertyAnalyzer.analyzeVersionInfo(properties);
                 });
     }
+<<<<<<< HEAD
 
     @Test
     public void testSingleLocationLabel() throws AnalysisException {
@@ -346,4 +382,6 @@ public class PropertyAnalyzerTest {
             Assert.assertEquals(Pattern.compile(regex).matcher(loc).matches(), analyzeSuccess[i++]);
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

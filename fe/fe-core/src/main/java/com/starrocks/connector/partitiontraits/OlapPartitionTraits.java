@@ -25,6 +25,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.PCell;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -43,7 +47,11 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public String getDbName() {
+=======
+    public String getCatalogDBName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         throw new NotImplementedException("not support olap table");
     }
 
@@ -53,12 +61,15 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean supportPartitionRefresh() {
         // TODO: check partition types
         return true;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
         if (!((OlapTable) table).getPartitionInfo().isRangePartition()) {
             throw new IllegalArgumentException("Must be range partitioned table");
@@ -67,9 +78,14 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) {
         // TODO: check partition type
         return ((OlapTable) table).getListPartitionMap();
+=======
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) {
+        return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -89,8 +105,14 @@ public class OlapPartitionTraits extends DefaultTraits {
             List<String> baseTablePartitionInfos = Lists.newArrayList();
             for (String p : baseTable.getVisiblePartitionNames()) {
                 Partition partition = baseTable.getPartition(p);
+<<<<<<< HEAD
                 baseTablePartitionInfos.add(String.format("%s:%s:%s", p, partition.getVisibleVersion(),
                         partition.getVisibleVersionTime()));
+=======
+                baseTablePartitionInfos.add(String.format("%s:%s:%s:%s", p, partition.getId(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersion(),
+                        partition.getDefaultPhysicalPartition().getVisibleVersionTime()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             LOG.debug("baseTable: {}, baseTablePartitions:{}, mvBaseTableVisibleVersionMap: {}",
                     baseTable.getName(), baseTablePartitionInfos, mvBaseTableVisibleVersionMap);
@@ -101,7 +123,11 @@ public class OlapPartitionTraits extends DefaultTraits {
         for (String partitionName : baseTable.getVisiblePartitionNames()) {
             if (!mvBaseTableVisibleVersionMap.containsKey(partitionName)) {
                 Partition partition = baseTable.getPartition(partitionName);
+<<<<<<< HEAD
                 if (partition.getVisibleVersion() != 1) {
+=======
+                if (partition.getDefaultPhysicalPartition().getVisibleVersion() != 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     result.add(partitionName);
                 }
             }
@@ -111,16 +137,25 @@ public class OlapPartitionTraits extends DefaultTraits {
             String basePartitionName = versionEntry.getKey();
             Partition basePartition = baseTable.getPartition(basePartitionName);
             if (basePartition == null) {
+<<<<<<< HEAD
                 // Once there is a partition deleted, refresh all partitions.
                 return baseTable.getVisiblePartitionNames();
+=======
+                // If this partition is dropped, ignore it.
+                continue;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo = versionEntry.getValue();
             if (mvRefreshedPartitionInfo == null) {
                 result.add(basePartitionName);
             } else {
                 // Ignore partitions if mv's partition is the same with the basic table.
+<<<<<<< HEAD
                 if (mvRefreshedPartitionInfo.getId() == basePartition.getId()
                         && !isBaseTableChanged(basePartition, mvRefreshedPartitionInfo)) {
+=======
+                if (!isBaseTableChanged(basePartition, mvRefreshedPartitionInfo)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     continue;
                 }
 
@@ -131,8 +166,27 @@ public class OlapPartitionTraits extends DefaultTraits {
         return result;
     }
 
+<<<<<<< HEAD
     public List<Column> getPartitionColumns() {
         return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
+=======
+    /**
+     * Check whether the base table's partition has changed or not.
+     * </p>
+     * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
+     * version and modified time.
+     */
+    public static boolean isBaseTableChanged(Partition partition,
+                                             MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
+        return mvRefreshedPartitionInfo.getId() != partition.getId()
+                || partition.getDefaultPhysicalPartition().getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
+                || partition.getDefaultPhysicalPartition().getVisibleVersionTime()
+                > mvRefreshedPartitionInfo.getLastRefreshTime();
+    }
+
+    public List<Column> getPartitionColumns() {
+        return ((OlapTable) table).getPartitionInfo().getPartitionColumns(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

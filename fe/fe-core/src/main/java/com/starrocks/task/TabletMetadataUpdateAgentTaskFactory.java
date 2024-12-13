@@ -20,10 +20,22 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
 
 import java.util.List;
+=======
+import com.starrocks.thrift.TPersistentIndexType;
+import com.starrocks.thrift.TTabletMetaInfo;
+import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TTabletSchema;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -60,6 +72,16 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdateIsInMemoryTask(backendId, inMemoryConfigs);
     }
 
+<<<<<<< HEAD
+=======
+    public static TabletMetadataUpdateAgentTask createLakePersistentIndexUpdateTask(long backendId, Set<Long> tablets,
+                                                                                    boolean enablePersistentIndex,
+                                                                                    String persistentIndexType) {
+        requireNonNull(tablets, "tablets is null");
+        return new UpdateLakePersistentIndexTask(backendId, tablets, enablePersistentIndex, persistentIndexType);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static TabletMetadataUpdateAgentTask createEnablePersistentIndexUpdateTask(long backend, Set<Long> tablets,
                                                                                       Boolean value) {
         requireNonNull(tablets, "tablets is null");
@@ -102,6 +124,16 @@ public class TabletMetadataUpdateAgentTaskFactory {
         return new UpdatePrimaryIndexCacheExpireTimeTask(backendId, requireNonNull(expireTimes, "expireTimes is null"));
     }
 
+<<<<<<< HEAD
+=======
+    public static TabletMetadataUpdateAgentTask createTabletSchemaUpdateTask(long backendId,
+                                                                             List<Long> tabletIds,
+                                                                             TTabletSchema tabletSchema,
+                                                                             boolean createSchemaFile) {
+        return new UpdateTabletSchemaTask(backendId, tabletIds, tabletSchema, createSchemaFile);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static class UpdatePartitionIdTask extends TabletMetadataUpdateAgentTask {
         private final Set<Long> tabletSet;
 
@@ -117,7 +149,11 @@ public class TabletMetadataUpdateAgentTaskFactory {
 
         @Override
         public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+<<<<<<< HEAD
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
             for (Long tabletId : tabletSet) {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
@@ -193,6 +229,48 @@ public class TabletMetadataUpdateAgentTaskFactory {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private static class UpdateLakePersistentIndexTask extends TabletMetadataUpdateAgentTask {
+        private final Set<Long> tablets;
+        private boolean enablePersistentIndex;
+        private String persistentIndexType;
+
+        private UpdateLakePersistentIndexTask(long backendId, Set<Long> tablets,
+                boolean enablePersistentIndex, String persistentIndexType) {
+            super(backendId, Objects.hash(tablets, enablePersistentIndex, persistentIndexType));
+            this.tablets = tablets;
+            this.enablePersistentIndex = enablePersistentIndex;
+            this.persistentIndexType = persistentIndexType;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tablets;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setEnable_persistent_index(enablePersistentIndex);
+                if (persistentIndexType.equalsIgnoreCase("CLOUD_NATIVE")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.CLOUD_NATIVE);
+                } else if (persistentIndexType.equalsIgnoreCase("LOCAL")) {
+                    metaInfo.setPersistent_index_type(TPersistentIndexType.LOCAL);
+                } else {
+                    throw new IllegalArgumentException("Unknown persistent index type: " + persistentIndexType);
+                }
+                metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static class UpdateBinlogConfigTask extends TabletMetadataUpdateAgentTask {
         private final List<Pair<Long, BinlogConfig>> binlogConfigList;
 
@@ -246,4 +324,41 @@ public class TabletMetadataUpdateAgentTaskFactory {
             return metaInfos;
         }
     }
+<<<<<<< HEAD
+=======
+
+    private static class UpdateTabletSchemaTask extends TabletMetadataUpdateAgentTask {
+        private final List<Long> tablets;
+        private final TTabletSchema tabletSchema;
+        private final boolean createSchemaFile;
+
+        private UpdateTabletSchemaTask(long backendId, List<Long> tablets, TTabletSchema tabletSchema,
+                                       boolean createSchemaFile) {
+            super(backendId, tablets.hashCode());
+            this.tablets = new ArrayList<>(tablets);
+            this.tabletSchema = Objects.requireNonNull(tabletSchema, "tabletSchema is null");
+            this.createSchemaFile = createSchemaFile;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return new HashSet<>(tablets);
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            boolean create = createSchemaFile;
+            List<TTabletMetaInfo> metaInfos = new ArrayList<>(tablets.size());
+            for (Long tabletId : tablets) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setTablet_schema(tabletSchema);
+                metaInfos.add(metaInfo);
+                metaInfo.setCreate_schema_file(create);
+                create = false;
+            }
+            return metaInfos;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

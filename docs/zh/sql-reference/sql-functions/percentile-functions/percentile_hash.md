@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_hash
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 `double` 类型数值构造成 `percentile` 类型数值。
 

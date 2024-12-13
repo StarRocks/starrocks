@@ -38,8 +38,13 @@ protected:
 TEST_F(ParquetFooterTest, TestEmptyParquetFile) {
     const std::string file_path = "./be/test/formats/parquet/test_data/empty.parquet";
     auto file = open_file(file_path);
+<<<<<<< HEAD
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(file_path), 0);
+=======
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(file_path));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status status = file_reader->init(&ctx);
     EXPECT_TRUE(status.is_corruption());
 }
@@ -47,8 +52,13 @@ TEST_F(ParquetFooterTest, TestEmptyParquetFile) {
 TEST_F(ParquetFooterTest, TestEncryptedParquetFile) {
     const std::string file_path = "./be/test/formats/parquet/test_data/encrypt_columns_and_footer.parquet.encrypted";
     auto file = open_file(file_path);
+<<<<<<< HEAD
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(file_path), 0);
+=======
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(file_path));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status status = file_reader->init(&ctx);
     EXPECT_TRUE(status.is_not_supported());
 }

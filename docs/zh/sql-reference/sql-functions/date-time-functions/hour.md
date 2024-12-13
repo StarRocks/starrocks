@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hour
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获得指定日期中的小时信息。
 

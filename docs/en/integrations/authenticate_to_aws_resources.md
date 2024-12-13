@@ -132,9 +132,15 @@ The following figure provides a high-level explanation of the differences in mec
 
 In various scenarios in which StarRocks needs to integrate with AWS S3, for example, when you create external catalogs or file external tables or when you ingest, back up, or restore data from AWS S3, configure the authentication parameters for accessing AWS S3 as follows:
 
+<<<<<<< HEAD
 - If you use the instance profile-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `true`.
 - If you use the assumed role-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3.
 - If you use the IAM user-based authentication method to access AWS S3, set `aws.s3.use_instance_profile` to `false` and configure `aws.s3.access_key` and `aws.s3.secret_key` as the access key and secret key of your AWS IAM user.
+=======
+- For instance profile-based authentication, set `aws.s3.use_instance_profile` to `true`.
+- For assumed role-based authentication, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3 (for example, the ARN of the assumed role `s3_assumed_role` you have created above).
+- For IAM user-based authentication, set `aws.s3.use_instance_profile` to `false` and configure `aws.s3.access_key` and `aws.s3.secret_key` as the access key and secret key of your AWS IAM user.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The following table describes the parameters.
 
@@ -149,9 +155,15 @@ The following table describes the parameters.
 
 In various scenarios in which StarRocks needs to integrate with AWS Glue, for example, when you create external catalogs, configure the authentication parameters for accessing AWS Glue as follows:
 
+<<<<<<< HEAD
 - If you use the instance profile-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `true`.
 - If you use the assumed role-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS Glue.
 - If you use the IAM user-based authentication method to access AWS Glue, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user.
+=======
+- For instance profile-based authentication, set `aws.glue.use_instance_profile` to `true`.
+- For assumed role-based authentication, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS Glue (for example, the ARN of the assumed role `glue_assumed_role` you have created above).
+- For IAM user-based authentication, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 The following table describes the parameters.
 
@@ -220,7 +232,11 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
+<<<<<<< HEAD
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+=======
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       "aws.s3.region" = "us-west-2",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
   );
@@ -234,11 +250,19 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
+<<<<<<< HEAD
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
+=======
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
+      "aws.s3.region" = "us-west-2",
+      "hive.metastore.type" = "glue",
+      "aws.glue.use_instance_profile" = "true",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/glue_assumed_role",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       "aws.glue.region" = "us-west-2"
   );
   ```
@@ -321,7 +345,11 @@ PROPERTIES
     "path" = "s3://starrocks-test/",
     "format" = "ORC",
     "aws.s3.use_instance_profile" = "true",
+<<<<<<< HEAD
     "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+=======
+    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     "aws.s3.region" = "us-west-2"
 );
 ```
@@ -390,7 +418,11 @@ LOAD LABEL test_s3_db.test_credential_instanceprofile_7
 WITH BROKER
 (
     "aws.s3.use_instance_profile" = "true",
+<<<<<<< HEAD
     "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
+=======
+    "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/s3_assumed_role",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     "aws.s3.region" = "us-west-1"
 )
 PROPERTIES

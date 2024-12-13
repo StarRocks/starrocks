@@ -54,8 +54,15 @@ import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.Collections;
 import java.util.Formatter;
+=======
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Formatter;
+import java.util.HashSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -89,6 +96,12 @@ public class RuntimeProfile {
 
     private String name;
     private double localTimePercent;
+<<<<<<< HEAD
+=======
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    private volatile long version = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public RuntimeProfile(String name) {
         this();
@@ -232,6 +245,7 @@ public class RuntimeProfile {
         }
     }
 
+<<<<<<< HEAD
     public void update(final TRuntimeProfileTree thriftProfile) {
         Reference<Integer> idx = new Reference<>(0);
         update(thriftProfile.nodes, idx);
@@ -244,6 +258,39 @@ public class RuntimeProfile {
 
         // update this level's counters
         if (node.counters != null) {
+=======
+    public long getVersion() {
+        return version;
+    }
+
+    public void update(final TRuntimeProfileTree thriftProfile) {
+        Reference<Integer> idx = new Reference<>(0);
+        update(thriftProfile.nodes, idx, false);
+        Preconditions.checkState(idx.getRef().equals(thriftProfile.nodes.size()));
+    }
+
+    // Update a subtree of profiles from nodes, rooted at idx. It will do a preorder
+    // traversal, and modify idx in the traversal process. idx will point to the node
+    // immediately following this subtree after the traversal. If the version of the
+    // parent node, or the version of root node for this subtree is older, skip to update
+    // the profile of subtree, but still traverse the nodes to get the node immediately
+    // following this subtree.
+    private void update(List<TRuntimeProfileNode> nodes, Reference<Integer> idx, boolean isParentNodeOld) {
+        TRuntimeProfileNode node = nodes.get(idx.getRef());
+
+        boolean isNodeOld;
+        if (isParentNodeOld || (node.isSetVersion() && node.version < version)) {
+            isNodeOld = true;
+        } else {
+            isNodeOld = false;
+            if (node.isSetVersion()) {
+                version = node.version;
+            }
+        }
+
+        // update this level's counters
+        if (!isNodeOld && node.counters != null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // mapping from counterName to parentCounterName
             Map<String, String> child2ParentMap = Maps.newHashMap();
             if (node.child_counters_map != null) {
@@ -311,7 +358,11 @@ public class RuntimeProfile {
             }
         }
 
+<<<<<<< HEAD
         if (node.info_strings_display_order != null) {
+=======
+        if (!isNodeOld && node.info_strings_display_order != null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Map<String, String> nodeInfoStrings = node.info_strings;
             for (String key : node.info_strings_display_order) {
                 String value = nodeInfoStrings.get(key);
@@ -330,7 +381,11 @@ public class RuntimeProfile {
                 childProfile = new RuntimeProfile(childName);
                 addChild(childProfile);
             }
+<<<<<<< HEAD
             childProfile.update(nodes, idx);
+=======
+            childProfile.update(nodes, idx, isNodeOld);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -414,6 +469,10 @@ public class RuntimeProfile {
         return builder.toString();
     }
 
+<<<<<<< HEAD
+=======
+    // concurrency safe
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void addChild(RuntimeProfile child) {
         if (child == null) {
             return;
@@ -424,6 +483,21 @@ public class RuntimeProfile {
         childList.add(pair);
     }
 
+<<<<<<< HEAD
+=======
+    // concurrency safe
+    public void addChildren(List<RuntimeProfile> children) {
+        if (children.isEmpty()) {
+            return;
+        }
+        final RuntimeProfile child = children.get(0);
+        childMap.put(child.name, child);
+        List<Pair<RuntimeProfile, Boolean>> childList =
+                children.stream().map(c -> new Pair<>(c, true)).collect(Collectors.toList());
+        this.childList.addAll(childList);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void removeChild(String childName) {
         RuntimeProfile childProfile = childMap.remove(childName);
         if (childProfile == null) {
@@ -551,6 +625,51 @@ public class RuntimeProfile {
         return infoStrings.get(key);
     }
 
+<<<<<<< HEAD
+=======
+    // Serializes profile to thrift. Not threadsafe.
+    public TRuntimeProfileTree toThrift() {
+        TRuntimeProfileTree profileTree = new TRuntimeProfileTree();
+        profileTree.setNodes(new ArrayList<>());
+        toThrift(profileTree.nodes);
+        return profileTree;
+    }
+
+    // Flatten the tree of runtime profiles by in-order traversal. Not threadsafe.
+    private void toThrift(List<TRuntimeProfileNode> nodes) {
+        TRuntimeProfileNode node = new TRuntimeProfileNode();
+        nodes.add(node);
+
+        node.setName(name);
+        node.setNum_children(childMap.size());
+        node.setIndent(true);
+        node.setVersion(version);
+
+        for (Map.Entry<String, Pair<Counter, String>> entry : counterMap.entrySet()) {
+            Counter counter = entry.getValue().first;
+            TCounter tCounter = new TCounter();
+            tCounter.setName(entry.getKey());
+            tCounter.setValue(counter.getValue());
+            tCounter.setType(counter.getType());
+            tCounter.setStrategy(counter.getStrategy());
+            node.addToCounters(tCounter);
+        }
+
+        for (Map.Entry<String, Set<String>> entry : childCounterMap.entrySet()) {
+            node.putToChild_counters_map(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
+        for (Map.Entry<String, String> entry : infoStrings.entrySet()) {
+            node.putToInfo_strings(entry.getKey(), entry.getValue());
+            node.addToInfo_strings_display_order(entry.getKey());
+        }
+
+        for (RuntimeProfile child : childMap.values()) {
+            child.toThrift(nodes);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Merge all the isomorphic sub profiles and the caller must know for sure
     // that all the children are isomorphic, otherwise, the behavior is undefined
     public static RuntimeProfile mergeIsomorphicProfiles(List<RuntimeProfile> profiles,
@@ -665,6 +784,7 @@ public class RuntimeProfile {
                     break;
                 }
 
+<<<<<<< HEAD
                 Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
                 if (minCounter != null) {
                     alreadyMerged = true;
@@ -679,6 +799,25 @@ public class RuntimeProfile {
                         maxValue = maxCounter.getValue();
                     }
                 }
+=======
+                if (!counter.isSkipMinMax()) {
+                    Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
+                    if (minCounter != null) {
+                        alreadyMerged = true;
+                        if (minCounter.getValue() < minValue) {
+                            minValue = minCounter.getValue();
+                        }
+                    }
+                    Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
+                    if (maxCounter != null) {
+                        alreadyMerged = true;
+                        if (maxCounter.getValue() > maxValue) {
+                            maxValue = maxCounter.getValue();
+                        }
+                    }
+                }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 counters.add(counter);
             }
             Counter mergedCounter;
@@ -702,6 +841,7 @@ public class RuntimeProfile {
                 }
                 mergedCounter.setValue(mergedValue);
 
+<<<<<<< HEAD
                 Counter minCounter =
                         mergedProfile.addCounter(MERGED_INFO_PREFIX_MIN + name, type, mergedCounter.getStrategy(),
                                 name);
@@ -710,6 +850,18 @@ public class RuntimeProfile {
                                 name);
                 minCounter.setValue(minValue);
                 maxCounter.setValue(maxValue);
+=======
+                if (!mergedCounter.isSkipMinMax()) {
+                    Counter minCounter =
+                            mergedProfile.addCounter(MERGED_INFO_PREFIX_MIN + name, type, mergedCounter.getStrategy(),
+                                    name);
+                    Counter maxCounter =
+                            mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
+                                    name);
+                    minCounter.setValue(minValue);
+                    maxCounter.setValue(maxValue);
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
         }

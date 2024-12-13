@@ -21,5 +21,9 @@ public enum CloudType {
     AZURE,
     GCP,
     ALIYUN,
+<<<<<<< HEAD
+=======
+    TENCENT,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     HDFS
 }

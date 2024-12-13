@@ -274,10 +274,18 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
 
             ConstantOperator op = collectionElement.getChild(1).cast();
             int index = 0;
+<<<<<<< HEAD
             try {
                 index = op.castTo(Type.INT).getInt();
             } catch (Exception e) {
                 throw new SemanticException("Invalid index for struct element: " + collectionElement);
+=======
+            Optional<ConstantOperator> res = op.castTo(Type.INT);
+            if (!res.isPresent()) {
+                throw new SemanticException("Invalid index for struct element: " + collectionElement);
+            } else {
+                index = res.get().getInt();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (index > 0) {

@@ -41,6 +41,10 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "storage/types.h"
+<<<<<<< HEAD
+=======
+#include "util/slice.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -50,10 +54,16 @@ class PageBuilder;
 class PageDecoder;
 class PageBuilderOptions;
 
+<<<<<<< HEAD
 // Only support dict decoding for non-string column.
 // For rollback version from 3.3 to 3.2.
 inline bool enable_non_string_column_dict_encoding() {
     return false;
+=======
+inline bool enable_non_string_column_dict_encoding() {
+    double epsilon = 0.0001;
+    return std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) > epsilon;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 // We dont make TYPE_TINYINT support dict encoding. The reason is that TYPE_TINYINT is only have

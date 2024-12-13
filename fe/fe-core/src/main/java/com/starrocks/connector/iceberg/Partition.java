@@ -16,6 +16,11 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.PartitionInfo;
 
+<<<<<<< HEAD
+=======
+import java.util.concurrent.TimeUnit;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class Partition implements PartitionInfo {
     private final long modifiedTime;
 
@@ -24,6 +29,14 @@ public class Partition implements PartitionInfo {
         return modifiedTime;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public TimeUnit getModifiedTimeUnit() {
+        return TimeUnit.MICROSECONDS;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Partition(long modifiedTime) {
         this.modifiedTime = modifiedTime;
     }

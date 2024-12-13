@@ -17,7 +17,10 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 
@@ -41,7 +44,11 @@ public class FunctionArgsDef {
         return isVariadic;
     }
 
+<<<<<<< HEAD
     public void analyze() throws AnalysisException {
+=======
+    public void analyze() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         argTypes = new Type[argTypeDefs.size()];
         int i = 0;
         for (TypeDef typeDef : argTypeDefs) {

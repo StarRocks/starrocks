@@ -2,6 +2,10 @@
 #include "util/failpoint/fail_point.h"
 
 #include <filesystem>
+<<<<<<< HEAD
+=======
+#include <utility>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "fmt/format.h"
 #include "simdjson.h"
@@ -17,7 +21,11 @@ int check_fail_point(const char* name, int* failnum, void** failinfo, unsigned i
     return fp->shouldFail();
 }
 
+<<<<<<< HEAD
 FailPoint::FailPoint(const std::string& name) : _name(name) {
+=======
+FailPoint::FailPoint(std::string name) : _name(std::move(name)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
 }
 
@@ -119,7 +127,11 @@ FailPoint* FailPointRegistry::get(const std::string& name) {
     return iter->second;
 }
 
+<<<<<<< HEAD
 void FailPointRegistry::iterate(std::function<void(FailPoint*)> callback) {
+=======
+void FailPointRegistry::iterate(const std::function<void(FailPoint*)>& callback) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (const auto& [_, fp] : _fps) {
         callback(fp);
     }
@@ -178,6 +190,10 @@ bool init_failpoint_from_conf(const std::string& conf_file) {
     return false;
 }
 
+<<<<<<< HEAD
+=======
+// NOLINTNEXTLINE(modernize-use-equals-default)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 FailPointRegistry::FailPointRegistry() {
 #ifdef FIU_ENABLE
     fiu_init(0);
@@ -185,9 +201,17 @@ FailPointRegistry::FailPointRegistry() {
 }
 
 FailPointRegisterer::FailPointRegisterer(FailPoint* fp) {
+<<<<<<< HEAD
     FailPointRegistry::GetInstance()->add(fp);
 }
 
 DEFINE_FAIL_POINT(random_error);
+=======
+    (void)FailPointRegistry::GetInstance()->add(fp);
+}
+
+DEFINE_FAIL_POINT(random_error);
+DEFINE_FAIL_POINT(output_stream_io_error);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks::failpoint

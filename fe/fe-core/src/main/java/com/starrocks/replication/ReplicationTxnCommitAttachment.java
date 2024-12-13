@@ -20,7 +20,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
@@ -33,25 +36,46 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("partitionVersions")
     private Map<Long, Long> partitionVersions; // The version of partitions
 
+<<<<<<< HEAD
+=======
+    @SerializedName("partitionVersionEpochs")
+    private Map<Long, Long> partitionVersionEpochs; // The version epoch of partitions
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ReplicationTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.REPLICATION);
     }
 
+<<<<<<< HEAD
     public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions) {
         super(TransactionState.LoadJobSourceType.REPLICATION);
         this.partitionVersions = partitionVersions;
+=======
+    public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions, Map<Long, Long> partitionVersionEpochs) {
+        super(TransactionState.LoadJobSourceType.REPLICATION);
+        this.partitionVersions = partitionVersions;
+        this.partitionVersionEpochs = partitionVersionEpochs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Map<Long, Long> getPartitionVersions() {
         return partitionVersions;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Long, Long> getPartitionVersionEpochs() {
+        return partitionVersionEpochs;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -60,4 +84,6 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
                 ReplicationTxnCommitAttachment.class);
         this.partitionVersions = insertTxnCommitAttachment.getPartitionVersions();
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

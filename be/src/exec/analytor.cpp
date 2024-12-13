@@ -22,9 +22,15 @@
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/status.h"
+<<<<<<< HEAD
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
 #include "exprs/anyval_util.h"
+=======
+#include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/agg/count.h"
+#include "exprs/agg/window.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
@@ -123,6 +129,20 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     if (_tnode.analytic_node.__isset.sql_aggregate_functions) {
         _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
     }
+<<<<<<< HEAD
+=======
+
+    _is_merge_funcs = _tnode.analytic_node.analytic_functions[0].nodes[0].agg_expr.is_merge_agg;
+    if (_is_merge_funcs) {
+        for (size_t i = 1; i < _tnode.analytic_node.analytic_functions.size(); i++) {
+            DCHECK(_tnode.analytic_node.analytic_functions[i].nodes[0].agg_expr.is_merge_agg);
+        }
+    }
+    if (_is_merge_funcs) {
+        _runtime_profile->add_info_string("isMerge", "true");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _mem_pool = std::make_unique<MemPool>();
 
     const TAnalyticNode& analytic_node = _tnode.analytic_node;
@@ -151,7 +171,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             ++node_idx;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
+<<<<<<< HEAD
             RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+=======
+            RETURN_IF_ERROR(
+                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -179,6 +204,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 return_type = TYPE_DOUBLE;
             }
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);
+<<<<<<< HEAD
+=======
+            if (_is_merge_funcs && fn.name.function_name == "count") {
+                is_input_nullable = false;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             auto* func = get_window_function(fn.name.function_name, TYPE_BIGINT, return_type, is_input_nullable,
                                              fn.binary_type, state->func_version());
             _agg_functions[i] = func;
@@ -190,6 +221,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             const TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
 
+<<<<<<< HEAD
             auto return_typedesc = AnyValUtil::column_type_to_type_desc(return_type);
             // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
@@ -198,6 +230,15 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             }
 
             _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_typedesc, arg_typedescs);
+=======
+            // Collect arg_typedescs for aggregate function.
+            std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            for (auto& type : fn.arg_types) {
+                arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
+            }
+
+            _agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             state->obj_pool()->add(_agg_fn_ctxs[i]);
 
             // For nullable aggregate function(sum, max, min, avg),
@@ -298,7 +339,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         vector<TTupleId> tuple_ids;
         tuple_ids.push_back(_child_row_desc.tuple_descriptors()[0]->id());
         tuple_ids.push_back(_buffered_tuple_id);
+<<<<<<< HEAD
         RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids, vector<bool>(2, false));
+=======
+        RowDescriptor cmp_row_desc(state->desc_tbl(), tuple_ids);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!_partition_ctxs.empty()) {
             RETURN_IF_ERROR(Expr::prepare(_partition_ctxs, state));
         }
@@ -338,7 +383,13 @@ Status Analytor::open(RuntimeState* state) {
             }
         }
         AggDataPtr agg_states = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
+<<<<<<< HEAD
         _managed_fn_states.emplace_back(std::make_unique<ManagedFunctionStates>(&_agg_fn_ctxs, agg_states, this));
+=======
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+        _managed_fn_states.emplace_back(
+                std::make_unique<ManagedFunctionStates<Analytor>>(&_agg_fn_ctxs, agg_states, this));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     };
 
@@ -365,8 +416,16 @@ void Analytor::close(RuntimeState* state) {
 
     auto agg_close = [this, state]() {
         // Note: we must free agg_states before _mem_pool free_all;
+<<<<<<< HEAD
         _managed_fn_states.clear();
         _managed_fn_states.shrink_to_fit();
+=======
+        {
+            SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+            _managed_fn_states.clear();
+            _managed_fn_states.shrink_to_fit();
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (_mem_pool != nullptr) {
             _mem_pool->free_all();
@@ -382,9 +441,15 @@ void Analytor::close(RuntimeState* state) {
 
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
+<<<<<<< HEAD
         promise_st->get_future().get();
     } else {
         agg_close();
+=======
+        (void)promise_st->get_future().get();
+    } else {
+        (void)agg_close();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -552,6 +617,10 @@ void Analytor::_remove_unused_rows(RuntimeState* state) {
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             _order_columns[i]->remove_first_n_values(remove_rows);
         }
+<<<<<<< HEAD
+=======
+        SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             _agg_functions[i]->reset_state_for_contraction(
                     _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_rows);
@@ -585,6 +654,7 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     const size_t chunk_size = chunk->num_rows();
 
     {
+<<<<<<< HEAD
         auto check_if_overflow = [](Column* column) {
             std::string msg;
             if (column->capacity_limit_reached(&msg)) {
@@ -592,6 +662,8 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
             }
             return Status::OK();
         };
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
@@ -600,20 +672,32 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
                 // When chunk's column is const, maybe need to unpack it.
                 TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
 
+<<<<<<< HEAD
                 RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
+=======
+                RETURN_IF_ERROR(_agg_intput_columns[i][j]->capacity_limit_reached());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
+<<<<<<< HEAD
             RETURN_IF_ERROR(check_if_overflow(_partition_columns[i].get()));
+=======
+            RETURN_IF_ERROR(_partition_columns[i]->capacity_limit_reached());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
+<<<<<<< HEAD
             RETURN_IF_ERROR(check_if_overflow(_order_columns[i].get()));
+=======
+            RETURN_IF_ERROR(_order_columns[i]->capacity_limit_reached());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -932,6 +1016,10 @@ void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
 
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
                                     int64_t frame_end) {
+<<<<<<< HEAD
+=======
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -950,13 +1038,30 @@ void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_e
             // instead of _partition.end to refer to the current right boundary.
             frame_end = std::min<int64_t>(frame_end, _partition.end);
         }
+<<<<<<< HEAD
         _agg_functions[i]->update_batch_single_state_with_frame(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
                 partition_start, partition_end, frame_start, frame_end);
+=======
+        if (_is_merge_funcs) {
+            for (size_t j = frame_start; j < frame_end; j++) {
+                _agg_functions[i]->merge(_agg_fn_ctxs[i], data_columns[0],
+                                         _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], j);
+            }
+        } else {
+            _agg_functions[i]->update_batch_single_state_with_frame(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
+                    partition_start, partition_end, frame_start, frame_end);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 void Analytor::_update_window_batch_removable_cumulatively() {
+<<<<<<< HEAD
+=======
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         const Column* agg_column = _agg_intput_columns[i][0].get();
         _agg_functions[i]->update_state_removable_cumulatively(
@@ -998,6 +1103,10 @@ void Analytor::_reset_state_for_next_partition() {
 }
 
 void Analytor::_reset_window_state() {
+<<<<<<< HEAD
+=======
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -1192,6 +1301,10 @@ void Analytor::_find_candidate_peer_group_ends() {
 }
 
 void Analytor::_get_window_function_result(size_t frame_start, size_t frame_end) {
+<<<<<<< HEAD
+=======
+    SCOPED_THREAD_LOCAL_AGG_STATE_ALLOCATOR_SETTER(_allocator.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // DO NOT put timer here because this function will be used frequently,
     // timer will cause a sharp drop in performance.
     DCHECK_GT(frame_end, frame_start);

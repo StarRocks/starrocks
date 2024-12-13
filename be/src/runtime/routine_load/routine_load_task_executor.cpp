@@ -325,7 +325,11 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         return Status::InternalError("unknown load source type");
     }
 
+<<<<<<< HEAD
     VLOG(1) << "receive a new routine load task: " << ctx->brief();
+=======
+    VLOG(2) << "receive a new routine load task: " << ctx->brief();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // register the task
     ctx->ref();
     _task_map[ctx->id] = ctx;
@@ -338,7 +342,11 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
                                             std::unique_lock<std::mutex> l(_lock);
                                             _task_map.erase(ctx->id);
                                             LOG(INFO) << "finished routine load task " << ctx->brief()
+<<<<<<< HEAD
                                                       << ", status: " << ctx->status.get_error_msg()
+=======
+                                                      << ", status: " << ctx->status.message()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                       << ", current tasks num: " << _task_map.size();
                                             if (ctx->unref()) {
                                                 delete ctx;
@@ -360,6 +368,7 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
 
 void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool* consumer_pool,
                                         const ExecFinishCallback& cb) {
+<<<<<<< HEAD
 #define HANDLE_ERROR(stmt, err_msg)                                                        \
     do {                                                                                   \
         Status _status_ = (stmt);                                                          \
@@ -368,6 +377,16 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             cb(ctx);                                                                       \
             return;                                                                        \
         }                                                                                  \
+=======
+#define HANDLE_ERROR(stmt, err_msg)                                       \
+    do {                                                                  \
+        Status _status_ = (stmt);                                         \
+        if (UNLIKELY(!_status_.ok() && !_status_.is_publish_timeout())) { \
+            err_handler(ctx, _status_, err_msg);                          \
+            cb(ctx);                                                      \
+            return;                                                       \
+        }                                                                 \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } while (false);
 
     LOG(INFO) << "begin to execute routine load task: " << ctx->brief();
@@ -383,7 +402,11 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         pipe = std::make_shared<KafkaConsumerPipe>();
         Status st = std::static_pointer_cast<KafkaDataConsumerGroup>(consumer_grp)->assign_topic_partitions(ctx);
         if (!st.ok()) {
+<<<<<<< HEAD
             err_handler(ctx, st, st.get_error_msg());
+=======
+            err_handler(ctx, st, st.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             cb(ctx);
             return;
         }
@@ -393,7 +416,11 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         pipe = std::make_shared<PulsarConsumerPipe>();
         Status st = std::static_pointer_cast<PulsarDataConsumerGroup>(consumer_grp)->assign_topic_partitions(ctx);
         if (!st.ok()) {
+<<<<<<< HEAD
             err_handler(ctx, st, st.get_error_msg());
+=======
+            err_handler(ctx, st, st.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             cb(ctx);
             return;
         }
@@ -438,7 +465,11 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         if (!st.ok()) {
             // Kafka Offset Commit is idempotent, Failure should not block the normal process
             // So just print a warning
+<<<<<<< HEAD
             LOG(WARNING) << st.get_error_msg();
+=======
+            LOG(WARNING) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             break;
         }
 
@@ -447,7 +478,11 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
         if (!st.ok()) {
             // Kafka Offset Commit is idempotent, Failure should not block the normal process
             // So just print a warning
+<<<<<<< HEAD
             LOG(WARNING) << st.get_error_msg();
+=======
+            LOG(WARNING) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         _data_consumer_pool.return_consumer(consumer);
 
@@ -461,7 +496,11 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             if (!st.ok()) {
                 // Pulsar Offset Acknowledgement is idempotent, Failure should not block the normal process
                 // So just print a warning
+<<<<<<< HEAD
                 LOG(WARNING) << st.get_error_msg();
+=======
+                LOG(WARNING) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             }
 
@@ -470,7 +509,11 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             if (!st.ok()) {
                 // Pulsar Offset Acknowledgement is idempotent, Failure should not block the normal process
                 // So just print a warning
+<<<<<<< HEAD
                 LOG(WARNING) << st.get_error_msg();
+=======
+                LOG(WARNING) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             // do ack
@@ -478,7 +521,11 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
             if (!st.ok()) {
                 // Pulsar Offset Acknowledgement is idempotent, Failure should not block the normal process
                 // So just print a warning
+<<<<<<< HEAD
                 LOG(WARNING) << st.get_error_msg();
+=======
+                LOG(WARNING) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             // return consumer
@@ -491,11 +538,19 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     cb(ctx);
 }
 
+<<<<<<< HEAD
 void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& st, const std::string& err_msg) {
     LOG(WARNING) << err_msg << " " << ctx->brief();
     ctx->status = st;
     if (ctx->need_rollback) {
         _exec_env->stream_load_executor()->rollback_txn(ctx);
+=======
+void RoutineLoadTaskExecutor::err_handler(StreamLoadContext* ctx, const Status& st, std::string_view err_msg) {
+    LOG(WARNING) << err_msg << " " << ctx->brief();
+    ctx->status = st;
+    if (ctx->need_rollback) {
+        (void)_exec_env->stream_load_executor()->rollback_txn(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ctx->need_rollback = false;
     }
     if (ctx->body_sink != nullptr) {

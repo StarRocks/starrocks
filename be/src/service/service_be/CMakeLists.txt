@@ -23,4 +23,8 @@ add_library(ServiceBE
     internal_service.cpp
     lake_service.cpp
     starrocks_be.cpp
+<<<<<<< HEAD
+=======
+    arrow_flight_sql_service.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 )

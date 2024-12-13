@@ -17,6 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
+<<<<<<< HEAD
 if (CLANG_TIDY_PATH)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
@@ -24,6 +25,12 @@ endif()
 set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
+=======
+set(RUNTIME_FILES
+    broker_mgr.cpp
+    buffer_control_block.cpp
+    buffer_control_result_writer.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     client_cache.cpp
     local_pass_through_buffer.cpp
     data_stream_mgr.cpp
@@ -33,6 +40,10 @@ set(RUNTIME_FILES
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
+<<<<<<< HEAD
+=======
+    global_variables.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     user_function_cache.cpp
     jdbc_driver_manager.cpp
     mem_pool.cpp
@@ -42,11 +53,18 @@ set(RUNTIME_FILES
     runtime_state.cpp
     string_value.cpp
     decimalv2_value.cpp
+<<<<<<< HEAD
     large_int_value.cpp
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
     types.cpp
+<<<<<<< HEAD
+=======
+    agg_state_desc.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     mem_tracker.cpp
     data_stream_recvr.cpp
     export_sink.cpp
@@ -54,12 +72,23 @@ set(RUNTIME_FILES
     load_channel.cpp
     local_tablets_channel.cpp
     snapshot_loader.cpp
+<<<<<<< HEAD
     query_statistics.cpp 
+=======
+    query_statistics.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     message_body_sink.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
     stream_load/stream_load_executor.cpp
     stream_load/stream_load_pipe.cpp
+<<<<<<< HEAD
+=======
+    stream_load/time_bounded_stream_load_pipe.cpp
+    batch_write/isomorphic_batch_write.cpp
+    batch_write/batch_write_mgr.cpp
+    batch_write/batch_write_util.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     routine_load/data_consumer.cpp
     routine_load/data_consumer_group.cpp
     routine_load/data_consumer_pool.cpp
@@ -73,9 +102,19 @@ set(RUNTIME_FILES
     http_result_writer.cpp
     file_result_writer.cpp
     statistic_result_writer.cpp
+<<<<<<< HEAD
     variable_result_writer.cpp
     memory/system_allocator.cpp
     memory/mem_chunk_allocator.cpp
+=======
+    metadata_result_writer.cpp
+    variable_result_writer.cpp
+    arrow_result_writer.cpp
+    memory/roaring_hook.cpp
+    memory/system_allocator.cpp
+    memory/mem_chunk_allocator.cpp
+    memory/column_allocator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     tablets_channel.cpp
@@ -95,6 +134,11 @@ set(RUNTIME_FILES
     iceberg_table_sink.cpp
     hive_table_sink.cpp
     table_function_table_sink.cpp
+<<<<<<< HEAD
+=======
+    blackhole_table_sink.cpp
+    dictionary_cache_sink.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     type_pack.cpp
     customized_result_writer.cpp
 )

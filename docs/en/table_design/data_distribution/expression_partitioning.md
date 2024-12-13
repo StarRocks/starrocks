@@ -54,7 +54,11 @@ expression ::=
 ### Usage notes
 
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
+<<<<<<< HEAD
 - StarRocks sets the default maximum number of automatically created partitions to 4096, which can be configured by the FE parameter `max_automatic_partition_number`. This parameter can prevent you from accidentally creating too many partitions.
+=======
+- StarRocks sets the default maximum number of automatically created partitions for one load to 4096, which can be configured by the FE parameter `auto_partition_max_creation_number_per_load`. This parameter can prevent you from accidentally creating too many partitions.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - The naming rule for partitions is consistent with the naming rule for dynamic partitioning.
 
 ### **Examples**
@@ -156,7 +160,11 @@ partition_columns ::=
 ### Usage notes
 
 - During data loading, StarRocks automatically creates some partitions based on the loaded data, but if the load job fails for some reason, the partitions that are automatically created by StarRocks cannot be automatically deleted.
+<<<<<<< HEAD
 - StarRocks sets the default maximum number of automatically created partitions to 4096, which can be configured by the FE parameter `max_automatic_partition_number`. This parameter can prevent you from accidentally creating too many partitions.
+=======
+- StarRocks sets the default maximum number of automatically created partitions for one load to 4096, which can be configured by the FE parameter `auto_partition_max_creation_number_per_load`. This parameter can prevent you from accidentally creating too many partitions.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - The naming rule for partitions: if multiple partition columns are specified, the values of different partition columns are connected with an underscore `_` in the partition name, and the format is `p<value in partition column 1>_<value in partition column 2>_...`. For example, if two columns `dt` and `province` are specified as partition columns, both of which are string types, and a data row with values `2022-04-01` and `beijing` is loaded, the corresponding partition automatically created is named `p20220401_beijing`.
 
 ### Examples

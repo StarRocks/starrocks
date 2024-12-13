@@ -22,7 +22,11 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregatedMaterializedViewRewriter;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+=======
+import com.starrocks.sql.optimizer.rule.transformation.materialization.IMaterializedViewRewriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 /**
@@ -51,7 +55,12 @@ public class AggregateScanRule extends BaseMaterializedViewRewriteRule {
     }
 
     @Override
+<<<<<<< HEAD
     public MaterializedViewRewriter getMaterializedViewRewrite(MvRewriteContext mvContext) {
+=======
+    public IMaterializedViewRewriter createRewriter(OptimizerContext optimizerContext,
+                                                    MvRewriteContext mvContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new AggregatedMaterializedViewRewriter(mvContext);
     }
 }

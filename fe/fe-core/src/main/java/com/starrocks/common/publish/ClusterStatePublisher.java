@@ -34,12 +34,21 @@
 
 package com.starrocks.common.publish;
 
+<<<<<<< HEAD
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.BackendService;
+=======
+import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TAgentPublishRequest;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TNetworkAddress;
@@ -70,7 +79,11 @@ public class ClusterStatePublisher {
     // Fuck singleton.
     public static ClusterStatePublisher getInstance() {
         if (INSTANCE == null) {
+<<<<<<< HEAD
             INSTANCE = new ClusterStatePublisher(GlobalStateMgr.getCurrentSystemInfo());
+=======
+            INSTANCE = new ClusterStatePublisher(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return INSTANCE;
     }
@@ -107,6 +120,7 @@ public class ClusterStatePublisher {
 
         @Override
         public void run() {
+<<<<<<< HEAD
             // Here to publish all worker
             TNetworkAddress addr = new TNetworkAddress(node.getHost(), node.getBePort());
             BackendService.Client client = null;
@@ -130,10 +144,20 @@ public class ClusterStatePublisher {
                     }
                     tAgentResult = client.publish_cluster_state(request);
                 }
+=======
+            TNetworkAddress addr = new TNetworkAddress(node.getHost(), node.getBePort());
+            try {
+                TAgentPublishRequest request = stateUpdate.toThrift();
+                TAgentResult tAgentResult = ThriftRPCRequestExecutor.callNoRetry(
+                        ThriftConnectionPool.backendPool,
+                        addr,
+                        client -> client.publish_cluster_state(request));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (tAgentResult.getStatus().getStatus_code() != TStatusCode.OK) {
                     // Success execute, no dirty data possibility
                     LOG.warn("Backend execute publish failed. backend=[{}], message=[{}]",
                             addr, tAgentResult.getStatus().getError_msgs());
+<<<<<<< HEAD
                 }
                 LOG.debug("Success publish to backend([{}])", addr);
                 // Publish here
@@ -145,6 +169,16 @@ public class ClusterStatePublisher {
                 client = null;
             } finally {
                 ClientPool.backendPool.returnObject(addr, client);
+=======
+                } else {
+                    LOG.debug("Success publish to backend([{}])", addr);
+                    // Publish here
+                    handler.onResponse(node);
+                }
+            } catch (TException e) {
+                LOG.warn("Fetch a agent client failed. backend=[{}] reason=[{}]", addr, e);
+                handler.onFailure(node, e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }

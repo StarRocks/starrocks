@@ -243,7 +243,11 @@ public class ListPartitionDescTest {
         listMultiPartitionDesc.analyze(this.findColumnDefList(), this.findSupportedProperties(null));
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
+=======
+    @Test(expected = SemanticException.class)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testReplicaNum() throws AnalysisException {
         Map<String, String> supportedProperties = new HashMap<>();
         supportedProperties.put("replication_num", "0");

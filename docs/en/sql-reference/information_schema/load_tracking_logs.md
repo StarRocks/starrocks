@@ -10,7 +10,12 @@ The following fields are provided in `load_tracking_logs`:
 
 | **Field**     | **Description**                            |
 | ------------- | ------------------------------------------ |
+<<<<<<< HEAD
 | JOB_ID        | The ID of the load job.                    |
+=======
+| ID            | The ID of the load.                        |
+| JOB_ID        | The ID of the load job(deprecated).                    |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | LABEL         | The label of the load job.                 |
 | DATABASE_NAME | The database that the load job belongs to. |
 | TRACKING_LOG  | Errors (if any) of the load job.           |

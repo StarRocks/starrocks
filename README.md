@@ -29,15 +29,28 @@
    <a href="https://twitter.com/StarRocksLabs">
     <img src="https://img.shields.io/twitter/follow/StarRocksLabs?style=social" alt="Twitter">
   </a>
+<<<<<<< HEAD
+=======
+  <a href="https://gurubase.io/g/starrocks">
+    <img src="https://img.shields.io/badge/Gurubase-Ask%20StarRocks%20Guru-006BFF" alt="Gurubase">
+  </a>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
  </p>
 
 <div align="center"> 
 
+<<<<<<< HEAD
   </div>
 StarRocks, a Linux Foundation project, is the next-generation data platform designed to make data-intensive real-time analytics fast and easy. 
 It delivers query speeds 5 to 10 times faster than other popular solutions. StarRocks can perform real-time analytics well while updating historical records. It can also enhance real-time analytics with historical data from data lakes easily. With StarRocks, you can get rid of the de-normalized tables and get the best performance and flexibility. <br>
 
 Learn more 👉🏻 [Introduction to StarRocks](https://www.starrocks.io/blog/introduction_to_starrocks )
+=======
+</div>
+StarRocks is the world's fastest open query engine for sub-second, ad-hoc analytics both on and off the data lakehouse. With average query performance 3x faster than other popular alternatives, StarRocks is a query engine that eliminates the need for denormalization and adapts to your use cases, without having to move your data or rewrite SQL. A Linux Foundation project. <br></br>
+
+Learn more 👉🏻 [What Is StarRocks: Features and Use Cases](https://www.youtube.com/watch?v=RfXO5GOnbW4&ab_channel=CelerData)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 <br>
  <p align="center">
@@ -53,7 +66,11 @@ Learn more 👉🏻 [Introduction to StarRocks](https://www.starrocks.io/blog/in
 * **💡 Smart query optimization:** StarRocks can optimize complex queries through CBO (Cost Based Optimizer). With a better execution plan, the data analysis efficiency will be greatly improved.
 * **⚡ Real-time update:** The updated model of StarRocks can perform upsert/delete operations according to the primary key, and achieve efficient query while concurrent updates.
 * **🪟 Intelligent materialized view:** The materialized view of StarRocks can be automatically updated during the data import and automatically selected when the query is executed.
+<<<<<<< HEAD
 * **✨ Querying data in data lakes directly**: StarRocks allows direct access to data from Apache Hive™, Apache Iceberg™, and Apache Hudi™ without importing.
+=======
+* **✨ Querying data in data lakes directly**: StarRocks allows direct access to data from Apache Hive™, Apache Iceberg™, Delta Lake™ and Apache Hudi™ without importing.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * **🎛️ Resource management**: This feature allows StarRocks to limit resource consumption for queries and implement isolation and efficient use of resources among tenants in the same cluster.
 * **💠 Easy to maintain**: Simple architecture makes StarRocks easy to deploy, maintain and scale out. StarRocks tunes its query plan agilely, balances the resources when the cluster is scaled in or out, and recovers the data replica under node failure automatically.
 
@@ -74,7 +91,11 @@ StarRocks’s streamlined architecture is mainly composed of two modules: Fronte
 Starting from version 3.0, StarRocks supports a new shared-data architecture, which can provide better scalability and lower costs.
 
  <p align="center">
+<<<<<<< HEAD
     <img src="docs/en/assets/shared-data.png">
+=======
+    <img src="docs/en/_assets/shared-data.png" width="55%" height="55%">
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
    </a>
 </p>
 
@@ -87,10 +108,17 @@ Starting from version 3.0, StarRocks supports a new shared-data architecture, wh
 
 | Section | Description |
 |-|-|
+<<<<<<< HEAD
 | [Deploy](https://docs.starrocks.io/docs/deployment/deployment_overview/) | Learn how to run and configure StarRocks.|
 | [Articles](https://github.com/StarRocks/starrocks/discussions/categories/how-tos-tutorials-best-practices-and-architecture-articles)| How-tos, Tutorials, Best Practices and Architecture Articles. |
 | [Docs](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro)| Full documentation. |
 | [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
+=======
+| [Quick Starts](https://docs.starrocks.io/docs/quick_start/)| How-tos and Tutorials. |
+| [Deploy](https://docs.starrocks.io/docs/deployment/deployment_overview/) | Learn how to run and configure StarRocks.|
+| [Docs](https://docs.starrocks.io/)| Full documentation. |
+| [Blogs](https://www.starrocks.io/blog) | StarRocks deep dive and user stories.  |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### ❓ Get support  
 [<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://try.starrocks.com/join-starrocks-on-slack)
@@ -107,13 +135,24 @@ We welcome all kinds of contributions from the community, individuals and partne
 
 1. See [Contributing.md](https://github.com/StarRocks/starrocks/blob/main/CONTRIBUTING.md) to get started.
 2. Set up StarRocks development environment:
+<<<<<<< HEAD
 * [IDE Setup](https://docs.starrocks.io/en-us/main/developers/development-environment/ide-setup) 
+=======
+* [IDE Setup](https://docs.starrocks.io/docs/developers/development-environment/ide-setup/) 
+* [Compile StarRocks with Docker](https://docs.starrocks.io/docs/developers/build-starrocks/Build_in_docker/) 
+* [Deploy StarRocks manually](https://docs.starrocks.io/docs/deployment/deploy_manually/) 
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
 **📝 License:** StarRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 **👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
+<<<<<<< HEAD
+=======
+
+**💬 Developer Group：** Please join our [Google Groups](https://groups.google.com/g/starrocks-dev) to discuss StarRocks features, project directions, issues, pull requests, or share suggestions.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   
 <br>
   
@@ -122,6 +161,17 @@ We welcome all kinds of contributions from the community, individuals and partne
 This project is used by the following companies. Learn more about their use cases:
 
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
+<<<<<<< HEAD
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
 - [Zepp Health](https://starrocks.io/blog/zeppheath) 
 - [Lenovo](https://starrocks.io/blog/lenovo_en) 
+=======
+- [Pinterest](https://medium.com/pinterest-engineering/delivering-faster-analytics-at-pinterest-a639cdfad374)
+- [Coinbase](https://www.youtube.com/watch?v=3Z9jSCaHnYg&list=PL0eWwaesODdhBhKSnvpfIEAB9sgk8rKmy)
+- [Tencent(Games)](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
+- [Tencent(LLM)](https://www.youtube.com/watch?v=WVHXFks9EQk)
+- [Demandbase](https://starrocks.medium.com/demandbase-ditches-denormalization-by-switching-off-clickhouse-44195d795a83)
+- [Shopee](https://celerdata.com/blog/how-shopee-3xed-their-query-performance-with-starrocks)
+- [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
+- [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks) 
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

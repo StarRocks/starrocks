@@ -34,13 +34,21 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <bvar/variable.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <string>
 
 #include "http/http_handler.h"
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class Webserver;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ExecEnv;
 class HttpRequest;
 class MetricRegistry;
@@ -59,6 +67,10 @@ public:
 private:
     MetricRegistry* _metrics;
     MockFunc _mock_func;
+<<<<<<< HEAD
+=======
+    bvar::DumpOptions _options;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

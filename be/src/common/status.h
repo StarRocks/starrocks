@@ -5,16 +5,24 @@
 #pragma once
 
 #include <string>
+<<<<<<< HEAD
+=======
+#include <string_view>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <vector>
 
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
+<<<<<<< HEAD
 #include "util/slice.h"               // for Slice
 #include "util/time.h"
 #ifdef STARROCKS_ASSERT_STATUS_CHECKED
 #include "util/stack_util.h"
 #endif
+=======
+#include "util/time.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -23,7 +31,12 @@ class TStatus;
 
 template <typename T>
 class StatusOr;
+<<<<<<< HEAD
 #ifdef STARROCKS_STATUS_NODISCARD
+=======
+// @TODO this should be removed later after fixing compile issues in ut
+#ifndef BE_TEST
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define STATUS_ATTRIBUTE [[nodiscard]]
 #else
 #define STATUS_ATTRIBUTE
@@ -34,6 +47,7 @@ public:
     Status() = default;
 
     ~Status() noexcept {
+<<<<<<< HEAD
 #ifdef STARROCKS_ASSERT_STATUS_CHECKED
         if (!_checked) {
             auto stack = get_stack_trace();
@@ -45,6 +59,8 @@ public:
             // std::abort();
         }
 #endif
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!is_moved_from(_state)) {
             delete[] _state;
         }
@@ -58,6 +74,7 @@ public:
 #endif
 
     // Copy c'tor makes copy of error detail so Status can be returned by value
+<<<<<<< HEAD
     Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {
         s.mark_checked();
         must_check();
@@ -69,14 +86,23 @@ public:
         s.mark_checked();
         must_check();
     }
+=======
+    Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {}
+
+    // Move c'tor
+    Status(Status&& s) noexcept : _state(s._state) { s._state = moved_from_state(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Same as copy c'tor
     Status& operator=(const Status& s) {
         if (this != &s) {
             Status tmp(s);
             std::swap(this->_state, tmp._state);
+<<<<<<< HEAD
             tmp.mark_checked();
             must_check();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return *this;
     }
@@ -86,8 +112,11 @@ public:
         if (this != &s) {
             Status tmp(std::move(s));
             std::swap(this->_state, tmp._state);
+<<<<<<< HEAD
             tmp.mark_checked();
             must_check();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return *this;
     }
@@ -116,6 +145,7 @@ public:
     void update(const Status& new_status);
     void update(Status&& new_status);
 
+<<<<<<< HEAD
     // In case of intentionally swallowing an error, user must explicitly call
     // this function. That way we are easily able to search the code to find where
     // error swallowing occurs.
@@ -181,10 +211,50 @@ public:
         return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg);
     }
     static Status JsonFormatError(const Slice& msg) {
+=======
+    static Status OK() { return Status(); }
+
+    static Status Unknown(std::string_view msg) { return Status(TStatusCode::UNKNOWN, msg); }
+
+    static Status PublishTimeout(std::string_view msg) { return Status(TStatusCode::PUBLISH_TIMEOUT, msg); }
+    static Status MemoryAllocFailed(std::string_view msg) { return Status(TStatusCode::MEM_ALLOC_FAILED, msg); }
+    static Status BufferAllocFailed(std::string_view msg) { return Status(TStatusCode::BUFFER_ALLOCATION_FAILED, msg); }
+    static Status InvalidArgument(std::string_view msg) { return Status(TStatusCode::INVALID_ARGUMENT, msg); }
+    static Status MinimumReservationUnavailable(std::string_view msg) {
+        return Status(TStatusCode::MINIMUM_RESERVATION_UNAVAILABLE, msg);
+    }
+    static Status Corruption(std::string_view msg) { return Status(TStatusCode::CORRUPTION, msg); }
+    static Status IOError(std::string_view msg) { return Status(TStatusCode::IO_ERROR, msg); }
+    static Status NotFound(std::string_view msg) { return Status(TStatusCode::NOT_FOUND, msg); }
+    static Status AlreadyExist(std::string_view msg) { return Status(TStatusCode::ALREADY_EXIST, msg); }
+    static Status NotSupported(std::string_view msg) { return Status(TStatusCode::NOT_IMPLEMENTED_ERROR, msg); }
+    static Status EndOfFile(std::string_view msg) { return Status(TStatusCode::END_OF_FILE, msg); }
+    static Status InternalError(std::string_view msg) { return Status(TStatusCode::INTERNAL_ERROR, msg); }
+    static Status RuntimeError(std::string_view msg) { return Status(TStatusCode::RUNTIME_ERROR, msg); }
+    static Status Cancelled(std::string_view msg) { return Status(TStatusCode::CANCELLED, msg); }
+
+    static Status MemoryLimitExceeded(std::string_view msg) { return Status(TStatusCode::MEM_LIMIT_EXCEEDED, msg); }
+
+    static Status ThriftRpcError(std::string_view msg) { return Status(TStatusCode::THRIFT_RPC_ERROR, msg); }
+    static Status TimedOut(std::string_view msg) { return Status(TStatusCode::TIMEOUT, msg); }
+    static Status TooManyTasks(std::string_view msg) { return Status(TStatusCode::TOO_MANY_TASKS, msg); }
+    static Status ServiceUnavailable(std::string_view msg) { return Status(TStatusCode::SERVICE_UNAVAILABLE, msg); }
+    static Status Uninitialized(std::string_view msg) { return Status(TStatusCode::UNINITIALIZED, msg); }
+    static Status Aborted(std::string_view msg) { return Status(TStatusCode::ABORTED, msg); }
+    static Status DataQualityError(std::string_view msg) { return Status(TStatusCode::DATA_QUALITY_ERROR, msg); }
+    static Status VersionAlreadyMerged(std::string_view msg) {
+        return Status(TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED, msg);
+    }
+    static Status DuplicateRpcInvocation(std::string_view msg) {
+        return Status(TStatusCode::DUPLICATE_RPC_INVOCATION, msg);
+    }
+    static Status JsonFormatError(std::string_view msg) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // TODO(mofei) define json format error.
         return Status(TStatusCode::DATA_QUALITY_ERROR, msg);
     }
 
+<<<<<<< HEAD
     static Status GlobalDictError(const Slice& msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
 
     static Status TransactionInProcessing(const Slice& msg) { return Status(TStatusCode::TXN_IN_PROCESSING, msg); }
@@ -319,6 +389,88 @@ public:
         mark_checked();
         return code() == TStatusCode::SR_EAGAIN;
     }
+=======
+    static Status GlobalDictError(std::string_view msg) { return Status(TStatusCode::GLOBAL_DICT_ERROR, msg); }
+
+    static Status TransactionInProcessing(std::string_view msg) { return Status(TStatusCode::TXN_IN_PROCESSING, msg); }
+    static Status TransactionNotExists(std::string_view msg) { return Status(TStatusCode::TXN_NOT_EXISTS, msg); }
+    static Status LabelAlreadyExists(std::string_view msg) { return Status(TStatusCode::LABEL_ALREADY_EXISTS, msg); }
+
+    static Status ResourceBusy(std::string_view msg) { return Status(TStatusCode::RESOURCE_BUSY, msg); }
+
+    static Status EAgain(std::string_view msg) { return Status(TStatusCode::SR_EAGAIN, msg); }
+
+    static Status RemoteFileNotFound(std::string_view msg) { return Status(TStatusCode::REMOTE_FILE_NOT_FOUND, msg); }
+
+    static Status Yield() { return {TStatusCode::YIELD, ""}; }
+
+    static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
+
+    static Status CapacityLimitExceed(std::string_view msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
+
+    static Status Shutdown(std::string_view msg) { return Status(TStatusCode::SHUTDOWN, msg); }
+
+    static Status BigQueryCpuSecondLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED, msg);
+    }
+    static Status BigQueryScanRowsLimitExceeded(std::string_view msg) {
+        return Status(TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED, msg);
+    }
+
+    bool ok() const { return _state == nullptr; }
+
+    bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
+
+    bool is_mem_limit_exceeded() const { return code() == TStatusCode::MEM_LIMIT_EXCEEDED; }
+
+    bool is_capacity_limit_exceeded() const { return code() == TStatusCode::CAPACITY_LIMIT_EXCEED; }
+
+    bool is_thrift_rpc_error() const { return code() == TStatusCode::THRIFT_RPC_ERROR; }
+
+    bool is_end_of_file() const { return code() == TStatusCode::END_OF_FILE; }
+
+    bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
+
+    bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
+
+    bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
+
+    bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
+
+    bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
+
+    bool is_corruption() const { return code() == TStatusCode::CORRUPTION; }
+
+    bool is_resource_busy() const { return code() == TStatusCode::RESOURCE_BUSY; }
+
+    /// @return @c true if the status indicates Uninitialized.
+    bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }
+
+    // @return @c true if the status indicates an Aborted error.
+    bool is_aborted() const { return code() == TStatusCode::ABORTED; }
+
+    /// @return @c true if the status indicates an InvalidArgument error.
+    bool is_invalid_argument() const { return code() == TStatusCode::INVALID_ARGUMENT; }
+
+    // @return @c true if the status indicates ServiceUnavailable.
+    bool is_service_unavailable() const { return code() == TStatusCode::SERVICE_UNAVAILABLE; }
+
+    bool is_data_quality_error() const { return code() == TStatusCode::DATA_QUALITY_ERROR; }
+
+    bool is_version_already_merged() const { return code() == TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED; }
+
+    bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
+
+    bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
+
+    bool is_publish_timeout() const { return code() == TStatusCode::PUBLISH_TIMEOUT; }
+
+    bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
+
+    bool is_yield() const { return code() == TStatusCode::YIELD; }
+
+    bool is_shutdown() const { return code() == TStatusCode::SHUTDOWN; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.
@@ -332,12 +484,15 @@ public:
     void to_thrift(TStatus* status) const;
     void to_protobuf(StatusPB* status) const;
 
+<<<<<<< HEAD
     std::string get_error_msg() const {
         mark_checked();
         auto msg = message();
         return std::string(msg.data, msg.size);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /// @return A string representation of this status suitable for printing.
     ///   Returns the string "OK" for success.
     std::string to_string(bool with_context_info = true) const;
@@ -349,11 +504,16 @@ public:
     // This is similar to to_string, except that it does not include
     // the context info.
     //
+<<<<<<< HEAD
     // @note The returned Slice is only valid as long as this Status object
+=======
+    // @note The returned std::string_view is only valid as long as this Status object
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     //   remains live and unchanged.
     //
     // @return The message portion of the Status. For @c OK statuses,
     //   this returns an empty string.
+<<<<<<< HEAD
     Slice message() const;
 
     // Error message with extra context info, like file name, line number.
@@ -361,6 +521,14 @@ public:
 
     TStatusCode::type code() const {
         mark_checked();
+=======
+    std::string_view message() const;
+
+    // Error message with extra context info, like file name, line number.
+    std::string_view detailed_message() const;
+
+    TStatusCode::type code() const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return _state == nullptr ? TStatusCode::OK : static_cast<TStatusCode::type>(_state[4]);
     }
 
@@ -372,7 +540,11 @@ public:
     ///   The message to prepend.
     /// @return A new Status object with the same state plus an additional
     ///   leading message.
+<<<<<<< HEAD
     Status clone_and_prepend(const Slice& msg) const;
+=======
+    Status clone_and_prepend(std::string_view msg) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /// Clone this status and add the specified suffix to the message.
     ///
@@ -382,6 +554,7 @@ public:
     ///   The message to append.
     /// @return A new Status object with the same state plus an additional
     ///   trailing message.
+<<<<<<< HEAD
     Status clone_and_append(const Slice& msg) const;
 
     Status clone_and_append_context(const char* filename, int line, const char* expr) const;
@@ -392,17 +565,32 @@ public:
 private:
     static const char* copy_state(const char* state);
     static const char* copy_state_with_extra_ctx(const char* state, Slice ctx);
+=======
+    Status clone_and_append(std::string_view msg) const;
+
+    Status clone_and_append_context(const char* filename, int line, const char* expr) const;
+
+    Status(TStatusCode::type code, std::string_view msg) : Status(code, msg, {}) {}
+    Status(TStatusCode::type code, std::string_view msg, std::string_view ctx);
+
+private:
+    static const char* copy_state(const char* state);
+    static const char* copy_state_with_extra_ctx(const char* state, std::string_view ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Indicates whether this Status was the rhs of a move operation.
     static bool is_moved_from(const char* state);
     static const char* moved_from_state();
 
+<<<<<<< HEAD
     void mark_checked() const {
 #ifdef STARROCKS_ASSERT_STATUS_CHECKED
         _checked = true;
 #endif
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     // OK status has a nullptr _state.  Otherwise, _state is a new[] array
     // of the following form:
@@ -412,6 +600,7 @@ private:
     //    _state[5.. 5 + len1]                == message
     //    _state[5 + len1 .. 5 + len1 + len2] == context
     const char* _state = nullptr;
+<<<<<<< HEAD
 #ifdef STARROCKS_ASSERT_STATUS_CHECKED
     // This field design follows Status in RocksDB
     // https://github.com/facebook/rocksdb/blob/05daa123323b1471bde4723dc441763d687fd825/include/rocksdb/status.h#L467
@@ -424,14 +613,26 @@ inline void Status::update(const Status& new_status) {
     if (ok()) {
         *this = new_status;
         must_check();
+=======
+};
+
+inline void Status::update(const Status& new_status) {
+    if (ok()) {
+        *this = new_status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
 inline void Status::update(Status&& new_status) {
+<<<<<<< HEAD
     new_status.mark_checked();
     if (ok()) {
         *this = std::move(new_status);
         must_check();
+=======
+    if (ok()) {
+        *this = std::move(new_status);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -467,6 +668,7 @@ inline const Status& to_status(const StatusOr<T>& st) {
 
 #if defined(ENABLE_STATUS_FAILED)
 struct StatusInstance {
+<<<<<<< HEAD
     static constexpr Status (*random[])(const Slice& msg) = {&Status::Unknown,
                                                              &Status::PublishTimeout,
                                                              &Status::MemoryAllocFailed,
@@ -491,6 +693,32 @@ struct StatusInstance {
                                                              &Status::TransactionNotExists,
                                                              &Status::LabelAlreadyExists,
                                                              &Status::ResourceBusy};
+=======
+    static constexpr Status (*random[])(std::string_view msg) = {&Status::Unknown,
+                                                                 &Status::PublishTimeout,
+                                                                 &Status::MemoryAllocFailed,
+                                                                 &Status::BufferAllocFailed,
+                                                                 &Status::InvalidArgument,
+                                                                 &Status::MinimumReservationUnavailable,
+                                                                 &Status::Corruption,
+                                                                 &Status::IOError,
+                                                                 &Status::NotFound,
+                                                                 &Status::AlreadyExist,
+                                                                 &Status::NotSupported,
+                                                                 &Status::EndOfFile,
+                                                                 &Status::ServiceUnavailable,
+                                                                 &Status::Uninitialized,
+                                                                 &Status::Aborted,
+                                                                 &Status::DataQualityError,
+                                                                 &Status::VersionAlreadyMerged,
+                                                                 &Status::DuplicateRpcInvocation,
+                                                                 &Status::JsonFormatError,
+                                                                 &Status::GlobalDictError,
+                                                                 &Status::TransactionInProcessing,
+                                                                 &Status::TransactionNotExists,
+                                                                 &Status::LabelAlreadyExists,
+                                                                 &Status::ResourceBusy};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static constexpr TStatusCode::type codes[] = {TStatusCode::UNKNOWN,
                                                   TStatusCode::PUBLISH_TIMEOUT,
@@ -517,7 +745,11 @@ struct StatusInstance {
                                                   TStatusCode::LABEL_ALREADY_EXISTS,
                                                   TStatusCode::RESOURCE_BUSY};
 
+<<<<<<< HEAD
     static constexpr int SIZE = sizeof(random) / sizeof(Status(*)(const Slice& msg));
+=======
+    static constexpr int SIZE = sizeof(random) / sizeof(Status(*)(std::string_view msg));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 #define RETURN_INJECT(index)                                                         \
@@ -545,6 +777,7 @@ struct StatusInstance {
 #define RETURN_IF_ERROR(stmt) RETURN_IF_ERROR_INTERNAL(stmt)
 #endif
 
+<<<<<<< HEAD
 #define EXIT_IF_ERROR(stmt)                        \
     do {                                           \
         auto&& status__ = (stmt);                  \
@@ -553,6 +786,26 @@ struct StatusInstance {
             LOG(ERROR) << msg;                     \
             exit(1);                               \
         }                                          \
+=======
+#define SET_STATUE_AND_RETURN_IF_ERROR_INTERNAL(err_status, stmt)                                           \
+    do {                                                                                                    \
+        auto&& status__ = (stmt);                                                                           \
+        if (UNLIKELY(!status__.ok())) {                                                                     \
+            err_status = to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+            return;                                                                                         \
+        }                                                                                                   \
+    } while (false)
+
+#define SET_STATUE_AND_RETURN_IF_ERROR(err_status, stmt) SET_STATUE_AND_RETURN_IF_ERROR_INTERNAL(err_status, stmt)
+
+#define EXIT_IF_ERROR(stmt)                   \
+    do {                                      \
+        auto&& status__ = (stmt);             \
+        if (UNLIKELY(!status__.ok())) {       \
+            LOG(ERROR) << status__.message(); \
+            exit(1);                          \
+        }                                     \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } while (false)
 
 #define VA_ARGS_HELPER(fmt, ...) fmt " " #__VA_ARGS__

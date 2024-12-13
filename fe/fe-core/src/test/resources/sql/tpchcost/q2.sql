@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_acctbal,
@@ -42,6 +43,8 @@ order by
     n_name,
     s_name,
     p_partkey limit 100;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F10)
 Output Exprs:16: S_ACCTBAL | 12: S_NAME | 26: N_NAME | 1: P_PARTKEY | 3: P_MFGR | 13: S_ADDRESS | 15: S_PHONE | 17: S_COMMENT
@@ -149,6 +152,10 @@ OutPut Exchange Id: 25
 |
 20:SORT
 |  order by: [1, INT, false] ASC
+<<<<<<< HEAD
+=======
+|  analytic partition by: [1: P_PARTKEY, INT, false]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |  offset: 0
 |  cardinality: 80000
 |  column statistics:

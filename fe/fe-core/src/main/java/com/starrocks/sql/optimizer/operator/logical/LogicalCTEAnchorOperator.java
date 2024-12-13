@@ -21,9 +21,17 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+<<<<<<< HEAD
 
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.sql.optimizer.property.DomainProperty;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Objects;
 
 /*
@@ -58,6 +66,14 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
         return projectInputRow(inputs.get(1).getRowOutputInfo());
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        return new DomainProperty(Map.of());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getCteId() {
         return cteId;
     }
@@ -106,6 +122,14 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
             return new LogicalCTEAnchorOperator();
         }
 
+<<<<<<< HEAD
+=======
+        public LogicalCTEAnchorOperator.Builder setCteId(int cteId) {
+            builder.cteId = cteId;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @Override
         public LogicalCTEAnchorOperator.Builder withOperator(LogicalCTEAnchorOperator operator) {
             super.withOperator(operator);

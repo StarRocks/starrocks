@@ -25,6 +25,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.KuduTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Version;
@@ -33,6 +37,10 @@ import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.metastore.MetastoreTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.trino.TrinoViewColumnTypeConverter;
 import com.starrocks.connector.trino.TrinoViewDefinition;
 import com.starrocks.credential.CloudConfiguration;
@@ -65,6 +73,10 @@ import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.Option;
+<<<<<<< HEAD
+=======
+import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -117,6 +129,13 @@ public class HiveMetastoreApiConverter {
         return inputFormat != null && HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
     }
 
+<<<<<<< HEAD
+=======
+    public static boolean isKuduTable(String inputFormat) {
+        return inputFormat != null && KuduTable.isKuduInputFormat(inputFormat);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
         Optional<Map<String, String>> tableParamsOptional = Optional.ofNullable(tableParams);
         if (isDeltaLakeTable(tableParamsOptional.orElse(ImmutableMap.of()))) {
@@ -180,11 +199,24 @@ public class HiveMetastoreApiConverter {
         return tableBuilder.build();
     }
 
+<<<<<<< HEAD
     public static Table toMetastoreApiTable(HiveTable table) {
         Table apiTable = new Table();
         apiTable.setDbName(table.getDbName());
         apiTable.setTableName(table.getTableName());
         apiTable.setTableType("MANAGED_TABLE");
+=======
+    public static MetastoreTable toMetastoreTable(Table table) {
+        String tableLocation = toTableLocation(table.getSd(), table.getParameters());
+        return new MetastoreTable(table.getDbName(), table.getTableName(), tableLocation, table.getCreateTime());
+    }
+
+    public static Table toMetastoreApiTable(HiveTable table) {
+        Table apiTable = new Table();
+        apiTable.setDbName(table.getCatalogDBName());
+        apiTable.setTableName(table.getCatalogTableName());
+        apiTable.setTableType(table.getHiveTableType().name());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         apiTable.setOwner(System.getenv("HADOOP_USER_NAME"));
         apiTable.setParameters(toApiTableProperties(table));
         apiTable.setPartitionKeys(table.getPartitionColumns().stream()
@@ -194,9 +226,23 @@ public class HiveMetastoreApiConverter {
         return apiTable;
     }
 
+<<<<<<< HEAD
     private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
         SerDeInfo serdeInfo = new SerDeInfo();
         serdeInfo.setName(table.getTableName());
+=======
+    public static KuduTable toKuduTable(Table table, String catalogName) {
+        List<Column> fullSchema = toFullSchemasForHiveTable(table);
+        List<String> partColNames = table.getPartitionKeys().stream()
+                .map(FieldSchema::getName)
+                .collect(Collectors.toList());
+        return KuduTable.fromMetastoreTable(table, catalogName, fullSchema, partColNames);
+    }
+
+    private static StorageDescriptor makeStorageDescriptorFromHiveTable(HiveTable table) {
+        SerDeInfo serdeInfo = new SerDeInfo();
+        serdeInfo.setName(table.getCatalogTableName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HiveStorageFormat storageFormat = table.getStorageFormat();
         serdeInfo.setSerializationLib(storageFormat.getSerde());
 
@@ -250,6 +296,12 @@ public class HiveMetastoreApiConverter {
         if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
             tableProperties.put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString());
         }
+<<<<<<< HEAD
+=======
+        if (table.getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
+            tableProperties.put("EXTERNAL", "TRUE");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return tableProperties.build();
     }
@@ -295,7 +347,12 @@ public class HiveMetastoreApiConverter {
         }
 
         HoodieTableMetaClient metaClient =
+<<<<<<< HEAD
                 HoodieTableMetaClient.builder().setConf(configuration).setBasePath(hudiBasePath).build();
+=======
+                HoodieTableMetaClient.builder().setConf(new HadoopStorageConfiguration(configuration))
+                        .setBasePath(hudiBasePath).build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);
         Schema hudiSchema;

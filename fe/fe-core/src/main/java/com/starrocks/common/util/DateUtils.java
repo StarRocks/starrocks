@@ -18,16 +18,26 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSerializer;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.gson.GsonUtils;
 
+=======
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.SemanticException;
+
+import java.time.DayOfWeek;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+<<<<<<< HEAD
 import java.time.ZoneOffset;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -35,6 +45,10 @@ import java.time.format.ResolverStyle;
 import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
+<<<<<<< HEAD
+=======
+import java.time.temporal.WeekFields;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class DateUtils {
     // These are marked as deprecated because they don't support year 0000 parsing
@@ -116,8 +130,13 @@ public class DateUtils {
         return dateTime.format(DATE_TIME_FORMATTER_UNIX);
     }
 
+<<<<<<< HEAD
     public static LocalDateTime fromEpochMillis(long epochMilli) {
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), ZoneOffset.UTC);
+=======
+    public static LocalDateTime fromEpochMillis(long epochMilli, ZoneId zoneId) {
+        return LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMilli), zoneId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static LocalDateTime parseUnixDateTime(String str) {
@@ -169,7 +188,11 @@ public class DateUtils {
         return localDateTimeWithZone.toLocalDateTime();
     }
 
+<<<<<<< HEAD
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
+=======
+    public static DateTimeFormatter probeFormat(String dateTimeStr) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (dateTimeStr.length() == 8) {
             return DATEKEY_FORMATTER;
         } else if (dateTimeStr.length() == 10) {
@@ -179,7 +202,11 @@ public class DateUtils {
         } else if (dateTimeStr.length() == 26) {
             return DATE_TIME_MS_FORMATTER_UNIX;
         } else {
+<<<<<<< HEAD
             throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
+=======
+            throw new SemanticException("can not probe datetime format:" + dateTimeStr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -221,7 +248,11 @@ public class DateUtils {
         }
     }
 
+<<<<<<< HEAD
     public static LocalDateTime parseDatTimeString(String datetime) throws AnalysisException {
+=======
+    public static LocalDateTime parseDatTimeString(String datetime) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DateTimeFormatter dateTimeFormatter = probeFormat(datetime);
         return parseStringWithDefaultHSM(datetime, dateTimeFormatter);
     }
@@ -294,7 +325,12 @@ public class DateUtils {
                                 .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
                         break;
                     case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x
+<<<<<<< HEAD
                         builder.appendValue(ChronoField.ALIGNED_WEEK_OF_YEAR, 2);
+=======
+                        final WeekFields weekFields = WeekFields.of(DayOfWeek.MONDAY, 4);
+                        builder.appendValue(weekFields.weekOfWeekBasedYear(), 2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         break;
                     case 'Y': // %Y Year, numeric, four digits
                         builder.appendValue(ChronoField.YEAR, 4);

@@ -23,7 +23,10 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -131,7 +134,11 @@ public class ShowStreamLoadStmt extends ShowStmt {
         return includeHistory;
     }
 
+<<<<<<< HEAD
     public StreamLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) throws AnalysisException {
+=======
+    public StreamLoadFunctionalExprProvider getFunctionalExprProvider(ConnectContext context) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (null == functionalExprProvider) {
             functionalExprProvider = new StreamLoadFunctionalExprProvider();
         }

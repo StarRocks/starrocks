@@ -18,14 +18,29 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
+<<<<<<< HEAD
 import com.starrocks.sql.parser.NodePosition;
+=======
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.util.EitherOr;
+
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
 
     private final TableName mvName;
+<<<<<<< HEAD
     private final PartitionRangeDesc partitionRangeDesc;
     private final boolean forceRefresh;
     private final boolean isSync;
+=======
+    private EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc;
+    private final boolean forceRefresh;
+    private final boolean isSync;
+    private final Integer priority;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -33,6 +48,7 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
                     .build();
 
     public RefreshMaterializedViewStatement(TableName mvName,
+<<<<<<< HEAD
                                             PartitionRangeDesc partitionRangeDesc,
                                             boolean forceRefresh, boolean isSync) {
         this(mvName, partitionRangeDesc, forceRefresh, isSync, NodePosition.ZERO);
@@ -46,6 +62,16 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
         this.partitionRangeDesc = partitionRangeDesc;
         this.forceRefresh = forceRefresh;
         this.isSync = isSync;
+=======
+                                            EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc,
+                                            boolean forceRefresh, boolean isSync, Integer priority, NodePosition pos) {
+        super(pos);
+        this.mvName = mvName;
+        this.partitionDesc = partitionDesc;
+        this.forceRefresh = forceRefresh;
+        this.isSync = isSync;
+        this.priority = priority;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TableName getMvName() {
@@ -57,8 +83,27 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
         return visitor.visitRefreshMaterializedViewStatement(this, context);
     }
 
+<<<<<<< HEAD
     public PartitionRangeDesc getPartitionRangeDesc() {
         return partitionRangeDesc;
+=======
+    public EitherOr<PartitionRangeDesc, Set<PListCell>> getPartitionDesc() {
+        return partitionDesc;
+    }
+
+    public PartitionRangeDesc getPartitionRangeDesc() {
+        if (partitionDesc == null) {
+            return null;
+        }
+        return partitionDesc.left();
+    }
+
+    public Set<PListCell> getPartitionListDesc() {
+        if (partitionDesc == null) {
+            return null;
+        }
+        return partitionDesc.right();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isForceRefresh() {
@@ -68,4 +113,11 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     public boolean isSync() {
         return isSync;
     }
+<<<<<<< HEAD
+=======
+
+    public Integer getPriority() {
+        return priority;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

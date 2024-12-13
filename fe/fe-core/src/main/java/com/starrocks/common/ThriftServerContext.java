@@ -50,4 +50,18 @@ public class ThriftServerContext implements ServerContext {
     public TNetworkAddress getClient() {
         return client;
     }
+<<<<<<< HEAD
+=======
+
+
+    @Override
+    public <T> T unwrap(Class<T> aClass) {
+        throw new UnsupportedOperationException("Unimplemented method 'unwrap'");
+    }
+
+    @Override
+    public boolean isWrapperFor(Class<?> aClass) {
+        return false;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

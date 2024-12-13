@@ -28,6 +28,10 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class DescribeStmt extends ShowStmt {
 
@@ -63,6 +67,16 @@ public class DescribeStmt extends ShowStmt {
                     .addColumn(new Column("Table", ScalarType.createVarchar(30)))
                     .build();
 
+<<<<<<< HEAD
+=======
+    private static final ShowResultSetMetaData DESC_TABLE_FUNCTION_TABLE_META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("Field", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Null", ScalarType.createVarchar(10)))
+                    .build();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // empty col num equals to DESC_OLAP_TABLE_ALL_META_DATA.size()
     public static final List<String> EMPTY_ROW = initEmptyRow();
 
@@ -75,6 +89,12 @@ public class DescribeStmt extends ShowStmt {
     private boolean isOlapTable;
     private boolean isMaterializedView;
 
+<<<<<<< HEAD
+=======
+    private boolean isTableFunctionTable = false;
+    private Map<String, String> tableFunctionProperties = null;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public DescribeStmt(TableName dbTableName, boolean isAllTables) {
         this(dbTableName, isAllTables, NodePosition.ZERO);
     }
@@ -86,6 +106,17 @@ public class DescribeStmt extends ShowStmt {
         this.isAllTables = isAllTables;
     }
 
+<<<<<<< HEAD
+=======
+    public DescribeStmt(Map<String, String> tableFunctionProperties, NodePosition pos) {
+        super(pos);
+        this.dbTableName = null;
+        this.totalRows = new LinkedList<>();
+        this.isTableFunctionTable = true;
+        this.tableFunctionProperties = tableFunctionProperties;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isAllTables() {
         return isAllTables;
     }
@@ -126,8 +157,21 @@ public class DescribeStmt extends ShowStmt {
         isOlapTable = olapTable;
     }
 
+<<<<<<< HEAD
     public List<List<String>> getResultRows() throws AnalysisException {
         if (isAllTables || isMaterializedView) {
+=======
+    public boolean isTableFunctionTable() {
+        return isTableFunctionTable;
+    }
+
+    public Map<String, String> getTableFunctionProperties() {
+        return tableFunctionProperties;
+    }
+
+    public List<List<String>> getResultRows() throws AnalysisException {
+        if (isAllTables || isMaterializedView || isTableFunctionTable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return totalRows;
         } else {
             Preconditions.checkNotNull(node);
@@ -137,6 +181,13 @@ public class DescribeStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
+<<<<<<< HEAD
+=======
+        if (isTableFunctionTable) {
+            return DESC_TABLE_FUNCTION_TABLE_META_DATA;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!isAllTables) {
             if (isMaterializedView) {
                 return DESC_OLAP_TABLE_META_DATA;

@@ -21,6 +21,7 @@ import com.starrocks.sql.parser.NodePosition;
 /**
  * Representation of a Kill statement.
  * Acceptable syntax:
+<<<<<<< HEAD
  * KILL [QUERY | CONNECTION] connection_id
  */
 public class KillStmt extends StatementBase {
@@ -29,6 +30,17 @@ public class KillStmt extends StatementBase {
 
     public KillStmt(boolean isConnectionKill, long connectionId) {
         this(isConnectionKill, connectionId, NodePosition.ZERO);
+=======
+ * KILL [QUERY | CONNECTION] connection_id | query_id
+ */
+public class KillStmt extends StatementBase {
+    private boolean isConnectionKill;
+    private long connectionId;
+    private String queryId;
+
+    public KillStmt(long connectionId, NodePosition pos) {
+        this(false, connectionId, pos);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public KillStmt(boolean isConnectionKill, long connectionId, NodePosition pos) {
@@ -37,6 +49,14 @@ public class KillStmt extends StatementBase {
         this.connectionId = connectionId;
     }
 
+<<<<<<< HEAD
+=======
+    public KillStmt(String queryId, NodePosition pos) {
+        super(pos);
+        this.queryId = queryId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isConnectionKill() {
         return isConnectionKill;
     }
@@ -45,6 +65,13 @@ public class KillStmt extends StatementBase {
         return connectionId;
     }
 
+<<<<<<< HEAD
+=======
+    public String getQueryId() {
+        return queryId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;

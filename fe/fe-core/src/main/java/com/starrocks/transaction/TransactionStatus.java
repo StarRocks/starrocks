@@ -17,6 +17,13 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TTransactionStatus;
+
+import java.util.Arrays;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public enum TransactionStatus {
     UNKNOWN(0),
     PREPARE(1),
@@ -27,6 +34,7 @@ public enum TransactionStatus {
 
     private final int flag;
 
+<<<<<<< HEAD
     private TransactionStatus(int flag) {
         this.flag = flag;
     }
@@ -51,6 +59,41 @@ public enum TransactionStatus {
                 return PREPARED;
             default:
                 return UNKNOWN;
+=======
+    TransactionStatus(int flag) {
+        this.flag = flag;
+    }
+
+    public static TransactionStatus valueOf(int flag) {
+        return Arrays.stream(values())
+                .filter(status -> status.getFlag() == flag)
+                .findFirst()
+                .orElse(UNKNOWN);
+    }
+
+    public TTransactionStatus toThrift() {
+        switch (this.getFlag()) {
+            // UNKNOWN
+            case 0:
+                return TTransactionStatus.UNKNOWN;
+            // PREPARE
+            case 1:
+                return TTransactionStatus.PREPARE;
+            // COMMITTED
+            case 2:
+                return TTransactionStatus.COMMITTED;
+            // VISIBLE
+            case 3:
+                return TTransactionStatus.VISIBLE;
+            // ABORTED
+            case 4:
+                return TTransactionStatus.ABORTED;
+            // PREPARED
+            case 5:
+                return TTransactionStatus.PREPARED;
+            default:
+                return TTransactionStatus.UNKNOWN;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -64,6 +107,7 @@ public enum TransactionStatus {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         switch (this) {
             case UNKNOWN:
                 return "UNKNOWN";
@@ -80,5 +124,12 @@ public enum TransactionStatus {
             default:
                 return "UNKNOWN";
         }
+=======
+        return this.name();
+    }
+
+    public int getFlag() {
+        return flag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

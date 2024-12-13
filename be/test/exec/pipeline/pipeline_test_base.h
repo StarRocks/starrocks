@@ -17,6 +17,12 @@
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+#include "exec/pipeline/pipeline_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/InternalService_types.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
@@ -60,7 +66,13 @@ protected:
 
     // lambda used to init _pipelines
     std::function<void(RuntimeState*)> _pipeline_builder;
+<<<<<<< HEAD
     Pipelines _pipelines;
+=======
+
+    Pipelines _pipelines;
+    ExecutionGroupPtr exec_group;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     // Prepare execution context of pipeline

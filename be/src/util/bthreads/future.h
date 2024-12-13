@@ -115,6 +115,10 @@ public:
 
 private:
     friend class Promise<R>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<R>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     explicit Future(std::shared_ptr<SharedState<R>> state) : BaseType(std::move(state)) {}
 };
@@ -150,6 +154,10 @@ public:
 
 private:
     friend class Promise<R&>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<R&>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     explicit Future(std::shared_ptr<SharedState<R&>> state) : BaseType(std::move(state)) {}
 };
@@ -183,6 +191,10 @@ public:
 
 private:
     friend class Promise<void>;
+<<<<<<< HEAD
+=======
+    friend class SharedFuture<void>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     explicit Future(std::shared_ptr<SharedState<void>> state) : BaseType(std::move(state)) {}
 };
@@ -237,6 +249,10 @@ public:
 private:
     friend class Promise<R>;
     friend class Future<R>;
+<<<<<<< HEAD
+=======
+    friend class FutureBase<R>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     using BaseType = FutureBase<R>;
 

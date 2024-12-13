@@ -14,20 +14,33 @@
 
 #include "exec/tablet_sink_colocate_sender.h"
 
+<<<<<<< HEAD
+=======
+#include <utility>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
+<<<<<<< HEAD
 namespace starrocks::stream_load {
+=======
+namespace starrocks {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 TabletSinkColocateSender::TabletSinkColocateSender(
         PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
         OlapTablePartitionParam* vectorized_partition, std::vector<IndexChannel*> channels,
         std::unordered_map<int64_t, NodeChannel*> node_channels, std::vector<ExprContext*> output_expr_ctxs,
         bool enable_replicated_storage, TWriteQuorumType::type write_quorum_type, int num_repicas)
+<<<<<<< HEAD
         : TabletSinkSender(load_id, txn_id, std::move(index_id_to_tablet_be_map), vectorized_partition,
+=======
+        : TabletSinkSender(std::move(load_id), txn_id, std::move(index_id_to_tablet_be_map), vectorized_partition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                            std::move(channels), std::move(node_channels), std::move(output_expr_ctxs),
                            enable_replicated_storage, write_quorum_type, num_repicas) {}
 
@@ -131,7 +144,11 @@ Status TabletSinkColocateSender::_send_chunks(const OlapTableSchemaParam* schema
         if (!st.ok()) {
             LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
                          << ", node=" << node->node_info()->host << ":" << node->node_info()->brpc_port
+<<<<<<< HEAD
                          << ", errmsg=" << st.get_error_msg();
+=======
+                         << ", errmsg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             err_st = st;
             // we only send to primary replica, if it fail whole load fail
             if (_enable_replicated_storage) {
@@ -148,7 +165,11 @@ Status TabletSinkColocateSender::try_open(RuntimeState* state) {
     }
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(_vectorized_partition->open(state));
+=======
+    RETURN_IF_ERROR(_partition_params->open(state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     for_each_node_channel([](NodeChannel* ch) { ch->try_open(); });
     return Status::OK();
 }
@@ -183,7 +204,11 @@ Status TabletSinkColocateSender::open_wait() {
         if (!st.ok()) {
             LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                          << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
+<<<<<<< HEAD
                          << ", errmsg=" << st.get_error_msg();
+=======
+                         << ", errmsg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             err_st = st.clone_and_append(std::string(" be:") + ch->node_info()->host);
             this->_mark_as_failed(ch);
         }
@@ -214,7 +239,11 @@ Status TabletSinkColocateSender::try_close(RuntimeState* state) {
             auto st = ch->try_close();
             if (!st.ok()) {
                 LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
+<<<<<<< HEAD
                              << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.get_error_msg();
+=======
+                             << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 err_st = st;
                 this->_mark_as_failed(ch);
             }
@@ -244,9 +273,16 @@ bool TabletSinkColocateSender::is_close_done() {
     return _close_done;
 }
 
+<<<<<<< HEAD
 Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile) {
     if (UNLIKELY(!_colocate_mv_index)) {
         return TabletSinkColocateSender::close_wait(state, close_status, ts_profile);
+=======
+Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
+                                            bool write_txn_log) {
+    if (UNLIKELY(!_colocate_mv_index)) {
+        return TabletSinkColocateSender::close_wait(state, close_status, ts_profile, write_txn_log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     Status status = std::move(close_status);
     if (status.ok()) {
@@ -263,7 +299,11 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
                 if (!channel_status.ok()) {
                     LOG(WARNING) << "close channel failed. channel_name=" << ch->name()
                                  << ", load_info=" << ch->print_load_info()
+<<<<<<< HEAD
                                  << ", error_msg=" << channel_status.get_error_msg();
+=======
+                                 << ", error_msg=" << channel_status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     err_st = channel_status;
                     this->_mark_as_failed(ch);
                 }
@@ -273,7 +313,19 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
                 status = err_st;
                 for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
             }
+<<<<<<< HEAD
 
+=======
+            if (status.ok() && write_txn_log) {
+                auto merge_txn_log = [this](NodeChannel* channel) {
+                    for (auto& log : channel->txn_logs()) {
+                        _txn_log_map[log.partition_id()].add_txn_logs()->Swap(&log);
+                    }
+                };
+                for_each_node_channel(merge_txn_log);
+                status.update(_write_combined_txn_log());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // only if status is ok can we call this _profile->total_time_counter().
             // if status is not ok, this sink may not be prepared, so that _profile is null
             SCOPED_TIMER(ts_profile->runtime_profile->total_time_counter());
@@ -303,8 +355,13 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
     }
 
     Expr::close(_output_expr_ctxs, state);
+<<<<<<< HEAD
     if (_vectorized_partition) {
         _vectorized_partition->close(state);
+=======
+    if (_partition_params) {
+        _partition_params->close(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return status;
 }
@@ -321,4 +378,8 @@ bool TabletSinkColocateSender::get_immutable_partition_ids(std::set<int64_t>* pa
     return has_immutable_partition;
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::stream_load
+=======
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

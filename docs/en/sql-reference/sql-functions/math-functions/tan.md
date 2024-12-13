@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # tan
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the tangent of `x`, where `x` is in radians.
 

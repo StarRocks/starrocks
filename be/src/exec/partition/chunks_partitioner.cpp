@@ -26,6 +26,7 @@ namespace starrocks {
 
 ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
                                      const std::vector<ExprContext*>& partition_exprs,
+<<<<<<< HEAD
                                      std::vector<PartitionColumnType> partition_types)
         : _has_nullable_partition_column(has_nullable_partition_column),
           _partition_exprs(partition_exprs),
@@ -36,6 +37,18 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
 Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
     _state = state;
     _mem_pool = std::make_unique<MemPool>();
+=======
+                                     std::vector<PartitionColumnType> partition_types, MemPool* mem_pool)
+        : _has_nullable_partition_column(has_nullable_partition_column),
+          _partition_exprs(partition_exprs),
+          _partition_types(std::move(partition_types)),
+          _mem_pool(mem_pool) {
+    _partition_columns.resize(partition_exprs.size());
+}
+
+Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_profile, bool enable_pre_agg) {
+    _state = state;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _obj_pool = std::make_unique<ObjectPool>();
     _init_hash_map_variant();
 
@@ -45,6 +58,12 @@ Status ChunksPartitioner::prepare(RuntimeState* state, RuntimeProfile* runtime_p
     _limited_buffer = std::make_unique<LimitedPipelineChunkBuffer<ChunksPartitionStatistics>>(
             &_statistics, 1, config::local_exchange_buffer_mem_limit_per_driver,
             state->chunk_size() * config::streaming_agg_chunk_buffer_size);
+<<<<<<< HEAD
+=======
+    if (enable_pre_agg) {
+        _hash_map_variant.set_enable_pre_agg();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 

@@ -31,6 +31,11 @@ using FragmentFuture = std::future<void>;
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
 using Pipelines = std::vector<PipelinePtr>;
+<<<<<<< HEAD
+=======
+using PipelineRawPtr = Pipeline*;
+using PipelineRawPtrs = std::vector<Pipeline*>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;
@@ -48,4 +53,13 @@ class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
 class GlobalDriverExecutor;
 class ExecStateReporter;
+<<<<<<< HEAD
 } // namespace starrocks::pipeline
+=======
+class PipelineBuilderContext;
+} // namespace starrocks::pipeline
+
+namespace starrocks {
+using OperatorFactoryPtr = pipeline::OpFactoryPtr;
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

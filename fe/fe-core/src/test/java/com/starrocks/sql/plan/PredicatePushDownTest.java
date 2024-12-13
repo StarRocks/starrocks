@@ -67,7 +67,11 @@ public class PredicatePushDownTest extends PlanTestBase {
         {
             String sql = "select * from t0 where coalesce(v1 < 2, null, v2 > 1)";
             String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
             assertContains(plan, "PREDICATES: coalesce(1: v1 < 2, NULL, 2: v2 > 1)");
+=======
+            assertContains(plan, "predicates: coalesce(1: v1 < 2, NULL, 2: v2 > 1)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         {
             String sql = "WITH cte0 AS (\n" +

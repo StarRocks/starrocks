@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # approx_count_distinct
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回类似于 `COUNT(DISTINCT col)` 结果的近似值。
 

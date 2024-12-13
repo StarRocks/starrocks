@@ -40,11 +40,20 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
+<<<<<<< HEAD
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+=======
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
+import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
+import com.starrocks.credential.aliyun.AliyunCloudCredential;
+import com.starrocks.qe.VariableMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -60,7 +69,10 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+<<<<<<< HEAD
 import static org.mockito.ArgumentMatchers.anyLong;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
@@ -83,6 +95,10 @@ public class MockedBase {
     protected static OdpsConnector odpsConnector = Mockito.mock(OdpsConnector.class);
     protected static OdpsMetadata odpsMetadata = Mockito.mock(OdpsMetadata.class);
     protected static ConnectorContext context = Mockito.mock(ConnectorContext.class);
+<<<<<<< HEAD
+=======
+    protected static VariableMgr variableMgr = new VariableMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Mock
     static TableReadSessionBuilder mockTableReadSessionBuilder = Mockito.mock(TableReadSessionBuilder.class);
@@ -123,6 +139,10 @@ public class MockedBase {
                 "    \"SourceIP\": \"127.0.0.1\"}");
 
         when(project.getName()).thenReturn("project");
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         when(tableIterator.hasNext()).thenReturn(true, false);
         when(tableIterator.next()).thenReturn(table);
 
@@ -177,6 +197,7 @@ public class MockedBase {
         when(globalStateMgr.getCatalogMgr()).thenReturn(catalogMgr);
         when(globalStateMgr.getConnectorMgr()).thenReturn(connectorMgr);
         when(globalStateMgr.getMetadataMgr()).thenReturn(metadataMgr);
+<<<<<<< HEAD
         when(connectorMgr.getConnector(anyString())).thenReturn(
                 new CatalogConnector(odpsConnector, new InformationSchemaConnector("catalog")));
         when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
@@ -186,6 +207,18 @@ public class MockedBase {
         when(metadataMgr.getRemoteFileInfos(any(), any(), any(), anyLong(), any(), any(), anyLong())).thenReturn(
                 ImmutableList.of(fileInfo));
         when(odpsMetadata.getRemoteFileInfos(any(), any(), anyLong(), any(), any(), anyLong(), any())).thenReturn(
+=======
+        when(globalStateMgr.getVariableMgr()).thenReturn(variableMgr);
+        when(connectorMgr.getConnector(anyString())).thenReturn(new CatalogConnector(
+                odpsConnector, new InformationSchemaConnector("catalog"), new TableMetaConnector("catalog", "odps")));
+        when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
+
+        RemoteFileInfo fileInfo = new RemoteFileInfo();
+        fileInfo.setFiles(ImmutableList.of(OdpsRemoteFileDesc.createOdpsRemoteFileDesc(odpsSplitsInfo)));
+        when(metadataMgr.getRemoteFiles(any(), any())).thenReturn(
+                ImmutableList.of(fileInfo));
+        when(odpsMetadata.getRemoteFiles(any(), any(), any())).thenReturn(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ImmutableList.of(fileInfo));
     }
 }

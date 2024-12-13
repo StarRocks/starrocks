@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_trunc
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Truncates a time value based on the specified date part, such as year, day, hour, or minute.
 

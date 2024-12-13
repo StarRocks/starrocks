@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_returnflag,
@@ -20,6 +21,8 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F02)
 Output Exprs:9: l_returnflag | 10: l_linestatus | 19: sum | 20: sum | 21: sum | 22: sum | 23: avg | 24: avg | 25: avg | 26: count
@@ -138,6 +141,10 @@ NON-PARTITION PREDICATES: 11: l_shipdate <= '1998-12-01'
 MIN/MAX PREDICATES: 11: l_shipdate <= '1998-12-01'
 partitions=1/1
 avgRowSize=70.0
+<<<<<<< HEAD
+=======
+dataCacheOptions={populate: false}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 cardinality: 600037902
 column statistics:
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE

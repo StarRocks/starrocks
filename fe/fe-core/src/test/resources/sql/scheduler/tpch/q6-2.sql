@@ -13,7 +13,11 @@ PLAN FRAGMENT 0(F01)
   DOP: 16
   INSTANCES
     INSTANCE(0-F01#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F00)
   DOP: 16
@@ -93,5 +97,9 @@ PLAN FRAGMENT 1
      tabletList=1004,1006,1008,1010,1012,1014,1016,1018,1020,1022 ...
      cardinality=1
      avgRowSize=36.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

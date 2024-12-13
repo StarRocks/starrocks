@@ -14,6 +14,7 @@
 package com.starrocks.connector.partitiontraits;
 
 import com.starrocks.catalog.OdpsPartitionKey;
+<<<<<<< HEAD
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 
@@ -24,6 +25,11 @@ public class OdpsPartitionTraits extends DefaultTraits {
         return ((OdpsTable) table).getDbName();
     }
 
+=======
+import com.starrocks.catalog.PartitionKey;
+
+public class OdpsPartitionTraits extends DefaultTraits {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean isSupportPCTRefresh() {
         return false;

@@ -318,7 +318,11 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
             List<Bucket> buckets = convertBuckets(histogramString.toString(), type, scala);
             Map<String, Long> mcv = convertMCV(histogramString.toString(), scala);
             histogramStatistics.put(fileName, new Histogram(buckets, mcv));
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     0, 0, fileName, StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.MIN, Maps.newHashMap()));
         } catch (Exception e) {
             e.printStackTrace();
@@ -377,7 +381,11 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
             ColumnStatistic columnStatistic = ColumnStatistic.buildFrom(getColumnStatistic(table, col)).
                     setHistogram(histogram).build();
             long rowCount = tableRowCount.getOrDefault(table.getName(), -1);
+<<<<<<< HEAD
             connectorTableColumnStats.add(new ConnectorTableColumnStats(columnStatistic, rowCount));
+=======
+            connectorTableColumnStats.add(new ConnectorTableColumnStats(columnStatistic, rowCount, "2024-01-01 00:00:00"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return connectorTableColumnStats;
     }

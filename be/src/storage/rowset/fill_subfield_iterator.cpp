@@ -40,4 +40,11 @@ Status FillSubfieldIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t
     return _column_iter->fetch_subfield_by_rowid(rowids, size, values);
 }
 
+<<<<<<< HEAD
+=======
+ordinal_t FillSubfieldIterator::num_rows() const {
+    return _column_iter->num_rows();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

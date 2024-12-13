@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # percentile_approx
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回第 p 个百分位点的近似值。
 

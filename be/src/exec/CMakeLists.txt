@@ -21,6 +21,10 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
 set(EXEC_FILES
+<<<<<<< HEAD
+=======
+    capture_version_node.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     data_sink.cpp
     empty_set_node.cpp
     exec_node.cpp
@@ -36,6 +40,11 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+<<<<<<< HEAD
+=======
+    write_combined_txn_log.cpp
+    multi_olap_table_sink.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     mysql_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
@@ -98,7 +107,11 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
+<<<<<<< HEAD
     mor_processor.cpp
+=======
+    cache_select_scanner.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -108,6 +121,11 @@ set(EXEC_FILES
     table_function_node.cpp
     schema_scanner.cpp
     schema_scan_node.cpp
+<<<<<<< HEAD
+=======
+    dictionary_cache_writer.cpp
+    arrow_flight_batch_reader.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
@@ -150,9 +168,17 @@ set(EXEC_FILES
     schema_scanner/schema_helper.cpp
     schema_scanner/schema_routine_load_jobs_scanner.cpp
     schema_scanner/schema_stream_loads_scanner.cpp
+<<<<<<< HEAD
     schema_scanner/sys_object_dependencies.cpp
     schema_scanner/sys_fe_locks.cpp
     schema_scanner/sys_fe_memory_usage.cpp
+=======
+    schema_scanner/schema_be_datacache_metrics_scanner.cpp
+    schema_scanner/sys_object_dependencies.cpp
+    schema_scanner/sys_fe_locks.cpp
+    schema_scanner/sys_fe_memory_usage.cpp
+    schema_scanner/schema_temp_tables_scanner.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -161,6 +187,10 @@ set(EXEC_FILES
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
+<<<<<<< HEAD
+=======
+    pipeline/capture_version_operator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
     pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
@@ -169,6 +199,13 @@ set(EXEC_FILES
     pipeline/exchange/local_exchange_sink_operator.cpp
     pipeline/exchange/local_exchange_source_operator.cpp
     pipeline/exchange/multi_cast_local_exchange.cpp
+<<<<<<< HEAD
+=======
+    pipeline/exchange/mem_limited_chunk_queue.cpp
+    pipeline/exchange/spillable_multi_cast_local_exchange.cpp
+    pipeline/exchange/multi_cast_local_exchange_sink_operator.cpp
+    pipeline/exchange/multi_cast_local_exchange_source_operator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline/exchange/sink_buffer.cpp
     pipeline/fragment_executor.cpp
     pipeline/operator.cpp
@@ -197,14 +234,26 @@ set(EXEC_FILES
     pipeline/scan/schema_chunk_source.cpp
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
+<<<<<<< HEAD
+=======
+    pipeline/sink/connector_sink_operator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
+<<<<<<< HEAD
+=======
+    pipeline/sink/blackhole_table_sink_operator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
+<<<<<<< HEAD
+=======
+    pipeline/sink/dictionary_cache_sink_operator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp
@@ -260,12 +309,25 @@ set(EXEC_FILES
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
+<<<<<<< HEAD
     pipeline/adaptive/lazy_instantiate_drivers_operator.cpp
     pipeline/adaptive/utils.cpp
+=======
+    pipeline/adaptive/utils.cpp
+    pipeline/adaptive/event.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline/chunk_accumulate_operator.cpp
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp
     pipeline/spill_process_channel.cpp
+<<<<<<< HEAD
+=======
+    pipeline/group_execution/execution_group.cpp
+    pipeline/group_execution/execution_group_builder.cpp
+    pipeline/group_execution/group_operator.cpp
+    workgroup/pipeline_executor_set.cpp
+    workgroup/pipeline_executor_set_manager.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
@@ -283,8 +345,18 @@ set(EXEC_FILES
     spill/dir_manager.cpp
     spill/serde.cpp
     spill/input_stream.cpp
+<<<<<<< HEAD
     spill/log_block_manager.cpp
     spill/operator_mem_resource_manager.cpp
+=======
+    spill/data_stream.cpp
+    spill/block_reader.cpp
+    spill/log_block_manager.cpp
+    spill/file_block_manager.cpp
+    spill/hybird_block_manager.cpp
+    spill/operator_mem_resource_manager.cpp
+    spill/query_spill_manager.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

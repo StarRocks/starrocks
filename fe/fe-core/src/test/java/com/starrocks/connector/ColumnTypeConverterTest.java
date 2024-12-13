@@ -27,6 +27,10 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.hive.common.type.HiveVarchar;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,6 +38,10 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.catalog.ScalarType.getOlapMaxVarcharLength;
 import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
@@ -112,7 +120,11 @@ public class ColumnTypeConverterTest {
         Type resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
+<<<<<<< HEAD
         itemType = ScalarType.createDefaultExternalTableString();
+=======
+        itemType = ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = fromHiveTypeToArrayType(typeStr);
@@ -166,7 +178,11 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.DATE);
+<<<<<<< HEAD
         valueType = ScalarType.createDefaultExternalTableString();
+=======
+        valueType = ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         mapType = new MapType(keyType, valueType);
         typeStr = "map<date,string>";
         resType = fromHiveTypeToMapType(typeStr);
@@ -237,7 +253,11 @@ public class ColumnTypeConverterTest {
             String typeStr = "struct<struct_test:int,c1:struct<c1:int,cc1:string>>";
             StructType c1 = new StructType(Lists.newArrayList(
                     new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+<<<<<<< HEAD
                     new StructField("cc1", ScalarType.createDefaultExternalTableString())
+=======
+                    new StructField("cc1", ScalarType.createDefaultCatalogString())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ));
             StructType root = new StructType(Lists.newArrayList(
                     new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
@@ -297,10 +317,22 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
+<<<<<<< HEAD
         Type stringType = ScalarType.createDefaultExternalTableString();
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, stringType);
+=======
+        Type stringType = ScalarType.createDefaultCatalogString();
+        typeStr = "string";
+        resType = ColumnTypeConverter.fromHiveType(typeStr);
+        Assert.assertEquals(resType, stringType);
+
+        Assert.assertEquals("varchar(65535)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("varchar(65534)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -322,7 +354,11 @@ public class ColumnTypeConverterTest {
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
+<<<<<<< HEAD
         Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultExternalTableString()));
+=======
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultCatalogString()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
@@ -339,7 +375,11 @@ public class ColumnTypeConverterTest {
         Schema structSchema = Schema.createRecord(fields);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+<<<<<<< HEAD
         StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+=======
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
@@ -363,13 +403,21 @@ public class ColumnTypeConverterTest {
         Schema mapSchema = Schema.createMap(structSchema);
 
         StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+<<<<<<< HEAD
         StructField structField2 = new StructField("field2", ScalarType.createDefaultExternalTableString());
+=======
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultCatalogString());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ArrayList<StructField> structFields = new ArrayList<>();
         structFields.add(structField1);
         structFields.add(structField2);
         StructType structType = new StructType(structFields);
 
+<<<<<<< HEAD
         MapType mapType = new MapType(ScalarType.createDefaultExternalTableString(), structType);
+=======
+        MapType mapType = new MapType(ScalarType.createDefaultCatalogString(), structType);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals(mapType, fromHudiType(mapSchema));
 
@@ -423,9 +471,13 @@ public class ColumnTypeConverterTest {
                 () -> toHiveType(ScalarType.createCharType(10000)));
 
         Assert.assertEquals("varchar(100)", toHiveType(ScalarType.createVarchar(100)));
+<<<<<<< HEAD
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Unsupported Hive type: VARCHAR(200000). Supported VARCHAR types: VARCHAR(<=65535)",
                 () -> toHiveType(ScalarType.createVarcharType(200000)));
+=======
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarcharType(200000)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
 

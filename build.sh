@@ -18,7 +18,11 @@
 
 ##############################################################
 # This script is used to compile StarRocks
+<<<<<<< HEAD
 # Usage:
+=======
+# Usage: 
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #    sh build.sh --help
 # Eg:
 #    sh build.sh                                      build all
@@ -67,7 +71,11 @@ if [[ $OSTYPE == darwin* ]] ; then
     PARALLEL=$(sysctl -n hw.ncpu)
     # We know for sure that build-thirdparty.sh will fail on darwin platform, so just skip the step.
 else
+<<<<<<< HEAD
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/include/llvm/InitializePasses.h ]]; then
+=======
+    if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
     fi
@@ -80,6 +88,10 @@ usage() {
 Usage: $0 <options>
   Optional options:
      --be               build Backend
+<<<<<<< HEAD
+=======
+     --format-lib       build StarRocks format library, only with shared-data mode cluster
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --hive-udf         build Hive UDF
@@ -95,15 +107,31 @@ Usage: $0 <options>
      --without-starcache
                         build Backend without starcache library
      -j                 build Backend parallel
+<<<<<<< HEAD
+=======
+     --output-compile-time 
+                        save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
+                        Turning this option on automatically disables ccache.
+     --without-tenann
+                        build without vector index tenann library
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      --with-compress-debug-symbol {ON|OFF}
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
                         build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
+<<<<<<< HEAD
      --without-avx2     build Backend without avx2(instruction)
+=======
+     --without-avx2     build Backend without avx2(instruction)    
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      -h,--help          Show this help message
   Eg.
     $0                                           build all
     $0 --be                                      build Backend without clean
+<<<<<<< HEAD
+=======
+    $0 --format-lib                              build StarRocks format library without clean
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     $0 --fe --clean                              clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
@@ -117,6 +145,10 @@ OPTS=$(getopt \
   -n $0 \
   -o 'hj:' \
   -l 'be' \
+<<<<<<< HEAD
+=======
+  -l 'format-lib' \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   -l 'fe' \
   -l 'spark-dpp' \
   -l 'hive-udf' \
@@ -130,6 +162,11 @@ OPTS=$(getopt \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
+<<<<<<< HEAD
+=======
+  -l 'output-compile-time' \
+  -l 'without-tenann' \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
@@ -143,6 +180,10 @@ fi
 eval set -- "$OPTS"
 
 BUILD_BE=
+<<<<<<< HEAD
+=======
+BUILD_FORMAT_LIB=
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 BUILD_FE=
 BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
@@ -155,11 +196,20 @@ WITH_COMPRESS=ON
 WITH_STARCACHE=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
+<<<<<<< HEAD
+=======
+OUTPUT_COMPILE_TIME=OFF
+WITH_TENANN=ON
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 WITH_RELATIVE_SRC_PATH=ON
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
 MSG_BE="Backend"
+<<<<<<< HEAD
+=======
+MSG_FORMAT_LIB="Format Lib"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -170,10 +220,24 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+<<<<<<< HEAD
 if [[ -z ${JEMALLOC_DEBUG} ]]; then
     JEMALLOC_DEBUG=OFF
 fi
 if [[ -z ${CCACHE} ]]; then
+=======
+if [[ -z ${USE_BMI_2} ]]; then
+    USE_BMI_2=ON
+fi
+if [[ -z ${JEMALLOC_DEBUG} ]]; then
+    JEMALLOC_DEBUG=OFF
+fi
+if [[ -z ${ENABLE_JIT} ]]; then
+    ENABLE_JIT=ON
+fi
+
+if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CCACHE=ccache
 fi
 
@@ -188,6 +252,12 @@ if [ -e /proc/cpuinfo ] ; then
     if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
     fi
+<<<<<<< HEAD
+=======
+    if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
+        USE_BMI_2=OFF
+    fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 fi
 
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
@@ -200,24 +270,44 @@ fi
 
 HELP=0
 if [ $# == 1 ] ; then
+<<<<<<< HEAD
     # default
+=======
+    # default. `sh build.sh``
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     BUILD_HIVE_UDF=1
+<<<<<<< HEAD
     CLEAN=0
     RUN_UT=0
 elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
     # default
+=======
+    BUILD_FORMAT_LIB=0
+    CLEAN=0
+    RUN_UT=0
+elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
+    # default. `sh build.sh -j 32`
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     BUILD_HIVE_UDF=1
+<<<<<<< HEAD
+=======
+    BUILD_FORMAT_LIB=0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CLEAN=0
     RUN_UT=0
     PARALLEL=$2
 else
     BUILD_BE=0
+<<<<<<< HEAD
+=======
+    BUILD_FORMAT_LIB=0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     BUILD_FE=0
     BUILD_SPARK_DPP=0
     BUILD_HIVE_UDF=0
@@ -226,6 +316,10 @@ else
     while true; do
         case "$1" in
             --be) BUILD_BE=1 ; shift ;;
+<<<<<<< HEAD
+=======
+            --format-lib) BUILD_FORMAT_LIB=1 ; shift ;;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             --fe) BUILD_FE=1 ; shift ;;
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
@@ -238,6 +332,11 @@ else
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
+<<<<<<< HEAD
+=======
+            --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
+            --without-tenann) WITH_TENANN=OFF; shift ;;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             --without-avx2) USE_AVX2=OFF; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
@@ -255,6 +354,7 @@ if [[ ${HELP} -eq 1 ]]; then
     exit
 fi
 
+<<<<<<< HEAD
 if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
     echo "--clean can not be specified without --fe or --be or --spark-dpp or --hive-udf"
     exit 1
@@ -283,6 +383,48 @@ echo "Get params:
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
+=======
+if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FORMAT_LIB} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
+    echo "--clean can not be specified without --fe or --be or --format-lib or --spark-dpp or --hive-udf"
+    exit 1
+fi
+if [ ${BUILD_BE} -eq 1 ] && [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    echo "--format-lib can not be specified with --be"
+    exit 1
+fi
+if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    echo "do not build java extendsions when build format-lib."
+    BUILD_JAVA_EXT=OFF
+fi
+
+echo "Get params:
+    BUILD_BE                    -- $BUILD_BE
+    BUILD_FORMAT_LIB            -- $BUILD_FORMAT_LIB
+    BE_CMAKE_TYPE               -- $BUILD_TYPE
+    BUILD_FE                    -- $BUILD_FE
+    BUILD_SPARK_DPP             -- $BUILD_SPARK_DPP
+    BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
+    CCACHE                      -- ${CCACHE}
+    CLEAN                       -- $CLEAN
+    RUN_UT                      -- $RUN_UT
+    WITH_GCOV                   -- $WITH_GCOV
+    WITH_BENCH                  -- $WITH_BENCH
+    WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
+    WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+    WITH_STARCACHE              -- $WITH_STARCACHE
+    ENABLE_SHARED_DATA          -- $USE_STAROS
+    USE_AVX2                    -- $USE_AVX2
+    USE_AVX512                  -- $USE_AVX512
+    USE_SSE4_2                  -- $USE_SSE4_2
+    USE_BMI_2                   -- $USE_BMI_2
+    JEMALLOC_DEBUG              -- $JEMALLOC_DEBUG
+    PARALLEL                    -- $PARALLEL
+    ENABLE_QUERY_DEBUG_TRACE    -- $ENABLE_QUERY_DEBUG_TRACE
+    ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
+    BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
+    OUTPUT_COMPILE_TIME         -- $OUTPUT_COMPILE_TIME
+    WITH_TENANN                 -- $WITH_TENANN
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     WITH_RELATIVE_SRC_PATH      -- $WITH_RELATIVE_SRC_PATH
 "
 
@@ -320,16 +462,31 @@ cd ${STARROCKS_HOME}
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
+<<<<<<< HEAD
+=======
+    WITH_TENANN=OFF
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 else
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server/
 fi
 
 # Clean and build Backend
+<<<<<<< HEAD
 if [ ${BUILD_BE} -eq 1 ] ; then
+=======
+if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if ! ${CMAKE_CMD} --version; then
         echo "Error: cmake is not found"
         exit 1
     fi
+<<<<<<< HEAD
+=======
+    # When build starrocks format lib, USE_STAROS must be ON
+    if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+        USE_STAROS=ON
+    fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     CMAKE_BUILD_TYPE=$BUILD_TYPE
     echo "Build Backend: ${CMAKE_BUILD_TYPE}"
@@ -337,6 +494,12 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     if [ "${WITH_GCOV}" = "ON" ]; then
         CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_gcov
     fi
+<<<<<<< HEAD
+=======
+    if [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
+        CMAKE_BUILD_DIR=${STARROCKS_HOME}/be/build_${CMAKE_BUILD_TYPE}_format-lib
+    fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if [ ${CLEAN} -eq 1 ]; then
         rm -rf $CMAKE_BUILD_DIR
@@ -355,20 +518,42 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       export STARLET_INSTALL_DIR
     fi
     
+<<<<<<< HEAD
+=======
+    if [ "${OUTPUT_COMPILE_TIME}" == "ON" ]; then
+        rm -f ${ROOT}/compile_times.txt
+        CXX_COMPILER_LAUNCHER=${ROOT}/build-support/compile_time.sh
+    else
+        CXX_COMPILER_LAUNCHER=${CCACHE}
+    fi
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
         # this option cannot work with clang-14
         WITH_COMPRESS=OFF
     fi
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
                   -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
+<<<<<<< HEAD
                   -DCMAKE_CXX_COMPILER_LAUNCHER=${CCACHE}                  \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
                   -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG  \
+=======
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=${CXX_COMPILER_LAUNCHER} \
+                  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
+                  -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
+                  -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
+                  -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
+                  -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG                      \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
@@ -376,8 +561,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
+<<<<<<< HEAD
                   -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
+=======
+                  -DBUILD_BE=${BUILD_BE}                                \
+                  -DWITH_TENANN=${WITH_TENANN}                          \
+                  -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT}                  \
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON                    \
+                  -DBUILD_FORMAT_LIB=${BUILD_FORMAT_LIB}                \
+                  -DWITH_RELATIVE_SRC_PATH=${WITH_RELATIVE_SRC_PATH}    \
+                  ..
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     time ${BUILD_SYSTEM} -j${PARALLEL}
     if [ "${WITH_CLANG_TIDY}" == "ON" ];then
@@ -456,8 +651,12 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
+<<<<<<< HEAD
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
+=======
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler ${STARROCKS_OUTPUT}/fe/bin/
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MSG="${MSG} √ ${MSG_FE}"
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -468,9 +667,37 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
     fi
 fi
 
+<<<<<<< HEAD
 if [ ${BUILD_BE} -eq 1 ]; then
     rm -rf ${STARROCKS_OUTPUT}/be/lib/*
     mkdir -p ${STARROCKS_OUTPUT}/be/lib/jni-packages
+=======
+if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
+    rm -rf ${STARROCKS_OUTPUT}/format-lib/*
+    mkdir -p ${STARROCKS_OUTPUT}/format-lib
+    cp -r ${STARROCKS_HOME}/be/output/format-lib/* ${STARROCKS_OUTPUT}/format-lib/
+    # format $BUILD_TYPE to lower case
+    ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
+    if [ "${ibuildtype}" == "release" ] ; then
+        pushd ${STARROCKS_OUTPUT}/format-lib/ &>/dev/null
+        FORMAT_LIB=libstarrocks_format.so
+        FORMAT_LIB_DEBUGINFO=libstarrocks_format.debuginfo
+        echo "Split $FORMAT_LIB debug symbol to $FORMAT_LIB_DEBUGINFO ..."
+        # strip be binary
+        # if eu-strip is available, can replace following three lines into `eu-strip -g -f starrocks_be.debuginfo starrocks_be`
+        objcopy --only-keep-debug $FORMAT_LIB $FORMAT_LIB_DEBUGINFO
+        strip --strip-debug $FORMAT_LIB
+        objcopy --add-gnu-debuglink=$FORMAT_LIB_DEBUGINFO $FORMAT_LIB
+        popd &>/dev/null
+    fi
+    MSG="${MSG} √ ${MSG_FORMAT_LIB}"
+fi
+
+if [ ${BUILD_BE} -eq 1 ]; then
+    rm -rf ${STARROCKS_OUTPUT}/be/lib/*
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/jni-packages
+    mkdir -p ${STARROCKS_OUTPUT}/be/lib/py-packages
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
@@ -507,6 +734,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         popd &>/dev/null
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
+<<<<<<< HEAD
     cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -525,10 +753,41 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     cp -r -p ${STARROCKS_HOME}/java-extensions/common-runtime/target/common-runtime-lib ${STARROCKS_OUTPUT}/be/lib/
+=======
+
+    if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
+        cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/jni-connector/target/starrocks-jni-connector.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/hudi-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/starrocks-hudi-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/starrocks-hudi-reader.jar ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/odps-reader/target/odps-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/odps-reader/target/starrocks-odps-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/odps-reader/target/starrocks-odps-reader.jar ${STARROCKS_OUTPUT}/be/lib/odps-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/iceberg-metadata-reader/target/iceberg-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/iceberg-metadata-reader/target/starrocks-iceberg-metadata-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/iceberg-metadata-reader/target/starrocks-iceberg-metadata-reader.jar ${STARROCKS_OUTPUT}/be/lib/iceberg-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/common-runtime/target/common-runtime-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/kudu-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
+    fi
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
+<<<<<<< HEAD
     if [ -d ${STARROCKS_THIRDPARTY}/installed/gcs_connector ]; then
       cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     fi
@@ -551,6 +810,18 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/iceberg-reader-lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib/zookeeper-3.8.3.jar
+=======
+    cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
+
+    # remove zookeeper
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
+
+    cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     MSG="${MSG} √ ${MSG_BE}"
 fi

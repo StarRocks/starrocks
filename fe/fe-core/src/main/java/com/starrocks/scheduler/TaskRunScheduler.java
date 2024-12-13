@@ -44,6 +44,11 @@ public class TaskRunScheduler {
     @SerializedName("runningTaskRunMap")
     private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
 
+<<<<<<< HEAD
+=======
+    @SerializedName("runningSyncTaskRunMap")
+    private final Map<Long, TaskRun> runningSyncTaskRunMap = Maps.newConcurrentMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ////////// pending task run map //////////
     /**
@@ -199,6 +204,24 @@ public class TaskRunScheduler {
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    //////////// sync running task run map ////////////
+    public void addSyncRunningTaskRun(TaskRun taskRun) {
+        if (taskRun == null) {
+            return;
+        }
+        runningSyncTaskRunMap.put(taskRun.getTaskId(), taskRun);
+    }
+
+    public TaskRun removeSyncRunningTaskRun(TaskRun taskRun) {
+        if (taskRun == null) {
+            return null;
+        }
+        return runningSyncTaskRunMap.remove(taskRun.getTaskId());
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String toString() {
         return GsonUtils.GSON.toJson(this);

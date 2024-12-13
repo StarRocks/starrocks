@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     cntrycode,
@@ -36,6 +37,8 @@ group by
     cntrycode
 order by
     cntrycode ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[29: substring ASC NULLS FIRST]])
     TOP-N (order by [[29: substring ASC NULLS FIRST]])
@@ -49,9 +52,17 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                                 ASSERT LE 1
                                     AGGREGATE ([GLOBAL] aggregate [{99: sum=sum(99: sum), 100: count=sum(100: count)}] group by [[]] having [null]
                                         EXCHANGE GATHER
+<<<<<<< HEAD
                                             AGGREGATE ([LOCAL] aggregate [{99: sum=sum(49: c_sum), 100: count=sum(48: c_count)}] group by [[]] having [null]
                                                 SCAN (mv[customer_agg_mv1] columns[46: c_acctbal, 47: substring_phone, 48: c_count, 49: c_sum] predicate[46: c_acctbal > 0.00 AND 47: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
                         EXCHANGE SHUFFLE[21]
                             SCAN (table[orders] columns[21: o_custkey] predicate[null])
 [end]
 
+=======
+                                            AGGREGATE ([LOCAL] aggregate [{99: sum=sum(88: c_sum), 100: count=sum(87: c_count)}] group by [[]] having [null]
+                                                SCAN (mv[customer_agg_mv1] columns[85: c_acctbal, 86: substring_phone, 87: c_count, 88: c_sum] predicate[85: c_acctbal > 0.00 AND 86: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
+                        EXCHANGE SHUFFLE[21]
+                            SCAN (table[orders] columns[21: o_custkey] predicate[null])
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

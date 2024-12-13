@@ -170,6 +170,18 @@ public class ArrayType extends Type {
     public String toMysqlColumnTypeString() {
         return toSql();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "array<...>";
+        }
+        return String.format("array<%s>", itemType.toTypeString(depth + 1));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public int getMaxUniqueId() {
         return itemType.getMaxUniqueId();

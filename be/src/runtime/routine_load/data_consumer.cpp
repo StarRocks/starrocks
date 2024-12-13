@@ -125,7 +125,11 @@ Status KafkaDataConsumer::init(StreamLoadContext* ctx) {
             Status st = ctx->exec_env()->small_file_mgr()->get_file(file_id, parts[2], &file_path);
             if (!st.ok()) {
                 std::stringstream ss;
+<<<<<<< HEAD
                 ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.get_error_msg();
+=======
+                ss << "PAUSE: failed to get file for config: " << item.first << ", error: " << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Status::InternalError(ss.str());
             }
             RETURN_IF_ERROR(set_conf(item.first, file_path));

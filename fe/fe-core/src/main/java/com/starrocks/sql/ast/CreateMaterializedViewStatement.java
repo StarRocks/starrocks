@@ -16,13 +16,22 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
+=======
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PartitionType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.plan.ExecPlan;
@@ -50,7 +59,16 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private boolean ifNotExists;
     private String comment;
     private RefreshSchemeClause refreshSchemeDesc;
+<<<<<<< HEAD
     private ExpressionPartitionDesc expressionPartitionDesc;
+=======
+
+    // partition by clause which may be list or range partition expr.
+    private final List<Expr> partitionByExprs;
+    // partition type of the mv which is deduced by its referred base table.
+    private PartitionType partitionType;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private Map<String, String> properties;
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
@@ -72,9 +90,16 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
     private List<Index> mvIndexes = Lists.newArrayList();
+<<<<<<< HEAD
     private Column partitionColumn;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
+=======
+    // MV's output columns that are referred by mv's partition expressions
+    private List<Column> partitionColumns;
+    // Ref base table partition expression referred by mv's partition by expressions
+    private List<Expr> partitionRefTableExprs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Materialized view's output columns may be different from defined query's output columns.
     // Record the indexes based on materialized view's column output.
@@ -83,13 +108,22 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     //  queryOutputIndexes  :  1, 0, 2
     // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
     private List<Integer> queryOutputIndices = Lists.newArrayList();
+<<<<<<< HEAD
+=======
+    // Generated partition columns for mv's partition by expressions, partition expression index to generated column.
+    private Map<Integer, Column> generatedPartitionCols = Maps.newHashMap();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public CreateMaterializedViewStatement(TableName tableName, boolean ifNotExists,
                                            List<ColWithComment> colWithComments,
                                            List<IndexDef> indexDefs,
                                            String comment,
                                            RefreshSchemeClause refreshSchemeDesc,
+<<<<<<< HEAD
                                            ExpressionPartitionDesc expressionPartitionDesc,
+=======
+                                           List<Expr> partitionByExprs,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                            DistributionDesc distributionDesc, List<String> sortKeys,
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
@@ -102,7 +136,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.ifNotExists = ifNotExists;
         this.comment = comment;
         this.refreshSchemeDesc = refreshSchemeDesc;
+<<<<<<< HEAD
         this.expressionPartitionDesc = expressionPartitionDesc;
+=======
+        this.partitionByExprs = partitionByExprs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.distributionDesc = distributionDesc;
         this.sortKeys = sortKeys;
         this.properties = properties;
@@ -150,12 +188,32 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.refreshSchemeDesc = refreshSchemeDesc;
     }
 
+<<<<<<< HEAD
     public ExpressionPartitionDesc getPartitionExpDesc() {
         return expressionPartitionDesc;
     }
 
     public void setPartitionExpDesc(ExpressionPartitionDesc expressionPartitionDesc) {
         this.expressionPartitionDesc = expressionPartitionDesc;
+=======
+    /**
+     * Get partition by expr of the mv
+     */
+    public List<Expr> getPartitionByExprs() {
+        return partitionByExprs;
+    }
+
+    /**
+     * Get partition type of the mv
+     * @return
+     */
+    public PartitionType getPartitionType() {
+        return partitionType;
+    }
+
+    public void setPartitionType(PartitionType partitionType) {
+        this.partitionType = partitionType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setKeysType(KeysType keysType) {
@@ -246,6 +304,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.baseTableInfos = baseTableInfos;
     }
 
+<<<<<<< HEAD
     public Column getPartitionColumn() {
         return partitionColumn;
     }
@@ -260,6 +319,22 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setPartitionRefTableExpr(Expr partitionRefTableExpr) {
         this.partitionRefTableExpr = partitionRefTableExpr;
+=======
+    public List<Column> getPartitionColumns() {
+        return partitionColumns;
+    }
+
+    public void setPartitionColumns(List<Column> partitionColumns) {
+        this.partitionColumns = partitionColumns;
+    }
+
+    public List<Expr> getPartitionRefTableExpr() {
+        return partitionRefTableExprs;
+    }
+
+    public void setPartitionRefTableExpr(List<Expr> partitionRefTableExprs) {
+        this.partitionRefTableExprs = partitionRefTableExprs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public ExecPlan getMaintenancePlan() {
@@ -283,6 +358,13 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.columnRefFactory = columnRefFactory;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Integer, Column> getGeneratedPartitionCols() {
+        return generatedPartitionCols;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateMaterializedViewStatement(this, context);

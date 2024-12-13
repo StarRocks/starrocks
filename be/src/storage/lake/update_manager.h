@@ -30,6 +30,10 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+class Cache;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class TxnLogPB_OpWrite;
 
 namespace lake {
@@ -41,6 +45,7 @@ class UpdateManager;
 struct AutoIncrementPartialUpdateState;
 using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
 
+<<<<<<< HEAD
 class LakeDelvecLoader : public DelvecLoader {
 public:
     LakeDelvecLoader(UpdateManager* update_mgr, const MetaFileBuilder* pk_builder, bool fill_cache)
@@ -51,6 +56,21 @@ private:
     UpdateManager* _update_mgr = nullptr;
     const MetaFileBuilder* _pk_builder = nullptr;
     bool _fill_cache = false;
+=======
+class PersistentIndexBlockCache {
+public:
+    explicit PersistentIndexBlockCache(MemTracker* mem_tracker, int64_t cache_limit);
+
+    void update_memory_usage();
+
+    Cache* cache() { return _cache.get(); }
+
+private:
+    std::mutex _mutex;
+    size_t _memory_usage{0};
+    std::unique_ptr<Cache> _cache;
+    std::unique_ptr<MemTracker> _mem_tracker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 // This is a converter between rowset segment id and segment file info. We need this converter
@@ -63,15 +83,28 @@ public:
                            const std::map<int, FileInfo>& replace_segments);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
+<<<<<<< HEAD
+=======
+    const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     // From rowset segment id to segment file
     std::unordered_map<uint32_t, FileInfo> _rssid_to_file_info;
+<<<<<<< HEAD
+=======
+    // From rowset segment id to rowset id
+    std::unordered_map<uint32_t, uint32_t> _rssid_to_rowid;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class UpdateManager {
 public:
+<<<<<<< HEAD
     UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker);
+=======
+    UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
@@ -79,9 +112,19 @@ public:
     int64_t get_cache_expire_ms() const { return _cache_expire_ms; }
 
     // publish primary key tablet, update primary index and delvec, then update meta file
+<<<<<<< HEAD
     Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadata& metadata,
                                       Tablet* tablet, IndexEntry* index_entry, MetaFileBuilder* builder,
                                       int64_t base_version);
+=======
+    Status publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                      const TabletMetadataPtr& metadata, Tablet* tablet, IndexEntry* index_entry,
+                                      MetaFileBuilder* builder, int64_t base_version);
+
+    Status publish_column_mode_partial_update(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                              const TabletMetadataPtr& metadata, Tablet* tablet,
+                                              MetaFileBuilder* builder, int64_t base_version);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
@@ -109,7 +152,11 @@ public:
     size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
 
     Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
+<<<<<<< HEAD
                                       const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
+=======
+                                      const TabletMetadata& metadata, const Tablet& tablet, IndexEntry* index_entry,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                       MetaFileBuilder* builder, int64_t base_version);
 
     Status light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
@@ -161,9 +208,12 @@ public:
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
 
+<<<<<<< HEAD
     // commit primary index, only take affect when it is local persistent index
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
     // remove index entry if it isn't nullptr
@@ -185,6 +235,13 @@ public:
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
 
+<<<<<<< HEAD
+=======
+    Status execute_index_major_compaction(const TabletMetadata& metadata, TxnLogPB* txn_log);
+
+    PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
 
 private:
@@ -227,7 +284,11 @@ private:
     // compaction cache
     DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
+<<<<<<< HEAD
     LocationProvider* _location_provider = nullptr;
+=======
+    std::shared_ptr<LocationProvider> _location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TabletManager* _tablet_mgr = nullptr;
 
     // memory checkers
@@ -237,6 +298,11 @@ private:
     std::unique_ptr<MemTracker> _compaction_state_mem_tracker;
 
     std::vector<PkIndexShard> _pk_index_shards;
+<<<<<<< HEAD
+=======
+
+    std::unique_ptr<PersistentIndexBlockCache> _block_cache;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace lake

@@ -69,10 +69,17 @@ public:
     void execute();
     void close();
     Status register_non_pipeline_load(const TUniqueId& fragment_instance_id);
+<<<<<<< HEAD
     Status unregister_non_pipeline_load(const TUniqueId& fragment_instance_id);
 
     Status register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
     Status unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
+=======
+    void unregister_non_pipeline_load(const TUniqueId& fragment_instance_id);
+
+    Status register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
+    void unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     void _start_report_profile();

@@ -14,6 +14,10 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -135,6 +139,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(`order_id`) BUCKETS 9\n" +
                 "PROPERTIES (\n" +
+<<<<<<< HEAD
                 "\"dynamic_partition.enable\" = \"true\",\n" +
                 "\"dynamic_partition.time_unit\" = \"HOUR\",\n" +
                 "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
@@ -142,6 +147,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "\"dynamic_partition.end\" = \"2\",\n" +
                 "\"dynamic_partition.prefix\" = \"p\",\n" +
                 "\"dynamic_partition.buckets\" = \"9\"," +
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "\"replication_num\" = \"1\"" +
                 ");";
         starRocksAssert.withTable(tableSQL);
@@ -221,7 +228,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testDateTruncPartitionColumnExpr() throws Exception {
+=======
+    public void testDateTruncPartitionColumnExpr1() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
                 "  `order_id` bigint(20) NOT NULL DEFAULT \"-1\" COMMENT \"\",\n" +
                 "  `dt` datetime NOT NULL DEFAULT \"1996-01-01 00:00:00\" COMMENT \"\",\n" +
@@ -233,6 +244,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "PARTITION p2023041017 VALUES [(\"2023-04-10 17:00:00\"), (\"2023-04-10 18:00:00\")),\n" +
                 "PARTITION p2023041021 VALUES [(\"2023-04-10 21:00:00\"), (\"2023-04-10 22:00:00\"))\n" +
                 ")\n" +
+<<<<<<< HEAD
                 "DISTRIBUTED BY HASH(`order_id`) BUCKETS 9\n" +
                 "PROPERTIES (\n" +
                 "\"dynamic_partition.enable\" = \"true\",\n" +
@@ -247,6 +259,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         starRocksAssert.withTable(tableSQL);
         String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
+=======
+                "DISTRIBUTED BY HASH(`order_id`)";
+        starRocksAssert.withTable(tableSQL);
+        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "PARTITION BY ds \n" +
                 "DISTRIBUTED BY RANDOM \n" +
                 "AS SELECT \n" +
@@ -265,6 +282,10 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .match("test_partition_expr_mv1");
         }
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -274,6 +295,21 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .nonMatch("test_partition_expr_mv1");
         }
+<<<<<<< HEAD
+=======
+        connectContext.getSessionVariable().setEnableMaterializedViewTimeSeriesPushDownRewrite(true);
+
+        {
+            UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
+            sql("SELECT \n" +
+                    "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                    "date_trunc('minute', `dt`) AS ds \n" +
+                    "FROM `test_partition_expr_tbl1`\n" +
+                    "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
+                    "group by ds")
+                    .match("test_partition_expr_mv1");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
         starRocksAssert.dropTable("test_partition_expr_tbl1");
     }
@@ -370,6 +406,10 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "group by ds")
                     .nonMatch("test_partition_expr_mv1");
         }
+<<<<<<< HEAD
+=======
+        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -377,7 +417,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
                     "group by ds")
+<<<<<<< HEAD
                     .nonMatch("test_partition_expr_mv1");
+=======
+                    .match("test_partition_expr_mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
@@ -387,7 +431,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
+<<<<<<< HEAD
                     .nonMatch("test_partition_expr_mv1");
+=======
+                    .match("test_partition_expr_mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
@@ -425,6 +473,10 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     .nonMatch("test_partition_expr_mv1");
         }
 
+<<<<<<< HEAD
+=======
+        UtFrameUtils.mockLogicalScanIsEmptyOutputRows(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             sql("SELECT \n" +
                     "count(DISTINCT `order_id`) AS `order_num`, \n" +
@@ -432,7 +484,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE date_trunc('day', `dt`) BETWEEN '2023-04-01' AND '2023-05-01'\n" +
                     "group by ds")
+<<<<<<< HEAD
                     .nonMatch("test_partition_expr_mv1");
+=======
+                    .match("test_partition_expr_mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
@@ -442,7 +498,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                     "FROM `test_partition_expr_tbl1`\n" +
                     "WHERE `dt` BETWEEN '2023-04-11' AND '2023-04-12'\n" +
                     "group by ds")
+<<<<<<< HEAD
                     .nonMatch("test_partition_expr_mv1");
+=======
+                    .match("test_partition_expr_mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
@@ -511,6 +571,25 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 String query = "select t1a, sum(t1b + 1) as total from test.test_all_type group by t1a;";
                 sql(query).nonMatch("mv0");
             }
+<<<<<<< HEAD
+=======
+            {
+                String query = "select t1a, max(t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, max(concat(t1b,'.')), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, min(substr(t1b,1)), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+            {
+                String query = "select t1a, count(distinct t1b), sum(t1f) as total from test.test_all_type group by t1a;";
+                sql(query).match("mv0");
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
     }
 
@@ -527,6 +606,112 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testRewriteWithEliminateJoinsBasic1() {
+        starRocksAssert.withMaterializedView("create materialized view mv0" +
+                " distributed by random" +
+                " as select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;", () -> {
+            {
+                String query = "select t1.t1b, sum(t1f) as total from test.test_all_type t1 " +
+                        "join (select 'k1' as k1) t2 on t1.t1a=t2.k1 group by t1.t1b;";
+                sql(query).match("mv0")
+                        .contains("  1:Project\n" +
+                                "  |  <slot 2> : 16: t1b\n" +
+                                "  |  <slot 13> : 15: total\n" +
+                                "  |  \n" +
+                                "  0:OlapScanNode\n" +
+                                "     TABLE: mv0\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: 14: t1a = 'k1'");
+            }
+            {
+                String query = "select t2.k1, t1.t1b, sum(t1f) as total from test.test_all_type t1 " +
+                        "join (select 'k1' as k1) t2 on true group by t2.k1, t1.t1b;";
+                sql(query).match("mv0")
+                        .contains("  1:AGGREGATE (update serialize)\n" +
+                                "  |  STREAMING\n" +
+                                "  |  output: sum(15: total)\n" +
+                                "  |  group by: 16: t1b\n" +
+                                "  |  \n" +
+                                "  0:OlapScanNode\n" +
+                                "     TABLE: mv0");
+            }
+        });
+    }
+
+    @Test
+    public void testRewriteWithEliminateJoinsBasic2() throws Exception {
+       starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
+               "  `k1` date,\n" +
+               "  `k2` decimal64(18, 2),\n" +
+               "  `k3` varchar(255),\n" +
+               "  `v1` varchar(255)\n" +
+               ") ENGINE=OLAP \n" +
+               "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+               "DISTRIBUTED BY RANDOM\n" +
+               "PROPERTIES (\n" +
+               "\"replication_num\" = \"1\"\n" +
+               ");");
+       starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` \n" +
+               "DISTRIBUTED BY RANDOM\n" +
+               "REFRESH ASYNC\n" +
+               "PROPERTIES (\n" +
+               "\"replication_num\" = \"1\"\n" +
+               ")\n" +
+               "AS SELECT k1, k2, k3, sum(v1) from tbl1 group by k1, k2, k3");
+        {
+            String sql = "with cte as(" +
+                    "    select " +
+                    "    '2024-07-20' as date1," +
+                    "    date_add('2024-07-20', interval -1 month) AS start_date," +
+                    "    date_add('2024-07-20', interval 1 month) AS end_date," +
+                    "    'k3' as k3" +
+                    ") select " +
+                    "    cte.date1, cte.start_date, cte.end_date, t1.k1, t1.k2, t1.k3, sum(t1.v1) " +
+                    "    from cte join tbl1 t1 " +
+                    "    on cte.k3 = t1.k3 " +
+                    "    group by cte.date1, cte.start_date, cte.end_date, t1.k1, t1.k2, t1.k3";
+            sql(sql).contains("mv1")
+                    .contains("  1:Project\n" +
+                            "  |  <slot 6> : 11: k1\n" +
+                            "  |  <slot 7> : 12: k2\n" +
+                            "  |  <slot 8> : 13: k3\n" +
+                            "  |  <slot 10> : '2024-07-20'\n" +
+                            "  |  <slot 11> : '2024-06-20 00:00:00'\n" +
+                            "  |  <slot 12> : '2024-08-20 00:00:00'\n" +
+                            "  |  <slot 13> : 14: sum(v1)\n" +
+                            "  |  \n" +
+                            "  0:OlapScanNode\n" +
+                            "     TABLE: mv1");
+        }
+
+        {
+            String sql = "with cte as(" +
+                    "    select " +
+                    "    '2024-07-20' as date1," +
+                    "    date_add('2024-07-20', interval -1 month) AS start_date," +
+                    "    date_add('2024-07-20', interval 1 month) AS end_date," +
+                    "    'k3' as k3" +
+                    ") select " +
+                    "    cte.date1, cte.start_date, cte.end_date, t1.k1, sum(t1.v1) " +
+                    "    from cte join tbl1 t1 " +
+                    "    on cte.k3 = t1.k3 " +
+                    "    group by cte.date1, cte.start_date, cte.end_date, t1.k1";
+            sql(sql).contains("mv1")
+                    .contains("1:Project\n" +
+                            "|  <slot 14> : col$: k1\n" +
+                            "|  <slot 17> : col$: sum(v1)\n" +
+                            "|\n" +
+                            "0:OlapScanNode\n" +
+                            "TABLE: mv1");
+        }
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tbl1");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testWrongMVRewrite() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `tbl1` (\n" +
                 "  `k1` date,\n" +

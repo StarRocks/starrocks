@@ -63,4 +63,23 @@ public class IcebergGlueCatalogTest {
                 "glue_native_catalog", new Configuration(), icebergProperties);
         Assert.assertTrue(icebergGlueCatalog.tableExists("db1", "tbl1"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRenameTable(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+        icebergGlueCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergGlueCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # regexp_replace
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 对字符串 str 进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。
 

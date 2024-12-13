@@ -16,6 +16,10 @@
 
 #include <atomic>
 
+<<<<<<< HEAD
+=======
+#include "block_cache/disk_space_monitor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "block_cache/kv_cache.h"
 #include "common/status.h"
 
@@ -29,6 +33,11 @@ public:
     // Return a singleton block cache instance
     static BlockCache* instance();
 
+<<<<<<< HEAD
+=======
+    ~BlockCache();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Init the block cache instance
     Status init(const CacheOptions& options);
 
@@ -56,15 +65,30 @@ public:
     // function, the corresponding pointer will never be freed by the cache system.
     Status read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options = nullptr);
 
+<<<<<<< HEAD
+=======
+    bool exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
 
     // Update the datacache memory quota.
+<<<<<<< HEAD
     Status update_mem_quota(size_t quota_bytes);
+=======
+    Status update_mem_quota(size_t quota_bytes, bool flush_to_disk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Update the datacache disk space infomation, such as disk quota or disk path.
     Status update_disk_spaces(const std::vector<DirSpace>& spaces);
 
+<<<<<<< HEAD
+=======
+    // Adjust the disk spaces, the space quota will be adjusted based on current disk usage before updating.
+    Status adjust_disk_spaces(const std::vector<DirSpace>& spaces);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void record_read_remote(size_t size, int64_t lateny_us);
 
     void record_read_cache(size_t size, int64_t lateny_us);
@@ -84,8 +108,17 @@ public:
 
     bool available() const { return is_initialized() && (has_mem_cache() || has_disk_cache()); }
 
+<<<<<<< HEAD
     DataCacheEngineType engine_type();
 
+=======
+    void disk_spaces(std::vector<DirSpace>* spaces);
+
+    DataCacheEngineType engine_type();
+
+    std::shared_ptr<starcache::StarCache> starcache_instance() { return _kv_cache->starcache_instance(); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static const size_t MAX_BLOCK_SIZE;
 
 private:
@@ -95,7 +128,13 @@ private:
     void _refresh_quota();
 
     size_t _block_size = 0;
+<<<<<<< HEAD
     std::unique_ptr<KvCache> _kv_cache;
+=======
+    std::shared_ptr<KvCache> _kv_cache;
+    std::unique_ptr<DiskSpaceMonitor> _disk_space_monitor;
+    std::vector<std::string> _disk_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::atomic<bool> _initialized = false;
     std::atomic<size_t> _mem_quota = 0;
     std::atomic<size_t> _disk_quota = 0;

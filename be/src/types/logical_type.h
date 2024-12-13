@@ -122,7 +122,11 @@ inline bool is_float_type(LogicalType type) {
     return type == TYPE_FLOAT || type == TYPE_DOUBLE;
 }
 
+<<<<<<< HEAD
 inline bool is_string_type(LogicalType type) {
+=======
+constexpr bool is_string_type(LogicalType type) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
 
@@ -162,6 +166,21 @@ inline bool is_scalar_field_type(LogicalType type) {
     }
 }
 
+<<<<<<< HEAD
+=======
+inline bool is_semi_type(LogicalType type) {
+    switch (type) {
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_JSON:
+        return true;
+    default:
+        return false;
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 inline bool is_complex_metric_type(LogicalType type) {
     switch (type) {
     case TYPE_OBJECT:
@@ -173,7 +192,11 @@ inline bool is_complex_metric_type(LogicalType type) {
     }
 }
 
+<<<<<<< HEAD
 inline bool is_enumeration_type(LogicalType type) {
+=======
+constexpr bool is_enumeration_type(LogicalType type) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     switch (type) {
     case TYPE_TINYINT:
     case TYPE_SMALLINT:
@@ -258,9 +281,12 @@ constexpr bool support_column_expr_predicate(LogicalType ltype) {
     case TYPE_DECIMAL32:  /* 24 */
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
+<<<<<<< HEAD
     case TYPE_JSON:
     case TYPE_ARRAY:
     case TYPE_MAP:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     case TYPE_STRUCT:
         return true;
     default:
@@ -296,6 +322,11 @@ VALUE_GUARD(LogicalType, IntegerLTGuard, lt_is_integer, TYPE_TINYINT, TYPE_SMALL
             TYPE_LARGEINT)
 VALUE_GUARD(LogicalType, SumBigIntLTGuard, lt_is_sum_bigint, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
             TYPE_BIGINT)
+<<<<<<< HEAD
+=======
+VALUE_GUARD(LogicalType, UnsignedLTGuard, lt_is_unsigned, TYPE_UNSIGNED_TINYINT, TYPE_UNSIGNED_SMALLINT,
+            TYPE_UNSIGNED_INT, TYPE_UNSIGNED_BIGINT)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 VALUE_GUARD(LogicalType, FloatLTGuard, lt_is_float, TYPE_FLOAT, TYPE_DOUBLE)
 VALUE_GUARD(LogicalType, Decimal32LTGuard, lt_is_decimal32, TYPE_DECIMAL32)
 VALUE_GUARD(LogicalType, Decimal64LTGuard, lt_is_decimal64, TYPE_DECIMAL64)

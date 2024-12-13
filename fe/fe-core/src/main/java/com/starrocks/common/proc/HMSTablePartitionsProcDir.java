@@ -12,14 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.common.AnalysisException;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -37,9 +46,15 @@ public class HMSTablePartitionsProcDir implements ProcDirInterface {
             .add("PartitionName")
             .build();
 
+<<<<<<< HEAD
     private final HiveMetaStoreTable hmsTable;
 
     public HMSTablePartitionsProcDir(HiveMetaStoreTable hmsTable) {
+=======
+    private final Table hmsTable;
+
+    public HMSTablePartitionsProcDir(Table hmsTable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.hmsTable = hmsTable;
     }
 
@@ -51,11 +66,20 @@ public class HMSTablePartitionsProcDir implements ProcDirInterface {
         result.setNames(TITLE_NAMES);
 
         if (hmsTable.isUnPartitioned()) {
+<<<<<<< HEAD
             result.addRow(Lists.newArrayList(hmsTable.getTableName()));
         } else {
             try {
                 List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
+=======
+            result.addRow(Lists.newArrayList(hmsTable.getCatalogTableName()));
+        } else {
+            try {
+                List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getCatalogDBName(),
+                                hmsTable.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (String partitionName : partitionNames) {
                     result.addRow(Lists.newArrayList(partitionName));
                 }

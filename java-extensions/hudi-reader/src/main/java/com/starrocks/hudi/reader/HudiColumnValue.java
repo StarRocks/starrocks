@@ -17,6 +17,10 @@ package com.starrocks.hudi.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
+<<<<<<< HEAD
+=======
+import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -24,11 +28,23 @@ import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspector;
+<<<<<<< HEAD
 import org.apache.hadoop.io.LongWritable;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+=======
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector;
+import org.apache.hadoop.io.LongWritable;
+
+import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -160,9 +176,26 @@ public class HudiColumnValue implements ColumnValue {
 
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+<<<<<<< HEAD
         Long dateTime = ((LongWritable) fieldData).get();
         TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
         LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(dateTime, timeUnit, timezone);
         return localDateTime;
+=======
+        ZoneId zoneId = ZoneId.systemDefault();
+        if (timezone != null) {
+            zoneId = ZoneId.of(timezone);
+        }
+        if (fieldData instanceof Timestamp) {
+            return ((Timestamp) fieldData).toLocalDateTime();
+        } else if (fieldData instanceof TimestampWritableV2) {
+            return LocalDateTime.ofInstant(Instant.ofEpochSecond((((TimestampObjectInspector) fieldInspector)
+                    .getPrimitiveJavaObject(fieldData)).toEpochSecond()), zoneId);
+        } else {
+            Long dateTime = ((LongWritable) fieldData).get();
+            TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
+            return HudiScannerUtils.getTimestamp(dateTime, timeUnit, zoneId);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

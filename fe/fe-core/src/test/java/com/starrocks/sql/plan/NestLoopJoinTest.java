@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -352,4 +356,23 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  \n" +
                 "  0:EMPTYSET");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testNotAllowCrossJoin() throws Exception {
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(false);
+        String sql = "select * from t0 a cross join t0 b;";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        PlanTestBase.connectContext.getSessionVariable().setEnableCrossJoin(true);
+    }
+
+    @Test
+    public void testNotAllowNestLoopJoin() throws Exception {
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(false);
+        String sql = "select count(a.v3) from t0 a join t0 b on a.v3 < b.v3;";
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        PlanTestBase.connectContext.getSessionVariable().setEnableNestedLoopJoin(true);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

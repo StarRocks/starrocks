@@ -17,11 +17,19 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.BiMap;
 import com.starrocks.sql.optimizer.OptExpression;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.OptimizerContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Map;
 import java.util.Set;
@@ -43,8 +51,17 @@ public class RewriteContext {
     private final ReplaceColumnRefRewriter mvColumnRefRewriter;
     private final Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
     private final Set<ColumnRefOperator> queryColumnSet;
+<<<<<<< HEAD
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
     private ScalarOperator unionRewriteQueryExtraPredicate;
+=======
+    private final OptimizerContext optimizerContext;
+    private BiMap<Integer, Integer> queryToMvRelationIdMapping;
+    private ScalarOperator unionRewriteQueryExtraPredicate;
+    private AggregatePushDownContext aggregatePushDownContext;
+    // whether this rewritten query is a rollup query
+    private boolean isRollup;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
@@ -58,7 +75,12 @@ public class RewriteContext {
                           ColumnRefFactory mvRefFactory,
                           ReplaceColumnRefRewriter mvColumnRefRewriter,
                           Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
+<<<<<<< HEAD
                           Set<ColumnRefOperator> queryColumnSet) {
+=======
+                          Set<ColumnRefOperator> queryColumnSet,
+                          OptimizerContext optimizerContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.queryExpression = queryExpression;
         this.queryPredicateSplit = queryPredicateSplit;
         this.queryEquivalenceClasses = queryEquivalenceClasses;
@@ -72,6 +94,10 @@ public class RewriteContext {
         this.mvColumnRefRewriter = mvColumnRefRewriter;
         this.outputMapping = outputMapping;
         this.queryColumnSet = queryColumnSet;
+<<<<<<< HEAD
+=======
+        this.optimizerContext = optimizerContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public BiMap<Integer, Integer> getQueryToMvRelationIdMapping() {
@@ -161,4 +187,27 @@ public class RewriteContext {
     public void setUnionRewriteQueryExtraPredicate(ScalarOperator unionRewriteQueryExtraPredicate) {
         this.unionRewriteQueryExtraPredicate = unionRewriteQueryExtraPredicate;
     }
+<<<<<<< HEAD
+=======
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
+    }
+
+    public boolean isRollup() {
+        return isRollup;
+    }
+
+    public void setRollup(boolean rollup) {
+        isRollup = rollup;
+    }
+
+    public OptimizerContext getOptimizerContext() {
+        return optimizerContext;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -37,6 +37,10 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.DDLStmtExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -59,7 +63,11 @@ public class StorageMediumInferTest {
     @BeforeClass
     public static void init() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+<<<<<<< HEAD
         be1 = GlobalStateMgr.getCurrentSystemInfo().getBackend(10001);
+=======
+        be1 = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         be1.getDisks().get("10001/path1").setPathHash(10001);
         be2 = UtFrameUtils.addMockBackend(10002);
         be2.getDisks().get("10002/path1").setPathHash(10002);
@@ -69,7 +77,11 @@ public class StorageMediumInferTest {
         // create database
         String createDbStmtStr = "create database if not exists test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static void createTable(String sql) throws Exception {
@@ -79,22 +91,37 @@ public class StorageMediumInferTest {
 
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+=======
+        DDLStmtExecutor.execute(alterTableStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
     public void testCreateTable() throws Exception {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         be1.setStorageMediumForAllDisks(TStorageMedium.HDD);
         be2.setStorageMediumForAllDisks(TStorageMedium.HDD);
         createTable("create table test.tbl1(key1 int, key2 varchar(10)) \n" +
                 "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
+<<<<<<< HEAD
         OlapTable tbl1 = (OlapTable) db.getTable("tbl1");
         List<Partition> partitionList1 = Lists.newArrayList(tbl1.getPartitions());
         DataProperty dataProperty1 =
                 globalStateMgr.getDataPropertyIncludeRecycleBin(tbl1.getPartitionInfo(),
+=======
+        OlapTable tbl1 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+        List<Partition> partitionList1 = Lists.newArrayList(tbl1.getPartitions());
+        DataProperty dataProperty1 =
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl1.getPartitionInfo(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         partitionList1.get(0).getId());
         Assert.assertEquals(TStorageMedium.HDD, dataProperty1.getStorageMedium());
 
@@ -104,10 +131,17 @@ public class StorageMediumInferTest {
                 + "duplicate key(k1)\n" + "partition by range(k2)\n" + "(partition p1 values less than(\"10\"))\n"
                 + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1'); ";
         createTable(sql);
+<<<<<<< HEAD
         OlapTable tbl2 = (OlapTable) db.getTable("tbl2");
         List<Partition> partitionList2 = Lists.newArrayList(tbl2.getPartitions());
         DataProperty dataProperty2 =
                 globalStateMgr.getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
+=======
+        OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
+        List<Partition> partitionList2 = Lists.newArrayList(tbl2.getPartitions());
+        DataProperty dataProperty2 =
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         partitionList2.get(0).getId());
         Assert.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
 
@@ -116,27 +150,45 @@ public class StorageMediumInferTest {
         Config.tablet_sched_storage_cooldown_second = 123123213L;
         createTable("create table test.tbl3(key1 int, key2 varchar(10)) \n" +
                 "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
+<<<<<<< HEAD
         OlapTable tbl3 = (OlapTable) db.getTable("tbl3");
         List<Partition> partitionList3 = Lists.newArrayList(tbl3.getPartitions());
         DataProperty dataProperty3 =
                 globalStateMgr.getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
+=======
+        OlapTable tbl3 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl3");
+        List<Partition> partitionList3 = Lists.newArrayList(tbl3.getPartitions());
+        DataProperty dataProperty3 =
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         partitionList3.get(0).getId());
         Assert.assertEquals(TStorageMedium.SSD, dataProperty3.getStorageMedium());
 
         Config.tablet_sched_storage_cooldown_second = -1L; // default value, no storage cool down
         createTable("create table test.tbl4(key1 int, key2 varchar(10)) \n" +
                 "distributed by hash(key1) buckets 10 properties('replication_num' = '1');");
+<<<<<<< HEAD
         OlapTable tbl4 = (OlapTable) db.getTable("tbl4");
         List<Partition> partitionList4 = Lists.newArrayList(tbl4.getPartitions());
         DataProperty dataProperty4 =
                 globalStateMgr.getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
+=======
+        OlapTable tbl4 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl4");
+        List<Partition> partitionList4 = Lists.newArrayList(tbl4.getPartitions());
+        DataProperty dataProperty4 =
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         partitionList4.get(0).getId());
         Assert.assertEquals(TStorageMedium.HDD, dataProperty4.getStorageMedium());
     }
 
     @Test
     public void testAlterTableAddPartition() throws Exception {
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         be1.setStorageMediumForAllDisks(TStorageMedium.SSD);
         be2.setStorageMediumForAllDisks(TStorageMedium.SSD);
@@ -145,12 +197,20 @@ public class StorageMediumInferTest {
                 + "distributed by hash(k2) buckets 1\n" + "properties('replication_num' = '1'); ";
         createTable(sql);
         alterTableWithNewParser("ALTER TABLE test.tblp2 ADD PARTITION IF NOT EXISTS p2 VALUES LESS THAN (\"20\")");
+<<<<<<< HEAD
         OlapTable tbl2 = (OlapTable) db.getTable("tblp2");
+=======
+        OlapTable tbl2 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tblp2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Partition> partitionList2 = Lists.newArrayList(tbl2.getPartitions());
         Assert.assertEquals(2, partitionList2.size());
         for (Partition partition : partitionList2) {
             DataProperty dataProperty2 =
+<<<<<<< HEAD
                     globalStateMgr.getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
+=======
+                    globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             partition.getId());
             Assert.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
         }

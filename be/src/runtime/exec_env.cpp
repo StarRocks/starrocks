@@ -34,13 +34,20 @@
 
 #include "runtime/exec_env.h"
 
+<<<<<<< HEAD
+=======
+#include <cctype>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <memory>
 #include <thread>
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
 #include "block_cache/block_cache.h"
+<<<<<<< HEAD
 #include "column/column_pool.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/config.h"
 #include "common/configbase.h"
 #include "common/logging.h"
@@ -48,13 +55,26 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/dir_manager.h"
+<<<<<<< HEAD
 #include "exec/workgroup/scan_executor.h"
+=======
+#include "exec/workgroup/pipeline_executor_set.h"
+#include "exec/workgroup/scan_executor.h"
+#include "exec/workgroup/scan_task_queue.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/workgroup/work_group.h"
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
+<<<<<<< HEAD
 #include "gutil/strings/substitute.h"
+=======
+#include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
+#include "gutil/strings/substitute.h"
+#include "runtime/batch_write/batch_write_mgr.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
@@ -85,6 +105,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
 #include "storage/update_manager.h"
+<<<<<<< HEAD
+=======
+#include "udf/python/env.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
@@ -94,6 +118,13 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/starrocks_metrics.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 // Calculate the total memory limit of all load tasks on this BE
@@ -228,8 +259,13 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
     _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", _process_mem_tracker.get());
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
+<<<<<<< HEAD
     _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
     _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
+=======
+    _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
+    _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
@@ -238,12 +274,19 @@ Status GlobalEnv::_init_mem_tracker() {
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
     _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
+<<<<<<< HEAD
+=======
+    _poco_connection_pool_mem_tracker = regist_tracker(-1, "poco_connection_pool", _process_mem_tracker.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
+<<<<<<< HEAD
     SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
     ForEach<ColumnPoolList>(op);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }
@@ -301,6 +344,17 @@ int64_t GlobalEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t perc
     return process_mem_limit * percent / 100;
 }
 
+<<<<<<< HEAD
+=======
+ExecEnv* ExecEnv::GetInstance() {
+    static ExecEnv s_exec_env;
+    return &s_exec_env;
+}
+
+ExecEnv::ExecEnv() = default;
+ExecEnv::~ExecEnv() = default;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
@@ -386,7 +440,17 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_load_rpc_pool));
     REGISTER_GAUGE_STARROCKS_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads)
 
+<<<<<<< HEAD
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
+=======
+    RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache") // thread pool for dictionary cache Sink
+                            .set_min_threads(1)
+                            .set_max_threads(config::dictionary_cache_refresh_threadpool_size)
+                            .set_max_queue_size(INT32_MAX) // unlimit queue size
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_dictionary_cache_pool));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
@@ -401,6 +465,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         return (driver_limiter == nullptr) ? 0 : driver_limiter->num_total_drivers();
     });
 
+<<<<<<< HEAD
     std::unique_ptr<ThreadPool> wg_driver_executor_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("pip_wg_executor") // pipeline executor for workgroup
                             .set_min_threads(0)
@@ -413,6 +478,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _wg_driver_executor->initialize(_max_executor_threads);
 
     int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+=======
+    const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
+                                       ? CpuInfo::num_cores()
+                                       : config::pipeline_scan_thread_pool_thread_num;
+
+    const int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     if (config::hdfs_client_enable_hedged_read) {
@@ -423,6 +495,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                 << "hdfs_client_hedged_read_threadpool_size should greater than 0";
     }
 
+<<<<<<< HEAD
     std::unique_ptr<ThreadPool> connector_scan_worker_thread_pool_with_workgroup;
     RETURN_IF_ERROR(ThreadPoolBuilder("con_wg_scan_io")
                             .set_min_threads(0)
@@ -434,6 +507,38 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             std::move(connector_scan_worker_thread_pool_with_workgroup),
             std::make_unique<workgroup::WorkGroupScanTaskQueue>(workgroup::ScanSchedEntityType::CONNECTOR));
     _connector_scan_executor->initialize(connector_num_io_threads);
+=======
+    // Disable bind cpus when cgroup has cpu quota but no cpuset.
+    const bool enable_bind_cpus = config::enable_resource_group_bind_cpus &&
+                                  (!CpuInfo::is_cgroup_with_cpu_quota() || CpuInfo::is_cgroup_with_cpuset());
+    config::enable_resource_group_bind_cpus = enable_bind_cpus;
+    workgroup::PipelineExecutorSetConfig executors_manager_opts(
+            CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
+            CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing);
+    _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
+    RETURN_IF_ERROR(_workgroup_manager->start());
+
+    StarRocksMetrics::instance()->metrics()->register_hook("pipe_execution_hook", [this] {
+        int64_t driver_schedule_count = 0;
+        int64_t driver_execution_ns = 0;
+        int64_t driver_queue_len = 0;
+        int64_t driver_poller_block_queue_len = 0;
+        int64_t scan_executor_queuing = 0;
+        _workgroup_manager->for_each_executors([&](const workgroup::PipelineExecutorSet& executors) {
+            const auto metrics = executors.driver_executor()->metrics();
+            driver_schedule_count += metrics.schedule_count;
+            driver_execution_ns += metrics.driver_execution_ns;
+            driver_queue_len += metrics.driver_queue_len;
+            driver_poller_block_queue_len += metrics.driver_poller_block_queue_len;
+            scan_executor_queuing += executors.scan_executor()->num_tasks();
+        });
+        StarRocksMetrics::instance()->pipe_driver_schedule_count.set_value(driver_schedule_count);
+        StarRocksMetrics::instance()->pipe_driver_execution_time.set_value(driver_execution_ns);
+        StarRocksMetrics::instance()->pipe_driver_queue_len.set_value(driver_queue_len);
+        StarRocksMetrics::instance()->pipe_poller_block_queue_len.set_value(driver_poller_block_queue_len);
+        StarRocksMetrics::instance()->pipe_scan_executor_queuing.set_value(scan_executor_queuing);
+    });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
@@ -443,6 +548,29 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
         _load_path_mgr = new LoadPathMgr(this);
     }
 
+<<<<<<< HEAD
+=======
+    std::unique_ptr<ThreadPool> load_rowset_pool;
+    std::unique_ptr<ThreadPool> load_segment_pool;
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_rowset_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_rowset_pool));
+    _load_rowset_thread_pool = load_rowset_pool.release();
+
+    RETURN_IF_ERROR(
+            ThreadPoolBuilder("load_segment_pool")
+                    .set_min_threads(0)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
+                    .set_max_queue_size(config::load_segment_thread_pool_queue_size)
+                    .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
+                    .build(&load_segment_pool));
+    _load_segment_thread_pool = load_segment_pool.release();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _broker_mgr = new BrokerMgr(this);
 #ifndef BE_TEST
     _bfd_parser = BfdParser::create();
@@ -454,6 +582,20 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
 
+<<<<<<< HEAD
+=======
+    std::unique_ptr<ThreadPool> batch_write_thread_pool;
+    RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
+                            .set_min_threads(config::batch_write_thread_pool_num_min)
+                            .set_max_threads(config::batch_write_thread_pool_num_max)
+                            .set_max_queue_size(config::batch_write_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&batch_write_thread_pool));
+    auto batch_write_executor =
+            std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
+    _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
 
@@ -462,12 +604,21 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(this);
+<<<<<<< HEAD
+=======
+    auto runtime_filter_event_func = [] {
+        auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
+        return (pool == nullptr) ? 0U : pool->queue_size();
+    };
+    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     _backend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "frontend");
     _broker_client_cache->init_metrics(StarRocksMetrics::instance()->metrics(), "broker");
     RETURN_IF_ERROR(_result_mgr->init());
 
+<<<<<<< HEAD
     int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                  ? CpuInfo::num_cores()
                                  : config::pipeline_scan_thread_pool_thread_num;
@@ -492,6 +643,17 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
 #if defined(USE_STAROS) && !defined(BE_TEST)
     _lake_location_provider = new lake::StarletLocationProvider();
+=======
+    // it means acting as compute node while store_path is empty. some threads are not needed for that case.
+    Status status = _load_path_mgr->init();
+    if (!status.ok()) {
+        LOG(ERROR) << "load path mgr init failed." << status.message();
+        exit(-1);
+    }
+
+#if defined(USE_STAROS) && !defined(BE_TEST) && !defined(BUILD_FORMAT_LIB)
+    _lake_location_provider = std::make_shared<lake::StarletLocationProvider>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _lake_update_manager =
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
@@ -507,7 +669,11 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
 
 #elif defined(BE_TEST)
+<<<<<<< HEAD
     _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
+=======
+    _lake_location_provider = std::make_shared<lake::FixedLocationProvider>(_store_paths.front().path);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _lake_update_manager =
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
@@ -532,6 +698,20 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+    auto jit_engine = JITEngine::get_instance();
+    status = jit_engine->init();
+    if (!status.ok()) {
+        LOG(WARNING) << "Failed to init JIT engine: " << status.message();
+    }
+#endif
+
+    RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
+    PythonEnvManager::getInstance().start_background_cleanup_thread();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -569,10 +749,13 @@ void ExecEnv::stop() {
         _pipeline_sink_io_pool->shutdown();
     }
 
+<<<<<<< HEAD
     if (_wg_driver_executor) {
         _wg_driver_executor->close();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_agent_server) {
         _agent_server->stop();
     }
@@ -597,12 +780,17 @@ void ExecEnv::stop() {
         _load_rpc_pool->shutdown();
     }
 
+<<<<<<< HEAD
     if (_scan_executor) {
         _scan_executor->close();
     }
 
     if (_connector_scan_executor) {
         _connector_scan_executor->close();
+=======
+    if (_workgroup_manager) {
+        _workgroup_manager->close();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     if (_thread_pool) {
@@ -621,13 +809,32 @@ void ExecEnv::stop() {
         _stream_mgr->close();
     }
 
+<<<<<<< HEAD
+=======
+    if (_batch_write_mgr) {
+        _batch_write_mgr->stop();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (_routine_load_task_executor) {
         _routine_load_task_executor->stop();
+    }
+
+<<<<<<< HEAD
+#ifndef BE_TEST
+    close_s3_clients();
+#endif
+=======
+    if (_dictionary_cache_pool) {
+        _dictionary_cache_pool->shutdown();
     }
 
 #ifndef BE_TEST
     close_s3_clients();
 #endif
+
+    PythonEnvManager::getInstance().close();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void ExecEnv::destroy() {
@@ -646,17 +853,28 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
+<<<<<<< HEAD
     SAFE_DELETE(_wg_driver_executor);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
     _load_rpc_pool.reset();
+<<<<<<< HEAD
     SAFE_DELETE(_scan_executor);
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);
     SAFE_DELETE(_streaming_load_thread_pool);
+=======
+    _workgroup_manager->destroy();
+    _workgroup_manager.reset();
+    SAFE_DELETE(_thread_pool);
+    SAFE_DELETE(_streaming_load_thread_pool);
+    SAFE_DELETE(_load_segment_thread_pool);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();
@@ -665,7 +883,10 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_query_context_mgr);
     // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
     // _query_pool_mem_tracker.
+<<<<<<< HEAD
     workgroup::WorkGroupManager::instance()->destroy();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_driver_limiter);
     SAFE_DELETE(_broker_client_cache);
@@ -676,10 +897,17 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
+<<<<<<< HEAD
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+=======
+    SAFE_DELETE(_lake_update_manager);
+    SAFE_DELETE(_lake_replication_txn_manager);
+    SAFE_DELETE(_cache_mgr);
+    _dictionary_cache_pool.reset();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _automatic_partition_pool.reset();
     _metrics = nullptr;
 }
@@ -711,17 +939,124 @@ void ExecEnv::wait_for_finish() {
     _wait_for_fragments_finish();
 }
 
+<<<<<<< HEAD
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
+=======
+uint32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (pipeline_dop > 0) {
         return pipeline_dop;
     }
 
     // Default dop is a half of the number of hardware threads.
+<<<<<<< HEAD
     return std::max<int32_t>(1, _max_executor_threads / 2);
+=======
+    return std::max<uint32_t>(1, _max_executor_threads / 2);
+}
+
+uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
+    if (pipeline_sink_dop > 0) {
+        return pipeline_sink_dop;
+    }
+
+    // Default sink dop is the number of hardware threads with a cap of 64.
+    auto dop = std::max<uint32_t>(1, _max_executor_threads);
+    return std::min<uint32_t>(dop, 64);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
 }
 
+<<<<<<< HEAD
+=======
+bool parse_resource_str(const string& str, string* value) {
+    if (!str.empty()) {
+        std::string tmp_str = str;
+        StripLeadingWhiteSpace(&tmp_str);
+        StripTrailingWhitespace(&tmp_str);
+        if (tmp_str.empty()) {
+            return false;
+        } else {
+            *value = tmp_str;
+            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+void ExecEnv::try_release_resource_before_core_dump() {
+    std::set<std::string> modules;
+    bool release_all = false;
+    if (config::try_release_resource_before_core_dump.value() == "*") {
+        release_all = true;
+    } else {
+        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
+                                       &parse_resource_str, &modules);
+    }
+
+    auto need_release = [&release_all, &modules](const std::string& name) {
+        return release_all || modules.contains(name);
+    };
+
+    if (_workgroup_manager != nullptr && need_release("connector_scan_executor")) {
+        _workgroup_manager->for_each_executors([](auto& executors) { executors.connector_scan_executor()->close(); });
+        LOG(INFO) << "close connector scan executor";
+    }
+    if (_workgroup_manager != nullptr && need_release("olap_scan_executor")) {
+        _workgroup_manager->for_each_executors([](auto& executors) { executors.scan_executor()->close(); });
+        LOG(INFO) << "close olap scan executor";
+    }
+    if (_thread_pool != nullptr && need_release("non_pipeline_scan_thread_pool")) {
+        _thread_pool->shutdown();
+        LOG(INFO) << "shutdown non-pipeline scan thread pool";
+    }
+    if (_pipeline_prepare_pool != nullptr && need_release("pipeline_prepare_thread_pool")) {
+        _pipeline_prepare_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline prepare thread pool";
+    }
+    if (_pipeline_sink_io_pool != nullptr && need_release("pipeline_sink_io_thread_pool")) {
+        _pipeline_sink_io_pool->shutdown();
+        LOG(INFO) << "shutdown pipeline sink io thread pool";
+    }
+    if (_query_rpc_pool != nullptr && need_release("query_rpc_thread_pool")) {
+        _query_rpc_pool->shutdown();
+        LOG(INFO) << "shutdown query rpc thread pool";
+    }
+    if (_agent_server != nullptr && need_release("publish_version_worker_pool")) {
+        _agent_server->stop_task_worker_pool(TaskWorkerType::PUBLISH_VERSION);
+        LOG(INFO) << "stop task worker pool for publish version";
+    }
+    if (_workgroup_manager != nullptr && need_release("wg_driver_executor")) {
+        _workgroup_manager->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
+        LOG(INFO) << "stop worker group driver executor";
+    }
+    auto* storage_page_cache = StoragePageCache::instance();
+    if (storage_page_cache != nullptr && need_release("data_cache")) {
+        storage_page_cache->set_capacity(0);
+        LOG(INFO) << "release storage page cache memory";
+    }
+    if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
+        // TODO: Currently, block cache don't support shutdown now,
+        //  so here will temporary use update_mem_quota instead to release memory.
+        (void)_block_cache->update_mem_quota(0, false);
+        LOG(INFO) << "release block cache";
+    }
+}
+
+pipeline::DriverExecutor* ExecEnv::wg_driver_executor() {
+    return _workgroup_manager->shared_executors()->driver_executor();
+}
+workgroup::ScanExecutor* ExecEnv::scan_executor() {
+    return _workgroup_manager->shared_executors()->scan_executor();
+}
+workgroup::ScanExecutor* ExecEnv::connector_scan_executor() {
+    return _workgroup_manager->shared_executors()->connector_scan_executor();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

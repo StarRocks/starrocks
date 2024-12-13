@@ -47,12 +47,48 @@ using Roaring = roaring::Roaring;
 class BitmapRangeIterator {
 public:
     explicit BitmapRangeIterator(const Roaring& bitmap) {
+<<<<<<< HEAD
         roaring_init_iterator(&bitmap.roaring, &_iter);
+=======
+        roaring_iterator_init(&bitmap.roaring, &_iter);
+        _read_next_batch();
+    }
+
+    BitmapRangeIterator(const Roaring& bitmap, uint32_t start) {
+        roaring_iterator_init(&bitmap.roaring, &_iter);
+        roaring_uint32_iterator_move_equalorlarger(&_iter, start);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _read_next_batch();
     }
 
     ~BitmapRangeIterator() = default;
 
+<<<<<<< HEAD
+=======
+    // read next range into [*from, *to) whose size <= max_range_size.
+    // return false when there is no more range.
+    bool next_range(uint32_t max_range_size, uint32_t* from, uint32_t* to) {
+        if (_eof) {
+            return false;
+        }
+        *from = _buf[_buf_pos];
+        auto last_val = *from;
+
+        uint32_t range_size = 0;
+        do {
+            _buf_pos++;
+            last_val++;
+            range_size++;
+            if (_buf_pos == _buf_size) {
+                _read_next_batch();
+            }
+        } while (range_size < max_range_size && !_eof && _buf[_buf_pos] == last_val);
+
+        *to = last_val;
+        return true;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // read next range into [*from, *to)
     // return false when there is no more range.
     bool next_range(uint32_t* from, uint32_t* to) {
@@ -75,7 +111,11 @@ public:
 
 private:
     void _read_next_batch() {
+<<<<<<< HEAD
         uint32_t n = roaring::api::roaring_read_uint32_iterator(&_iter, _buf, kBatchSize);
+=======
+        uint32_t n = roaring::api::roaring_uint32_iterator_read(&_iter, _buf, kBatchSize);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _buf_pos = 0;
         _buf_size = n;
         _eof = n == 0;

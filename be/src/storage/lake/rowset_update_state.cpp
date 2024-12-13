@@ -15,6 +15,10 @@
 #include "rowset_update_state.h"
 
 #include "common/tracer.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -37,10 +41,40 @@ RowsetUpdateState::RowsetUpdateState() = default;
 
 RowsetUpdateState::~RowsetUpdateState() = default;
 
+<<<<<<< HEAD
 void RowsetUpdateState::init(const RowsetUpdateStateParams& params) {
     DCHECK_GT(params.metadata.version(), 0);
     DCHECK_EQ(params.tablet->id(), params.metadata.id());
     _tablet_id = params.metadata.id();
+=======
+// Restore state to what it was before the data was loaded
+void RowsetUpdateState::_reset() {
+    _upserts.clear();
+    _deletes.clear();
+    _partial_update_states.clear();
+    _auto_increment_partial_update_states.clear();
+    _auto_increment_delete_pks.clear();
+    _memory_usage = 0;
+    _base_versions.clear();
+    _schema_version = 0;
+    _segment_iters.clear();
+    _rowset_ptr.reset();
+}
+
+void RowsetUpdateState::init(const RowsetUpdateStateParams& params) {
+    DCHECK_GT(params.metadata->version(), 0);
+    DCHECK_EQ(params.tablet->id(), params.metadata->id());
+    if (!_base_versions.empty() && _schema_version < params.metadata->schema().schema_version()) {
+        LOG(INFO) << "schema version has changed from " << _schema_version << " to "
+                  << params.metadata->schema().schema_version() << ", need to reload the update state."
+                  << " tablet_id: " << params.tablet->id() << " old base version: " << _base_versions[0]
+                  << " new base version: " << params.metadata->version();
+        // The data has been loaded, but the schema has changed and needs to be reloaded according to the new schema
+        _reset();
+    }
+    _tablet_id = params.metadata->id();
+    _schema_version = params.metadata->schema().schema_version();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 static bool has_partial_update_state(const RowsetUpdateStateParams& params) {
@@ -178,12 +212,19 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     }
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
     std::unique_ptr<Column> pk_column;
+<<<<<<< HEAD
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
     if (_segment_iters.empty()) {
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, &_stats));
+=======
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
+
+    if (_segment_iters.empty()) {
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     // only hold pkey, so can use larger chunk size
@@ -215,6 +256,7 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     return Status::OK();
 }
 
+<<<<<<< HEAD
 static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_write,
                                                   const TabletSchemaCSPtr& tablet_schema) {
     const auto& txn_meta = op_write.txn_meta();
@@ -231,6 +273,25 @@ static std::vector<uint32_t> get_read_columns_ids(const TxnLogPB_OpWrite& op_wri
     }
 
     return read_column_ids;
+=======
+// Return the id, i.e, position index, of unmodified columns in the |tablet_schema|
+static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_write,
+                                                  const TabletSchemaCSPtr& tablet_schema) {
+    const auto& txn_meta = op_write.txn_meta();
+
+    std::set<ColumnUID> modified_column_unique_ids(txn_meta.partial_update_column_unique_ids().begin(),
+                                                   txn_meta.partial_update_column_unique_ids().end());
+
+    std::vector<ColumnId> unmodified_column_ids;
+    for (uint32_t i = 0, num_cols = tablet_schema->num_columns(); i < num_cols; i++) {
+        auto uid = tablet_schema->column(i).unique_id();
+        if (modified_column_unique_ids.count(uid) == 0) {
+            unmodified_column_ids.push_back(i);
+        }
+    }
+
+    return unmodified_column_ids;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t segment_id,
@@ -253,8 +314,13 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
 
     std::shared_ptr<TabletSchema> modified_columns_schema = nullptr;
     if (has_partial_update_state(params)) {
+<<<<<<< HEAD
         std::vector<uint32_t> update_column_ids(txn_meta.partial_update_column_unique_ids().begin(),
                                                 txn_meta.partial_update_column_unique_ids().end());
+=======
+        std::vector<ColumnUID> update_column_ids(txn_meta.partial_update_column_unique_ids().begin(),
+                                                 txn_meta.partial_update_column_unique_ids().end());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         modified_columns_schema = TabletSchema::create_with_uid(params.tablet_schema, update_column_ids);
     } else {
         std::vector<int32_t> all_column_ids;
@@ -415,7 +481,11 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     const RowsetMetadata& rowset_meta = params.op_write.rowset();
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
+<<<<<<< HEAD
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata.schema());
+=======
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
         rowset_meta.num_rows() == 0 || params.op_write.txn_meta().has_merge_condition()) {
@@ -448,6 +518,22 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
     const auto& dest_path = params.op_write.rewrite_segments(segment_id);
     DCHECK(src_path != dest_path);
 
+<<<<<<< HEAD
+=======
+    FileInfo src{.path = params.tablet->segment_location(src_path)};
+    auto segment_encryption_metas_size = params.op_write.rowset().segment_encryption_metas_size();
+    if (segment_encryption_metas_size > 0) {
+        if (segment_id >= segment_encryption_metas_size) {
+            string msg = fmt::format("tablet:{} rowset:{} index:{} >= segment_encryption_metas size:{}",
+                                     params.tablet->tablet_id(), params.op_write.rowset().id(), segment_id,
+                                     segment_encryption_metas_size);
+            LOG(ERROR) << msg;
+            return Status::Corruption(msg);
+        }
+        src.encryption_meta = params.op_write.rowset().segment_encryption_metas(segment_id);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool skip_because_file_exist = false;
     int64_t t_rewrite_start = MonotonicMillis();
     if (has_auto_increment_partial_update_state(params) &&
@@ -455,11 +541,19 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         FileInfo file_info{.path = params.tablet->segment_location(dest_path)};
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
         if (!skip_rewrite) {
+<<<<<<< HEAD
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
                     params.tablet->segment_location(src_path), &file_info, params.tablet_schema,
                     _auto_increment_partial_update_states[segment_id], unmodified_column_ids,
                     has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
                     params.op_write, params.tablet));
+=======
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(
+                    src, &file_info, params.tablet_schema, _auto_increment_partial_update_states[segment_id],
+                    unmodified_column_ids,
+                    has_partial_update_state(params) ? &_partial_update_states[segment_id].write_columns : nullptr,
+                    params.tablet));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             skip_because_file_exist = true;
         }
@@ -471,8 +565,13 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, const RowsetUpdat
         // if rewrite fail, let segment gc to clean dest segment file
         ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
         if (!skip_rewrite) {
+<<<<<<< HEAD
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
                     params.tablet->segment_location(src_path), &file_info, params.tablet_schema, unmodified_column_ids,
+=======
+            RETURN_IF_ERROR(SegmentRewriter::rewrite_partial_update(
+                    src, &file_info, params.tablet_schema, unmodified_column_ids,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     _partial_update_states[segment_id].write_columns, segment_id, partial_rowset_footer));
         } else {
             skip_because_file_exist = true;
@@ -504,7 +603,11 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     // There are two cases that we must resolve conflict here:
     // 1. Current transaction's base version isn't equal latest base version, which means that conflict happens.
     // 2. We use batch publish here. This transaction may conflict with a transaction in the same batch.
+<<<<<<< HEAD
     if (base_version == _base_versions[segment_id] && base_version + 1 == params.metadata.version()) {
+=======
+    if (base_version == _base_versions[segment_id] && base_version + 1 == params.metadata->version()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::OK();
     }
     _base_versions[segment_id] = base_version;
@@ -521,7 +624,11 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id], &new_rss_rowids, false));
 
     size_t total_conflicts = 0;
+<<<<<<< HEAD
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata.schema());
+=======
+    std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
     // get rss_rowids to identify conflict exist or not
     int64_t t_start = MonotonicMillis();
@@ -722,12 +829,29 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     auto root_path = params.tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     const std::string& path = params.op_write.dels(del_id);
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(params.tablet->del_location(path)));
     ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
     std::vector<uint8_t> read_buffer(file_size);
     RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
     auto col = pk_column->clone();
     if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+=======
+    RandomAccessFileOptions opts;
+    if (params.op_write.dels_size() == params.op_write.del_encryption_metas_size()) {
+        // When upgrade from old version, `del_encryption_metas` could be empty.
+        auto& meta = params.op_write.del_encryption_metas(del_id);
+        if (!meta.empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(meta));
+            opts.encryption_info = std::move(info);
+        }
+    }
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(opts, params.tablet->del_location(path)));
+    ASSIGN_OR_RETURN(auto read_buffer, read_file->read_all());
+    auto col = pk_column->clone();
+    if (serde::ColumnArraySerde::deserialize(reinterpret_cast<const uint8_t*>(read_buffer.data()), col.get()) ==
+        nullptr) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Status::InternalError("column deserialization failed");
     }
     col->raw_data();

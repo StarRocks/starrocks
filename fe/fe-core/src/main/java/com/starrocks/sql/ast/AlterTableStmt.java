@@ -12,18 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.sql.ast;
 
+=======
+package com.starrocks.sql.ast;
+
+import com.starrocks.alter.AlterOpType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 // Alter table statement.
 public class AlterTableStmt extends DdlStmt {
     private TableName tbl;
+<<<<<<< HEAD
     private final List<AlterClause> ops;
+=======
+    private final List<AlterClause> alterClauseList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public AlterTableStmt(TableName tbl, List<AlterClause> ops) {
         this(tbl, ops, NodePosition.ZERO);
@@ -32,7 +46,11 @@ public class AlterTableStmt extends DdlStmt {
     public AlterTableStmt(TableName tbl, List<AlterClause> ops, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
+<<<<<<< HEAD
         this.ops = ops;
+=======
+        this.alterClauseList = ops;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setTableName(String newTableName) {
@@ -43,8 +61,49 @@ public class AlterTableStmt extends DdlStmt {
         return tbl;
     }
 
+<<<<<<< HEAD
     public List<AlterClause> getOps() {
         return ops;
+=======
+    public List<AlterClause> getAlterClauseList() {
+        return alterClauseList;
+    }
+
+    public String getCatalogName() {
+        return tbl.getCatalog();
+    }
+
+    public String getDbName() {
+        return tbl.getDb();
+    }
+
+    public String getTableName() {
+        return tbl.getTbl();
+    }
+
+    public boolean contains(AlterOpType op) {
+        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
+        return currentOps.contains(op);
+    }
+
+    public boolean hasPartitionOp() {
+        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
+        return currentOps.contains(AlterOpType.ADD_PARTITION)
+                || currentOps.contains(AlterOpType.DROP_PARTITION)
+                || currentOps.contains(AlterOpType.REPLACE_PARTITION)
+                || currentOps.contains(AlterOpType.MODIFY_PARTITION)
+                || currentOps.contains(AlterOpType.TRUNCATE_PARTITION);
+    }
+
+    public boolean hasSchemaChangeOp() {
+        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
+        return currentOps.contains(AlterOpType.SCHEMA_CHANGE) || currentOps.contains(AlterOpType.OPTIMIZE);
+    }
+
+    public boolean hasRollupOp() {
+        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
+        return currentOps.contains(AlterOpType.ADD_ROLLUP) || currentOps.contains(AlterOpType.DROP_ROLLUP);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

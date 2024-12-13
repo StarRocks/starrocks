@@ -13,9 +13,18 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+=======
+import com.google.common.collect.ImmutableSet;
+import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -31,7 +40,11 @@ import static com.starrocks.catalog.FunctionSet.MULTI_DISTINCT_COUNT;
 import static com.starrocks.catalog.FunctionSet.TO_BITMAP;
 
 public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
+<<<<<<< HEAD
     public static IRewriteEquivalent INSTANCE = new BitmapRewriteEquivalent();
+=======
+    public static IAggregateRewriteEquivalent INSTANCE = new BitmapRewriteEquivalent();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public BitmapRewriteEquivalent() {}
 
@@ -73,6 +86,7 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         return null;
     }
 
+<<<<<<< HEAD
     private ScalarOperator rewriteImpl(CallOperator aggFunc,
                                        ScalarOperator replace,
                                        boolean isRollup) {
@@ -89,6 +103,46 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
                     Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] { Type.BITMAP },
                             IS_IDENTICAL));
         }
+=======
+    private CallOperator makeBitmapUnionCountFunc(ScalarOperator arg0) {
+        return new CallOperator(BITMAP_UNION_COUNT, Type.BIGINT,
+                Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
+                        IS_IDENTICAL));
+    }
+
+    private CallOperator makeBitmapUnionFunc(ScalarOperator arg0) {
+        return new CallOperator(BITMAP_UNION, Type.BITMAP,
+                Arrays.asList(arg0), Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
+                        IS_IDENTICAL));
+    }
+
+    private CallOperator makeBitmapCountFunc(ScalarOperator arg0) {
+        return new CallOperator(FunctionSet.BITMAP_COUNT, Type.BIGINT,
+                Arrays.asList(arg0), Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
+                        IS_IDENTICAL));
+    }
+
+    public static final ImmutableSet<String> SUPPORT_AGG_FUNC = ImmutableSet.of(
+            MULTI_DISTINCT_COUNT,
+            BITMAP_UNION_COUNT,
+            BITMAP_AGG
+    );
+
+    @Override
+    public boolean isSupportPushDownRewrite(CallOperator aggFunc) {
+        if (aggFunc == null) {
+            return false;
+        }
+
+        String aggFuncName = aggFunc.getFnName();
+        if (SUPPORT_AGG_FUNC.contains(aggFuncName)) {
+            return true;
+        }
+        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
+            return true;
+        }
+        return false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -103,12 +157,22 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
         boolean isRollup = shuttleContext.isRollup();
+<<<<<<< HEAD
         if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() ||
                 aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
+=======
+        if ((aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() && aggFunc.getChildren().size() == 1) ||
+                aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
+            SessionVariable sessionVariable = shuttleContext.getRewriteContext().getOptimizerContext().getSessionVariable();
+            if (!sessionVariable.isEnableCountDistinctRewriteByHllBitmap()) {
+                return null;
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
             }
+<<<<<<< HEAD
             return rewriteImpl(aggFunc, replace, isRollup);
         } else if (aggFuncName.equals(BITMAP_UNION_COUNT)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
@@ -127,11 +191,31 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
                 return null;
             }
             return rewriteImpl(aggFunc, replace, isRollup);
+=======
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+        } else if (aggFuncName.equals(BITMAP_UNION_COUNT)) {
+            ScalarOperator eqArg = aggFunc.getChild(0);
+            if (eqArg == null) {
+                return null;
+            }
+            if (eqArg instanceof CallOperator) {
+                CallOperator arg00 = (CallOperator) eqArg;
+                if (!arg00.getFnName().equals(TO_BITMAP) && !arg00.getFnName().equals(BITMAP_HASH)) {
+                    return null;
+                }
+                eqArg = arg00.getChild(0);
+            }
+            if (!eqArg.equals(eqChild)) {
+                return null;
+            }
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (aggFuncName.equals(BITMAP_AGG)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
             }
+<<<<<<< HEAD
             return new CallOperator(BITMAP_UNION,
                     aggFunc.getType(),
                     Arrays.asList(replace),
@@ -140,4 +224,50 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         }
         return null;
     }
+=======
+            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+        }
+        return null;
+    }
+
+    @Override
+    public ScalarOperator rewriteRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                     CallOperator aggFunc,
+                                                     ColumnRefOperator replace) {
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equals(BITMAP_AGG)) {
+            return makeBitmapUnionFunc(replace);
+        } else {
+            return makeBitmapUnionCountFunc(replace);
+        }
+    }
+
+    @Override
+    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                               CallOperator aggFunc,
+                                               ColumnRefOperator replace) {
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equals(BITMAP_AGG)) {
+            return makeBitmapUnionFunc(replace);
+        } else {
+            return makeBitmapCountFunc(replace);
+        }
+    }
+
+    @Override
+    public Pair<CallOperator, CallOperator> rewritePushDownRollupAggregateFunc(EquivalentShuttleContext shuttleContext,
+                                                                               CallOperator aggFunc,
+                                                                               ColumnRefOperator replace) {
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equals(BITMAP_AGG)) {
+            CallOperator partialFn = makeBitmapUnionFunc(replace);
+            CallOperator finalFn = makeBitmapUnionFunc(replace);
+            return Pair.create(partialFn, finalFn);
+        } else {
+            CallOperator partialFn = makeBitmapUnionFunc(replace);
+            CallOperator finalFn = makeBitmapUnionCountFunc(replace);
+            return Pair.create(partialFn, finalFn);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

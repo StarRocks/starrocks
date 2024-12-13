@@ -701,6 +701,7 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_binary(FunctionContext* context, 
     }
 
     ColumnPtr col = builder.build(ColumnHelper::is_all_const(columns));
+<<<<<<< HEAD
     std::string err_msg;
     if (col->capacity_limit_reached(&err_msg)) {
         return Status::InternalError(
@@ -708,6 +709,10 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_binary(FunctionContext* context, 
     } else {
         return col;
     }
+=======
+    RETURN_IF_ERROR(col->capacity_limit_reached());
+    return col;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_from_binary(FunctionContext* context, const Columns& columns) {

@@ -76,6 +76,14 @@ public class FloatLiteral extends LiteralExpr {
         this(value, NodePosition.ZERO);
     }
 
+<<<<<<< HEAD
+=======
+    public FloatLiteral(String value, Type type) throws AnalysisException {
+        this(value, NodePosition.ZERO);
+        this.type = type;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public FloatLiteral(String value, NodePosition pos) throws AnalysisException {
         super(pos);
         Double floatValue = null;

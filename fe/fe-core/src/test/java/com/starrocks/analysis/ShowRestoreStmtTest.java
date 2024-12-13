@@ -15,11 +15,19 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import static org.junit.Assert.assertEquals;
 
 import com.starrocks.sql.ast.ShowRestoreStmt;
 import org.junit.Test;
 
+=======
+import com.starrocks.sql.ast.ShowRestoreStmt;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class ShowRestoreStmtTest {
     
     @Test

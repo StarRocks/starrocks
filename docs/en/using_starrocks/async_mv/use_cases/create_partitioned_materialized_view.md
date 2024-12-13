@@ -226,7 +226,10 @@ FROM par_tbl1
 GROUP BY datekey, k1;
 ```
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Align partitions with multiple base tables
 
 ![Partitioned Materialized View-3](../../../_assets/partitioned_mv-3.png)
@@ -271,7 +274,10 @@ GROUP BY
   par_tbl3.datekey_new,
   par_tbl3.k1;
 ```
+<<<<<<< HEAD
 -->
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Achieve incremental refresh and transparent rewrite
 

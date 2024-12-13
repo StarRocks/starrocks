@@ -36,8 +36,13 @@ package com.starrocks.task;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.binlog.BinlogConfig;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
+=======
+import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TBinlogConfig;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
@@ -60,6 +65,10 @@ public class CreateReplicaTask extends AgentTask {
 
     private final long version;
     private final TCompressionType compressionType;
+<<<<<<< HEAD
+=======
+    private final int compressionLevel;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final TStorageMedium storageMedium;
     private final boolean enablePersistentIndex;
     private TPersistentIndexType persistentIndexType;
@@ -81,7 +90,13 @@ public class CreateReplicaTask extends AgentTask {
 
     private int primaryIndexCacheExpireSec = 0;
     private boolean createSchemaFile = true;
+<<<<<<< HEAD
     private final TTabletSchema tabletSchema;
+=======
+    private boolean enableTabletCreationOptimization = false;
+    private final TTabletSchema tabletSchema;
+    private long timeoutMs = -1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -94,9 +109,17 @@ public class CreateReplicaTask extends AgentTask {
         this.persistentIndexType = builder.getPersistentIndexType();
         this.tabletType = builder.getTabletType();
         this.compressionType = builder.getCompressionType();
+<<<<<<< HEAD
         this.tabletSchema = builder.getTabletSchema();
         this.binlogConfig = builder.getBinlogConfig();
         this.createSchemaFile = builder.isCreateSchemaFile();
+=======
+        this.compressionLevel = builder.getCompressionLevel();
+        this.tabletSchema = builder.getTabletSchema();
+        this.binlogConfig = builder.getBinlogConfig();
+        this.createSchemaFile = builder.isCreateSchemaFile();
+        this.enableTabletCreationOptimization = builder.isEnableTabletCreationOptimization();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.baseTabletId = builder.getBaseTabletId();
         this.recoverySource = builder.getRecoverySource();
         this.inRestoreMode = builder.isInRestoreMode();
@@ -140,6 +163,13 @@ public class CreateReplicaTask extends AgentTask {
         this.baseSchemaHash = baseSchemaHash;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TTabletType getTabletType() {
         return tabletType;
     }
@@ -169,8 +199,15 @@ public class CreateReplicaTask extends AgentTask {
             createTabletReq.setBase_schema_hash(baseSchemaHash);
         }
         createTabletReq.setCompression_type(compressionType);
+<<<<<<< HEAD
         createTabletReq.setTablet_type(tabletType);
         createTabletReq.setCreate_schema_file(createSchemaFile);
+=======
+        createTabletReq.setCompression_level(compressionLevel);
+        createTabletReq.setTablet_type(tabletType);
+        createTabletReq.setCreate_schema_file(createSchemaFile);
+        createTabletReq.setEnable_tablet_creation_optimization(enableTabletCreationOptimization);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return createTabletReq;
     }
 
@@ -185,6 +222,10 @@ public class CreateReplicaTask extends AgentTask {
         private long tabletId = INVALID_ID;
         private long version = INVALID_ID;
         private TCompressionType compressionType;
+<<<<<<< HEAD
+=======
+        private int compressionLevel;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private TStorageMedium storageMedium;
         private boolean enablePersistentIndex;
         private TPersistentIndexType persistentIndexType;
@@ -196,6 +237,10 @@ public class CreateReplicaTask extends AgentTask {
         private RecoverySource recoverySource;
         private int primaryIndexCacheExpireSec = 0;
         private boolean createSchemaFile = true;
+<<<<<<< HEAD
+=======
+        private boolean enableTabletCreationOptimization = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private TTabletSchema tabletSchema;
 
         private Builder() {
@@ -273,6 +318,18 @@ public class CreateReplicaTask extends AgentTask {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public int getCompressionLevel() {
+            return compressionLevel;
+        }
+
+        public Builder setCompressionLevel(int compressionLevel) {
+            this.compressionLevel = compressionLevel;
+            return this;
+        }        
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public TStorageMedium getStorageMedium() {
             return storageMedium;
         }
@@ -372,6 +429,18 @@ public class CreateReplicaTask extends AgentTask {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public boolean isEnableTabletCreationOptimization() {
+            return enableTabletCreationOptimization;
+        }
+
+        public Builder setEnableTabletCreationOptimization(boolean enableTabletCreationOptimization) {
+            this.enableTabletCreationOptimization = enableTabletCreationOptimization;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public TTabletSchema getTabletSchema() {
             return tabletSchema;
         }

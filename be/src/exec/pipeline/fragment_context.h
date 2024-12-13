@@ -19,6 +19,10 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/driver_limiter.h"
+<<<<<<< HEAD
+=======
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -34,6 +38,10 @@
 #include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
+=======
+#include "storage/predicate_tree_params.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/hash_util.hpp"
 
 namespace starrocks {
@@ -70,12 +78,18 @@ public:
     void set_data_sink(std::unique_ptr<DataSink> data_sink);
 
     size_t total_dop() const;
+<<<<<<< HEAD
     Pipelines& pipelines() { return _pipelines; }
     void set_pipelines(Pipelines&& pipelines) { _pipelines = std::move(pipelines); }
     size_t num_drivers() const;
 
     bool all_pipelines_finished() const { return _num_finished_pipelines == _pipelines.size(); }
     void count_down_pipeline(size_t val = 1);
+=======
+
+    bool all_execution_groups_finished() const { return _num_finished_execution_groups == _execution_groups.size(); }
+    void count_down_execution_group(size_t val = 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool need_report_exec_state();
     void report_exec_state_if_necessary();
@@ -95,6 +109,7 @@ public:
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
+<<<<<<< HEAD
     Status prepare_all_pipelines() {
         for (auto& pipe : _pipelines) {
             RETURN_IF_ERROR(pipe->prepare(_runtime_state.get()));
@@ -104,6 +119,23 @@ public:
     Status iterate_drivers(const std::function<Status(const DriverPtr&)>& call);
     void clear_all_drivers();
     void close_all_pipelines();
+=======
+    void set_pipelines(ExecutionGroups&& exec_groups, Pipelines&& pipelines);
+
+    Status prepare_all_pipelines();
+
+    template <class Func>
+    void iterate_drivers(Func&& call) {
+        iterate_pipeline([&](const Pipeline* pipeline) {
+            for (auto& driver : pipeline->drivers()) {
+                call(driver);
+            }
+        });
+    }
+
+    void clear_all_drivers();
+    void close_all_execution_groups();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeFilterHub* runtime_filter_hub() { return &_runtime_filter_hub; }
 
@@ -126,6 +158,12 @@ public:
     bool enable_adaptive_dop() const { return _enable_adaptive_dop; }
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
+<<<<<<< HEAD
+=======
+    const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
+    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = std::move(params); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t next_driver_id() { return _next_driver_id++; }
 
     void set_workgroup(workgroup::WorkGroupPtr wg) { _workgroup = std::move(wg); }
@@ -148,7 +186,32 @@ public:
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
+<<<<<<< HEAD
 private:
+=======
+    void init_jit_profile();
+
+    void update_jit_profile(int64_t time_ns);
+
+    void iterate_pipeline(const std::function<void(Pipeline*)>& call);
+    Status iterate_pipeline(const std::function<Status(Pipeline*)>& call);
+
+    Status prepare_active_drivers();
+    Status submit_active_drivers(DriverExecutor* executor);
+
+    bool enable_group_execution() const { return _enable_group_execution; }
+    void set_enable_group_execution(bool enable_group_execution) { _enable_group_execution = enable_group_execution; }
+
+    void set_report_when_finish(bool report) { _report_when_finish = report; }
+
+    // acquire runtime filter from cache
+    void acquire_runtime_filters();
+
+private:
+    void _close_stream_load_contexts();
+
+    bool _enable_group_execution = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Id of this query
     TUniqueId _query_id;
     // Id of this instance
@@ -169,7 +232,12 @@ private:
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
     Pipelines _pipelines;
+<<<<<<< HEAD
     std::atomic<size_t> _num_finished_pipelines = 0;
+=======
+    ExecutionGroups _execution_groups;
+    std::atomic<size_t> _num_finished_execution_groups = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeFilterHub _runtime_filter_hub;
 
@@ -184,7 +252,10 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     std::vector<StreamLoadContext*> _stream_load_contexts;
+<<<<<<< HEAD
     bool _channel_stream_load = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
@@ -196,9 +267,22 @@ private:
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;
 
+<<<<<<< HEAD
     size_t _expired_log_count = 0;
 
     std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
+=======
+    PredicateTreeParams _pred_tree_params;
+
+    size_t _expired_log_count = 0;
+
+    std::atomic<int64_t> _last_report_exec_state_ns = MonotonicNanos();
+
+    RuntimeProfile::Counter* _jit_counter = nullptr;
+    RuntimeProfile::Counter* _jit_timer = nullptr;
+
+    bool _report_when_finish{};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class FragmentContextManager {

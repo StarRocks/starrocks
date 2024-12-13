@@ -1255,11 +1255,15 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index,
 void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 5;
+<<<<<<< HEAD
     config::enable_light_pk_compaction_publish = true;
     DeferOp unset_config([&] {
         config::vertical_compaction_max_columns_per_group = orig;
         config::enable_light_pk_compaction_publish = false;
     });
+=======
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int N = 100;
     srand(GetCurrentTimeMicros());
@@ -1284,7 +1288,11 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
+<<<<<<< HEAD
     std::thread th([&]() { best_tablet->updates()->compaction(_compaction_mem_tracker.get()); });
+=======
+    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
     while (output_rs == nullptr && retry_cnt <= 10) {
@@ -1592,11 +1600,15 @@ void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
 void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_persistent_index) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 1;
+<<<<<<< HEAD
     config::enable_light_pk_compaction_publish = true;
     DeferOp unset_config([&] {
         config::vertical_compaction_max_columns_per_group = orig;
         config::enable_light_pk_compaction_publish = false;
     });
+=======
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     int N = 100;
     srand(GetCurrentTimeMicros());
@@ -1621,7 +1633,11 @@ void TabletUpdatesTest::test_vertical_compaction_with_rows_mapper(bool enable_pe
     EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
     // stop apply
     best_tablet->updates()->stop_apply(true);
+<<<<<<< HEAD
     std::thread th([&]() { best_tablet->updates()->compaction(_compaction_mem_tracker.get()); });
+=======
+    std::thread th([&]() { ASSERT_FALSE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok()); });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RowsetSharedPtr output_rs;
     size_t retry_cnt = 0;
     while (output_rs == nullptr && retry_cnt <= 10) {
@@ -3207,8 +3223,12 @@ TEST_F(TabletUpdatesTest, test_partial_update_with_lsc) {
         auto st = _tablet->rowset_commit(version, partial_rowset);
         ASSERT_TRUE(st.ok()) << st.to_string();
 
+<<<<<<< HEAD
         TabletSchemaSPtr new_tablet_schema = std::make_shared<TabletSchema>();
         new_tablet_schema->copy_from(_tablet->tablet_schema());
+=======
+        TabletSchemaSPtr new_tablet_schema = std::make_shared<TabletSchema>(*_tablet->tablet_schema());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto cur_schema_version = new_tablet_schema->schema_version();
         TabletColumn add_col;
         add_col.set_unique_id(3);
@@ -3617,9 +3637,33 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
     // 14. get del_vec failed
     test_fail_point("tablet_apply_get_del_vec_failed", 15, N / 2);
+<<<<<<< HEAD
 }
 
 TEST_F(TabletUpdatesTest, test_column_mode_partial_update_apply_retry) {}
+=======
+
+    // 15. delvec inconsistent
+    {
+        // Enable fail point
+        trigger_mode.set_mode(FailPointTriggerModeType::ENABLE);
+        auto fp = starrocks::failpoint::FailPointRegistry::GetInstance()->get("tablet_delvec_inconsistent");
+        fp->setMode(trigger_mode);
+
+        // Create and commit rowset
+        auto rs = create_rowset(_tablet, keys, &deletes);
+        ASSERT_TRUE(_tablet->rowset_commit(16, rs).ok());
+        ASSERT_EQ(16, _tablet->updates()->max_version());
+
+        // Wait for a short duration and check error state
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        ASSERT_TRUE(_tablet->updates()->is_error());
+
+        trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
+        fp->setMode(trigger_mode);
+    }
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     config::retry_apply_interval_second = 1;
@@ -3768,7 +3812,11 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         ASSERT_TRUE(rs_meta.tablet_schema() == nullptr);
     }
 
+<<<<<<< HEAD
     ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(100, _tablet, 100, 2, rs1, 0).ok());
+=======
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(100, _tablet, 100, 2, rs1, 0, false).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(0, _tablet->committed_rowset_size());
 
     {
@@ -3795,7 +3843,11 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
     ASSERT_EQ(true, rs2->rowset_meta()->skip_tablet_schema());
     ASSERT_EQ(1, _tablet->committed_rowset_size());
     ASSERT_TRUE(rs2->tablet_schema() != nullptr);
+<<<<<<< HEAD
     ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(101, _tablet, 100, 4, rs2, 0).ok());
+=======
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(101, _tablet, 100, 4, rs2, 0, false).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(0, _tablet->committed_rowset_size());
 
     {
@@ -3854,7 +3906,11 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         ASSERT_EQ(true, parse_ok);
         ASSERT_TRUE(rs_meta.tablet_schema() != nullptr);
     }
+<<<<<<< HEAD
     ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(102, _tablet, 102, 3, rs3, 0).ok());
+=======
+    ASSERT_TRUE(StorageEngine::instance()->txn_manager()->publish_txn(102, _tablet, 102, 3, rs3, 0, false).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     _tablet->set_update_schema_running(false);
     auto rs4 = create_rowset(_tablet, keys);

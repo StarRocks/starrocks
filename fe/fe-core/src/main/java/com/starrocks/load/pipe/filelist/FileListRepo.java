@@ -74,6 +74,10 @@ public abstract class FileListRepo {
         LOADING,
         FINISHED,
         SKIPPED,
+<<<<<<< HEAD
         ERROR;
+=======
+        ERROR
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

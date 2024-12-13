@@ -101,7 +101,11 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
             try {
                 dumpInfo.getSessionVariable().replayFromJson(dumpJsonObject.get("session_variables").getAsString());
             } catch (IOException e) {
+<<<<<<< HEAD
                 LOG.warn("deserialize from json failed. " + e);
+=======
+                LOG.warn("deserialize from json failed. ", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         // column statistics

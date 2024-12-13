@@ -13,10 +13,22 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 
 public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseVisitor {
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+
+public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
+    public AlterMVClauseAnalyzerVisitor(Table table) {
+        super(table);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
         //modify properties check in AlterMVJobExecutor
         return null;

@@ -17,7 +17,11 @@
 
 package com.starrocks.mysql;
 
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
+=======
+import com.starrocks.common.ErrorReportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -58,21 +62,35 @@ public class MysqlPasswordTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCheckPassword() throws AnalysisException {
+=======
+    public void testCheckPassword() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertEquals("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32",
                 new String(MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32")));
 
         Assert.assertEquals("", new String(MysqlPassword.checkPassword(null)));
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
     public void testCheckPasswdFail() throws AnalysisException {
+=======
+    @Test(expected = ErrorReportException.class)
+    public void testCheckPasswdFail() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MysqlPassword.checkPassword("*9A6EC1164108A8D3DA3BE3F35A56F6499B6FC32");
         Assert.fail("No exception throws");
     }
 
+<<<<<<< HEAD
     @Test(expected = AnalysisException.class)
     public void testCheckPasswdFail2() throws AnalysisException {
+=======
+    @Test(expected = ErrorReportException.class)
+    public void testCheckPasswdFail2() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC32"));
         MysqlPassword.checkPassword("*9A6EC51164108A8D3DA3BE3F35A56F6499B6FC3H");
         Assert.fail("No exception throws");

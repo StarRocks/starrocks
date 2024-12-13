@@ -71,11 +71,19 @@ private:
     void _assign_ordinals();
     template <typename T>
     void _assign_ordinals_tmpl();
+<<<<<<< HEAD
     ChunkPtr _late_materialize(const ChunkPtr& chunk);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <typename T>
     ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
 
 protected:
+<<<<<<< HEAD
+=======
+    ChunkPtr _late_materialize(const ChunkPtr& chunk);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t _total_rows = 0;        // Total rows of sorting data
     Permutation _sort_permutation; // Temp permutation for sorting
     size_t _staging_unsorted_rows = 0;

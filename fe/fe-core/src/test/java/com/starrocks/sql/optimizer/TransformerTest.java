@@ -132,6 +132,14 @@ public class TransformerTest {
         runUnitTest("subquery");
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPivot() {
+        runUnitTest("pivot");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void analyzeAndBuildOperator(String originStmt, String operatorString, String except,
                                                ErrorCollector collector) {
         try {

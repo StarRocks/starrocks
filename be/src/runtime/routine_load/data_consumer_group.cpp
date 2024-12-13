@@ -88,7 +88,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                                  capture2 = [this, &result_st](const Status& st) {
                                      std::unique_lock<std::mutex> lock(_mutex);
                                      _counter--;
+<<<<<<< HEAD
                                      VLOG(1) << "group counter is: " << _counter << ", grp: " << _grp_id;
+=======
+                                     VLOG(2) << "group counter is: " << _counter << ", grp: " << _grp_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                      if (_counter == 0) {
                                          _queue.shutdown();
                                          LOG(INFO)
@@ -101,7 +105,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             LOG(WARNING) << "failed to submit data consumer: " << consumer->id() << ", group id: " << _grp_id;
             return Status::InternalError("failed to submit data consumer");
         } else {
+<<<<<<< HEAD
             VLOG(1) << "submit a data consumer: " << consumer->id() << ", group id: " << _grp_id;
+=======
+            VLOG(2) << "submit a data consumer: " << consumer->id() << ", group id: " << _grp_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -153,7 +161,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             _queue.shutdown();
             // cancel all consumers
             for (auto& consumer : _consumers) {
+<<<<<<< HEAD
                 consumer->cancel(ctx);
+=======
+                (void)consumer->cancel(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             // waiting all threads finished
@@ -175,7 +187,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 // we need to commit and tell fe to move offset to the newest offset, otherwise, fe will retry consume.
                 for (auto& item : cmt_offset) {
                     if (item.second > ctx->kafka_info->cmt_offset[item.first]) {
+<<<<<<< HEAD
                         kafka_pipe->finish();
+=======
+                        RETURN_IF_ERROR(kafka_pipe->finish());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         ctx->kafka_info->cmt_offset = std::move(cmt_offset);
                         ctx->receive_bytes = 0;
                         return Status::OK();
@@ -185,7 +201,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 return Status::Cancelled("Cancelled");
             } else {
                 DCHECK(left_bytes < ctx->max_batch_size);
+<<<<<<< HEAD
                 kafka_pipe->finish();
+=======
+                RETURN_IF_ERROR(kafka_pipe->finish());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ctx->kafka_info->cmt_offset = std::move(cmt_offset);
                 ctx->receive_bytes = ctx->max_batch_size - left_bytes;
                 return Status::OK();
@@ -233,8 +253,12 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
                 } else {
                     // failed to append this msg, we must stop
+<<<<<<< HEAD
                     LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id
                                  << ", errmsg=" << st.get_error_msg();
+=======
+                    LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     eos = true;
                     {
                         std::unique_lock<std::mutex> lock(_mutex);
@@ -307,7 +331,11 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                                  capture2 = [this, &result_st](const Status& st) {
                                      std::unique_lock<std::mutex> lock(_mutex);
                                      _counter--;
+<<<<<<< HEAD
                                      VLOG(1) << "group counter is: " << _counter << ", grp: " << _grp_id;
+=======
+                                     VLOG(2) << "group counter is: " << _counter << ", grp: " << _grp_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                      if (_counter == 0) {
                                          _queue.shutdown();
                                          LOG(INFO)
@@ -320,7 +348,11 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             LOG(WARNING) << "failed to submit data consumer: " << consumer->id() << ", group id: " << _grp_id;
             return Status::InternalError("failed to submit data consumer");
         } else {
+<<<<<<< HEAD
             VLOG(1) << "submit a data consumer: " << consumer->id() << ", group id: " << _grp_id;
+=======
+            VLOG(2) << "submit a data consumer: " << consumer->id() << ", group id: " << _grp_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -371,7 +403,11 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             _queue.shutdown();
             // cancel all consumers
             for (auto& consumer : _consumers) {
+<<<<<<< HEAD
                 consumer->cancel(ctx);
+=======
+                (void)consumer->cancel(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             // waiting all threads finished
@@ -390,7 +426,11 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 return Status::Cancelled("Cancelled");
             } else {
                 DCHECK(left_bytes < ctx->max_batch_size);
+<<<<<<< HEAD
                 pulsar_pipe->finish();
+=======
+                RETURN_IF_ERROR(pulsar_pipe->finish());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ctx->pulsar_info->ack_offset = std::move(ack_offset);
                 ctx->receive_bytes = ctx->max_batch_size - left_bytes;
                 get_backlog_nums(ctx);
@@ -418,7 +458,11 @@ Status PulsarDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 VLOG(3) << "consume partition" << partition << " - " << msg_id;
             } else {
                 // failed to append this msg, we must stop
+<<<<<<< HEAD
                 LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.get_error_msg();
+=======
+                LOG(WARNING) << "failed to append msg to pipe. grp: " << _grp_id << ", errmsg=" << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 eos = true;
                 {
                     std::unique_lock<std::mutex> lock(_mutex);
@@ -452,7 +496,11 @@ void PulsarDataConsumerGroup::get_backlog_nums(StreamLoadContext* ctx) {
         int64_t backlog_num;
         Status st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition_backlog(&backlog_num);
         if (!st.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << st.get_error_msg();
+=======
+            LOG(WARNING) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             ctx->pulsar_info
                     ->partition_backlog[std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition()] =

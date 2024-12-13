@@ -35,7 +35,10 @@
 #include "agent/task_worker_pool.h"
 
 #include <atomic>
+<<<<<<< HEAD
 #include <boost/lexical_cast.hpp>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <chrono>
 #include <condition_variable>
 #include <ctime>
@@ -49,12 +52,22 @@
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
+<<<<<<< HEAD
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/FrontendService.h"
+=======
+#include "block_cache/block_cache.h"
+#include "block_cache/datacache_utils.h"
+#include "common/status.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/workgroup/work_group.h"
+#include "fs/fs_util.h"
+#include "gen_cpp/DataCache_types.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
@@ -65,16 +78,24 @@
 #include "storage/publish_version_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
+<<<<<<< HEAD
 #include "storage/task/engine_alter_tablet_task.h"
 #include "storage/task/engine_batch_load_task.h"
 #include "storage/task/engine_checksum_task.h"
 #include "storage/task/engine_clone_task.h"
 #include "storage/task/engine_storage_migration_task.h"
+=======
+#include "storage/task/engine_batch_load_task.h"
+#include "storage/task/engine_clone_task.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/misc.h"
 #include "util/starrocks_metrics.h"
+<<<<<<< HEAD
 #include "util/stopwatch.hpp"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/thread.h"
 
 namespace starrocks {
@@ -116,6 +137,14 @@ TaskWorkerPool<AgentTaskRequest>::TaskWorkerPool(ExecEnv* env, int worker_count)
 template <class AgentTaskRequest>
 TaskWorkerPool<AgentTaskRequest>::~TaskWorkerPool() {
     stop();
+<<<<<<< HEAD
+=======
+    for (uint32_t i = 0; i < _worker_count; ++i) {
+        if (_worker_threads[i].joinable()) {
+            _worker_threads[i].join();
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     delete _worker_thread_condition_variable;
 }
 
@@ -128,6 +157,7 @@ void TaskWorkerPool<AgentTaskRequest>::start() {
 
 template <class AgentTaskRequest>
 void TaskWorkerPool<AgentTaskRequest>::stop() {
+<<<<<<< HEAD
     if (_stopped) {
         return;
     }
@@ -138,6 +168,10 @@ void TaskWorkerPool<AgentTaskRequest>::stop() {
             _worker_threads[i].join();
         }
     }
+=======
+    _stopped = true;
+    _worker_thread_condition_variable->notify_all();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 template <class AgentTaskRequest>
@@ -320,7 +354,12 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
+<<<<<<< HEAD
         StorageEngine::instance()->execute_task(&engine_task);
+=======
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -432,10 +471,17 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         LOG(INFO) << "get delete push task. signature: " << agent_task_req->signature << " priority: " << priority
                   << " push_type: " << push_req.push_type;
         std::vector<TTabletInfo> tablet_infos;
+<<<<<<< HEAD
 
         EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
                                         GlobalEnv::GetInstance()->load_mem_tracker());
         StorageEngine::instance()->execute_task(&engine_task);
+=======
+        EngineBatchLoadTask engine_task(push_req, &tablet_infos, agent_task_req->signature, &status,
+                                        GlobalEnv::GetInstance()->load_mem_tracker());
+        // EngineBatchLoadTask execute always return OK
+        (void)(StorageEngine::instance()->execute_task(&engine_task));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (status == STARROCKS_PUSH_HAD_LOADED) {
             // remove the task and not return to fe
@@ -747,7 +793,11 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+<<<<<<< HEAD
         auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
+=======
+        auto workgroups = ExecEnv::GetInstance()->workgroup_manager()->list_workgroups();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         request.__set_active_workgroups(workgroups);
         request.__set_backend(BackendOptions::get_localBackend());
         TMasterResult result;
@@ -759,7 +809,11 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
                          << ", err=" << status;
         }
         if (result.__isset.workgroup_ops) {
+<<<<<<< HEAD
             workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
+=======
+            ExecEnv::GetInstance()->workgroup_manager()->apply(result.workgroup_ops);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         nap_sleep(config::report_workgroup_interval_seconds,
                   [worker_pool_this] { return worker_pool_this->_stopped.load(); });
@@ -814,6 +868,54 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
     return nullptr;
 }
 
+<<<<<<< HEAD
+=======
+void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    const auto* worker_pool_this = static_cast<ReportDataCacheMetricsTaskWorkerPool*>(arg_this);
+
+    TReportRequest request;
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    while ((!worker_pool_this->_stopped)) {
+        auto master_address = get_master_address();
+        if (master_address.port == 0) {
+            // port == 0 means not received heartbeat yet
+            // sleep a short time and try again
+            sleep(config::sleep_one_second);
+            continue;
+        }
+
+        StarRocksMetrics::instance()->report_datacache_metrics_requests_total.increment(1);
+        request.__set_backend(BackendOptions::get_localBackend());
+        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+
+        TDataCacheMetrics t_metrics{};
+        if (config::datacache_enable) {
+            const BlockCache* cache = BlockCache::instance();
+            const DataCacheMetrics& metrics = cache->cache_metrics();
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, metrics);
+        } else {
+            t_metrics.__set_status(TDataCacheStatus::DISABLED);
+        }
+
+        request.__set_datacache_metrics(t_metrics);
+
+        TMasterResult result;
+        status = report_task(request, &result);
+
+        if (status != STARROCKS_SUCCESS) {
+            StarRocksMetrics::instance()->report_datacache_metrics_requests_failed.increment(1);
+            LOG(WARNING) << "Fail to report resource_usage to " << master_address.hostname << ":" << master_address.port
+                         << ", err=" << status;
+        }
+        size_t sleep_secs = config::report_datacache_metrics_interval_ms / 1000;
+        nap_sleep(sleep_secs, [&]() { return worker_pool_this->_stopped.load(); });
+    }
+
+    return nullptr;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 AgentStatus TaskWorkerPoolBase::get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
                                                 TTabletInfo* tablet_info) {
     AgentStatus status = STARROCKS_SUCCESS;

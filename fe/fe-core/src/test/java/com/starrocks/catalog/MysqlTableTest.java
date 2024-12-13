@@ -45,6 +45,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -52,6 +53,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 
@@ -84,6 +87,7 @@ public class MysqlTableTest {
         FakeGlobalStateMgr.setMetaVersion(FeConstants.META_VERSION);
     }
 
+<<<<<<< HEAD
     @Test
     public void testNormal() throws DdlException, IOException {
         MysqlTable mysqlTable = new MysqlTable(1000, "mysqlTable", columns, properties);
@@ -127,6 +131,8 @@ public class MysqlTableTest {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test(expected = DdlException.class)
     public void testNoHost() throws DdlException {
         Map<String, String> pro = Maps.filterKeys(properties, new Predicate<String>() {

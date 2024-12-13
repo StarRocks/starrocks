@@ -59,8 +59,18 @@ void CompactionTask::run() {
     ss << "output version:" << _task_info.output_version << ", input versions size:" << _input_rowsets.size()
        << ", input versions:";
 
+<<<<<<< HEAD
     for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
         ss << _input_rowsets[i]->version() << ";";
+=======
+    for (int i = 0; i < _input_rowsets.size(); ++i) {
+        if (i < 5) {
+            ss << _input_rowsets[i]->version() << ";";
+        }
+        if (_input_rowsets[i]->rowset_meta()->gtid() > _task_info.gtid) {
+            _task_info.gtid = _input_rowsets[i]->rowset_meta()->gtid();
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     if (_input_rowsets.size() > 5) {
         ss << ".." << (*_input_rowsets.rbegin())->version();
@@ -226,9 +236,15 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
                 config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
 
         std::unique_ptr<RowsetWriter> output_rs_writer;
+<<<<<<< HEAD
         RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
                                                                         _task_info.algorithm, _task_info.output_version,
                                                                         &output_rs_writer, _tablet_schema));
+=======
+        RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
+                _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version,
+                data_rowsets.back()->rowset_meta()->gtid(), &output_rs_writer, _tablet_schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Status status = output_rs_writer->add_rowset(data_rowsets.back());
         if (!status.ok()) {
             LOG(WARNING) << "fail to compact rowset."

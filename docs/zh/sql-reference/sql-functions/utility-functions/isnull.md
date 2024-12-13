@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # isnull
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 判断输入值是否为 `NULL`。如果是 `NULL`，返回 1。如果不是 `NULL`，返回 0。
 

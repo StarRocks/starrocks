@@ -23,6 +23,10 @@ public class TrinoQueryTest extends TrinoTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         TrinoTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -393,6 +397,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select c0, c1.a from test_struct";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
+<<<<<<< HEAD
                 "  |  <slot 4> : 2: c1.a");
 
         sql = "select c0, test_struct.c1.a from test_struct";
@@ -421,6 +426,36 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 4> : 3: c2.a\n" +
                 "  |  <slot 5> : 3: c2.b");
+=======
+                "  |  <slot 4> : 2: c1.a[false]");
+
+        sql = "select c0, test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
+
+        sql = "select c0, test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
+
+        sql = "select c0, default_catalog.test.test_struct.c1.a from test_struct";
+        assertPlanContains(sql, "<slot 4> : 2: c1.a[false]");
+
+        sql = "select c1.a[10].b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 2: c1.a[true][10].b[true]");
+
+        sql = "select c2.a, c2.b from test_struct";
+        assertPlanContains(sql, "  1:Project\n" +
+                "  |  <slot 4> : 3: c2.a[false]\n" +
+                "  |  <slot 5> : 3: c2.b[false]");
+
+        sql = "select c2.a + c2.b from test_struct";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : CAST(3: c2.a[true] AS DOUBLE) + 3: c2.b[true]");
+
+        sql = "select sum(c2.b) from test_struct group by c2.a";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 4> : 3: c2.a[false]\n" +
+                "  |  <slot 5> : 3: c2.b[false]");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void testSelectRow() throws Exception {
@@ -598,6 +633,7 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select * from (select v1 from t0 union all select v4 from t1 union all select v3 from t0) tt order by v1 " +
                 "limit 2;";
+<<<<<<< HEAD
         assertPlanContains(sql, "0:UNION\n" +
                 "  |  \n" +
                 "  |----4:EXCHANGE\n" +
@@ -605,11 +641,21 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
                 "  2:EXCHANGE");
+=======
+        assertPlanContains(sql, "0:UNION", "7:TOP-N\n" +
+                "  |  order by: <slot 10> 10: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         sql = "select * from (select v1 from t0 intersect select v4 from t1 intersect select v3 from t0 limit 10) tt " +
                 "order by v1 limit 2;";
         assertPlanContains(sql, "0:INTERSECT\n" +
+<<<<<<< HEAD
                 "  |  limit: 10",
+=======
+                        "  |  limit: 10",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "8:TOP-N\n" +
                         "  |  order by: <slot 10> 10: v1 ASC\n" +
                         "  |  offset: 0\n" +
@@ -1221,6 +1267,21 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCastRowDataType() throws Exception {
+        String sql = "select CAST(ROW(1, 2e0) AS ROW(x BIGINT, y DOUBLE))";
+        assertPlanContains(sql, "CAST(row(1, 2.0) AS struct<X bigint(20), Y double>)");
+    }
+
+    @Test
+    public void testCastArrayDataType() throws Exception {
+        String sql = "select cast(ARRAY[1] as array(int))";
+        assertPlanContains(sql, "CAST([1] AS ARRAY<INT>)");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testDistinctFrom() throws Exception {
         String sql = "select 1 is distinct from 1";
         analyzeSuccess(sql);

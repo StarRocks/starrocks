@@ -116,7 +116,11 @@ INTO TABLE <table_name>
 
   指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。
 
+<<<<<<< HEAD
 - `TEMPORARY PARTITION`
+=======
+- `TEMPORARY_PARTITION`
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   指定要把数据导入哪些[临时分区](../../../table_design/data_distribution/Temporary_partition.md)。
 

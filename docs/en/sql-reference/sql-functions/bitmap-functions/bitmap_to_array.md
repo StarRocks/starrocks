@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_to_array
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Converts a BITMAP into a BIGINT array.
 

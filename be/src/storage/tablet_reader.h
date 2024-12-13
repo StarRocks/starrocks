@@ -46,6 +46,11 @@ public:
 
     void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
 
+<<<<<<< HEAD
+=======
+    void set_use_gtid(bool use_gtid) { _use_gtid = use_gtid; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status prepare();
 
     // Precondition: the last method called must have been `prepare()`.
@@ -85,6 +90,10 @@ private:
                                  MemPool* mempool);
 
     Status _init_collector_for_pk_index_read();
+<<<<<<< HEAD
+=======
+    Status _init_compaction_column_paths(const TabletReaderParams& read_params);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;
@@ -96,7 +105,10 @@ private:
     MemPool _mempool;
     ObjectPool _obj_pool;
 
+<<<<<<< HEAD
     PredicateMap _pushdown_predicates;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DeletePredicates _delete_predicates;
     PredicateList _predicate_free_list;
 
@@ -113,6 +125,11 @@ private:
     // used for pk index based pointer read
     const TabletReaderParams* _reader_params = nullptr;
     bool _is_asc_hint = true;
+<<<<<<< HEAD
+=======
+
+    bool _use_gtid = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

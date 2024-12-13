@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_union
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 输入一组 bitmap 值，求这一组 bitmap 值的并集。
 

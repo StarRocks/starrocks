@@ -48,8 +48,14 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+=======
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.OperationType;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
@@ -58,7 +64,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+<<<<<<< HEAD
 import org.junit.After;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -75,12 +84,27 @@ public class GlobalStateMgrTest {
     public void setUp() {
         Config.meta_dir = UUID.randomUUID().toString();
         Config.plugin_dir = UUID.randomUUID().toString();
+<<<<<<< HEAD
         UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
     @After
     public void tearDown() {
         MetaContext.remove();
+=======
+    }
+
+    @Test
+    public void testSaveLoadHeader() throws Exception {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+
+        ImageWriter imageWriter = new ImageWriter("", ImageFormatVersion.v2, 0);
+        // test json-format header
+        UtFrameUtils.PseudoImage image2 = new UtFrameUtils.PseudoImage();
+        imageWriter.setOutputStream(image2.getDataOutputStream());
+        globalStateMgr.saveHeader(imageWriter.getDataOutputStream());
+        globalStateMgr.loadHeader(image2.getDataInputStream());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private GlobalStateMgr mockGlobalStateMgr() throws Exception {
@@ -114,11 +138,19 @@ public class GlobalStateMgrTest {
     @Test
     public void testReplayUpdateFrontend() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+<<<<<<< HEAD
         List<Frontend> frontends = globalStateMgr.getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
         globalStateMgr.replayUpdateFrontend(fe);
         List<Frontend> updatedFrontends = globalStateMgr.getFrontends(null);
+=======
+        List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
+        Frontend fe = frontends.get(0);
+        fe.updateHostAndEditLogPort("testHost", 1000);
+        globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
+        List<Frontend> updatedFrontends = globalStateMgr.getNodeMgr().getFrontends(null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
@@ -164,10 +196,17 @@ public class GlobalStateMgrTest {
         BDBHA ha = new BDBHA(env, "testNode");
         globalStateMgr.setHaProtocol(ha);
         globalStateMgr.setEditLog(editLog);
+<<<<<<< HEAD
         List<Frontend> frontends = globalStateMgr.getFrontends(null);
         Frontend fe = frontends.get(0);
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(fe.getHost(), "sandbox-fqdn");
         globalStateMgr.modifyFrontendHost(clause);
+=======
+        List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
+        Frontend fe = frontends.get(0);
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(fe.getHost(), "sandbox-fqdn");
+        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = DdlException.class)
@@ -175,7 +214,11 @@ public class GlobalStateMgrTest {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
         // this case will occur [frontend does not exist] exception
+<<<<<<< HEAD
         globalStateMgr.modifyFrontendHost(clause);
+=======
+        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = DdlException.class)
@@ -183,13 +226,63 @@ public class GlobalStateMgrTest {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
         // this case will occur [can not modify current master node] exception
+<<<<<<< HEAD
         globalStateMgr.modifyFrontendHost(clause);
+=======
+        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = DdlException.class)
     public void testAddRepeatedFe() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
+<<<<<<< HEAD
         globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
+=======
+        globalStateMgr.getNodeMgr().addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
+    }
+
+    @Test
+    public void testCanSkipBadReplayedJournal() {
+        boolean originVal = Config.metadata_journal_ignore_replay_failure;
+        Config.metadata_journal_ignore_replay_failure = false;
+
+        // when recover_on_load_journal_failed is false, the failure of every operation type can not be skipped.
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
+
+        Config.metadata_journal_ignore_replay_failure = true;
+        // when recover_on_load_journal_failed is false, the failure of recoverable operation type can be skipped.
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
+
+        Config.metadata_journal_ignore_replay_failure = originVal;
+
+        // when metadata_enable_recovery_mode is true, all types of failure can be skipped.
+        originVal = Config.metadata_enable_recovery_mode;
+        Config.metadata_enable_recovery_mode = true;
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Config.metadata_enable_recovery_mode = originVal;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static class MyGlobalStateMgr extends GlobalStateMgr {
@@ -262,6 +355,7 @@ public class GlobalStateMgrTest {
             Assert.assertEquals(removeFileErrorMessage, suppressedExceptions[0].getMessage());
         }
     }
+<<<<<<< HEAD
 
     @Test
     public void testCanSkipBadReplayedJournal() {
@@ -291,4 +385,6 @@ public class GlobalStateMgrTest {
 
         Config.metadata_journal_ignore_replay_failure = originVal;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -23,6 +23,19 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+/// If an ArrayColumn is nullable, it will be nested as follows:
+/// NullableColumn( ArrayColumn(data_column=NullableColumn, offsets_column=UInt32Column ) ).
+/// eg. (null, [1,2,3], [4, null, 6])
+/// NullableColumn
+///     - null_column: (1, 0, 0)
+///     - data_column (ArrayColumn):
+///         - data_column (NullableColumn):
+///             - null_column: (0, 0, 0, 0, 1, 0)
+///             - data_column: (1, 2, 3, 4, <default>, 6)
+///         - offsets_column: (0, 0, 3, 6)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
     friend class ColumnFactory<Column, ArrayColumn>;
 
@@ -87,8 +100,11 @@ public:
 
     bool append_nulls(size_t count) override;
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override { return false; }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -173,8 +189,14 @@ public:
 
     std::string debug_string() const override;
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override {
         return _elements->capacity_limit_reached(msg) || _offsets->capacity_limit_reached(msg);
+=======
+    Status capacity_limit_reached() const override {
+        RETURN_IF_ERROR(_elements->capacity_limit_reached());
+        return _offsets->capacity_limit_reached();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;

@@ -16,5 +16,9 @@ package com.starrocks.sql.ast;
 
 public enum SetQualifier {
     ALL,
+<<<<<<< HEAD
     DISTINCT;
+=======
+    DISTINCT
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -128,6 +128,21 @@ jobs:
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+<<<<<<< HEAD
+=======
+      - name: add branch-3.4 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.4')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.4'
+
+      - name: add branch-3.3 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.3')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.3'
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       - name: add branch-3.2 label
         if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
         uses: actions-ecosystem/action-add-labels@v1
@@ -146,11 +161,25 @@ jobs:
         with:
           labels: '3.0'
 
+<<<<<<< HEAD
       - name: add branch-2.5 label
         if: contains(toJson(github.event.pull_request.body), '[x] 2.5')
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: '2.5'
+=======
+      - name: remove branch-3.4 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.4') && contains(github.event.pull_request.labels.*.name, '3.4')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '3.4'
+
+      - name: remove branch-3.3 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.3') && contains(github.event.pull_request.labels.*.name, '3.3')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '3.3'
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
       - name: remove branch-3.2 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
@@ -170,12 +199,15 @@ jobs:
         with:
           labels: '3.0'
 
+<<<<<<< HEAD
       - name: remove branch-2.5 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 2.5') && contains(github.event.pull_request.labels.*.name, '2.5')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: '2.5'
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       - name: check-done
         if: >
           (startsWith(github.event.pull_request.title, '[BugFix]') ||

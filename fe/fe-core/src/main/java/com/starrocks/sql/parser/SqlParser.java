@@ -23,6 +23,10 @@ import com.starrocks.connector.trino.TrinoParserUnsupportedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -51,9 +55,19 @@ import static com.starrocks.sql.common.UnsupportedException.unsupportedException
 
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
+<<<<<<< HEAD
     private static final int MIN_TOKEN_LIMIT = 100;
 
     private static final String EOF = "<EOF>";
+=======
+    private static final String EOF = "<EOF>";
+    private static final int MIN_TOKEN_LIMIT = 100;
+    private final AstBuilder.AstBuilderFactory astBuilderFactory;
+
+    public SqlParser(AstBuilder.AstBuilderFactory astBuilderFactory) {
+        this.astBuilderFactory = astBuilderFactory;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public static List<StatementBase> parse(String sql, SessionVariable sessionVariable) {
         try {
@@ -92,17 +106,38 @@ public class SqlParser {
             // In Trino parser AstBuilder, it could throw ParsingException for unexpected exception,
             // use StarRocks parser to parse now.
             LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+<<<<<<< HEAD
             return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+=======
+            if (sessionVariable.isEnableDialectDowngrade()) {
+                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+            }
+            throw e;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (io.trino.sql.parser.ParsingException e) {
             // This sql does not use Trino syntax，use StarRocks parser to parse now.
             if (sql.toLowerCase().contains("select")) {
                 LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
             }
+<<<<<<< HEAD
             return tryParseWithStarRocksDialect(sql, sessionVariable, e);
         } catch (TrinoParserUnsupportedException e) {
             // We only support Trino partial syntax now, and for Trino parser unsupported statement,
             // try to use StarRocks parser to parse
             return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+=======
+            if (sessionVariable.isEnableDialectDowngrade()) {
+                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+            }
+            throw e;
+        } catch (TrinoParserUnsupportedException e) {
+            // We only support Trino partial syntax now, and for Trino parser unsupported statement,
+            // try to use StarRocks parser to parse
+            if (sessionVariable.isEnableDialectDowngrade()) {
+                return tryParseWithStarRocksDialect(sql, sessionVariable, e);
+            }
+            throw e;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (UnsupportedException e) {
             // For unsupported statement, it can not be parsed by trino or StarRocks parser, both parser
             // can not support it now, we just throw the exception here to give user more information
@@ -141,8 +176,13 @@ public class SqlParser {
             // collect hint info
             HintCollector collector = new HintCollector((CommonTokenStream) pair.second.getTokenStream(), sessionVariable);
             collector.collect(singleStatementContexts.get(idx));
+<<<<<<< HEAD
 
             AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
+=======
+            AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                    .create(sessionVariable.getSqlMode(), collector.getContextWithHintMap());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             StatementBase statement = (StatementBase) astBuilder.visitSingleStatement(singleStatementContexts.get(idx));
             if (astBuilder.getParameters() != null && astBuilder.getParameters().size() != 0
                     && !(statement instanceof PrepareStmt)) {
@@ -199,13 +239,23 @@ public class SqlParser {
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext expressionContext = invokeParser(expressionSql, sessionVariable,
                 StarRocksParser::expressionSingleton).first;
+<<<<<<< HEAD
         return (Expr) new AstBuilder(sqlMode).visit(expressionContext);
+=======
+        return (Expr) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode).visit(expressionContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static List<Expr> parseSqlToExprs(String expressions, SessionVariable sessionVariable) {
         StarRocksParser.ExpressionListContext expressionListContext = (StarRocksParser.ExpressionListContext)
                 invokeParser(expressions, sessionVariable, StarRocksParser::expressionList).first;
+<<<<<<< HEAD
         AstBuilder astBuilder = new AstBuilder(sessionVariable.getSqlMode());
+=======
+        AstBuilder astBuilder = GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sessionVariable.getSqlMode());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return expressionListContext.expression().stream()
                 .map(e -> (Expr) astBuilder.visit(e))
                 .collect(Collectors.toList());
@@ -216,10 +266,17 @@ public class SqlParser {
         sessionVariable.setSqlMode(sqlMode);
         ParserRuleContext importColumnsContext = invokeParser(expressionSql, sessionVariable,
                 StarRocksParser::importColumns).first;
+<<<<<<< HEAD
         return (ImportColumnsStmt) new AstBuilder(sqlMode).visit(importColumnsContext);
     }
 
 
+=======
+        return (ImportColumnsStmt) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
+                .create(sqlMode).visit(importColumnsContext);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static Pair<ParserRuleContext, StarRocksParser> invokeParser(
             String sql, SessionVariable sessionVariable,
             Function<StarRocksParser, ParserRuleContext> parseFunction) {
@@ -240,6 +297,10 @@ public class SqlParser {
             }
             parser.setInterpreter(new ParserATNSimulator(parser, parser.getATN(), decisionDFA, new PredictionContextCache()));
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             // inspire by https://github.com/antlr/antlr4/issues/192#issuecomment-15238595
             // try SLL mode with BailErrorStrategy firstly

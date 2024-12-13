@@ -48,7 +48,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：String
 - 单位：-
 - 是否动态：否
+<<<<<<< HEAD
 - 描述：以 CIDR 形式指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。
+=======
+- 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
+- 引入版本：-
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：用于控制在未指定 `priority_networks` 时是否优先使用 IPv6 地址的布尔值。`true` 表示当托管节点的服务器同时具有 IPv4 和 IPv6 地址且未指定 `priority_networks` 时，允许系统优先使用 IPv6 地址。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 引入版本：-
 
 ##### mem_limit
@@ -699,27 +712,69 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：磁盘健康状态检测的间隔。
 - 引入版本：-
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### replication_threads
 
 - 默认值：0
 - 类型：Int
 - 单位：-
 - 是否动态：是
+<<<<<<< HEAD
 - 描述：
 - 引入版本：-
 -->
 
 <!--
 ##### clear_expired_replcation_snapshots_interval_seconds
+=======
+- 描述：用于同步的最大线程数。0 表示将线程数设置为 BE CPU 内核数的四倍。
+- 引入版本：v3.3.5
+
+##### replication_max_speed_limit_kbps
+
+- 默认值：50000
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最大速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_limit_kbps
+
+- 默认值：50
+- 类型：Int
+- 单位：KB/s
+- 是否动态：是
+- 描述：每个同步线程的最小速度。
+- 引入版本：v3.3.5
+
+##### replication_min_speed_time_seconds
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：同步线程低于最低速度所允许的持续时间。如果实际速度低于 `replication_min_speed_limit_kbps` 的时间超过此值，同步将失败。
+- 引入版本：v3.3.5
+
+##### clear_expired_replication_snapshots_interval_seconds
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 - 默认值：3600
 - 类型：Int
 - 单位：Seconds
 - 是否动态：是
+<<<<<<< HEAD
 - 描述：
 - 引入版本：-
 -->
+=======
+- 描述：系统清除异常同步遗留的过期快照的时间间隔。
+- 引入版本：v3.3.5
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### unused_rowset_monitor_interval
 
@@ -1614,6 +1669,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### dictionary_page_size
+
+- 默认值：1048576
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### dictionary_encoding_ratio_for_non_string_column
+
+- 默认值：0
+- 类型：Double
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### dictionary_speculate_min_chunk_size
 
 - 默认值：10000
@@ -1708,6 +1788,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：-
 - 是否动态：否
+<<<<<<< HEAD
 - 描述：单节点上所有的导入线程占据的内存上限比例。
 - 引入版本：-
 
@@ -1721,6 +1802,28 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：
 - 引入版本：-
 -->
+=======
+- 描述：单节点上所有的导入线程占据内存的软上限（百分比）。
+- 引入版本：-
+
+##### load_process_max_memory_hard_limit_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单节点上所有的导入线程占据内存的硬上限（比例）。当 `enable_new_load_on_memory_limit_exceeded` 设置为 `false`，并且所有导入线程的内存占用超过 `load_process_max_memory_limit_percent * load_process_max_memory_hard_limit_ratio` 时，系统将会拒绝新的导入线程。
+- 引入版本：v3.3.2
+
+##### enable_new_load_on_memory_limit_exceeded
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在导入线程内存占用达到硬上限后，是否允许新的导入线程。`true` 表示允许新导入线程，`false` 表示拒绝新导入线程。
+- 引入版本：v3.3.2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### txn_commit_rpc_timeout_ms (Deprecated)
 
@@ -1728,7 +1831,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 类型：Int
 - 单位：Milliseconds
 - 是否动态：是
+<<<<<<< HEAD
 - 描述：Transaction Commit RPC 超时的时长。该参数自 v3.1.0 起弃用。
+=======
+- 描述：Transaction Commit RPC 超时的时长。该参数自 v3.2.0 起弃用。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 引入版本：-
 
 ##### max_consumer_num_per_group
@@ -1812,7 +1919,10 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ### 查询引擎
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### scanner_thread_pool_thread_num
 
 - 默认值：48
@@ -2727,38 +2837,59 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### parquet_late_materialization_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
+<<<<<<< HEAD
 - 描述：
 - 引入版本：-
 -->
 
 <!--
+=======
+- 描述：是否使用延迟物化优化 Parquet 读性能。
+- 引入版本：-
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### parquet_late_materialization_v2_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
+<<<<<<< HEAD
 - 描述：
 - 引入版本：-
 -->
 
 <!--
+=======
+- 描述：是否使用 v2 版延迟物化优化 Parquet 读性能。v3.2 版本支持两个版本的 Parquet Reader 延迟物化，v3.3 版本仅保留 `parquet_late_materialization_enable` 延迟物化，并删除该变量。
+- 引入版本：v3.2
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### parquet_page_index_enable
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
+<<<<<<< HEAD
 - 描述：
 - 引入版本：-
 -->
+=======
+- 描述：是否使用 Parquet Pageindex 信息优化读性能。
+- 引入版本：v3.3
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 <!--
 ##### io_coalesce_read_max_buffer_size
@@ -2782,16 +2913,24 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：-
 -->
 
+<<<<<<< HEAD
 <!--
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### io_coalesce_adaptive_lazy_active
 
 - 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
+<<<<<<< HEAD
 - 描述：
 - 引入版本：-
 -->
+=======
+- 描述：根据谓词选择度，自适应决定是否将谓词列 IO 和非谓词列 IO 进行合并。
+- 引入版本：v3.2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 <!--
 ##### io_tasks_per_scan_operator
@@ -3135,6 +3274,72 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：指定 Query Cache 的大小。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### enable_json_flat
+
+- 默认值：false
+- 类型：Boolean
+- 单位：
+- 是否动态：是
+- 描述：是否开启 Flat JSON 特性。开启后新导入的 JSON 数据会自动打平，提升 JSON 数据查询性能。
+- 引入版本：v3.3.0
+
+##### json_flat_null_factor
+
+- 默认值：0.3
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不对该列进行提取，默认为 0.3。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_sparsity_factor
+
+- 默认值：0.9
+- 类型：Double
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### json_flat_column_max
+
+- 默认值：100
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：控制 Flat JSON 时，最多提取的子列数量。该参数仅在 `enable_json_flat` 为 `true` 时生效。
+- 引入版本：v3.3.0
+
+##### enable_compaction_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：控制是否为 Flat Json 数据进行 Compaction。
+- 引入版本：v3.3.3
+
+##### enable_lazy_dynamic_flat_json
+
+- 默认值：True
+- 类型：Bool
+- 单位：
+- 是否动态：是
+- 描述：当查询在读过程中未命中 Flat JSON Schema 时，是否启用 Lazy Dynamic Flat JSON。当此项设置为 `true` 时，StarRocks 将把 Flat JSON 操作推迟到计算流程，而不是读取流程。
+- 引入版本：v3.3.3
+
+##### jit_lru_cache_size
+
+- 默认值：0
+- 类型：Int
+- 单位：GB
+- 是否动态：是
+- 描述：JIT 编译的 LRU 缓存大小。如果设置为大于 0，则表示实际的缓存大小。如果设置为小于或等于 0，系统将自适应设置缓存大小，使用的公式为 `jit_lru_cache_size = min(mem_limit*0.01, 1GB)` （节点的 `mem_limit` 必须大于或等于 16 GB）。
+- 引入版本：-
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### 存算分离
 
 ##### starlet_port
@@ -3363,6 +3568,42 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### starlet_fslib_s3client_nonread_max_retries
+
+- 默认值：5
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### starlet_fslib_s3client_nonread_retry_scale_factor
+
+- 默认值：200
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### starlet_fslib_s3client_connect_timeout_ms
+
+- 默认值：1000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### lake_metadata_cache_limit
 
 - 默认值：2147483648
@@ -3652,6 +3893,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### spill_max_partition_level
+
+- 默认值：7
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### spill_max_partition_size
+
+- 默认值：1024
+- 类型：Int
+- 单位：
+- 是否动态：否
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### spill_max_log_block_container_bytes
 
 - 默认值：10737418240
@@ -3751,6 +4017,72 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 描述：Block 的元数据存储目录，可自定义。推荐创建在 `$STARROCKS_HOME` 路径下。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### datacache_auto_adjust_enable
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘容量自动调整开关，启用后会根据当前磁盘使用率动态调整缓存容量。
+- 引入版本：v3.3.0
+
+##### datacache_disk_high_level
+
+- 默认值：80
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘高水位（百分比）。当磁盘使用率高于该值时，系统自动淘汰 Data Cache 中的缓存数据。
+- 引入版本：v3.3.0
+
+##### datacache_disk_safe_level
+
+- 默认值：70
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘安全水位（百分比）。当 Data Cache 进行缓存自动扩缩容时，系统将尽可能以该阈值为磁盘使用率目标调整缓存容量。
+- 引入版本：v3.3.0
+
+##### datacache_disk_low_level
+
+- 默认值：60
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Data Cache 磁盘低水位（百分比）。当磁盘使用率在 `datacache_disk_idle_seconds_for_expansion` 指定的时间内持续低于该值，且用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
+- 引入版本：v3.3.0
+
+##### datacache_disk_adjust_interval_seconds
+
+- 默认值：10
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Data Cache 容量自动调整周期。每隔这段时间系统会进行一次缓存磁盘使用率检测，必要时触发相应扩缩容操作。
+- 引入版本：v3.3.0
+
+##### datacache_disk_idle_seconds_for_expansion
+
+- 默认值：7200
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：Data Cache 自动扩容最小等待时间。只有当磁盘使用率在 `datacache_disk_low_level` 以下持续时间超过该时长，才会触发自动扩容。
+- 引入版本：v3.3.0
+
+##### datacache_min_disk_quota_for_adjustment
+
+- 默认值：107374182400
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：Data Cache 自动扩缩容时的最小有效容量。当需要调整的目标容量小于该值时，系统会直接将缓存空间调整为 `0`，以避免缓存空间过小导致频繁填充和淘汰带来负优化。
+- 引入版本：v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### datacache_block_buffer_enable
 
 - 默认值：true
@@ -3878,6 +4210,20 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### report_datacache_metrics_interval_ms
+
+- 默认值：60000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### block_cache_enable
 
 - 默认值：false
@@ -4314,6 +4660,31 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 - 引入版本：v3.1.7, v3.2.3
 
 <!--
+<<<<<<< HEAD
+=======
+##### dictionary_cache_refresh_timeout_ms
+
+- 默认值：60000
+- 类型：Int
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### dictionary_cache_refresh_threadpool_size
+
+- 默认值：8
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### pk_dump_interval_seconds
 
 - 默认值：3600

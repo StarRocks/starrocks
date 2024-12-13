@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_avg
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the average value of all data in an ARRAY and return this result.
 

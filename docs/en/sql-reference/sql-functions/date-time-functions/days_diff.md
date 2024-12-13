@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # days_diff
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the day difference between two date expressions (`expr1` − `expr2`), accurate to the day.
 

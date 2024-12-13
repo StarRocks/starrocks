@@ -38,8 +38,15 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -50,6 +57,11 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -101,19 +113,32 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
     public void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException {
+=======
+    public void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         registerQuery(queryId, new QueryInfo(coord));
     }
 
     @Override
+<<<<<<< HEAD
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
         if (info.getConnectContext() != null && (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
                 info.getConnectContext().getSessionVariable().isAuditExecuteStmt())) {
+=======
+    public void registerQuery(TUniqueId queryId, QueryInfo info) throws StarRocksException {
+        if (needLogRegisterAndUnregisterQueryId(info)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.info("register query id = {}", DebugUtil.printId(queryId));
         }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
         if (result != null) {
+<<<<<<< HEAD
             throw new UserException("queryId " + queryId + " already exists");
+=======
+            throw new StarRocksException("queryId " + queryId + " already exists");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -148,8 +173,12 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }
+<<<<<<< HEAD
             if (info.getConnectContext() != null && (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
                     info.getConnectContext().getSessionVariable().isAuditExecuteStmt())) {
+=======
+            if (needLogRegisterAndUnregisterQueryId(info)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
             }
         }
@@ -166,6 +195,10 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             }
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+<<<<<<< HEAD
+=======
+                    .customQueryId(context.getCustomQueryId())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .queryId(queryIdStr)
                     .executionId(info.getConnectContext().getExecutionId())
                     .queryStartTime(info.getStartExecTime())
@@ -175,7 +208,13 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .db(context.getDatabase())
                     .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
                     .profile(info.getCoord().getQueryProfile())
+<<<<<<< HEAD
                     .warehouseName(info.coord.getWarehouseName()).build();
+=======
+                    .warehouseName(info.coord.getWarehouseName())
+                    .resourceGroupName(info.coord.getResourceGroupName())
+                    .build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             querySet.put(queryIdStr, item);
         }
@@ -293,6 +332,25 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params) {
+        final TReportFragmentFinishResponse result = new TReportFragmentFinishResponse();
+        final QueryInfo info = coordinatorMap.get(params.query_id);
+        if (info == null) {
+            LOG.debug("reportFragmentFinish() failed, query does not exist, fragment_instance_id={}, query_id={},",
+                    DebugUtil.printId(params.fragment_instance_id), DebugUtil.printId(params.query_id));
+            result.setStatus(new TStatus(TStatusCode.OK));
+            return result;
+        }
+        final TUniqueId fragment_instance_id = params.fragment_instance_id;
+        Status status = info.getCoord().scheduleNextTurn(fragment_instance_id);
+        result.setStatus(status.toThrift());
+        return result;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getCoordinatorCount() {
         return coordinatorMap.size();
     }
@@ -308,7 +366,11 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
+<<<<<<< HEAD
         return ImmutableMap.of("QueryInfo", (long) coordinatorMap.size());
+=======
+        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static final class QueryInfo {
@@ -355,4 +417,15 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             return startExecTime;
         }
     }
+<<<<<<< HEAD
+=======
+
+    private static boolean needLogRegisterAndUnregisterQueryId(QueryInfo inf) {
+        ConnectContext context = inf.getConnectContext();
+        return Config.log_register_and_unregister_query_id &&
+                context != null &&
+                (context.getCommand() != COM_STMT_EXECUTE ||
+                        context.getSessionVariable().isAuditExecuteStmt());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

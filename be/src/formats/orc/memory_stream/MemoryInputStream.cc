@@ -16,6 +16,10 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 MemoryInputStream::~MemoryInputStream() {}
+=======
+MemoryInputStream::~MemoryInputStream() = default;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

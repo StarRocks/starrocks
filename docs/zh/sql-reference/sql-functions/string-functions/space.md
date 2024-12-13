@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # space
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回由指定数量的空格组成的字符串。
 

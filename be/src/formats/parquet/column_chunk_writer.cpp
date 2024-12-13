@@ -14,9 +14,15 @@
 
 #include "formats/parquet/column_chunk_writer.h"
 
+<<<<<<< HEAD
 #include <parquet/arrow/writer.h>
 
 #include "formats/parquet/chunk_writer.h"
+=======
+#include <parquet/column_writer.h>
+#include <parquet/types.h>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "formats/parquet/level_builder.h"
 #include "gutil/casts.h"
 
@@ -57,7 +63,11 @@ void ColumnChunkWriter::write(const LevelBuilderResult& result) {
     case ParquetType: {                                                                                         \
         auto typed_column_writer =                                                                              \
                 down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<ParquetType>>*>(_column_writer); \
+<<<<<<< HEAD
         return typed_column_writer->EstimatedBufferedValueBytes();                                              \
+=======
+        return typed_column_writer->estimated_buffered_value_bytes();                                           \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 int64_t ColumnChunkWriter::estimated_buffered_value_bytes() {

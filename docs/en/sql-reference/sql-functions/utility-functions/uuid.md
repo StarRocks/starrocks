@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # uuid
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns a random UUID of the VARCHAR type. Two calls to this function can generate two different numbers. The UUID is 36 characters in length. It contains 5 hexadecimal numbers which are connected with four hyphens in the aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee format.
 

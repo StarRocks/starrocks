@@ -40,9 +40,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
+<<<<<<< HEAD
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
+=======
+import com.starrocks.analysis.Expr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
@@ -59,7 +63,10 @@ import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+<<<<<<< HEAD
 import java.util.ArrayList;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -253,6 +260,7 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public int getNumInstances() {
         int numInstances = 0;
         for (PlanNode child : children) {
@@ -263,6 +271,8 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canDoReplicatedJoin() {
         return false;
     }
@@ -308,7 +318,12 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
+=======
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr, List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -322,7 +337,11 @@ public abstract class SetOperationNode extends PlanNode {
             boolean pushDown = false;
             // try to push all children if any expr of a child can match `probeExpr`
             for (int i = 0; i < materializedResultExprLists_.size(); i++) {
+<<<<<<< HEAD
                 pushDown |= pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+=======
+                pushDown |= pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         candidatesOfSlotExprForChild(probeExpr, i), partitionByExprs,
                         candidatesOfSlotExprsForChild(partitionByExprs, i), i, false);
             }
@@ -331,7 +350,11 @@ public abstract class SetOperationNode extends PlanNode {
             }
         }
 
+<<<<<<< HEAD
         if (description.canProbeUse(this)) {
+=======
+        if (description.canProbeUse(this, context)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);

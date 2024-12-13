@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # json_string
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 JSON 类型转化为 JSON 字符串。
 

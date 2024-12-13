@@ -21,8 +21,17 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
+import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections4.MapUtils;
@@ -89,6 +98,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
+<<<<<<< HEAD
                                                              boolean preferComputeNode,
                                                              int numUsedComputeNodes,
                                                              ComputationFragmentSchedulingPolicy policy) {
@@ -96,6 +106,16 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, policy);
+=======
+                                     boolean preferComputeNode, int numUsedComputeNodes,
+                                     ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                                     long warehouseId) {
+
+            ImmutableMap<Long, ComputeNode> idToComputeNode =
+                    buildComputeNodeInfo(systemInfoService, numUsedComputeNodes, 
+                                         computationFragmentSchedulingPolicy, warehouseId);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ImmutableMap<Long, ComputeNode> idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
 
             if (LOG.isDebugEnabled()) {
@@ -138,6 +158,26 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.preferComputeNode = preferComputeNode;
     }
 
+<<<<<<< HEAD
+=======
+    @VisibleForTesting
+    public DefaultWorkerProvider(
+            ImmutableMap<Long, ComputeNode> id2ComputeNode,
+            ImmutableMap<Long, ComputeNode> availableID2ComputeNode) {
+        this.id2Backend = ImmutableMap.of();
+        this.id2ComputeNode = id2ComputeNode;
+
+        this.availableID2Backend = ImmutableMap.of();
+        this.availableID2ComputeNode = availableID2ComputeNode;
+
+        this.selectedWorkerIds = Sets.newConcurrentHashSet();
+
+        this.hasComputeNode = true;
+        this.preferComputeNode = true;
+        this.usedComputeNode = true;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public long selectNextWorker() throws NonRecoverableException {
         ComputeNode worker;
@@ -225,6 +265,10 @@ public class DefaultWorkerProvider implements WorkerProvider {
      * if usedComputeNode turns on or no backend, we add all compute nodes to the result.
      * if perferComputeNode turns on, we just return computeNode set
      * else add backend set and return
+<<<<<<< HEAD
+=======
+     *
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @return
      */
     @Override
@@ -253,7 +297,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return toString(usedComputeNode);
+=======
+        return toString(usedComputeNode, true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @VisibleForTesting
@@ -272,6 +320,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return -1;
     }
 
+<<<<<<< HEAD
     private String toString(boolean chooseComputeNode) {
         return chooseComputeNode ? computeNodesToString() : backendsToString();
     }
@@ -301,6 +350,61 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     @VisibleForTesting
     static int getNextComputeNodeIndex() {
+=======
+    private String toString(boolean chooseComputeNode, boolean allowNormalNodes) {
+        return chooseComputeNode ? computeNodesToString(allowNormalNodes) :
+                backendsToString(allowNormalNodes);
+    }
+
+    private void reportWorkerNotFoundException(boolean chooseComputeNode) throws NonRecoverableException {
+        throw new NonRecoverableException(
+                FeConstants.getNodeNotFoundError(chooseComputeNode) + toString(chooseComputeNode, false));
+    }
+
+    private String computeNodesToString(boolean allowNormalNodes) {
+        StringBuilder out = new StringBuilder("compute node: ");
+
+        id2ComputeNode.forEach((backendID, backend) -> {
+            if (shouldIncludeNode(backend, backendID, allowNormalNodes)) {
+                out.append(
+                        String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
+                                backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
+        return out.toString();
+    }
+
+    private String backendsToString(boolean allowNormalNodes) {
+        StringBuilder out = new StringBuilder("backend: ");
+        id2Backend.forEach((backendID, backend) -> {
+            if (shouldIncludeNode(backend, backendID, allowNormalNodes)) {
+                out.append(
+                        formatNodeInfo(backend.getHost(), backend.isAlive(), SimpleScheduler.isInBlocklist(backendID)));
+            }
+        });
+        return out.toString();
+    }
+
+    private boolean shouldIncludeNode(ComputeNode node, Long nodeId, boolean allowNormalNodes) {
+        return allowNormalNodes || !node.isAlive() || SimpleScheduler.isInBlocklist(nodeId);
+    }
+
+    private String formatNodeInfo(String host, boolean isAlive, boolean isInBlacklist) {
+        return String.format("[%s alive: %b inBlacklist: %b] ",
+                host, isAlive, isInBlacklist);
+    }
+
+    @VisibleForTesting
+    static int getNextComputeNodeIndex() {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            long currentWh = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+            if (ConnectContext.get() != null) {
+                currentWh = ConnectContext.get().getCurrentWarehouseId();
+            }
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().
+                    getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
     }
 
@@ -310,8 +414,14 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
+<<<<<<< HEAD
                                       int numUsedComputeNodes,
                                       ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy) {
+=======
+                                  int numUsedComputeNodes,
+                                  ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                                  long warehouseId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         //define Node Pool
         Map<Long, ComputeNode> computeNodes = new HashMap<>();
 
@@ -355,8 +465,13 @@ public class DefaultWorkerProvider implements WorkerProvider {
         return ImmutableMap.copyOf(computeNodes);
     }
 
+<<<<<<< HEAD
     private static boolean isWorkerAvailable(ComputeNode worker) {
         return worker.isAlive() && !SimpleScheduler.isInBlacklist(worker.getId());
+=======
+    public static boolean isWorkerAvailable(ComputeNode worker) {
+        return worker.isAlive() && !SimpleScheduler.isInBlocklist(worker.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @VisibleForTesting

@@ -60,7 +60,11 @@ public class EntityConvertUtils {
                 return ScalarType.createVarcharType(varcharTypeInfo.getLength());
             case STRING:
             case JSON:
+<<<<<<< HEAD
                 return ScalarType.createDefaultExternalTableString();
+=======
+                return ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case BINARY:
                 return Type.VARBINARY;
             case BOOLEAN:

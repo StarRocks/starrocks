@@ -68,7 +68,11 @@ public:
     Status open(RuntimeState* state) override;
 
     Status seek(const Columns& keys, StateTableResult& values) const override;
+<<<<<<< HEAD
     Status seek(const Columns& keys, const std::vector<uint8_t>& selection, StateTableResult& values) const override;
+=======
+    Status seek(const Columns& keys, const Filter& selection, StateTableResult& values) const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status seek(const Columns& keys, const std::vector<std::string>& projection_columns,
                 StateTableResult& values) const override;

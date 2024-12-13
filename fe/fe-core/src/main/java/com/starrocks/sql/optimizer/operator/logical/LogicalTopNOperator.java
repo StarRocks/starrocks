@@ -15,6 +15,10 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -29,11 +33,23 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.property.DomainProperty;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Objects;
 
 public class LogicalTopNOperator extends LogicalOperator {
@@ -45,6 +61,13 @@ public class LogicalTopNOperator extends LogicalOperator {
     private TopNType topNType;
     private boolean isSplit;
 
+<<<<<<< HEAD
+=======
+    // only set when rank <=1 with preAgg optimization is triggered
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private ImmutableMap<ColumnRefOperator, CallOperator> partitionPreAggCall;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public LogicalTopNOperator(List<Ordering> orderByElements) {
         this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL,
                 TopNType.ROW_NUMBER,
@@ -65,7 +88,11 @@ public class LogicalTopNOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_TOPN);
     }
 
+<<<<<<< HEAD
     private LogicalTopNOperator(long limit,
+=======
+    public LogicalTopNOperator(long limit,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 ScalarOperator predicate, Projection projection,
                                 List<ColumnRefOperator> partitionByColumns,
                                 long partitionLimit,
@@ -79,6 +106,10 @@ public class LogicalTopNOperator extends LogicalOperator {
         this.sortPhase = sortPhase;
         this.topNType = topNType;
         this.isSplit = isSplit;
+<<<<<<< HEAD
+=======
+        this.partitionPreAggCall = ImmutableMap.of();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkState(limit != 0);
     }
 
@@ -99,6 +130,14 @@ public class LogicalTopNOperator extends LogicalOperator {
         for (Ordering ordering : orderByElements) {
             columns.union(ordering.getColumnRef());
         }
+<<<<<<< HEAD
+=======
+        if (partitionPreAggCall != null && !partitionPreAggCall.isEmpty()) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                columns.union(entry.getValue().getUsedColumns());
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return columns;
     }
 
@@ -122,6 +161,13 @@ public class LogicalTopNOperator extends LogicalOperator {
         return orderByElements;
     }
 
+<<<<<<< HEAD
+=======
+    public ImmutableMap<ColumnRefOperator, CallOperator> getPartitionPreAggCall() {
+        return partitionPreAggCall;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
@@ -133,6 +179,16 @@ public class LogicalTopNOperator extends LogicalOperator {
             for (Ordering ordering : orderByElements) {
                 columns.union(ordering.getColumnRef());
             }
+<<<<<<< HEAD
+=======
+
+            if (partitionPreAggCall != null) {
+                for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                    columns.union(entry.getKey());
+                }
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return columns;
         }
     }
@@ -146,10 +202,31 @@ public class LogicalTopNOperator extends LogicalOperator {
         for (Ordering ordering : orderByElements) {
             entryList.add(new ColumnOutputInfo(ordering.getColumnRef(), ordering.getColumnRef()));
         }
+<<<<<<< HEAD
+=======
+
+        if (partitionPreAggCall != null) {
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : partitionPreAggCall.entrySet()) {
+                entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return new RowOutputInfo(entryList);
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public DomainProperty deriveDomainProperty(List<OptExpression> inputs) {
+        if (CollectionUtils.isEmpty(inputs)) {
+            return new DomainProperty(Map.of());
+        }
+        return inputs.get(0).getDomainProperty();
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalTopN(this, context);
     }
@@ -173,12 +250,21 @@ public class LogicalTopNOperator extends LogicalOperator {
         return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
+<<<<<<< HEAD
                 sortPhase == that.sortPhase && topNType == that.topNType;
+=======
+                sortPhase == that.sortPhase && topNType == that.topNType &&
+                Objects.equals(partitionPreAggCall, that.partitionPreAggCall);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit);
+=======
+        return Objects.hash(super.hashCode(), orderByElements, offset, sortPhase, topNType, isSplit, partitionPreAggCall);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static Builder builder() {
@@ -203,6 +289,10 @@ public class LogicalTopNOperator extends LogicalOperator {
             builder.isSplit = topNOperator.isSplit;
             builder.partitionLimit = topNOperator.partitionLimit;
             builder.partitionByColumns = topNOperator.partitionByColumns;
+<<<<<<< HEAD
+=======
+            builder.partitionPreAggCall = topNOperator.partitionPreAggCall;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return this;
         }
 
@@ -240,5 +330,14 @@ public class LogicalTopNOperator extends LogicalOperator {
             builder.isSplit = isSplit;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public LogicalTopNOperator.Builder setPartitionPreAggCall(
+                Map<ColumnRefOperator, CallOperator> partitionPreAggCall) {
+            builder.partitionPreAggCall = ImmutableMap.copyOf(partitionPreAggCall);
+            return this;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

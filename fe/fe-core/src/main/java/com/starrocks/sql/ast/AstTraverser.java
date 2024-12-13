@@ -19,7 +19,11 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 
+<<<<<<< HEAD
 public class AstTraverser<R, C> extends AstVisitor<R, C> {
+=======
+public class AstTraverser<R, C> implements AstVisitor<R, C> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // ---------------------------------------- Query Statement --------------------------------------------------------------
 

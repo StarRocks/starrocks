@@ -3,10 +3,17 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
+<<<<<<< HEAD
         ./column/binary_column_test.cpp
         ./column/chunk_test.cpp
         ./column/column_helper_test.cpp
         ./column/column_pool_test.cpp
+=======
+        ./column/array_view_column_test.cpp
+        ./column/binary_column_test.cpp
+        ./column/chunk_test.cpp
+        ./column/column_helper_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
@@ -24,13 +31,28 @@ set(EXEC_FILES
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+<<<<<<< HEAD
+=======
+        ./connector/deletion_vector/deletion_vector_test.cpp
+        ./connector_sink/hive_chunk_sink_test.cpp
+        ./connector_sink/iceberg_chunk_sink_test.cpp
+        ./connector_sink/file_chunk_sink_test.cpp
+        ./connector_sink/async_flush_output_stream_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./fs/fs_broker_test.cpp
         ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
+<<<<<<< HEAD
         ./fs/output_stream_wrapper_test.cpp
+=======
+        ./fs/encrypt_file_test.cpp
+        ./fs/key_cache_test.cpp
+        ./fs/output_stream_wrapper_test.cpp
+        ./fs/poco_http_client_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./exec/column_value_range_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
@@ -38,17 +60,33 @@ set(EXEC_FILES
         ./exec/iceberg/iceberg_table_sink_operator_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/workgroup/pipeline_executor_set_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
+<<<<<<< HEAD
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
+=======
+        ./exec/pipeline/multi_cast_local_exchange_test.cpp
+        ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/sink/export_sink_operator_test.cpp
+        ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
+        ./exec/pipeline/mem_limited_chunk_queue_test.cpp
+        ./exec/query_cache/query_cache_test.cpp
+        ./exec/query_cache/transform_operator.cpp
+        ./exec/schema_columns_scanner_test.cpp
+        ./exec/sink/connector_sink_operator_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/stream/mem_state_table_test.cpp
         ./exec/stream/stream_aggregator_test.cpp
@@ -74,11 +112,19 @@ set(EXEC_FILES
         ./exec/json_parser_test.cpp
         ./exec/json_scanner_test.cpp
         ./exec/lake_meta_scanner_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/multi_olap_table_sink_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./exec/avro_scanner_test.cpp
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/table_function_node_test.cpp
+<<<<<<< HEAD
+=======
+        ./exec/olap_scan_prepare_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/arithmetic_expr_test.cpp
@@ -110,7 +156,13 @@ set(EXEC_FILES
         ./exprs/function_helper_test.cpp
         ./exprs/in_predicate_test.cpp
         ./exprs/is_null_predicate_test.cpp
+<<<<<<< HEAD
         ./exprs/json_functions_test.cpp
+=======
+        ./exprs/jit_func_cache_test.cpp
+        ./exprs/json_functions_test.cpp
+        ./exprs/flat_json_functions_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
@@ -140,8 +192,15 @@ set(EXEC_FILES
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./exprs/vectorized_literal_test.cpp
+<<<<<<< HEAD
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
+=======
+        ./exprs/min_max_predicate_test.cpp
+        ./formats/csv/array_converter_test.cpp
+        ./formats/csv/boolean_converter_test.cpp
+        ./formats/csv/csv_file_writer_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
@@ -163,6 +222,10 @@ set(EXEC_FILES
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
+<<<<<<< HEAD
+=======
+        ./formats/orc/orc_file_writer_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/utils_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
@@ -175,11 +238,21 @@ set(EXEC_FILES
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./formats/parquet/column_converter_test.cpp
+<<<<<<< HEAD
+=======
+        ./formats/parquet/parquet_file_writer_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./formats/parquet/parquet_footer_test.cpp
         ./formats/parquet/parquet_cli_reader.h
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
+<<<<<<< HEAD
         ./formats/parquet/statistics_helper_test.cpp
+=======
+        ./formats/parquet/page_index_test.cpp
+        ./formats/parquet/statistics_helper_test.cpp
+        ./formats/disk_range_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -189,6 +262,10 @@ set(EXEC_FILES
         ./http/datacache_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
+<<<<<<< HEAD
+=======
+        ./http/action/update_config_action_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/io_profiler_test.cpp
@@ -199,6 +276,10 @@ set(EXEC_FILES
         ./io/seekable_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
+<<<<<<< HEAD
+=======
+        ./io/spill_block_manager_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
@@ -225,8 +306,16 @@ set(EXEC_FILES
         ./storage/lake/compaction_policy_test.cpp
         ./storage/lake/delta_writer_test.cpp
         ./storage/lake/vacuum_test.cpp
+<<<<<<< HEAD
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/rowset_test.cpp
+=======
+        ./storage/lake/starlet_location_provider_test.cpp
+        ./storage/lake/rowset_test.cpp
+        ./storage/lake/tablet_test.cpp
+        ./storage/lake/lake_data_source_test.cpp
+        ./storage/lake/lake_scan_node_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./storage/lake/schema_change_test.cpp
         ./storage/lake/alter_tablet_meta_test.cpp
         ./storage/lake/tablet_manager_test.cpp
@@ -239,9 +328,15 @@ set(EXEC_FILES
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
         ./storage/lake/metacache_test.cpp
+<<<<<<< HEAD
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/compaction_scheduler_test.cpp
         ./storage/lake/compaction_task_context_test.cpp
+=======
+        ./storage/lake/compaction_scheduler_test.cpp
+        ./storage/lake/compaction_task_context_test.cpp
+        ./storage/lake/lake_primary_key_consistency_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -255,6 +350,10 @@ set(EXEC_FILES
         ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
         ./storage/rowset/column_reader_writer_test.cpp
         ./storage/rowset/dict_page_test.cpp
+<<<<<<< HEAD
+=======
+        ./storage/rowset/data_sample_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./storage/rowset/encoding_info_test.cpp
         ./storage/rowset/frame_of_reference_page_test.cpp
         ./storage/rowset/map_column_rw_test.cpp
@@ -265,16 +364,35 @@ set(EXEC_FILES
         ./storage/rowset/segment_test.cpp
         ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/struct_column_rw_test.cpp
+<<<<<<< HEAD
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
         ./storage/rowset/default_value_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
         ./storage/rowset/metadata_cache_test.cpp
+=======
+        ./storage/rowset/flat_json_column_rw_test.cpp
+        ./storage/rowset/flat_json_column_compact_test.cpp
+        ./storage/rowset/zone_map_index_test.cpp
+        ./storage/rowset/unique_rowset_id_generator_test.cpp
+        ./storage/rowset/default_value_column_iterator_test.cpp
+        ./storage/rowset/column_iterator_decorator_test.cpp
+        ./storage/rowset/cast_column_iterator_test.cpp
+        ./storage/rowset/series_column_iterator_test.cpp
+        ./storage/rowset/index_page_test.cpp
+        ./storage/rowset/metadata_cache_test.cpp
+        ./storage/index/vector_index_test.cpp
+        ./storage/index/vector_search_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./storage/snapshot_meta_test.cpp
         ./storage/short_key_index_test.cpp
         ./storage/storage_types_test.cpp
         ./storage/tablet_meta_test.cpp
         ./storage/tablet_meta_manager_test.cpp
+<<<<<<< HEAD
+=======
+        ./storage/tablet_index_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./storage/table_reader_remote_test.cpp
         ./storage/table_reader_test.cpp
         ./storage/tablet_schema_test.cpp
@@ -320,7 +438,17 @@ set(EXEC_FILES
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
+<<<<<<< HEAD
         ./storage/meta_reader_test.cpp
+=======
+        ./storage/persistent_index_consistency_test.cpp
+        ./storage/meta_reader_test.cpp
+        ./storage/dictionary_cache_manager_test.cpp
+        ./storage/column_or_predicate_test.cpp
+        ./storage/column_and_predicate_test.cpp
+        ./storage/olap_runtime_range_pruner_test.cpp
+        ./runtime/agg_state_desc_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
         ./runtime/datetime_value_test.cpp
@@ -330,20 +458,38 @@ set(EXEC_FILES
         ./runtime/fragment_mgr_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
+<<<<<<< HEAD
+=======
+        ./runtime/local_tablets_channel_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./runtime/lake_tablets_channel_test.cpp
         ./runtime/large_int_value_test.cpp
         ./runtime/load_channel_test.cpp
         ./runtime/memory/mem_chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
+<<<<<<< HEAD
         ./runtime/mem_pool_test.cpp
         ./runtime/mem_tracker_test.cpp
         ./runtime/result_queue_mgr_test.cpp
+=======
+        ./runtime/memory/counting_allocator_test.cpp
+        ./runtime/mem_pool_test.cpp
+        ./runtime/mem_tracker_test.cpp
+        ./runtime/result_queue_mgr_test.cpp
+        ./runtime/batch_write/batch_write_mgr_test.cpp
+        ./runtime/batch_write/batch_write_util_test.cpp
+        ./runtime/batch_write/isomorphic_batch_write_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
+<<<<<<< HEAD
+=======
+        ./runtime/time_bounded_stream_load_pipe_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/user_function_cache_test.cpp
@@ -356,6 +502,10 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
+<<<<<<< HEAD
+=======
+        ./types/type_checker_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./simd/batch_run_counter_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
@@ -363,7 +513,13 @@ set(EXEC_FILES
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/await_test.cpp
+<<<<<<< HEAD
         ./util/bitmap_test.cpp
+=======
+        ./util/base85_test.cpp
+        ./util/bitmap_test.cpp
+        ./util/bit_mask_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
@@ -381,6 +537,10 @@ set(EXEC_FILES
         ./util/core_local_test.cpp
         ./util/core_local_counter_test.cpp
         ./util/countdown_latch_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/cpu_info_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
@@ -390,6 +550,10 @@ set(EXEC_FILES
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/json_flattener_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./util/md5_test.cpp
         ./util/monotime_test.cpp
         ./util/mysql_row_buffer_test.cpp
@@ -400,6 +564,10 @@ set(EXEC_FILES
         ./util/priority_queue_test.cpp
         ./util/rle_encoding_test.cpp
         ./util/runtime_profile_test.cpp
+<<<<<<< HEAD
+=======
+        ./util/raw_container_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./util/scoped_cleanup_test.cpp
         ./util/string_parser_test.cpp
         ./util/string_util_test.cpp
@@ -410,7 +578,13 @@ set(EXEC_FILES
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
         ./util/int96_test.cpp
+<<<<<<< HEAD
         ./util/bit_packing_test.cpp
+=======
+        ./util/internal_service_recoverable_stub_test.cpp
+        ./util/bit_packing_test.cpp
+        ./util/bit_packing_simd_test.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ./util/gc_helper_test.cpp
         ./util/lru_cache_test.cpp
         ./util/arrow/starrocks_column_to_arrow_test.cpp
@@ -427,6 +601,7 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./service/service_be/internal_service_test.cpp
+<<<<<<< HEAD
         ./storage/compaction_parallelization_test.cpp
         ./storage/delta_writer_test.cpp
         ./storage/rows_mapper_test.cpp
@@ -435,6 +610,24 @@ set(EXEC_FILES
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
+=======
+        ./storage/metadata_util_test.cpp
+        ./storage/delta_writer_test.cpp
+        ./storage/compaction_parallelization_test.cpp
+        ./storage/rows_mapper_test.cpp
+        ./storage/lake/persistent_index_memtable_test.cpp
+        ./storage/lake/lake_persistent_index_test.cpp
+        ./storage/lake/replication_txn_manager_test.cpp
+        ./storage/lake/persistent_index_sstable_test.cpp
+        ./block_cache/datacache_utils_test.cpp
+        ./block_cache/block_cache_hit_rate_counter_test.cpp
+        ./util/thrift_rpc_helper_test.cpp
+        )
+
+if ("${WITH_STARCACHE}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./block_cache/disk_space_monitor_test.cpp)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 

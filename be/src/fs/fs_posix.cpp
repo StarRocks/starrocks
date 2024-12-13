@@ -24,6 +24,10 @@
 
 #include "common/config.h"
 #include "common/logging.h"
+<<<<<<< HEAD
+=======
+#include "fs/encrypt_file.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "fs/fd_cache.h"
 #include "fs/fs.h"
 #include "gutil/gscoped_ptr.h"
@@ -163,6 +167,10 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
         ssize_t w;
         RETRY_ON_EINTR(w, pwritev(fd, iov + completed_iov, iov_count, cur_offset));
         if (PREDICT_FALSE(w < 0)) {
+<<<<<<< HEAD
+=======
+            perror("TRACE pwritev");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // An error: return a non-ok status.
             return io_error(filename, errno);
         }
@@ -210,6 +218,10 @@ public:
     Status append(const Slice& data) override { return appendv(&data, 1); }
 
     Status appendv(const Slice* data, size_t cnt) override {
+<<<<<<< HEAD
+=======
+        TEST_ERROR_POINT("PosixFileSystem::appendv");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #ifdef USE_STAROS
         staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
 #endif
@@ -227,6 +239,10 @@ public:
     }
 
     Status pre_allocate(uint64_t size) override {
+<<<<<<< HEAD
+=======
+        TEST_ERROR_POINT("PosixFileSystem::pre_allocate");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         uint64_t offset = std::max(_filesize, _pre_allocated_size);
         int ret;
         RETRY_ON_EINTR(ret, fallocate(_fd, 0, offset, size));
@@ -244,6 +260,10 @@ public:
     }
 
     Status close() override {
+<<<<<<< HEAD
+=======
+        TEST_ERROR_POINT("PosixFileSystem::close");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_closed) {
             return Status::OK();
         }
@@ -283,6 +303,10 @@ public:
     }
 
     Status flush(FlushMode mode) override {
+<<<<<<< HEAD
+=======
+        TEST_ERROR_POINT("PosixFileSystem::flush");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #if defined(__linux__)
         int flags = SYNC_FILE_RANGE_WRITE;
         if (mode == FLUSH_SYNC) {
@@ -301,6 +325,10 @@ public:
     }
 
     Status sync() override {
+<<<<<<< HEAD
+=======
+        TEST_ERROR_POINT("PosixFileSystem::sync");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MonotonicStopWatch watch;
         watch.start();
         if (_pending_sync) {
@@ -335,19 +363,32 @@ public:
 
     StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
                                                                   const string& fname) override {
+<<<<<<< HEAD
         (void)opts;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int fd;
         RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
             return io_error(fname, errno);
         }
+<<<<<<< HEAD
         auto stream = std::make_shared<io::FdInputStream>(fd);
         stream->set_close_on_delete(true);
         return std::make_unique<SequentialFile>(std::move(stream), fname);
+=======
+        auto stream = std::make_unique<io::FdInputStream>(fd);
+        stream->set_close_on_delete(true);
+        return SequentialFile::from(std::move(stream), fname, opts.encryption_info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& fname) override {
+<<<<<<< HEAD
+=======
+        std::unique_ptr<io::FdInputStream> fstream;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Handle* h = FdCache::Instance()->lookup(fname);
             if (h == nullptr) {
@@ -358,19 +399,31 @@ public:
                 }
                 h = FdCache::Instance()->insert(fname, fd);
             }
+<<<<<<< HEAD
             auto stream = std::make_shared<CachedFdInputStream>(h);
             stream->set_close_on_delete(false);
             return std::make_unique<RandomAccessFile>(std::move(stream), fname);
+=======
+            fstream = std::make_unique<CachedFdInputStream>(h);
+            fstream->set_close_on_delete(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             int fd;
             RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
             if (fd < 0) {
                 return io_error(fname, errno);
             }
+<<<<<<< HEAD
             auto stream = std::make_shared<io::FdInputStream>(fd);
             stream->set_close_on_delete(true);
             return std::make_unique<RandomAccessFile>(std::move(stream), fname);
         }
+=======
+            fstream = std::make_unique<io::FdInputStream>(fd);
+            fstream->set_close_on_delete(true);
+        }
+        return RandomAccessFile::from(std::move(fstream), fname, false, opts.encryption_info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const string& fname) override {
@@ -382,11 +435,26 @@ public:
         int fd = 0;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
 
+<<<<<<< HEAD
+=======
+        if (opts.direct_write) {
+            if (fcntl(fd, F_SETFL, O_DIRECT) == -1) {
+                ::close(fd);
+                return Status::InternalError("set fcntl direct error");
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         uint64_t file_size = 0;
         if (opts.mode == MUST_EXIST) {
             ASSIGN_OR_RETURN(file_size, get_file_size(fname));
         }
+<<<<<<< HEAD
         return std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close);
+=======
+        return wrap_encrypted(std::make_unique<PosixWritableFile>(fname, fd, file_size, opts.sync_on_close),
+                              opts.encryption_info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status path_exists(const std::string& fname) override {

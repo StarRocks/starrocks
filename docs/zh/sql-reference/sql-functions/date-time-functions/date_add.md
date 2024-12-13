@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # date_add,adddate
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 向日期添加指定的时间间隔。
 

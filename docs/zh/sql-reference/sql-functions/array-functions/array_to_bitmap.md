@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_to_bitmap
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 array 类型转化为 bitmap 类型。该函数从 2.3 版本开始支持。
 

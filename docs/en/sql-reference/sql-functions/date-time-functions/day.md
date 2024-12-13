@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # day
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Extracts the day part of a date or datetime expression and returns a value that ranges from 1 to 31.
 

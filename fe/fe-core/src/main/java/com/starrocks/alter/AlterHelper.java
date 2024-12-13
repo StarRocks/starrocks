@@ -32,8 +32,13 @@ public class AlterHelper {
         for (Column column : newColumns) {
             Preconditions.checkState(column.getUniqueId() >= 0);
             columnUniqueIdSet.add(column.getUniqueId());
+<<<<<<< HEAD
             if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
                 modifiedColumns.add(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+=======
+            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+                modifiedColumns.add(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX, column.getName()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         

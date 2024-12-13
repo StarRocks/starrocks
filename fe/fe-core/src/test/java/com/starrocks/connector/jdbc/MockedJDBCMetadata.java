@@ -20,6 +20,10 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 
@@ -41,6 +45,10 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "tbl1";
     public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "tbl2";
     public static final String MOCKED_PARTITIONED_TABLE_NAME3 = "tbl3";
+<<<<<<< HEAD
+=======
+    public static final String MOCKED_PARTITIONED_TABLE_NAME5 = "tbl5";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // string partition table
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME1 = "part_tbl1";
@@ -49,10 +57,18 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     private Map<String, String> properties;
     private Map<String, JDBCTable> tables = new HashMap<>();
 
+<<<<<<< HEAD
     private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
     private List<PartitionInfo> partitions = Arrays.asList(
             new Partition("d", 1690819200L),
             new Partition("d", 1690819200L),
+=======
+    private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803", "MAXVALUE");
+    private List<PartitionInfo> partitions = Arrays.asList(
+            new Partition("d", 1690819200L),
+            new Partition("d", 1690819200L),
+            new Partition("d", 1690819200L),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             new Partition("d", 1690819200L));
 
     private static ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -80,7 +96,14 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
                     tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
                             getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+<<<<<<< HEAD
                     tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME3, getSchema(tblName),
+=======
+                    tables.put(tblName, new JDBCTable(100003, MOCKED_PARTITIONED_TABLE_NAME3, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME5)) {
+                    tables.put(tblName, new JDBCTable(100005, MOCKED_PARTITIONED_TABLE_NAME5, getSchema(tblName),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
                 } else {
                     tables.put(tblName, new JDBCTable(tblName.hashCode(), tblName, getSchema(tblName),
@@ -156,12 +179,21 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String dbName, String tableName) {
+=======
+    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadatRequestContext requestContext) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         readLock();
         try {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
                 return Arrays.asList("1234567", "1234568", "1234569", "1234570");
+<<<<<<< HEAD
             } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
+=======
+            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)
+                    || tableName.equals(MOCKED_PARTITIONED_TABLE_NAME5)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Arrays.asList("20230801", "20230802", "20230803", "20230804");
             } else {
                 return partitionNames;
@@ -207,15 +239,23 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public void initPartitions() {
         readLock();
         try {
+<<<<<<< HEAD
             partitionNames = Arrays.asList("20230801", "20230802", "20230803");
             partitions = Arrays.asList(new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L),
+=======
+            partitionNames = Arrays.asList("20230801", "20230802", "20230803", "MAXVALUE");
+            partitions = Arrays.asList(new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new Partition("d", 1690819200L));
         } finally {
             readUnlock();
         }
     }
 
+<<<<<<< HEAD
 
     public void addPartitions() {
         readLock();
@@ -224,11 +264,24 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
             partitions = Arrays.asList(new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L),
+=======
+    public void addPartitions() {
+        readLock();
+        try {
+            partitionNames = Arrays.asList("20230802", "20230803", "20230804", "20230805", "MAXVALUE");
+            partitions = Arrays.asList(new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new Partition("d", 1690819200L));
         } finally {
             readUnlock();
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void refreshPartitions() {
@@ -236,6 +289,10 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         try {
             partitions = Arrays.asList(new Partition("d", 1690819300L),
                     new Partition("d", 1690819300L),
+<<<<<<< HEAD
+=======
+                    new Partition("d", 1690819300L),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     new Partition("d", 1690819300L));
         } finally {
             readUnlock();

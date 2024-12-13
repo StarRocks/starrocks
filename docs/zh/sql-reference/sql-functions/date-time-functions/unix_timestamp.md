@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # unix_timestamp
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。
 

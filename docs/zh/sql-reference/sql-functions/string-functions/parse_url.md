@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # parse_url
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从目标 URL 中提取一部分信息。
 

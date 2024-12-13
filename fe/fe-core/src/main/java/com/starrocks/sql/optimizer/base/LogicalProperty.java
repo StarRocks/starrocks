@@ -81,12 +81,20 @@ public class LogicalProperty implements Property {
 
     public LogicalProperty() {
         this.outputColumns = new ColumnRefSet();
+<<<<<<< HEAD
         this.usedCTEs = CTEProperty.EMPTY;
+=======
+        this.usedCTEs = EmptyCTEProperty.INSTANCE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public LogicalProperty(ColumnRefSet outputColumns) {
         this.outputColumns = outputColumns;
+<<<<<<< HEAD
         this.usedCTEs = CTEProperty.EMPTY;
+=======
+        this.usedCTEs = EmptyCTEProperty.INSTANCE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public LogicalProperty(LogicalProperty other) {
@@ -128,7 +136,11 @@ public class LogicalProperty implements Property {
             }
         }
 
+<<<<<<< HEAD
         usedCTEs = new CTEProperty(cteIds);
+=======
+        usedCTEs = CTEProperty.createProperty(cteIds);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static final class OneTabletProperty {
@@ -176,7 +188,12 @@ public class LogicalProperty implements Property {
         @Override
         public OneTabletProperty visitLogicalTableScan(LogicalScanOperator node, ExpressionContext context) {
             if (node instanceof LogicalOlapScanOperator) {
+<<<<<<< HEAD
                 if (((LogicalOlapScanOperator) node).getSelectedTabletId().size() <= 1) {
+=======
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
+                if (olapScanOperator.getSelectedTabletId() != null && olapScanOperator.getSelectedTabletId().size() <= 1) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Set<String> distributionColumnNames = node.getTable().getDistributionColumnNames();
                     List<ColumnRefOperator> bucketColumns = Lists.newArrayList();
                     for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {

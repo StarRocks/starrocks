@@ -43,6 +43,10 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.MatchExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -57,6 +61,10 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ArrayExpr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.DictionaryGetExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
@@ -73,12 +81,20 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -123,7 +139,10 @@ public class ScalarOperatorToExpr {
             this.colRefToExpr = variableToSlotRef;
             this.projectOperatorMap = projectOperatorMap;
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static class Formatter extends ScalarOperatorVisitor<Expr, FormatterContext> {
@@ -171,6 +190,10 @@ public class ScalarOperatorToExpr {
         public Expr visitSubfield(SubfieldOperator node, FormatterContext context) {
             SubfieldExpr expr = new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(),
                     node.getFieldNames());
+<<<<<<< HEAD
+=======
+            expr.setCopyFlag(node.getCopyFlag());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             hackTypeNull(expr);
             return expr;
         }
@@ -286,6 +309,10 @@ public class ScalarOperatorToExpr {
                         buildExpr.build(predicate.getChild(0), context), null);
             }
             callExpr.setType(Type.BOOLEAN);
+<<<<<<< HEAD
+=======
+            callExpr.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return callExpr;
         }
 
@@ -294,6 +321,10 @@ public class ScalarOperatorToExpr {
                     buildExpr.build(predicate.getChildren().get(0), context),
                     buildExpr.build(predicate.getChildren().get(1), context));
             call.setType(Type.BOOLEAN);
+<<<<<<< HEAD
+=======
+            call.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return call;
         }
 
@@ -375,6 +406,16 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public Expr visitMatchExprOperator(MatchExprOperator operator, FormatterContext context) {
+            Expr child1 = buildExpr.build(operator.getChild(0), context);
+            Expr child2 = buildExpr.build(operator.getChild(1), context);
+            return new MatchExpr(child1, child2);
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Expr visitCall(CallOperator call, FormatterContext context) {
             String fnName = call.getFnName();
             Expr callExpr;
@@ -466,6 +507,10 @@ public class ScalarOperatorToExpr {
                 case "user":
                 case "current_user":
                 case "current_role":
+<<<<<<< HEAD
+=======
+                case "session_id":
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
@@ -581,6 +626,7 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitDictMappingOperator(DictMappingOperator operator, FormatterContext context) {
+<<<<<<< HEAD
             final ColumnRefOperator dictColumn = operator.getDictColumn();
             final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
             final ScalarOperator call = operator.getOriginScalaOperator();
@@ -589,6 +635,13 @@ public class ScalarOperatorToExpr {
                             operator.getDictColumn().getName(),
                             dictExpr.isNullable());
 
+=======
+            // @todo: rewrite ScalarOperatorToExpr process when v1 is deprecated
+            final ColumnRefOperator dictColumn = operator.getDictColumn();
+            final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
+            final ScalarOperator call = operator.getOriginScalaOperator();
+            final ColumnRefOperator key = call.getColumnRefs().get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // Because we need to rewrite the string column to PlaceHolder when we build DictExpr,
             // the PlaceHolder and the original string column have the same id,
             // so we need to save the original string column first and restore it after we build the expression
@@ -596,13 +649,33 @@ public class ScalarOperatorToExpr {
             // 1. save the previous expr, it was null or string column
             final Expr old = context.colRefToExpr.get(key);
             // 2. use a placeholder instead of string column to build DictMapping
+<<<<<<< HEAD
             context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
+=======
+            if (key.getType().isArrayType()) {
+                context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
+                        Type.ARRAY_VARCHAR));
+            } else {
+                context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
+                        Type.VARCHAR));
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column
             if (old != null) {
                 context.colRefToExpr.put(key, old);
             }
+<<<<<<< HEAD
             Expr result = new DictMappingExpr(dictExpr, callExpr);
+=======
+            Expr result;
+            if (operator.getStringProvideOperator() != null) {
+                final Expr stringExpr = buildExpr.build(operator.getStringProvideOperator(), context);
+                result = new DictMappingExpr(dictExpr, callExpr, stringExpr);
+            } else {
+                result = new DictMappingExpr(dictExpr, callExpr);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             result.setType(operator.getType());
             hackTypeNull(result);
             return result;
@@ -627,6 +700,23 @@ public class ScalarOperatorToExpr {
                     .collect(Collectors.toList());
             return new DictQueryExpr(arg, operator.getDictQueryExpr(), operator.getFn());
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Expr visitDictionaryGetOperator(DictionaryGetOperator operator, FormatterContext context) {
+            List<Expr> arg = operator.getChildren().stream()
+                    .map(expr -> buildExpr.build(expr, context))
+                    .collect(Collectors.toList());
+            DictionaryGetExpr dictionaryGetExpr = new DictionaryGetExpr(arg);
+            dictionaryGetExpr.setType(operator.getType());
+            dictionaryGetExpr.setDictionaryId(operator.getDictionaryId());
+            dictionaryGetExpr.setDictionaryTxnId(operator.getDictionaryTxnId());
+            dictionaryGetExpr.setKeySize(operator.getKeySize());
+            dictionaryGetExpr.setNullIfNotExist(operator.getNullIfNotExist());
+            return dictionaryGetExpr;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     static class IgnoreSlotFormatter extends Formatter {

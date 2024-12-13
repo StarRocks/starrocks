@@ -2,7 +2,11 @@
 displayed_sidebar: docs
 ---
 
+<<<<<<< HEAD
 # starrocks-kubernetes-operator
+=======
+# Kubernetes Operator 版本发布
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 发布说明
 
@@ -30,7 +34,13 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
   - StarRocks Operator 默认配置文件：**operator.yaml**
   - Helm Chart，包括 `kube-starrocks` Chart `kube-starrocks-${chart_version}.tgz`。`kube-starrocks` Chart 还分两个子 Chart，`starrocks` Chart `starrocks-${chart_version}.tgz` 和 `operator` Chart `operator-${chart_version}.tgz`。
 
+<<<<<<< HEAD
 比如 1.8.6 版本 `kube-starrocks` Chart 的获取地址是：[kube-starrocks](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v1.8.6/kube-starrocks-1.8.6.tgz)
+=======
+比如 1.8.6 版本 `kube-starrocks` Chart 的获取地址是：
+
+`https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v1.8.6/kube-starrocks-1.8.6.tgz`
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **版本要求**
 
@@ -39,9 +49,68 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 ## 发布记录
 
+<<<<<<< HEAD
 ### 1.8
 
 **1.8.6**
+=======
+### 1.9
+
+#### 1.9.1
+
+**功能改进**
+
+- **[Helm Chart]** 当 `logStorageSize` 设置为 `0` 时，operator 不会为 log storage 创建 PersistentVolumeClaim（PVC）。[#398](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/398)
+- **[Operator]** operator 会检查 `storageVolumes` 中 `mountPath` 和 `name` 的值是否重复。如果存在重复的值，则会返回报错提示。[#388](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/388)
+- **[Operator]** FE 节点的数量不能缩减到 1。[#394](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/394)
+- **[Operator]** 支持 merge 多个 values yaml 文件中定义`feEnvVars`、`beEnvVars` 和 `cnEnvVars` 的值。[#396](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/396)
+- **[Operator]** 在 StarRocksCluster CRD 中添加了 `spec.containers.securityContext.capabilities`，以自定义容器的 Linux 权限。[#404](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/404)
+
+**缺陷修复**
+
+已修复以下问题：
+
+- **[Operator]** 支持更新 `service` 中的 `annotations` 字段。[#402](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/402) [#399](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/399)
+- **[Operator]** 使用 patch 而不是 update 的方式来修改 statefulset 和 deployment。这可以解决启用 CN + HPA 时升级 CN 会导致所有 CN pods 被终止并重新启动的问题。[#397](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/397)
+- **[Operator]** 使用 patch 而不是 update 的方式来修改 service object。这样可以避免 operator 覆盖写入对  service object 的修改，例如，在使用 Kubernetes 云提供商时，该 Kubernetes 云提供商修改了 service object。[#387](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/387)
+
+#### 1.9.0
+
+**新增特性**
+
+- 新增 StarRocksWarehouse CRD 以支持 StarRocks Warehouse。注意，StarRocks Warehouse 目前是 StarRocks 企业版的功能。[#323](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/323)
+
+**功能改进**
+
+- 在 StarRocksCluster CRD 中添加了 `status.reason` 字段。如果在部署集群过程中 subcontroller 的 apply 操作失败时，您可以执行 `kubectl get starrockscluster <name_of_the_starrocks_cluster_object> -oyaml`, 在返回结果中查看 `status.reason` 字段显示的错误日志。[#359](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/359)
+- 在 storageVolumes 字段中可以挂载一个空目录。 [#324](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/324)
+
+**缺陷修复**
+
+已修复以下问题：
+
+- StarRocks 集群的状态与集群的 FE、BE 和 CN 组件的状态不一致。[#380](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/380)
+- 当删除 `autoScalingPolicy` 时，HPA 资源未删除。[#379](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/379)
+- 当删除 `starRocksCnSpec` 时，HPA 资源未删除。[#357](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/357)
+
+### 1.8
+
+#### 1.8.8
+
+**缺陷修复**
+
+已修复以下问题：
+
+- **[Operator]** 使用 `StarRocksFeSpec.service`、`StarRocksBeSpec.service` 和 `StarRocksCnSpec.service` 添加 annotations 时，Operator 不再向 search service （内部 service）添加相应的的 annotations。[#370](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/370)
+
+### 1.8.7
+
+**功能改进**
+
+- 在 StarRocksCluster CRD 中添加了 `livenessProbeFailureSeconds` 和 `readinessProbeFailureSeconds` 字段。当 StarRocks 集群工作负载较重时，如果 liveness 和 readiness 探测的时间仍然为默认值，liveness 和 readiness 探测可能会失败，并导致容器重新启动。在这种情况下，您可以适当调大这两字段的值。[#309](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/309)
+
+#### 1.8.6
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **缺陷修复**
 
@@ -54,7 +123,11 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 - [使用 FE proxy 从 Kubernetes 网络外部导入数据到 StarRocks 集群](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/load_data_using_stream_load_howto.md)
 - [使用 Helm 更新 root 用户的密码](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md)
 
+<<<<<<< HEAD
 **1.8.5**
+=======
+#### 1.8.5
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **功能改进**
 
@@ -71,7 +144,11 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 - **[Helm Chart]** 当 `starrocks.starrocksCluster.name` 中指定的值与 `starrocks.nameOverride` 的值不同时，FE、BE 和 CN 的旧 `configmap` 会被删除，使用新名称的 `configmap` 会被创建。**这可能导致 FE/BE/CN pod 重新启动。**
 
+<<<<<<< HEAD
 **1.8.4**
+=======
+#### 1.8.4
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **新增特性**
 
@@ -92,7 +169,11 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 - [部署不同配置的 StarRocks 集群](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/examples/starrocks)。例如，[部署所有功能的 StarRocks 集群](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_all_features.yaml)。
 - [管理 StarRocks 集群的用户指南](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/doc)。例如，如何[配置日志和相关字段](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/logging_and_related_configurations_howto.md)以及[挂载外部 configmaps 或 secrets](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_external_configmaps_or_secrets_howto.md)。
 
+<<<<<<< HEAD
 **1.8.3**
+=======
+#### 1.8.3
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **升级说明**
 
@@ -107,13 +188,21 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 - 在 **nginx.conf** 中 `proxy_read_timeout` 参数的值从 60s 更改为 600s，以避免超时。
 
+<<<<<<< HEAD
 **1.8.2**
+=======
+#### 1.8.2
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **功能改进**
 
 - 提高 Operator pod 的内存使用上限，以避免内存溢出。[#254](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/254)
 
+<<<<<<< HEAD
 **1.8.1**
+=======
+#### 1.8.1
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **新增特性**
 
@@ -124,7 +213,11 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 - 在删除 StarRocks 集群的 `BeSpec` 或 `CnSpec` 时，将相关的 Kubernetes 资源删除，确保集群的状态干净和一致。[#245](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/245)
 
+<<<<<<< HEAD
 **1.8.0**
+=======
+#### 1.8.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 **升级说明和行为更改**
 

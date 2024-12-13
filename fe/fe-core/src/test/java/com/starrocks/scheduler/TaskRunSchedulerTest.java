@@ -227,7 +227,11 @@ public class TaskRunSchedulerTest {
         // test json result
         {
             TaskRunScheduler scheduler = GsonUtils.GSON.fromJson(str, TaskRunScheduler.class);
+<<<<<<< HEAD
             Assert.assertTrue(scheduler.getRunningTaskCount() == Config.task_runs_concurrency);
+=======
+            Assert.assertTrue(scheduler.getRunningTaskCount() == 4);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertTrue(scheduler.getPendingQueueCount() == 6);
 
             Set<Long> expPendingTaskIds = ImmutableSet.of(4L, 5L, 6L, 7L, 8L, 9L);
@@ -244,7 +248,10 @@ public class TaskRunSchedulerTest {
         }
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testTaskSchedulerWithDifferentTaskIds() {
         TaskManager tm = new TaskManager();

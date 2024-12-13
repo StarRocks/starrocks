@@ -23,7 +23,10 @@ public class TracerTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertNotContains(pr, "Trace");
     }
 
@@ -34,7 +37,10 @@ public class TracerTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertNotContains(pr, "--");
     }
@@ -46,7 +52,10 @@ public class TracerTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertNotContains(pr, "--");
     }
@@ -58,7 +67,10 @@ public class TracerTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertContains(pr, "-- Planner");
     }
@@ -70,7 +82,10 @@ public class TracerTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printScopeTimer();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertContains(pr, "--");
     }
@@ -82,7 +97,10 @@ public class TracerTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printTiming();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertContains(pr, "ms| watchScope");
     }
@@ -94,7 +112,10 @@ public class TracerTest extends PlanTestBase {
         String sql = "SELECT * from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1;";
         getFragmentPlan(sql);
         String pr = Tracers.printLogs();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertContains(pr, "origin logicOperatorTree");
         assertContains(pr, "TRACE QUERY");
@@ -112,7 +133,10 @@ public class TracerTest extends PlanTestBase {
                 "order by l_returnflag;";
         getFragmentPlan(sql);
         String pr = Tracers.printLogs();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertContains(pr, "origin logicOperatorTree");
         assertContains(pr, "TRACE QUERY");
@@ -130,7 +154,10 @@ public class TracerTest extends PlanTestBase {
                 "order by l_returnflag;";
         getFragmentPlan(sql);
         String pr = Tracers.printLogs();
+<<<<<<< HEAD
         System.out.println(pr);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Tracers.close();
         assertContains(pr, "QueryStatement");
     }

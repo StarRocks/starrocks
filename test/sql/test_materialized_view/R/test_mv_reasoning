@@ -69,8 +69,11 @@ TRACE REASON MV
 -- result:
     MV rewrite fail for mv1: Rewrite group by key failed: 4: c4 
     MV rewrite fail for mv1: Rewrite rollup aggregate failed, cannot rewrite group by keys: [4: c4] 
+<<<<<<< HEAD
     MV rewrite fail for mv1: Rewrite group by key failed: 4: c4 
     MV rewrite fail for mv1: Rewrite rollup aggregate failed, cannot rewrite group by keys: [4: c4] 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 TRACE REASON MV
     SELECT c1, sum(c3), count(c3)
@@ -79,7 +82,10 @@ TRACE REASON MV
     GROUP BY c1;
 -- result:
     MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 > a cannot be rewritten 
+<<<<<<< HEAD
     MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 > a cannot be rewritten 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 DROP MATERIALIZED VIEW mv1;
 -- result:
@@ -105,14 +111,20 @@ TRACE REASON MV
     GROUP BY c1, c2, c4;
 -- result:
     MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+<<<<<<< HEAD
     MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 TRACE REASON MV
     SELECT c1, c2, c4
     FROM t1;
 -- result:
     MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+<<<<<<< HEAD
     MV rewrite fail for mv1: Rewrite projection failed: cannot totally rewrite expr 4: c4 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 TRACE REASON MV
     SELECT c1, c2
@@ -120,7 +132,10 @@ TRACE REASON MV
     WHERE c4='a';
 -- result:
     MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 = a cannot be rewritten 
+<<<<<<< HEAD
     MV rewrite fail for mv1: Rewrite scalar operator failed: 4: c4 = a cannot be rewritten 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 ALTER MATERIALIZED VIEW mv1 INACTIVE;
 -- result:

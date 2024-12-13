@@ -15,8 +15,15 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.analysis.DescriptorTable;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.util.RuntimeProfile;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.datacache.DataCacheSelectMetrics;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -25,6 +32,10 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.slot.DeployState;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
@@ -68,21 +79,58 @@ public abstract class Coordinator {
                                                          List<PlanFragment> fragments,
                                                          List<ScanNode> scanNodes, String timezone, long startTime,
                                                          Map<String, String> sessionVariables,
+<<<<<<< HEAD
                                                          ConnectContext context, long execMemLimit);
+=======
+                                                         ConnectContext context, long execMemLimit,
+                                                         long warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Coordinator createBrokerExportScheduler(Long jobId, TUniqueId queryId, DescriptorTable descTable,
                                                 List<PlanFragment> fragments,
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
+<<<<<<< HEAD
                                                 long execMemLimit);
+=======
+                                                long execMemLimit,
+                                                long warehouseId);
+
+        Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+                                                          DescriptorTable descTable, List<PlanFragment> fragments,
+                                                          List<ScanNode> scanNodes);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // ------------------------------------------------------------------------------------
     // Common methods for scheduling.
     // ------------------------------------------------------------------------------------
+<<<<<<< HEAD
 
     public void exec() throws Exception {
         startScheduling();
+=======
+    public static class ScheduleOption {
+        public boolean doDeploy = true;
+        public boolean useQueryDeployExecutor = false;
+    }
+
+    public void exec() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        startScheduling(option);
+    }
+
+    public void execWithoutDeploy() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.doDeploy = false;
+        startScheduling(option);
+    }
+
+    public void execWithQueryDeployExecutor() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.useQueryDeployExecutor = true;
+        startScheduling(option);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -93,6 +141,7 @@ public abstract class Coordinator {
      *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
      * </ul>
      * <p>
+<<<<<<< HEAD
      *
      * @param needDeploy Whether deploying fragment instances to workers.
      */
@@ -104,6 +153,13 @@ public abstract class Coordinator {
 
     public void startSchedulingWithoutDeploy() throws Exception {
         startScheduling(false);
+=======
+     */
+    public abstract void startScheduling(ScheduleOption option) throws Exception;
+
+    public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
+        return Status.OK;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public abstract String getSchedulerExplain();
@@ -118,6 +174,14 @@ public abstract class Coordinator {
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
 
+<<<<<<< HEAD
+=======
+    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+            throws StarRocksException {
+        return List.of();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract void onFinished();
 
     public abstract LogicalSlot getSlot();
@@ -194,6 +258,11 @@ public abstract class Coordinator {
 
     public abstract List<QueryStatisticsItem.FragmentInstanceInfo> getFragmentInstanceInfos();
 
+<<<<<<< HEAD
+=======
+    public abstract DataCacheSelectMetrics getDataCacheSelectMetrics();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // ------------------------------------------------------------------------------------
     // Methods for audit.
     // ------------------------------------------------------------------------------------
@@ -223,5 +292,10 @@ public abstract class Coordinator {
 
     public abstract String getWarehouseName();
 
+<<<<<<< HEAD
+=======
+    public abstract String getResourceGroupName();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public abstract boolean isShortCircuit();
 }

@@ -17,23 +17,60 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Sets;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 
 public class AbstractBackupStmt extends DdlStmt {
     protected LabelName labelName;
     protected String repoName;
     protected List<TableRef> tblRefs;
+=======
+import java.util.Set;
+
+public class AbstractBackupStmt extends DdlStmt {
+    public enum BackupObjectType {
+        TABLE,
+        MV,
+        VIEW,
+        FUNCTION,
+        EXTERNAL_CATALOG,
+    }
+
+    protected LabelName labelName;
+    protected String repoName;
+    protected List<TableRef> tblRefs;
+    protected List<FunctionRef> fnRefs;
+    protected List<CatalogRef> externalCatalogRefs;
+
+    protected Set<BackupObjectType> allMarker;
+
+    protected boolean withOnClause;
+
+    // In new grammer for RESTORE, user can specify origin DB name
+    // in snapshot meta
+    protected String originDbName;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected Map<String, String> properties;
 
     protected long timeoutMs;
 
     public AbstractBackupStmt(LabelName labelName, String repoName, List<TableRef> tableRefs,
+<<<<<<< HEAD
                               Map<String, String> properties, NodePosition pos) {
+=======
+                              List<FunctionRef> fnRefs, List<CatalogRef> externalCatalogRefs, Set<BackupObjectType> allMarker,
+                              boolean withOnClause, String originDbName, Map<String, String> properties, NodePosition pos) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(pos);
         this.labelName = labelName;
         this.repoName = repoName;
@@ -41,7 +78,25 @@ public class AbstractBackupStmt extends DdlStmt {
         if (this.tblRefs == null) {
             this.tblRefs = Lists.newArrayList();
         }
+<<<<<<< HEAD
 
+=======
+        this.fnRefs = fnRefs;
+        if (this.fnRefs == null) {
+            this.fnRefs = Lists.newArrayList();
+        }
+        this.externalCatalogRefs = externalCatalogRefs;
+        if (this.externalCatalogRefs == null) {
+            this.externalCatalogRefs = Lists.newArrayList();
+        }
+        this.allMarker = allMarker;
+        if (this.allMarker == null) {
+            this.allMarker = Sets.newHashSet();
+        }
+
+        this.originDbName = originDbName;
+        this.withOnClause = withOnClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.properties = properties == null ? Maps.newHashMap() : properties;
     }
 
@@ -65,12 +120,65 @@ public class AbstractBackupStmt extends DdlStmt {
         return tblRefs;
     }
 
+<<<<<<< HEAD
+=======
+    public List<FunctionRef> getFnRefs() {
+        return fnRefs;
+    }
+
+    public List<CatalogRef> getExternalCatalogRefs() {
+        return externalCatalogRefs;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+<<<<<<< HEAD
+    public long getTimeoutMs() {
+        return timeoutMs;
+    }
+=======
+    public boolean withOnClause() {
+        return withOnClause;
+    }
+
+    public boolean allFunction() {
+        return allMarker.contains(BackupObjectType.FUNCTION);
+    }
+
+    public boolean allTable() {
+        return allMarker.contains(BackupObjectType.TABLE);
+    }
+
+    public boolean allMV() {
+        return allMarker.contains(BackupObjectType.MV);
+    }
+
+    public boolean allView() {
+        return allMarker.contains(BackupObjectType.VIEW);
+    }
+
+    public boolean allExternalCatalog() {
+        return allMarker.contains(BackupObjectType.EXTERNAL_CATALOG);
+    }
+
+    public void setAllExternalCatalog() {
+        allMarker.add(BackupObjectType.EXTERNAL_CATALOG);
     }
 
     public long getTimeoutMs() {
         return timeoutMs;
     }
+
+    public String getOriginDbName() {
+        return this.originDbName;
+    }
+
+    public boolean containsExternalCatalog() {
+        return allExternalCatalog() || !externalCatalogRefs.isEmpty();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 

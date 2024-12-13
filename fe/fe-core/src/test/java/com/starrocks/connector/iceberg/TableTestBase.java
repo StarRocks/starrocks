@@ -60,6 +60,16 @@ public class TableTestBase {
     public static final Schema SCHEMA_F =
             new Schema(required(1, "k1", Types.IntegerType.get()), required(2, "dt", Types.DateType.get()));
 
+<<<<<<< HEAD
+=======
+    public static final Schema SCHEMA_H =
+            new Schema(required(1, "k1", Types.IntegerType.get()),
+                    required(2, "k2", Types.StringType.get()),
+                    required(3, "k3", Types.StringType.get()),
+                    required(4, "k4", Types.StringType.get()),
+                    required(5, "k5", Types.StringType.get()));
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected static final int BUCKETS_NUMBER = 16;
 
     // Partition spec used to create tables
@@ -94,6 +104,12 @@ public class TableTestBase {
     protected static final PartitionSpec SPEC_F =
             PartitionSpec.builderFor(SCHEMA_F).day("dt").build();
 
+<<<<<<< HEAD
+=======
+    protected static final PartitionSpec SPEC_F_1 =
+            PartitionSpec.builderFor(SCHEMA_F).identity("dt").build();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC_A)
                     .withPath("/path/to/data-a.parquet")
@@ -212,6 +228,11 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableE = null;
     public TestTables.TestTable mockedNativeTableF = null;
     public TestTables.TestTable mockedNativeTableG = null;
+<<<<<<< HEAD
+=======
+    public TestTables.TestTable mockedNativeTableH = null;
+    public TestTables.TestTable mockedNativeTableI = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     protected final int formatVersion = 1;
 
@@ -228,6 +249,11 @@ public class TableTestBase {
         this.mockedNativeTableE = create(SCHEMA_D, SPEC_D_1, "te", 1);
         this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
         this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
+<<<<<<< HEAD
+=======
+        this.mockedNativeTableH = create(SCHEMA_H, PartitionSpec.unpartitioned(), "th", 1);
+        this.mockedNativeTableI = create(SCHEMA_F, SPEC_F_1, "ti", 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @After

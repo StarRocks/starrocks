@@ -19,6 +19,10 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -181,6 +185,17 @@ public class LiteralExprCompareTest {
         Assert.assertTrue(0 == double1.compareLiteral(double2));
         // self equal
         Assert.assertTrue(0 == double1.compareLiteral(double1));
+<<<<<<< HEAD
+=======
+
+        LiteralExpr floatType = LiteralExpr.create("3.14", Type.FLOAT);
+        Assert.assertEquals(PrimitiveType.FLOAT, floatType.getType().getPrimitiveType());
+        Assert.assertEquals(true, floatType.equals(new FloatLiteral(3.14, Type.FLOAT)));
+
+        LiteralExpr doubleType = LiteralExpr.create("3.14", Type.DOUBLE);
+        Assert.assertEquals(PrimitiveType.DOUBLE, doubleType.getType().getPrimitiveType());
+        Assert.assertEquals(true, doubleType.equals(new FloatLiteral(3.14, Type.DOUBLE)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private void intTestInternal(ScalarType type) throws AnalysisException {

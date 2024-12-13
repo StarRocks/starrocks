@@ -62,7 +62,10 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_nulls;
     std::vector<bool> is_consts;
     Chunk::SlotHashMap slot_id_to_index;
+<<<<<<< HEAD
     Chunk::TupleHashMap tuple_id_to_index;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // extra data meta
     std::vector<ChunkExtraColumnsMeta> extra_data_metas;
 };

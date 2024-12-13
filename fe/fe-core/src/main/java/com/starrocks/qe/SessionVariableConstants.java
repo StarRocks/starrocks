@@ -14,6 +14,11 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import org.apache.commons.lang3.EnumUtils;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class SessionVariableConstants {
 
     private SessionVariableConstants() {}
@@ -75,4 +80,18 @@ public class SessionVariableConstants {
         THREE_STAGE,
         FOUR_STAGE
     }
+<<<<<<< HEAD
+=======
+
+    // default, ndv, rewrite_by_hll_bitmap
+    public enum CountDistinctImplMode {
+        DEFAULT,                // default, keeps the original count distinct implementation
+        NDV,                    // ndv, uses HyperLogLog to estimate the count distinct
+        MULTI_COUNT_DISTINCT;
+        public static String MODE_DEFAULT = DEFAULT.toString();
+        public static CountDistinctImplMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(CountDistinctImplMode.class, str);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

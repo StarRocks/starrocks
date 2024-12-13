@@ -30,23 +30,40 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import org.apache.commons.lang.NotImplementedException;
 
+=======
+import com.starrocks.sql.common.PCell;
+import org.apache.commons.lang.NotImplementedException;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     @Override
     public boolean supportPartitionRefresh() {
         return false;
     }
+=======
+public abstract class DefaultTraits extends ConnectorPartitionTraits {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @Override
     public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
@@ -88,8 +105,15 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             return Lists.newArrayList(table.getName());
         }
 
+<<<<<<< HEAD
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getDbName(), getTableName());
+=======
+        ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
+        requestContext.setQueryMVRewrite(this.isQueryMVRewrite());
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -105,8 +129,13 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException {
         return PartitionUtil.getMVPartitionNameWithList(table, partitionColumn, getPartitionNames());
+=======
+    public Map<String, PCell> getPartitionCells(List<Column> partitionColumns) throws AnalysisException {
+        return PartitionUtil.getMVPartitionToCells(table, partitionColumns, getPartitionNames());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -122,6 +151,20 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+        Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
+        List<PartitionInfo> partitions = getPartitions(partitionNames);
+        Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
+        for (int index = 0; index < partitionNames.size(); ++index) {
+            partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
+        }
+        return partitionNameWithPartition;
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Optional<Long> maxPartitionRefreshTs() {
         throw new NotImplementedException("Not support maxPartitionRefreshTs");
     }
@@ -150,8 +193,13 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
             for (Map.Entry<String, MaterializedView.BasePartitionInfo> versionEntry : versionMap.entrySet()) {
                 String basePartitionName = versionEntry.getKey();
                 if (!latestPartitionInfo.containsKey(basePartitionName)) {
+<<<<<<< HEAD
                     // partitions deleted
                     return latestPartitionInfo.keySet();
+=======
+                    // If this partition is dropped, ignore it.
+                    continue;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 long basePartitionVersion = latestPartitionInfo.get(basePartitionName).getModifiedTime();
 
@@ -165,4 +213,48 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
         }
         return result;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public Set<String> getUpdatedPartitionNames(LocalDateTime checkTime, int extraSeconds) {
+        List<String> updatedPartitions = Lists.newArrayList();
+        try {
+            getPartitionNameWithPartitionInfo().
+                    forEach((partitionName, partitionInfo) -> {
+                        long partitionModifiedTimeMillis = partitionInfo.getModifiedTimeUnit().toMillis(
+                                partitionInfo.getModifiedTime());
+
+                        LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
+                                Instant.ofEpochMilli(partitionModifiedTimeMillis).plusSeconds(extraSeconds),
+                                Clock.systemDefaultZone().getZone());
+                        if (partitionUpdateTime.isAfter(checkTime)) {
+                            updatedPartitions.add(partitionName);
+                        }
+                    });
+            return Sets.newHashSet(updatedPartitions);
+        } catch (Exception e) {
+            // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
+            // just return null
+            return null;
+        }
+    }
+
+    @Override
+    public LocalDateTime getTableLastUpdateTime(int extraSeconds) {
+        try {
+            long lastModifiedTimeMillis = getPartitionNameWithPartitionInfo().values().stream().
+                    map(partitionInfo -> partitionInfo.getModifiedTimeUnit().toMillis(partitionInfo.getModifiedTime())).
+                    max(Long::compareTo).orElse(0L);
+            if (lastModifiedTimeMillis != 0L) {
+                return LocalDateTime.ofInstant(Instant.ofEpochMilli(lastModifiedTimeMillis).plusSeconds(extraSeconds),
+                        Clock.systemDefaultZone().getZone());
+            }
+        } catch (Exception e) {
+            // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
+            // just return null
+        }
+        return null;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

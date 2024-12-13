@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_name,
@@ -36,6 +37,8 @@ where
   and n_name = 'ARGENTINA'
 order by
     s_name ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F12)
 Output Exprs:2: S_NAME | 3: S_ADDRESS
@@ -194,7 +197,11 @@ OutPut Exchange Id: 14
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (14: PS_PARTKEY), remote = true
 |  - filter_id = 2, build_expr = (15: PS_SUPPKEY), remote = false
+<<<<<<< HEAD
 |  output columns: 15, 16, 48
+=======
+|  output columns: 15
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 |  cardinality: 40862130
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE

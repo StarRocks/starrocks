@@ -97,8 +97,14 @@ public class PhysicalDistributionAggOptRule implements TreeRewriteRule {
             scan.setNeedOutputChunkByBucket(true);
 
             if (!hasColocateRequirement && enablePartitionBucketOptimize) {
+<<<<<<< HEAD
                 Set<Column> partitionColumns =
                         Sets.newHashSet(((OlapTable) scan.getTable()).getPartitionInfo().getPartitionColumns());
+=======
+                OlapTable olapTable = ((OlapTable) scan.getTable());
+                Set<Column> partitionColumns = Sets.newHashSet(olapTable.getPartitionInfo()
+                        .getPartitionColumns(olapTable.getIdToColumn()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<ColumnRefOperator> groupBys = agg.getGroupBys();
                 for (ColumnRefOperator groupBy : groupBys) {
                     Column column = scan.getColRefToColumnMetaMap().get(groupBy);

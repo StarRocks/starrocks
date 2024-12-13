@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ln, dlog1, log
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回参数 `x` 的自然对数，以 e 为底数。
 

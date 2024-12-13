@@ -1,0 +1,21 @@
+-- name: test named arguments for table functions
+
+select * from TABLE(generate_series(start=>2, end=>5));
+select * from TABLE(generate_series(end=>5, start=>2));
+select * from TABLE(generate_series(start=>2, end=>5, step=>2));
+select * from TABLE(generate_series(step=>2, start=>2, end=>5));
+select * from TABLE(generate_series(start=>2, stop=>5));
+select * from TABLE(generate_series(end=>5,start=>2, step = 2));
+select * from TABLE(generate_series(start=>2, =>5));
+select * from TABLE(generate_series(start=>2, 5));
+select * from TABLE(generate_series(start=>2));
+select * from TABLE(generate_series(end=>2));
+select * from TABLE(generate_series(step=>2));
+select * from TABLE(generate_series(start=>2, stop=>null));
+select * from TABLE(generate_series(start=>2, end=>null));
+select * from TABLE(generate_series(start=>2, end=>4,step->3));
+select * from TABLE(generate_series(start=>2, step=>2, end=>4,start=>3));
+select * from TABLE(generate_series(start=>2, step=>2, end=>4,end=>6));
+select * from TABLE(generate_series(1, 5));
+select * from TABLE(generate_series(1, 5, 2));
+select * from TABLE(generate_series(1));

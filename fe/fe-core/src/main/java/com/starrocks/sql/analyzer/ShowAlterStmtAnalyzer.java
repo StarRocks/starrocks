@@ -48,7 +48,11 @@ public class ShowAlterStmtAnalyzer {
         new ShowAlterStmtAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class ShowAlterStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class ShowAlterStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 
@@ -68,7 +72,11 @@ public class ShowAlterStmtAnalyzer {
 
         private void handleShowAlterTable(ShowAlterStmt statement, ConnectContext context) throws SemanticException {
             // build proc path
+<<<<<<< HEAD
             @Nonnull Database db = context.getGlobalStateMgr().getDb(statement.getDbName());
+=======
+            @Nonnull Database db = context.getGlobalStateMgr().getLocalMetastore().getDb(statement.getDbName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ShowAlterStmt.AlterType type = statement.getType();
             StringBuilder sb = new StringBuilder();
             sb.append("/jobs/");
@@ -102,7 +110,11 @@ public class ShowAlterStmtAnalyzer {
             }
             statement.setDbName(dbName);
             // Check db.
+<<<<<<< HEAD
             if (context.getGlobalStateMgr().getDb(dbName) == null) {
+=======
+            if (context.getGlobalStateMgr().getLocalMetastore().getDb(dbName) == null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
 

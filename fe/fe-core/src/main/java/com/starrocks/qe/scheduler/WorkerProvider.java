@@ -42,7 +42,12 @@ public interface WorkerProvider {
         WorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
                                                boolean preferComputeNode,
                                                int numUsedComputeNodes,
+<<<<<<< HEAD
                                                ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy);
+=======
+                                               ComputationFragmentSchedulingPolicy computationFragmentSchedulingPolicy,
+                                               long warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**

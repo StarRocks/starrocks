@@ -44,6 +44,13 @@ public class MockIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
         return null;
     }

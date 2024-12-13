@@ -43,6 +43,10 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.DDLStmtExecutor;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
@@ -86,14 +90,24 @@ public class BatchRollupJobTest {
         String stmtStr = "alter table db1.tbl1 add rollup r1(k1) duplicate key(k1), r2(k1, k2) " +
                 "duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+=======
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("db1");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assert.assertNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(tbl);
 
         // 3 rollup jobs may be finished in the loop, so only check the final state at last.
@@ -118,7 +132,11 @@ public class BatchRollupJobTest {
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
+<<<<<<< HEAD
             Assert.assertEquals(4, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+=======
+            Assert.assertEquals(4, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -131,29 +149,47 @@ public class BatchRollupJobTest {
         String stmtStr = "alter table db1.tbl2 add rollup r1(k1) " +
                 "duplicate key(k1), r2(k1, k2) duplicate key(k1), r3(k2) duplicate key(k2);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+=======
+        DDLStmtExecutor.execute(alterTableStmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         Assert.assertEquals(3, alterJobs.size());
         List<Long> jobIds = Lists.newArrayList(alterJobs.keySet());
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("db1");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl2");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db1");
+        Assert.assertNotNull(db);
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(tbl);
         Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
 
         // cancel rollup jobs
         stmtStr = "cancel alter table rollup from db1.tbl2 (" + Joiner.on(",").join(jobIds) + ")";
         CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().cancelAlter(cancelStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         for (AlterJobV2 alterJob : alterJobs.values()) {
             Assert.assertEquals(AlterJobV2.JobState.CANCELLED, alterJob.getJobState());
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
+<<<<<<< HEAD
             Assert.assertEquals(1, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+=======
+            Assert.assertEquals(1, partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.VISIBLE).size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

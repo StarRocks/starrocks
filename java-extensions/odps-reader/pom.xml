@@ -12,19 +12,63 @@
     <artifactId>odps-reader</artifactId>
 
     <properties>
+<<<<<<< HEAD
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <slf4j.version>1.7.32</slf4j.version>
         <odps.version>0.45.5-public</odps.version>
+=======
+        <java-extensions.home>${basedir}/../</java-extensions.home>
+        <odps.version>0.48.3-public</odps.version>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     </properties>
 
     <dependencies>
         <dependency>
+<<<<<<< HEAD
             <groupId>com.aliyun.odps</groupId>
             <artifactId>odps-sdk-core</artifactId>
             <version>${odps.version}</version>
+=======
+            <groupId>com.starrocks</groupId>
+            <artifactId>jni-connector</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.aliyun.odps</groupId>
+            <artifactId>odps-sdk-core</artifactId>
+            <version>${odps.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.xerial.snappy</groupId>
+                    <artifactId>snappy-java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec-http2</artifactId>
+                </exclusion>
+            </exclusions>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
 
         <dependency>
@@ -43,6 +87,7 @@
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-compression</artifactId>
             <version>4.0.0</version>
+<<<<<<< HEAD
             <scope>compile</scope>
         </dependency>
 
@@ -80,6 +125,14 @@
             <groupId>org.apache.logging.log4j</groupId>
             <artifactId>log4j-1.2-api</artifactId>
             <version>${log4j.version}</version>
+=======
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+            </exclusions>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </dependency>
 
         <dependency>
@@ -87,6 +140,7 @@
             <artifactId>commons-lang</artifactId>
             <version>2.6</version>
         </dependency>
+<<<<<<< HEAD
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>jni-connector</artifactId>
@@ -94,11 +148,14 @@
             <scope>compile</scope>
         </dependency>
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     </dependencies>
 
     <build>
         <finalName>starrocks-odps-reader</finalName>
         <plugins>
+<<<<<<< HEAD
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -108,6 +165,8 @@
                     <target>${java.version}</target>
                 </configuration>
             </plugin>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             <!-- copy all dependency libs to target lib dir -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -127,6 +186,7 @@
                     </execution>
                 </executions>
             </plugin>
+<<<<<<< HEAD
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
@@ -148,6 +208,8 @@
                     </execution>
                 </executions>
             </plugin>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         </plugins>
     </build>
 </project>

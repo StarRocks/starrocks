@@ -123,8 +123,15 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                     Collections.singletonList(metaColumn), aggFunction);
             newAggCalls.put(kv.getKey(), newAggCall);
         }
+<<<<<<< HEAD
         LogicalMetaScanOperator newMetaScan = new LogicalMetaScanOperator(scanOperator.getTable(),
                 newScanColumnRefs, aggColumnIdToNames);
+=======
+        LogicalMetaScanOperator newMetaScan = LogicalMetaScanOperator.builder()
+                .setTable(scanOperator.getTable())
+                .setColRefToColumnMetaMap(newScanColumnRefs)
+                .setAggColumnIdToNames(aggColumnIdToNames).build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
                 aggregationOperator.getGroupingKeys(), newAggCalls);
 

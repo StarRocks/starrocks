@@ -64,6 +64,7 @@ enum HashJoinPhase {
     EOS = 4,
 };
 struct HashJoinerParam {
+<<<<<<< HEAD
     HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
                     TPlanNodeType::type node_type, std::vector<bool> is_null_safes,
                     std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
@@ -78,6 +79,19 @@ struct HashJoinerParam {
               _hash_join_node(hash_join_node),
               _node_id(node_id),
               _node_type(node_type),
+=======
+    HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, std::vector<bool> is_null_safes,
+                    std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
+                    std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
+                    const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
+                    TPlanNodeType::type build_node_type, TPlanNodeType::type probe_node_type,
+                    bool build_conjunct_ctxs_is_empty, std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters,
+                    std::set<SlotId> build_output_slots, std::set<SlotId> probe_output_slots,
+                    const TJoinDistributionMode::type distribution_mode, bool mor_reader_mode,
+                    bool enable_late_materialization, bool enable_partition_hash_join)
+            : _pool(pool),
+              _hash_join_node(hash_join_node),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               _is_null_safes(std::move(is_null_safes)),
               _build_expr_ctxs(std::move(build_expr_ctxs)),
               _probe_expr_ctxs(std::move(probe_expr_ctxs)),
@@ -85,7 +99,10 @@ struct HashJoinerParam {
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _build_row_descriptor(build_row_descriptor),
               _probe_row_descriptor(probe_row_descriptor),
+<<<<<<< HEAD
               _row_descriptor(row_descriptor),
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               _build_node_type(build_node_type),
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
@@ -93,7 +110,13 @@ struct HashJoinerParam {
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
+<<<<<<< HEAD
               _mor_reader_mode(mor_reader_mode) {}
+=======
+              _mor_reader_mode(mor_reader_mode),
+              _enable_late_materialization(enable_late_materialization),
+              _enable_partition_hash_join(enable_partition_hash_join) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -101,8 +124,11 @@ struct HashJoinerParam {
 
     ObjectPool* _pool;
     const THashJoinNode& _hash_join_node;
+<<<<<<< HEAD
     TPlanNodeId _node_id;
     TPlanNodeType::type _node_type;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::vector<bool> _is_null_safes;
     const std::vector<ExprContext*> _build_expr_ctxs;
     const std::vector<ExprContext*> _probe_expr_ctxs;
@@ -110,7 +136,10 @@ struct HashJoinerParam {
     const std::vector<ExprContext*> _conjunct_ctxs;
     const RowDescriptor _build_row_descriptor;
     const RowDescriptor _probe_row_descriptor;
+<<<<<<< HEAD
     const RowDescriptor _row_descriptor;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TPlanNodeType::type _build_node_type;
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
@@ -120,6 +149,11 @@ struct HashJoinerParam {
 
     const TJoinDistributionMode::type _distribution_mode;
     const bool _mor_reader_mode;
+<<<<<<< HEAD
+=======
+    const bool _enable_late_materialization;
+    const bool _enable_partition_hash_join;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -143,11 +177,19 @@ inline bool is_spillable(TJoinOp::type join_type) {
 struct HashJoinProbeMetrics {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+<<<<<<< HEAD
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RuntimeProfile::Counter* probe_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* other_join_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* where_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* probe_counter = nullptr;
+    RuntimeProfile::Counter* partition_probe_overhead = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void prepare(RuntimeProfile* runtime_profile);
 };
@@ -161,12 +203,21 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* runtime_filter_num = nullptr;
     RuntimeProfile::Counter* build_keys_per_bucket = nullptr;
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
+<<<<<<< HEAD
 
     RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
+=======
+    RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
+    RuntimeProfile::Counter* partition_nums = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void prepare(RuntimeProfile* runtime_profile);
 };
 
+<<<<<<< HEAD
+=======
+// TODO: rename HashJoiner to HashJoinController
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class HashJoiner final : public pipeline::ContextWithDependency {
 public:
     explicit HashJoiner(const HashJoinerParam& param);
@@ -205,7 +256,11 @@ public:
 
     void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
+<<<<<<< HEAD
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
+=======
+    Status append_chunk_to_ht(const ChunkPtr& chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
 
@@ -213,7 +268,12 @@ public:
 
     Status build_ht(RuntimeState* state);
     // probe phase
+<<<<<<< HEAD
     void push_chunk(RuntimeState* state, ChunkPtr&& chunk);
+=======
+    Status push_chunk(RuntimeState* state, ChunkPtr&& chunk);
+    Status probe_input_finished(RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state);
 
     pipeline::RuntimeInFilters& get_runtime_in_filters() { return _runtime_in_filters; }
@@ -262,6 +322,7 @@ public:
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const auto& spiller() { return _spiller; }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
+<<<<<<< HEAD
     auto& io_executor() { return *spill_channel()->io_executor(); }
     void set_spill_strategy(spill::SpillStrategy strategy) { _spill_strategy = strategy; }
     spill::SpillStrategy spill_strategy() { return _spill_strategy; }
@@ -280,6 +341,33 @@ public:
 
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
     HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
+=======
+    void set_spill_strategy(spill::SpillStrategy strategy) { _spill_strategy = strategy; }
+    spill::SpillStrategy spill_strategy() { return _spill_strategy; }
+
+    Status prepare_probe_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+        SCOPED_TIMER(probe_metrics().probe_conjunct_evaluate_timer);
+        RETURN_IF_ERROR(_prepare_key_columns(*key_columns, chunk, _probe_expr_ctxs));
+        return Status::OK();
+    }
+
+    Status prepare_build_key_columns(Columns* key_columns, const ChunkPtr& chunk) {
+        SCOPED_TIMER(build_metrics().build_conjunct_evaluate_timer);
+        RETURN_IF_ERROR(_prepare_key_columns(*key_columns, chunk, _build_expr_ctxs));
+        return Status::OK();
+    }
+
+    const std::vector<ExprContext*>& probe_expr_ctxs() { return _probe_expr_ctxs; }
+    const std::vector<ExprContext*>& build_expr_ctxs() { return _build_expr_ctxs; }
+
+    HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
+    HashJoinBuilder* new_builder(ObjectPool* pool) {
+        // We don't support spill partition hash join now.
+        HashJoinBuildOptions options;
+        options.enable_partitioned_hash_join = false;
+        return HashJoinBuilderFactory::create(pool, options, *this);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status filter_probe_output_chunk(ChunkPtr& chunk, JoinHashTable& hash_table) {
         // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
@@ -298,6 +386,18 @@ public:
         return Status::OK();
     }
 
+<<<<<<< HEAD
+=======
+    template <bool is_remain>
+    Status lazy_output_chunk(RuntimeState* state, ChunkPtr* probe_chunk, ChunkPtr* chunk, JoinHashTable& hash_table) {
+        if (_enable_late_materialization && (*chunk) && !(*chunk)->is_empty()) {
+            return hash_table.lazy_output<is_remain>(state, probe_chunk, chunk);
+        } else {
+            return Status::OK();
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
         // Post probe needn't process _other_join_conjunct_ctxs, because they
         // are `ON` predicates, which need to be processed only on probe phase.
@@ -351,11 +451,17 @@ private:
             return;
         }
 
+<<<<<<< HEAD
         auto& ht = _hash_join_builder->hash_table();
 
         if (row_count > 0) {
             if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && ht.get_key_columns().size() == 1 &&
                 _has_null(ht.get_key_columns()[0]) && _other_join_conjunct_ctxs.empty()) {
+=======
+        if (row_count > 0) {
+            if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN &&
+                _hash_join_builder->anti_join_key_column_has_null() && _other_join_conjunct_ctxs.empty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // The current implementation of HashTable will reserve a row for judging the end of the linked list.
                 // When performing expression calculations (such as cast string to int),
                 // it is possible that this reserved row will generate Null,
@@ -367,8 +473,11 @@ private:
         }
     }
 
+<<<<<<< HEAD
     Status _build(RuntimeState* state);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<ChunkPtr> _pull_probe_output_chunk(RuntimeState* state);
 
     Status _calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filter, bool& filter_all, bool& hit_all);
@@ -394,7 +503,10 @@ private:
 
     TJoinOp::type _join_type = TJoinOp::INNER_JOIN;
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
+<<<<<<< HEAD
     bool _is_closed = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const std::vector<bool>& _is_null_safes;
     // Equal conjuncts in Join On.
@@ -407,7 +519,10 @@ private:
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const RowDescriptor& _build_row_descriptor;
     const RowDescriptor& _probe_row_descriptor;
+<<<<<<< HEAD
     const RowDescriptor& _row_descriptor;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const TPlanNodeType::type _build_node_type;
     const TPlanNodeType::type _probe_node_type;
     const bool _build_conjunct_ctxs_is_empty;
@@ -425,8 +540,13 @@ private:
     // in-filter constructed from string-typed key columns reference the memory of this column, and the in-filter's
     // lifetime can last beyond HashJoiner.
     Columns _string_key_columns;
+<<<<<<< HEAD
     size_t _probe_column_count = 0;
     size_t _build_column_count = 0;
+=======
+    size_t _output_probe_column_count = 0;
+    size_t _output_build_column_count = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // hash table doesn't have reserved data
     // bool _ht_has_remain = false;
@@ -452,6 +572,10 @@ private:
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
+<<<<<<< HEAD
+=======
+    bool _enable_late_materialization = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

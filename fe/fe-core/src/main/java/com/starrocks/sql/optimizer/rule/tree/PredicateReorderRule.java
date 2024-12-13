@@ -85,7 +85,11 @@ public class PredicateReorderRule implements TreeRewriteRule {
                     Set<ColumnRefOperator> columnRefOperators =
                             optExpression.getStatistics().getColumnStatistics().keySet();
                     for (ColumnRefOperator column : columnRefOperators) {
+<<<<<<< HEAD
                         ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentStatisticStorage().
+=======
+                        ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage().
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 getColumnStatistic(table, column.getName());
                         statisticsBuilder.addColumnStatistic(column, columnStatistic);
                     }

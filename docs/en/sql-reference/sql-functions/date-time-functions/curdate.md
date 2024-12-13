@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # curdate,current_date
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains the current date and returns a value of the DATE type.
 

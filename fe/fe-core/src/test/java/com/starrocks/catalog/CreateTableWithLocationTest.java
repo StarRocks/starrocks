@@ -75,7 +75,11 @@ public class CreateTableWithLocationTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         for (PseudoBackend backend : cluster.getBackends()) {
             String stmtStr = "alter system modify backend '" + backend.getHostHeartbeatPort() + "' set ('" +
+<<<<<<< HEAD
                     AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '')";
+=======
+                        AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '')";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.out.println(stmtStr);
             cluster.runSql(null, stmtStr);
         }
@@ -86,18 +90,26 @@ public class CreateTableWithLocationTest {
         int i = 0;
         for (PseudoBackend backend : cluster.getBackends()) {
             String stmtStr = "alter system modify backend '" + backend.getHostHeartbeatPort() + "' set ('" +
+<<<<<<< HEAD
                     AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + locations.get(i++) +  "')";
+=======
+                        AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + locations.get(i++) + "')";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             System.out.println(stmtStr);
             cluster.runSql(null, stmtStr);
         }
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testCreateTableAndBackendNoLocationProp() throws SQLException {
         clearBackendLocationProp();
         PseudoCluster cluster = PseudoCluster.getInstance();
         String sql = "CREATE TABLE test.`test_table_backend_no_loc` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -112,6 +124,23 @@ public class CreateTableWithLocationTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_table_backend_no_loc");
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        cluster.runSql("test", sql);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_backend_no_loc");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNull(table.getLocation());
     }
 
@@ -120,7 +149,11 @@ public class CreateTableWithLocationTest {
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
             Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                     .getClusterInfo().getBackend(pseudoBackend.getId());
+=======
+                        .getClusterInfo().getBackend(pseudoBackend.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!backend.getLocation().isEmpty()) {
                 backendIds.add(backend.getId());
             }
@@ -133,7 +166,11 @@ public class CreateTableWithLocationTest {
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
             Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                     .getClusterInfo().getBackend(pseudoBackend.getId());
+=======
+                        .getClusterInfo().getBackend(pseudoBackend.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (backend.getLocation().containsKey(locationKey)) {
                 backendIds.add(backend.getId());
             }
@@ -146,9 +183,15 @@ public class CreateTableWithLocationTest {
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
             Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                     .getClusterInfo().getBackend(pseudoBackend.getId());
             if (backend.getLocation().containsKey(locationKey) &&
                     Objects.equals(backend.getLocation().get(locationKey), locationVal)) {
+=======
+                        .getClusterInfo().getBackend(pseudoBackend.getId());
+            if (backend.getLocation().containsKey(locationKey) &&
+                        Objects.equals(backend.getLocation().get(locationKey), locationVal)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 backendIds.add(backend.getId());
             }
         }
@@ -160,7 +203,11 @@ public class CreateTableWithLocationTest {
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
             Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                     .getClusterInfo().getBackend(pseudoBackend.getId());
+=======
+                        .getClusterInfo().getBackend(pseudoBackend.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (backend.getLocation().isEmpty()) {
                 backendIds.add(backend.getId());
             }
@@ -172,6 +219,7 @@ public class CreateTableWithLocationTest {
     public void testCreateTableNoLocPropBackendWithLocProp() throws SQLException {
         // last backend doesn't contain location property
         List<String> locations = Lists.newArrayList("rack:r1", "rack:rack2", "rack:rack3",
+<<<<<<< HEAD
                 "region:r1", "region:r2", "region:r3", "");
         setBackendLocationProp(locations);
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -194,6 +242,31 @@ public class CreateTableWithLocationTest {
 
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();
+=======
+                    "region:r1", "region:r2", "region:r3", "");
+        setBackendLocationProp(locations);
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        String sql = "CREATE TABLE test.`test_table_no_loc_backend_with_loc` (\n" +
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        cluster.runSql("test", sql);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_no_loc_backend_with_loc");
+        Assert.assertTrue(table.getLocation().keySet().contains("*"));
+
+        List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
+        List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp();
         Set<Long> backendIdsWithoutLocProp = getBackendIdsWithoutLocProp();
         System.out.println(backendIdsWithLocProp);
@@ -215,12 +288,17 @@ public class CreateTableWithLocationTest {
     public void testCreateTableWithExplicitLocPropBackendWithLocProp() throws SQLException {
         // last backend doesn't contain location property
         List<String> locations = Lists.newArrayList("rack:r1", "rack:rack2", "rack:rack3",
+<<<<<<< HEAD
                 "region:r1", "region:r2", "region:r3", "");
+=======
+                    "region:r1", "region:r2", "region:r3", "");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setBackendLocationProp(locations);
         PseudoCluster cluster = PseudoCluster.getInstance();
 
         // Test: rack:*
         String sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc1` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -239,6 +317,27 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:*\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        System.out.println(sql);
+        cluster.runSql("test", sql);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc1");
+        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
+        List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp("rack");
         Set<Long> backendIdsWithoutLocProp = getBackendIdsWithoutLocProp();
         // test_table_explicit_loc_backend_with_loc1's replicas should only distribute on backends with rack location
@@ -259,6 +358,7 @@ public class CreateTableWithLocationTest {
 
         // Test: rack:*, region:*
         sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc2` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -278,6 +378,28 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getBaseIndex().getTablets();
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:*, region:*\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        cluster.runSql("test", sql);
+        boolean hasReplicaOnRegionBackend = false;
+        boolean hasReplicaOnRackBackend = false;
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc2");
+        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assert.assertTrue(table.getLocation().keySet().contains("region"));
+        partitions = new ArrayList<>(table.getAllPartitions());
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Tablet tablet : tablets) {
             List<Replica> replicas = tablet.getAllReplicas();
             Set<Long> replicaBackendIds = Sets.newHashSet();
@@ -299,6 +421,7 @@ public class CreateTableWithLocationTest {
 
         // Test: rack:r1, rack:rack2, rack:rack3
         sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc3` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -316,6 +439,26 @@ public class CreateTableWithLocationTest {
         Assert.assertEquals(1, table.getLocation().keySet().size());
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getBaseIndex().getTablets();
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:r1, rack:rack2, rack:rack3\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        cluster.runSql("test", sql);
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc3");
+        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assert.assertEquals(1, table.getLocation().keySet().size());
+        partitions = new ArrayList<>(table.getAllPartitions());
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         backendIdsWithLocProp = getBackendIdsWithLocProp("rack", "r1");
         backendIdsWithLocProp.addAll(getBackendIdsWithLocProp("rack", "rack2"));
         backendIdsWithLocProp.addAll(getBackendIdsWithLocProp("rack", "rack3"));
@@ -333,6 +476,7 @@ public class CreateTableWithLocationTest {
 
         // Test: rack:r1, region:*
         sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc4` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -350,6 +494,26 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("region"));
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getBaseIndex().getTablets();
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:r1, region:*\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        cluster.runSql("test", sql);
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc4");
+        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        Assert.assertTrue(table.getLocation().keySet().contains("region"));
+        partitions = new ArrayList<>(table.getAllPartitions());
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<Long> allReplicasBackendIds = Sets.newHashSet();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = tablet.getAllReplicas();
@@ -372,6 +536,7 @@ public class CreateTableWithLocationTest {
 
         // Test: rack:r1, rack:rack2, not enough hosts, fallback to ignore location prop
         sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc5` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -388,6 +553,25 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         partitions = new ArrayList<>(table.getAllPartitions());
         tablets = partitions.get(0).getBaseIndex().getTablets();
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:r1, rack:rack2\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        cluster.runSql("test", sql);
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc5");
+        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        partitions = new ArrayList<>(table.getAllPartitions());
+        tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         allReplicasBackendIds = Sets.newHashSet();
         for (Tablet tablet : tablets) {
             List<Replica> replicas = tablet.getAllReplicas();
@@ -403,6 +587,7 @@ public class CreateTableWithLocationTest {
         backendIdsWithLocProp = getBackendIdsWithLocProp();
         backendIdsWithLocProp.addAll(getBackendIdsWithoutLocProp());
         Assert.assertEquals(backendIdsWithLocProp.size(),
+<<<<<<< HEAD
                 Sets.intersection(allReplicasBackendIds, backendIdsWithLocProp).size());
 
         // Test: rack:r1, rack:rack2, not enough hosts, fallback to ignore location prop
@@ -418,12 +603,33 @@ public class CreateTableWithLocationTest {
                 "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION +  "\" = \"rack:r1, rack:rack2\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
+=======
+                    Sets.intersection(allReplicasBackendIds, backendIdsWithLocProp).size());
+
+        // Test: rack:r1, rack:rack2, not enough hosts, fallback to ignore location prop
+        sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc6` (\n" +
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"10\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:r1, rack:rack2\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         try {
             cluster.runSql("test", sql);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains(
+<<<<<<< HEAD
                     "Table replication num should be less than of equal to the number of available BE nodes"));
+=======
+                        "Table replication num should be less than of equal to the number of available BE nodes"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // clean up
@@ -434,12 +640,17 @@ public class CreateTableWithLocationTest {
     public void testBestEffortMatchLocationProp() throws SQLException {
         // last backend has the same location prop with the first one
         List<String> locations = Lists.newArrayList("rack:r1", "rack:rack2", "rack:rack3",
+<<<<<<< HEAD
                 "region:r1", "region:r2", "region:r3", "rack:r1");
+=======
+                    "region:r1", "region:r2", "region:r3", "rack:r1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setBackendLocationProp(locations);
         PseudoCluster cluster = PseudoCluster.getInstance();
 
         // Test: rack:r1, rack:rack2, 3 hosts, but only 2 racks
         String sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc_best_effort` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -458,6 +669,27 @@ public class CreateTableWithLocationTest {
         Assert.assertTrue(table.getLocation().keySet().contains("rack"));
         List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
         List<Tablet> tablets = partitions.get(0).getBaseIndex().getTablets();
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:r1, rack:rack2\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        System.out.println(sql);
+        cluster.runSql("test", sql);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_explicit_loc_backend_with_loc_best_effort");
+        Assert.assertTrue(table.getLocation().keySet().contains("rack"));
+        List<Partition> partitions = new ArrayList<>(table.getAllPartitions());
+        List<Tablet> tablets = partitions.get(0).getDefaultPhysicalPartition().getBaseIndex().getTablets();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<Long> backendIdsWithLocProp = getBackendIdsWithLocProp("rack", "r1");
         backendIdsWithLocProp.addAll(getBackendIdsWithLocProp("rack", "rack2"));
         for (Tablet tablet : tablets) {

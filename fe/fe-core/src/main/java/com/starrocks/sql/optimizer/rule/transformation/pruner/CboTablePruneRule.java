@@ -145,7 +145,11 @@ public class CboTablePruneRule extends TransformationRule {
         Map<String, ColumnRefOperator> colNameToColRefMap = scanOp.getColumnNameToColRefMap();
         ColumnRefSet columnRefSet = new ColumnRefSet(colRefs);
         return table.getUniqueConstraints().stream()
+<<<<<<< HEAD
                 .map(uc -> new ColumnRefSet(uc.getUniqueColumns().stream().map(colNameToColRefMap::get)
+=======
+                .map(uc -> new ColumnRefSet(uc.getUniqueColumnNames(table).stream().map(colNameToColRefMap::get)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .collect(Collectors.toList()))).anyMatch(columnRefSet::containsAll);
     }
 

@@ -83,6 +83,16 @@ enum TExprNodeType {
   BINARY_LITERAL,
   MAP_EXPR,
   DICT_QUERY_EXPR,
+<<<<<<< HEAD
+=======
+
+  // query DICTIONARY object
+  DICTIONARY_GET_EXPR,
+  
+  JIT_EXPR,
+
+  MATCH_EXPR,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TAggregateExpr {
@@ -181,6 +191,16 @@ struct TDictQueryExpr {
   6: required bool strict_mode
 }
 
+<<<<<<< HEAD
+=======
+struct TDictionaryGetExpr {
+  1: optional i64 dict_id
+  2: optional i64 txn_id
+  3: optional i32 key_size
+  4: optional bool null_if_not_exist
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // This is essentially a union over the subclasses of Expr.
 struct TExprNode {
   1: required TExprNodeType node_type
@@ -222,6 +242,10 @@ struct TExprNode {
   // Used for SubfieldExpr
   30: optional list<string> used_subfield_names;
   31: optional TBinaryLiteral binary_literal;
+<<<<<<< HEAD
+=======
+  32: optional bool copy_flag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
   // used for CollectionElementAt
   35: optional bool check_is_out_of_bounds
@@ -234,6 +258,13 @@ struct TExprNode {
   54: optional bool is_monotonic
 
   55: optional TDictQueryExpr dict_query_expr
+<<<<<<< HEAD
+=======
+
+  56: optional TDictionaryGetExpr dictionary_get_expr
+  // whether this expr is only used in index
+  57: optional bool is_index_only_filter
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 struct TPartitionLiteral {

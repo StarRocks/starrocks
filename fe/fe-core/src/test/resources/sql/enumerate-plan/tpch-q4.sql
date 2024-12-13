@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     o_orderpriority,
@@ -20,6 +21,8 @@ group by
     o_orderpriority
 order by
     o_orderpriority ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [planCount]
 2
 [plan-1]

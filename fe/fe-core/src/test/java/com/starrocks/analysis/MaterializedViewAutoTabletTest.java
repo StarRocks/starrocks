@@ -14,14 +14,24 @@
 
 package com.starrocks.analysis;
 
+<<<<<<< HEAD
 import com.starrocks.alter.AlterJobV2Test;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.jetbrains.annotations.TestOnly;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -48,7 +58,11 @@ public class MaterializedViewAutoTabletTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
                 "create table test_table1 (k1 bigint, v0 int) DUPLICATE KEY (k1) DISTRIBUTED BY HASH(k1);");
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_for_auto_tablets");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return;
         }
@@ -56,9 +70,16 @@ public class MaterializedViewAutoTabletTest {
 
         int bucketNum1 = 0;
         int bucketNum2 = 0;
+<<<<<<< HEAD
         db.readLock();
         try {
             OlapTable table = (OlapTable) db.getTable("test_table1");
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_table1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 return;
             }
@@ -66,7 +87,11 @@ public class MaterializedViewAutoTabletTest {
                 bucketNum1 += partition.getDistributionInfo().getBucketNum();
             }
 
+<<<<<<< HEAD
             table = (OlapTable) db.getTable("mv1");
+=======
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 return;
             }
@@ -74,7 +99,11 @@ public class MaterializedViewAutoTabletTest {
                 bucketNum2 += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         Assert.assertEquals(bucketNum1, 6);
         Assert.assertEquals(bucketNum2, 6);

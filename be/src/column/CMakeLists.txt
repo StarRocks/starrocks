@@ -14,12 +14,18 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
 
+<<<<<<< HEAD
 if (CLANG_TIDY_PATH)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
 add_library(Column STATIC
         array_column.cpp
+=======
+add_library(Column STATIC
+        array_column.cpp
+        array_view_column.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         adaptive_nullable_column.cpp
         chunk.cpp
         chunk_extra_data.cpp

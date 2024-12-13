@@ -47,8 +47,13 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TreeNode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -75,7 +80,10 @@ import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 /**
  * Each PlanNode represents a single relational operator
  * and encapsulates the information needed by the planner to
@@ -119,8 +127,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // sum of tupleIds' avgSerializedSizes; set in computeStats()
     protected float avgRowSize;
 
+<<<<<<< HEAD
     protected int numInstances;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected Map<ColumnRefOperator, ColumnStatistic> columnStatistics;
 
     // For vector query engine
@@ -141,6 +152,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     protected Set<Integer> localRfWaitingSet = Sets.newHashSet();
     protected ExprSubstitutionMap outputSmap;
 
+<<<<<<< HEAD
+=======
+    // set if you want to collect execution statistics for this plan node
+    protected boolean needCollectExecStats = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected PlanNode(PlanNodeId id, ArrayList<TupleId> tupleIds, String planNodeName) {
         this.id = id;
         this.limit = -1;
@@ -148,7 +165,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList(tupleIds);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
+<<<<<<< HEAD
         this.numInstances = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     protected PlanNode(PlanNodeId id, String planNodeName) {
@@ -157,7 +177,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.tupleIds = Lists.newArrayList();
         this.cardinality = -1;
         this.planNodeName = planNodeName;
+<<<<<<< HEAD
         this.numInstances = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -171,7 +194,10 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.conjuncts = Expr.cloneList(node.conjuncts, null);
         this.cardinality = -1;
         this.planNodeName = planNodeName;
+<<<<<<< HEAD
         this.numInstances = 1;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<RuntimeFilterDescription> getProbeRuntimeFilters() {
@@ -548,7 +574,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (PlanNode child : children) {
             child.finalizeStats(analyzer);
         }
@@ -584,7 +614,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return outputSmap;
     }
 
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -624,7 +658,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      *
      * @throws AnalysisException
      */
+<<<<<<< HEAD
     protected void createDefaultSmap(Analyzer analyzer) throws UserException {
+=======
+    protected void createDefaultSmap(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
         outputSmap =
                 ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);
@@ -694,6 +732,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return getVerboseExplain(exprs, TExplainLevel.VERBOSE);
     }
 
+<<<<<<< HEAD
     public int getNumInstances() {
         return numInstances;
     }
@@ -702,6 +741,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         this.numInstances = numInstances;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void appendTrace(StringBuilder sb) {
         sb.append(planNodeName);
         if (!children.isEmpty()) {
@@ -793,8 +834,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     /**
      * When push down runtime filter cross exchange, need take care partitionByExprs of exchange.
      */
+<<<<<<< HEAD
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+=======
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
@@ -810,13 +858,21 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         boolean accept = false;
         for (PlanNode node : children) {
             if (candidatePartitionByExprs.isEmpty()) {
+<<<<<<< HEAD
                 if (node.pushDownRuntimeFilters(descTbl, description, probeExpr, Lists.newArrayList())) {
+=======
+                if (node.pushDownRuntimeFilters(context, probeExpr, Lists.newArrayList())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     accept = true;
                     break;
                 }
             } else {
                 for (List<Expr> candidateOfPartitionByExprs : candidatePartitionByExprs) {
+<<<<<<< HEAD
                     if (node.pushDownRuntimeFilters(descTbl, description, probeExpr, candidateOfPartitionByExprs)) {
+=======
+                    if (node.pushDownRuntimeFilters(context, probeExpr, candidateOfPartitionByExprs)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         accept = true;
                         break;
                     }
@@ -831,7 +887,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (accept) {
             return true;
         }
+<<<<<<< HEAD
         if (isBound && description.canProbeUse(this)) {
+=======
+        if (isBound && description.canProbeUse(this, context)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             description.addProbeExpr(id.asInt(), probeExpr);
             description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
@@ -892,11 +952,19 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
         return false;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected boolean canEliminateNull(SlotDescriptor slot) {
         return conjuncts.stream().anyMatch(expr -> canEliminateNull(expr, slot));
     }
 
+<<<<<<< HEAD
     private boolean tryPushdownRuntimeFilterToChild(DescriptorTable descTbl, RuntimeFilterDescription description,
+=======
+    private boolean tryPushdownRuntimeFilterToChild(RuntimeFilterPushDownContext context,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                     Optional<List<Expr>> optProbeExprCandidates,
                                                     Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                     int childIdx) {
@@ -908,14 +976,22 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
         for (Expr candidateOfProbeExpr : probeExprCandidates) {
             if (partitionByExprsCandidates.isEmpty()) {
+<<<<<<< HEAD
                 if (children.get(childIdx).pushDownRuntimeFilters(descTbl, description, candidateOfProbeExpr,
+=======
+                if (children.get(childIdx).pushDownRuntimeFilters(context, candidateOfProbeExpr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Lists.newArrayList())) {
                     return true;
                 }
             } else {
                 for (List<Expr> candidateOfPartitionByExprs : partitionByExprsCandidates) {
                     if (children.get(childIdx)
+<<<<<<< HEAD
                             .pushDownRuntimeFilters(descTbl, description, candidateOfProbeExpr,
+=======
+                            .pushDownRuntimeFilters(context, candidateOfProbeExpr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     candidateOfPartitionByExprs)) {
                         return true;
                     }
@@ -929,15 +1005,25 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Push down a runtime filter for the specific child with childIdx. `addProbeInfo` indicates whether
      * add runtime filter info into this PlanNode.
      */
+<<<<<<< HEAD
     protected boolean pushdownRuntimeFilterForChildOrAccept(DescriptorTable descTbl,
                                                             RuntimeFilterDescription description,
+=======
+    protected boolean pushdownRuntimeFilterForChildOrAccept(RuntimeFilterPushDownContext context,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                             Expr probeExpr,
                                                             Optional<List<Expr>> optProbeExprCandidates,
                                                             List<Expr> partitionByExprs,
                                                             Optional<List<List<Expr>>> optPartitionByExprsCandidates,
                                                             int childIdx,
                                                             boolean addProbeInfo) {
+<<<<<<< HEAD
         boolean accept = tryPushdownRuntimeFilterToChild(descTbl, description, optProbeExprCandidates,
+=======
+        RuntimeFilterDescription description = context.getDescription();
+        DescriptorTable descTbl = context.getDescTbl();
+        boolean accept = tryPushdownRuntimeFilterToChild(context, optProbeExprCandidates,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 optPartitionByExprsCandidates, childIdx);
         RoaringBitmap slotIds = getSlotIds(descTbl);
         boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
@@ -948,7 +1034,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         if (accept) {
             return true;
         }
+<<<<<<< HEAD
         if (isBound && addProbeInfo && description.canProbeUse(this)) {
+=======
+        if (isBound && addProbeInfo && description.canProbeUse(this, context)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);
@@ -1015,4 +1105,15 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
     // eg: sortedStreamingAGG/ PerBucketCompute
     public void disablePhysicalPropertyOptimize() {
     }
+<<<<<<< HEAD
+=======
+
+    public void forceCollectExecStats() {
+        this.needCollectExecStats = true;
+    }
+
+    public boolean needCollectExecStats() {
+        return needCollectExecStats;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

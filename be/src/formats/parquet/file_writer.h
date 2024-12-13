@@ -20,12 +20,17 @@
 #include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
+<<<<<<< HEAD
+=======
+#include <arrow/result.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <gen_cpp/DataSinks_types.h>
 #include <parquet/api/reader.h>
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
 
 #include <utility>
 
@@ -35,6 +40,49 @@
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
+=======
+#include <parquet/file_writer.h>
+#include <parquet/platform.h>
+#include <parquet/properties.h>
+#include <parquet/schema.h>
+#include <parquet/types.h>
+#include <stdint.h>
+
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "column/chunk.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
+#include "common/statusor.h"
+#include "formats/parquet/chunk_writer.h"
+#include "fs/fs.h"
+#include "gen_cpp/Types_types.h"
+#include "io/async_flush_output_stream.h"
+#include "runtime/runtime_state.h"
+#include "runtime/types.h"
+#include "util/priority_thread_pool.hpp"
+#include "util/runtime_profile.h"
+
+namespace parquet {
+class FileMetaData;
+} // namespace parquet
+namespace starrocks {
+class Chunk;
+class ExprContext;
+class PriorityThreadPool;
+class RuntimeState;
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::parquet {
 
@@ -71,6 +119,30 @@ private:
     HEADER_STATE _header_state = INITED;
 };
 
+<<<<<<< HEAD
+=======
+class AsyncParquetOutputStream : public arrow::io::OutputStream {
+public:
+    AsyncParquetOutputStream(io::AsyncFlushOutputStream* stream);
+
+    ~AsyncParquetOutputStream() override = default;
+
+    arrow::Status Write(const void* data, int64_t nbytes) override;
+
+    arrow::Status Write(const std::shared_ptr<arrow::Buffer>& data) override;
+
+    arrow::Status Close() override;
+
+    arrow::Result<int64_t> Tell() const override;
+
+    bool closed() const override { return _is_closed; };
+
+private:
+    io::AsyncFlushOutputStream* _stream;
+    bool _is_closed = false;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct ParquetBuilderOptions {
     TCompressionType::type compression_type = TCompressionType::SNAPPY;
     bool use_dict = true;
@@ -103,10 +175,18 @@ class FileWriterBase {
 public:
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
+<<<<<<< HEAD
                    const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size);
 
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs);
+=======
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size, RuntimeState* state);
+
+    FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs,
+                   RuntimeState* state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual ~FileWriterBase() = default;
 
@@ -148,12 +228,17 @@ protected:
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
     int64_t _max_file_size = 512 * 1024 * 1024; // 512MB
+<<<<<<< HEAD
+=======
+    RuntimeState* _state = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class SyncFileWriter : public FileWriterBase {
 public:
     SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
+<<<<<<< HEAD
                    const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size)
             : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
                              max_file_size) {}
@@ -162,6 +247,17 @@ public:
                    std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs)
             : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema),
                              std::move(type_descs)) {}
+=======
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t max_file_size, RuntimeState* state)
+            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
+                             max_file_size, state) {}
+
+    SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs,
+                   RuntimeState* state)
+            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), std::move(type_descs),
+                             state) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~SyncFileWriter() override = default;
 

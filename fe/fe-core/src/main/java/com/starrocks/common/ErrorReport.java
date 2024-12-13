@@ -58,11 +58,14 @@ public class ErrorReport {
         return errMsg;
     }
 
+<<<<<<< HEAD
     public static void reportAnalysisException(String pattern, Object... objs)
             throws AnalysisException {
         throw new AnalysisException(reportCommon(pattern, ErrorCode.ERR_UNKNOWN_ERROR, objs));
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void reportAnalysisException(ErrorCode errorCode, Object... objs)
             throws AnalysisException {
         reportAnalysisException(null, errorCode, objs);
@@ -99,14 +102,38 @@ public class ErrorReport {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
     }
 
+<<<<<<< HEAD
     public interface DdlExecutor {
         void apply() throws UserException;
+=======
+    public static void reportUserException(ErrorCode errorCode, Object... objs)
+            throws StarRocksException {
+        throw new StarRocksException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportTimeoutException(ErrorCode errorCode, Object... objs)
+            throws TimeoutException {
+        throw new TimeoutException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportNoAliveBackendException(ErrorCode errorCode, Object... objs)
+            throws NoAliveBackendException {
+        throw new NoAliveBackendException(reportCommon(null, errorCode, objs));
+    }
+
+    public interface DdlExecutor {
+        void apply() throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void wrapWithRuntimeException(DdlExecutor fun) {
         try {
             fun.apply();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new RuntimeException(e);
         }
     }

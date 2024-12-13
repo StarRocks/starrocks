@@ -22,6 +22,10 @@
 
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -43,11 +47,32 @@ namespace starrocks {
 class RowsetUpdateStateTest : public ::testing::Test {
 public:
     void SetUp() override {
+<<<<<<< HEAD
+=======
+        config::enable_transparent_data_encryption = true;
+        // add encryption keys
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+        auto val_st = root_encryption_key->generate_key();
+        EXPECT_TRUE(val_st.ok());
+        std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+        encryption_key->set_id(2);
+        KeyCache::instance().add_key(root_encryption_key);
+        KeyCache::instance().add_key(encryption_key);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
         _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
+<<<<<<< HEAD
+=======
+        config::enable_transparent_data_encryption = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_tablet) {
             StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
             _tablet.reset();
@@ -208,6 +233,29 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
     return read_until_eof(iter);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(RowsetUpdateStateTest, with_deletes) {
+    const int N = 100;
+    _tablet = create_tablet(rand(), rand());
+    // create full rowsets first
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<int64_t> delete_keys;
+    for (int i = 0; i < N / 2; i++) {
+        delete_keys.push_back(N + i);
+    }
+    Int64Column deletes;
+    deletes.append_numbers(delete_keys.data(), sizeof(int64_t) * delete_keys.size());
+    RowsetSharedPtr rowset = create_rowset(_tablet, keys, &deletes);
+    auto st = _tablet->rowset_commit(2, rowset, 0);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     const int N = 100;
     _tablet = create_tablet(rand(), rand());

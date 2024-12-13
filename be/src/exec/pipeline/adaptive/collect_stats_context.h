@@ -78,6 +78,11 @@ public:
 
     const int64_t max_output_amplification_factor() const { return _max_output_amplification_factor; }
 
+<<<<<<< HEAD
+=======
+    EventPtr blocking_event() const { return _blocking_event; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     using BufferChunkQueue = std::queue<ChunkPtr>;
 
@@ -109,6 +114,11 @@ private:
     std::vector<uint8_t> _is_finished_per_driver_seq;
 
     RuntimeState* const _runtime_state;
+<<<<<<< HEAD
+=======
+
+    EventPtr _blocking_event;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class CollectStatsState {

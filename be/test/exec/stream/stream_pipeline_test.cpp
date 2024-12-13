@@ -25,6 +25,10 @@
 #include "exec/stream/stream_operators_test.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "testutil/assert.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "testutil/desc_tbl_helper.h"
 
 namespace starrocks::stream {
@@ -68,12 +72,19 @@ Status StreamPipelineTest::prepare() {
     _runtime_state->set_fragment_ctx(_fragment_ctx);
 
     _obj_pool = _runtime_state->obj_pool();
+<<<<<<< HEAD
     _pipeline_context =
             _obj_pool->add(new pipeline::PipelineBuilderContext(_fragment_ctx, _degree_of_parallelism, true));
+=======
+    auto sink_dop = _degree_of_parallelism;
+    _pipeline_context =
+            _obj_pool->add(new pipeline::PipelineBuilderContext(_fragment_ctx, _degree_of_parallelism, sink_dop, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     DCHECK(_pipeline_builder != nullptr);
     _pipelines.clear();
     _pipeline_builder(_fragment_ctx->runtime_state());
+<<<<<<< HEAD
     _fragment_ctx->set_pipelines(std::move(_pipelines));
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
@@ -96,6 +107,29 @@ Status StreamPipelineTest::prepare() {
         const auto& pipeline = pipelines[n];
         pipeline->instantiate_drivers(_fragment_ctx->runtime_state());
     }
+=======
+    for (auto pipeline : _pipelines) {
+        exec_group->add_pipeline(std::move(pipeline.get()));
+    }
+    _fragment_ctx->set_pipelines({exec_group}, std::move(_pipelines));
+    exec_group.reset();
+    _pipelines.clear();
+    RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
+
+    // morsel queue
+    starrocks::pipeline::MorselQueueFactoryMap& morsel_queues = _fragment_ctx->morsel_queue_factories();
+    _fragment_ctx->iterate_pipeline([&morsel_queues](auto pipeline) {
+        if (pipeline->source_operator_factory()->with_morsels()) {
+            auto source_id = pipeline->source_operator_factory()->plan_node_id();
+            DCHECK(morsel_queues.count(source_id));
+            auto& morsel_queue_factory = morsel_queues[source_id];
+            pipeline->source_operator_factory()->set_morsel_queue_factory(morsel_queue_factory.get());
+        }
+    });
+
+    _fragment_ctx->iterate_pipeline(
+            [this](auto pipeline) { pipeline->instantiate_drivers(_fragment_ctx->runtime_state()); });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // prepare epoch manager
     auto stream_epoch_manager = _query_ctx->stream_epoch_manager();
@@ -107,6 +141,7 @@ Status StreamPipelineTest::prepare() {
 
 Status StreamPipelineTest::execute() {
     VLOG_ROW << "ExecutePipeline";
+<<<<<<< HEAD
     Status prepare_status = _fragment_ctx->iterate_drivers(
             [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); });
     DCHECK(prepare_status.ok());
@@ -121,6 +156,21 @@ Status StreamPipelineTest::execute() {
 }
 
 OpFactories StreamPipelineTest::maybe_interpolate_local_passthrough_exchange(OpFactories& pred_operators) {
+=======
+    _fragment_ctx->iterate_drivers(
+            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
+
+    // CHECK_OK(_fragment_ctx->submit_active_drivers(_exec_env->wg_driver_executor()));
+    _fragment_ctx->iterate_drivers([exec_env = _exec_env](const DriverPtr& driver) {
+        LOG(WARNING) << driver->to_readable_string();
+        exec_env->wg_driver_executor()->submit(driver.get());
+    });
+    return Status::OK();
+}
+
+OpFactories StreamPipelineTest::maybe_interpolate_local_passthrough_exchange(
+        OpFactories& pred_operators, pipeline::ExecutionGroupRawPtr exec_group) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(!pred_operators.empty() && pred_operators[0]->is_source());
     auto* source_operator = down_cast<SourceOperatorFactory*>(pred_operators[0].get());
     if (source_operator->degree_of_parallelism() > 1) {
@@ -139,7 +189,11 @@ OpFactories StreamPipelineTest::maybe_interpolate_local_passthrough_exchange(OpF
         // Add LocalExchangeSinkOperator to predecessor pipeline.
         pred_operators.emplace_back(std::move(local_exchange_sink));
         // predecessor pipeline comes to end.
+<<<<<<< HEAD
         _pipelines.emplace_back(std::make_unique<pipeline::Pipeline>(next_pipeline_id(), pred_operators));
+=======
+        _pipelines.emplace_back(std::make_unique<pipeline::Pipeline>(next_pipeline_id(), pred_operators, exec_group));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         OpFactories operators_source_with_local_exchange;
         // Multiple LocalChangeSinkOperators pipe into one LocalChangeSourceOperator.
@@ -153,7 +207,12 @@ OpFactories StreamPipelineTest::maybe_interpolate_local_passthrough_exchange(OpF
 }
 
 Status StreamPipelineTest::start_mv(InitiliazeFunc&& init_func) {
+<<<<<<< HEAD
     RETURN_IF_ERROR(init_func());
+=======
+    exec_group = pipeline::ExecutionGroupBuilder::create_normal_exec_group();
+    RETURN_IF_ERROR(init_func(this));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(prepare());
     RETURN_IF_ERROR(execute());
     return Status::OK();
@@ -202,7 +261,11 @@ Status StreamPipelineTest::wait_until_epoch_finished(const EpochInfo& epoch_info
                 [query_id](const pipeline::PipelineDriver* driver) {
                     return driver->query_ctx()->query_id() == query_id;
                 });
+<<<<<<< HEAD
         return num_parked_drivers == _fragment_ctx->num_drivers();
+=======
+        return num_parked_drivers == _fragment_ctx->total_dop();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     };
 
     while (!are_all_drivers_parked_func()) {

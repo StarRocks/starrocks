@@ -303,26 +303,44 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Col
     SparseRangeIterator<> iter = range.new_iterator();
     if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
+<<<<<<< HEAD
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
+=======
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
+            bool ok = dst->append_strings(std::vector<Slice>{_current_value});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DCHECK(ok);
             Range<> r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
                 size_t len = strnlen(reinterpret_cast<const char*>(_current_value.data()), _current_value.size());
+<<<<<<< HEAD
                 (void)dst->append_strings({Slice(_current_value.data(), len)});
+=======
+                (void)dst->append_strings(std::vector<Slice>{Slice(_current_value.data(), len)});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             to_read -= r.span_size();
         }
     } else {
         while (to_read > 0) {
+<<<<<<< HEAD
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
+=======
+            RETURN_IF_ERROR(seek_to_position_in_page(iter.begin()));
+            bool ok = dst->append_strings(std::vector<Slice>{_current_value});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             DCHECK(ok);
             Range<> r = iter.next(to_read);
             for (size_t i = 1; i < r.span_size(); ++i) {
                 RETURN_IF_ERROR(_next_value(&_current_value));
+<<<<<<< HEAD
                 (void)dst->append_strings({_current_value});
+=======
+                (void)dst->append_strings(std::vector<Slice>{_current_value});
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             to_read -= r.span_size();
         }

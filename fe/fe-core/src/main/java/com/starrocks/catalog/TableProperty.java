@@ -47,7 +47,10 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -94,6 +97,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
     public static final String BINLOG_PARTITION = "binlog_partition_";
 
+<<<<<<< HEAD
+=======
+    public static final String CLOUD_NATIVE_INDEX_TYPE = "CLOUD_NATIVE";
+    public static final String LOCAL_INDEX_TYPE = "LOCAL";
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public enum QueryRewriteConsistencyMode {
         DISABLE,    // 0: disable query rewrite
         LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
@@ -117,6 +126,71 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The value for enable_query_rewrite variable
+     */
+    public enum MVQueryRewriteSwitch {
+        DEFAULT,    // default, no check but eligible for query rewrite
+        TRUE,       // enabled, check the semantic and is eligible for query rewrite
+        FALSE,      // disabled
+        ;
+
+        public boolean isEnable() {
+            return TRUE == this || DEFAULT == this;
+        }
+
+        public static MVQueryRewriteSwitch defaultValue() {
+            return DEFAULT;
+        }
+
+        public static MVQueryRewriteSwitch parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return DEFAULT;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVQueryRewriteSwitch.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVQueryRewriteSwitch.values());
+        }
+    }
+
+    /**
+     * The value for transparent_mv_rewrite_mode variable
+     */
+    public enum MVTransparentRewriteMode {
+        FALSE, // default, mv acts as a normal table, only return the contained data no matter it's fresh or not
+        TRUE, // transparent, mv acts as transparent table of its defined query, its result is the same as its
+        // defined query.And it will redirect to its defined query if transparent rewrite failed or exceptions occurs.
+        TRANSPARENT_OR_ERROR, // try to transparent rewrite, and it will throw exception if transparent rewrite failed or
+        // exceptions occurs.
+        TRANSPARENT_OR_DEFAULT; // try to transparent rewrite, and it will use the original materialized view without partition
+        // compensated if transparent rewrite failed or exceptions occurs.
+
+        public boolean isEnable() {
+            return TRUE == this || TRANSPARENT_OR_ERROR == this || TRANSPARENT_OR_DEFAULT == this;
+        }
+
+        public static MVTransparentRewriteMode defaultValue() {
+            return FALSE;
+        }
+
+        public static MVTransparentRewriteMode parse(String str) {
+            if (StringUtils.isEmpty(str)) {
+                return FALSE;
+            }
+            return EnumUtils.getEnumIgnoreCase(MVTransparentRewriteMode.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on(",").join(MVTransparentRewriteMode.values());
+
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
@@ -130,6 +204,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private PeriodDuration partitionTTL = PeriodDuration.ZERO;
 
+<<<<<<< HEAD
+=======
+    // This property can be used to specify the retention condition of the partition table or materialized view,
+    // it's a SQL expression, and the partition will be deleted if the condition is not true.
+    private String partitionRetentionCondition = null;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
@@ -143,6 +224,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables;
 
+<<<<<<< HEAD
+=======
+    // This property only applies to materialized views,
+    // Indicates which tables do not refresh the base table when auto refresh
+    private List<TableName> excludedRefreshTables;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // This property only applies to materialized views
     private List<String> mvSortKeys;
 
@@ -156,6 +244,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private QueryRewriteConsistencyMode queryRewriteConsistencyMode =
             QueryRewriteConsistencyMode.defaultQueryRewriteConsistencyMode();
 
+<<<<<<< HEAD
+=======
+    private MVQueryRewriteSwitch mvQueryRewriteSwitch = MVQueryRewriteSwitch.DEFAULT;
+    private MVTransparentRewriteMode mvTransparentRewriteMode = MVTransparentRewriteMode.FALSE;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean isInMemory = false;
 
     private boolean enablePersistentIndex = false;
@@ -183,6 +277,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "compressionLevel")
+    // the default compression level of this table, only used for zstd for now.
+    private int compressionLevel = -1;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // the default write quorum
     private TWriteQuorumType writeQuorum = TWriteQuorumType.MAJORITY;
 
@@ -194,6 +295,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default automatic bucket size
     private long bucketSize = 0;
 
+<<<<<<< HEAD
+=======
+    // the default mutable bucket number
+    private long mutableBucketNum = 0;
+
+    private boolean enableLoadProfile = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private String baseCompactionForbiddenTimeRanges = "";
 
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
@@ -232,12 +341,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
+<<<<<<< HEAD
         if (FeConstants.runningUnitTest) {
             // FIXME: remove this later.
             // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
             // task run will only refresh 1 partition and will produce wrong result.
             partitionRefreshNumber = INVALID;
         }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TableProperty copy() {
@@ -295,6 +407,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_BUCKET_SIZE:
                 buildBucketSize();
                 break;
+<<<<<<< HEAD
+=======
+            case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+                buildMutableBucketNum();
+                break;
+            case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
+                buildEnableLoadProfile();
+                break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
                 buildBaseCompactionForbiddenTimeRanges();
                 break;
@@ -305,7 +426,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 buildBinlogAvailableVersion();
                 break;
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
+<<<<<<< HEAD
                 buildPartitionLiveNumber();
+=======
+                buildPartitionTTL();
+                buildPartitionLiveNumber();
+                buildPartitionRetentionCondition();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
@@ -329,6 +456,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildConstraint();
         buildMvSortKeys();
         buildQueryRewrite();
+<<<<<<< HEAD
+=======
+        buildMVQueryRewriteSwitch();
+        buildMVTransparentRewriteMode();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return this;
     }
 
@@ -384,7 +516,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
 
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+<<<<<<< HEAD
             Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties);
+=======
+            Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (ttlDuration != null) {
                 partitionTTL = ttlDuration.second;
             }
@@ -413,6 +549,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildPartitionRetentionCondition() {
+        partitionRetentionCondition = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, "");
+        return this;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TableProperty buildResourceGroup() {
         resourceGroup = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP,
                 null);
@@ -420,18 +564,36 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildExcludedTriggerTables() {
+<<<<<<< HEAD
         String excludedRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, null);
         List<TableName> tables = Lists.newArrayList();
         if (excludedRefreshConf != null) {
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
                     .splitToList(excludedRefreshConf);
+=======
+        excludedTriggerTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        excludedRefreshTables = parseExcludedTables(PropertyAnalyzer.PROPERTIES_EXCLUDED_REFRESH_TABLES);
+        return this;
+    }
+
+    private List<TableName> parseExcludedTables(String propertiesKey) {
+        String excludedTables = properties.getOrDefault(propertiesKey, null);
+        List<TableName> tables = Lists.newArrayList();
+        if (excludedTables != null) {
+            List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
+                    .splitToList(excludedTables);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
                 tables.add(tableName);
             }
         }
+<<<<<<< HEAD
         excludedTriggerTables = tables;
         return this;
+=======
+        return tables;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TableProperty buildMvSortKeys() {
@@ -455,6 +617,43 @@ public class TableProperty implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildMVQueryRewriteSwitch() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+        this.mvQueryRewriteSwitch = MVQueryRewriteSwitch.parse(value);
+        return this;
+    }
+
+    public static MVQueryRewriteSwitch analyzeQueryRewriteSwitch(String value) {
+        MVQueryRewriteSwitch res = MVQueryRewriteSwitch.parse(value);
+        if (res == null) {
+            String valueList = MVQueryRewriteSwitch.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
+    }
+
+    public TableProperty buildMVTransparentRewriteMode() {
+        String value = properties.get(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE);
+        this.mvTransparentRewriteMode = MVTransparentRewriteMode.parse(value);
+        return this;
+    }
+
+    public static MVTransparentRewriteMode analyzeMVTransparentRewrite(String value) {
+        MVTransparentRewriteMode res = MVTransparentRewriteMode.parse(value);
+        if (res == null) {
+            String valueList = MVTransparentRewriteMode.valueList();
+            throw new SemanticException(
+                    PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE
+                            + " can only be " + valueList + " but got " + value);
+        }
+        return res;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) {
         QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
         if (res == null) {
@@ -529,6 +728,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 return this;
             }
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         compressionType = TCompressionType.LZ4_FRAME;
         return this;
     }
@@ -553,6 +756,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildMutableBucketNum() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM) != null) {
+            mutableBucketNum = Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_MUTABLE_BUCKET_NUM));
+        }
+        return this;
+    }
+
+    public TableProperty buildEnableLoadProfile() {
+        if (properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE) != null) {
+            enableLoadProfile = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_LOAD_PROFILE));
+        }
+        return this;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TableProperty buildBaseCompactionForbiddenTimeRanges() {
         baseCompactionForbiddenTimeRanges = properties.getOrDefault(
                 PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, "");
@@ -572,12 +792,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPersistentIndexType() {
+<<<<<<< HEAD
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
             persistentIndexType = TPersistentIndexType.LOCAL;
         } else if (type.equals("CLOUD_NATIVE")) {
             // treat CLOUD_NATIVE as LOCAL in 3.2
             persistentIndexType = TPersistentIndexType.LOCAL;
+=======
+        String defaultType = Config.enable_cloud_native_persistent_index_by_default ? CLOUD_NATIVE_INDEX_TYPE : LOCAL_INDEX_TYPE;
+        String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, defaultType);
+        if (type.equals(LOCAL_INDEX_TYPE)) {
+            persistentIndexType = TPersistentIndexType.LOCAL;
+        } else if (type.equals(CLOUD_NATIVE_INDEX_TYPE)) {
+            persistentIndexType = TPersistentIndexType.CLOUD_NATIVE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return this;
     }
@@ -585,10 +814,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public static String persistentIndexTypeToString(TPersistentIndexType type) {
         switch (type) {
             case LOCAL:
+<<<<<<< HEAD
                 return "LOCAL";
             case CLOUD_NATIVE:
                 // treat CLOUD_NATIVE as LOCAL in 3.2
                 return "LOCAL";
+=======
+                return LOCAL_INDEX_TYPE;
+            case CLOUD_NATIVE:
+                return CLOUD_NATIVE_INDEX_TYPE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             default:
                 // shouldn't happen
                 // for it has been checked outside
@@ -681,6 +916,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return replicationNum;
     }
 
+<<<<<<< HEAD
+=======
+    public void setCompressionLevel(int compressionLevel) {
+        this.compressionLevel = compressionLevel;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
     }
@@ -697,6 +939,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionTTL;
     }
 
+<<<<<<< HEAD
+=======
+    public String getPartitionRetentionCondition() {
+        return partitionRetentionCondition;
+    }
+
+    public void setPartitionRetentionCondition(String partitionRetentionCondition) {
+        this.partitionRetentionCondition = partitionRetentionCondition;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getAutoRefreshPartitionsLimit() {
         return autoRefreshPartitionsLimit;
     }
@@ -729,6 +982,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
+<<<<<<< HEAD
+=======
+    public List<TableName> getExcludedRefreshTables() {
+        return excludedRefreshTables;
+    }
+
+    public void setExcludedRefreshTables(List<TableName> excludedRefreshTables) {
+        this.excludedRefreshTables = excludedRefreshTables;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getMvSortKeys() {
         return mvSortKeys;
     }
@@ -753,6 +1017,25 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this.queryRewriteConsistencyMode;
     }
 
+<<<<<<< HEAD
+=======
+    public void setMvQueryRewriteSwitch(MVQueryRewriteSwitch value) {
+        this.mvQueryRewriteSwitch = value;
+    }
+
+    public MVQueryRewriteSwitch getMvQueryRewriteSwitch() {
+        return this.mvQueryRewriteSwitch;
+    }
+
+    public void setMvTransparentRewriteMode(MVTransparentRewriteMode value) {
+        this.mvTransparentRewriteMode = value;
+    }
+
+    public MVTransparentRewriteMode getMvTransparentRewriteMode() {
+        return this.mvTransparentRewriteMode;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -793,6 +1076,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return bucketSize;
     }
 
+<<<<<<< HEAD
+=======
+    public long getMutableBucketNum() {
+        return mutableBucketNum;
+    }
+
+    public boolean enableLoadProfile() {
+        return enableLoadProfile;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getBaseCompactionForbiddenTimeRanges() {
         return baseCompactionForbiddenTimeRanges;
     }
@@ -805,6 +1099,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return compressionType;
     }
 
+<<<<<<< HEAD
+=======
+    public int getCompressionLevel() {
+        return compressionLevel;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean hasDelete() {
         return hasDelete;
     }
@@ -873,7 +1174,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildUseFastSchemaEvolution() {
         useFastSchemaEvolution = Boolean.parseBoolean(
+<<<<<<< HEAD
             properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
+=======
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION, "false"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return this;
     }
 
@@ -907,8 +1212,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionLiveNumber();
+<<<<<<< HEAD
         buildReplicatedStorage();
         buildBucketSize();
+=======
+        buildPartitionRetentionCondition();
+        buildReplicatedStorage();
+        buildBucketSize();
+        buildEnableLoadProfile();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         buildBinlogConfig();
         buildBinlogAvailableVersion();
         buildDataCachePartitionDuration();

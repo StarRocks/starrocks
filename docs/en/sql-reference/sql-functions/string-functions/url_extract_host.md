@@ -1,14 +1,26 @@
 ---
+<<<<<<< HEAD
 unlisted: true
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 displayed_sidebar: docs
 ---
 
 # url_extract_host
 
+<<<<<<< HEAD
 ## Description
 
 Extracts the host section from a URL.
 
+=======
+
+
+Extracts the host section from a URL.
+
+This function is supported from v3.3 onwards.
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## Syntax
 
 ```haskell

@@ -49,6 +49,11 @@ import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+<<<<<<< HEAD
+=======
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -299,6 +304,20 @@ public class BackendServiceClient {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public Future<PProcessDictionaryCacheResult> processDictionaryCache(
+            TNetworkAddress address, PProcessDictionaryCacheRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.processDictionaryCache(request);
+        } catch (Throwable e) {
+            LOG.warn("failed to execute processDictionaryCache, address={}:{}", address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static class SingletonHolder {
         private static final BackendServiceClient INSTANCE = new BackendServiceClient();
     }

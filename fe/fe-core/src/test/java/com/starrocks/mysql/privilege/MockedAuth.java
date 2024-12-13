@@ -24,6 +24,7 @@ import mockit.Expectations;
 
 public class MockedAuth {
 
+<<<<<<< HEAD
     public static void mockedAuth(Auth auth) {
         new Expectations() {
             {
@@ -42,6 +43,8 @@ public class MockedAuth {
         };
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void mockedConnectContext(ConnectContext ctx, String user, String ip) {
         new Expectations() {
             {

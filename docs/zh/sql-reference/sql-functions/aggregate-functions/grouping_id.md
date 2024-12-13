@@ -5,7 +5,11 @@ displayed_sidebar: docs
 
 # grouping_id
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 用于区分相同分组标准的分组统计结果。
 

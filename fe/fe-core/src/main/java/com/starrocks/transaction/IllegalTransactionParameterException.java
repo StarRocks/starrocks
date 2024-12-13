@@ -17,9 +17,15 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class IllegalTransactionParameterException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class IllegalTransactionParameterException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private static final long serialVersionUID = 1L;
 

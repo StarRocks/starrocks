@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_iso8601
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将某一个日期转换为 ISO 8601 标准格式的字符串。
 

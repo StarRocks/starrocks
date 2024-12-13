@@ -49,15 +49,27 @@ protected:
 
 TEST_F(LakeCompactionSchedulerTest, test_task_queue) {
     CompactionScheduler::WrapTaskQueues queue(10);
+<<<<<<< HEAD
     auto ctx = std::make_unique<CompactionTaskContext>(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
                                                        false /* is_checker */, nullptr);
+=======
+    auto ctx =
+            std::make_unique<CompactionTaskContext>(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
+                                                    false /* force_base_compaction */, false /* is_checker */, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     queue.set_target_size(5);
     ASSERT_EQ(5, queue.target_size());
     queue.put_by_txn_id(ctx->txn_id, ctx);
 
     std::vector<std::unique_ptr<CompactionTaskContext>> v;
+<<<<<<< HEAD
     auto ctx2 = std::make_unique<CompactionTaskContext>(101 /* txn_id */, 102 /* tablet_id */, 1 /* version */,
                                                         false /* is_checker */, nullptr);
+=======
+    auto ctx2 =
+            std::make_unique<CompactionTaskContext>(101 /* txn_id */, 102 /* tablet_id */, 1 /* version */,
+                                                    false /* force_base_compaction */, false /* is_checker */, nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     v.push_back(std::move(ctx2));
     queue.put_by_txn_id(101 /* txn_id */, v);
 }
@@ -110,7 +122,12 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
     // has error
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+<<<<<<< HEAD
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
+=======
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
+                                  false /* force_base_compaction */, false /* is_checker */, cb);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cb->update_status(Status::Aborted("aborted for test"));
         EXPECT_FALSE(compaction_should_cancel(&ctx).ok());
     }
@@ -118,14 +135,24 @@ TEST_F(LakeCompactionSchedulerTest, test_compaction_cancel) {
     // not checker
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+<<<<<<< HEAD
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, false /* is_checker */, cb);
+=======
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
+                                  false /* force_base_compaction */, false /* is_checker */, cb);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
     }
 
     // is checker
     {
         auto cb = std::make_shared<CompactionTaskCallback>(nullptr, &request, &response, nullptr);
+<<<<<<< HEAD
         CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */, true /* is_checker */, cb);
+=======
+        CompactionTaskContext ctx(100 /* txn_id */, 101 /* tablet_id */, 1 /* version */,
+                                  false /* force_base_compaction */, true /* is_checker */, cb);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cb->set_last_check_time(0);
         EXPECT_TRUE(compaction_should_cancel(&ctx).ok());
     }

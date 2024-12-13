@@ -40,6 +40,10 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.NodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -65,23 +69,52 @@ public class LocalTabletTest {
 
     private TabletInvertedIndex invertedIndex;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private SystemInfoService infoService;
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    private NodeMgr nodeMgr;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void makeTablet() {
         invertedIndex = new TabletInvertedIndex();
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex();
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = invertedIndex;
 
                 GlobalStateMgr.isCheckpointThread();
                 minTimes = 0;
                 result = false;
+<<<<<<< HEAD
+=======
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = infoService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -95,10 +128,16 @@ public class LocalTabletTest {
         tablet.addReplica(replica2);
         tablet.addReplica(replica3);
 
+<<<<<<< HEAD
         infoService = GlobalStateMgr.getCurrentSystemInfo();
         infoService.addBackend(new Backend(10001L, "host1", 9050));
         infoService.addBackend(new Backend(10002L, "host2", 9050));
 
+=======
+        infoService = globalStateMgr.getNodeMgr().getClusterInfo();
+        infoService.addBackend(new Backend(10001L, "host1", 9050));
+        infoService.addBackend(new Backend(10002L, "host2", 9050));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

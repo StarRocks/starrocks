@@ -46,6 +46,10 @@ import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TxnFinishState;
@@ -173,7 +177,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
                 replicas.add(replica);
                 if (updateInvertedIndex) {
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
+=======
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(id, replica);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -249,7 +257,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // for loading data
     public List<Long> getNormalReplicaBackendIds() {
         List<Long> beIds = Lists.newArrayList();
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
@@ -266,10 +278,16 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
+<<<<<<< HEAD
     public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
+=======
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(SystemInfoService infoService) {
+        Multimap<Replica, Long> map = LinkedHashMultimap.create();
+        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -316,6 +334,15 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
+                                     long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
+        throw new SemanticException("not implemented");
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getQueryableReplicasSize(long visibleVersion, int schemaHash) {
         int size = 0;
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
@@ -369,7 +396,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
             if (replicas.contains(replica)) {
                 replicas.remove(replica);
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
+=======
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(id, replica.getBackendId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
         }
@@ -383,7 +414,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 Replica replica = iterator.next();
                 if (replica.getBackendId() == backendId) {
                     iterator.remove();
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, backendId);
+=======
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(id, backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return true;
                 }
             }
@@ -513,6 +548,20 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return tabletRowCount;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public long getFuzzyRowCount() {
+        long tabletRowCount = 0L;
+        for (Replica replica : immutableReplicas) {
+            if (replica.getRowCount() > tabletRowCount) {
+                tabletRowCount = replica.getRowCount();
+            }
+        }
+        return tabletRowCount;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * check if this tablet is ready to be repaired, based on priority.
      * VERY_HIGH: repair immediately
@@ -558,7 +607,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     private String getReplicaBackendState(long backendId) {
+<<<<<<< HEAD
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Backend backend = infoService.getBackend(backendId);
         if (backend == null) {
             return "NIL";
@@ -621,7 +674,12 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                 replicas.size()));
                         empty = false;
                     }
+<<<<<<< HEAD
                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+=======
+                    Backend backend =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     sb.append(String.format(" %s:%d%s",
                             backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
                             replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));

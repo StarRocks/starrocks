@@ -178,4 +178,8 @@ int64_t PrimaryCompactionPolicy::_get_data_size(const std::shared_ptr<const Tabl
     return size;
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::lake
+=======
+} // namespace starrocks::lake
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

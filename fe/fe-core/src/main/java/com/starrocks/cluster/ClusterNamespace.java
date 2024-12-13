@@ -36,7 +36,10 @@ package com.starrocks.cluster;
 
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.SystemInfoService;
 
 /**
@@ -73,8 +76,12 @@ public class ClusterNamespace {
         if (Strings.isNullOrEmpty(cluster) || Strings.isNullOrEmpty(name)) {
             return null;
         }
+<<<<<<< HEAD
         if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase(AuthenticationMgr.ROOT_USER)
                 || name.equalsIgnoreCase(Auth.ADMIN_USER)) {
+=======
+        if (name.contains(CLUSTER_DELIMITER) || name.equalsIgnoreCase(AuthenticationMgr.ROOT_USER)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return name;
         }
         return cluster + CLUSTER_DELIMITER + name;

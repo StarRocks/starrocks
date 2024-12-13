@@ -45,6 +45,10 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ResourceMgr;
@@ -111,6 +115,10 @@ public class SparkLoadJobTest {
     private String etlOutputPath;
     private long tableId;
     private long partitionId;
+<<<<<<< HEAD
+=======
+    private long physicalPartitionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private long indexId;
     private long tabletId;
     private long replicaId;
@@ -136,6 +144,10 @@ public class SparkLoadJobTest {
         tabletId = 13L;
         replicaId = 14L;
         backendId = 15L;
+<<<<<<< HEAD
+=======
+        physicalPartitionId = 16L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         schemaHash = 146886;
     }
 
@@ -157,11 +169,19 @@ public class SparkLoadJobTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbName);
                 result = db;
                 globalStateMgr.getResourceMgr();
                 result = resourceMgr;
                 db.getTable(tableName);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbName);
+                result = db;
+                globalStateMgr.getResourceMgr();
+                result = resourceMgr;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = olapTable;
                 db.getId();
                 result = dbId;
@@ -219,11 +239,19 @@ public class SparkLoadJobTest {
                             @Injectable LeaderTaskExecutor executor) throws Exception {
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
                         (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
                         anyLong, anyLong);
+=======
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                result = transactionMgr;
+                transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
+                        (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
+                        anyLong, anyLong, anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = transactionId;
                 pendingTask.init();
                 pendingTask.getSignature();
@@ -350,6 +378,10 @@ public class SparkLoadJobTest {
             @Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
             @Mocked SparkEtlJobHandler handler, @Mocked AgentTaskExecutor executor,
             @Injectable Database db, @Injectable OlapTable table, @Injectable Partition partition,
+<<<<<<< HEAD
+=======
+            @Injectable PhysicalPartition physicalPartition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Injectable MaterializedIndex index, @Injectable LocalTablet tablet, @Injectable Replica replica,
             @Injectable GlobalTransactionMgr transactionMgr) throws Exception {
         EtlStatus status = new EtlStatus();
@@ -359,7 +391,11 @@ public class SparkLoadJobTest {
         Map<String, Long> filePathToSize = Maps.newHashMap();
         String filePath =
                 String.format("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/V1.label6.%d.%d.%d.0.%d.parquet",
+<<<<<<< HEAD
                         tableId, partitionId, indexId, schemaHash);
+=======
+                        tableId, physicalPartitionId, indexId, schemaHash);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
@@ -372,6 +408,7 @@ public class SparkLoadJobTest {
                 result = status;
                 handler.getEtlFilePaths(etlOutputPath, (BrokerDesc) any);
                 result = filePathToSize;
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
                 result = db;
                 db.getTable(tableId);
@@ -384,6 +421,22 @@ public class SparkLoadJobTest {
                 result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
                 partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 result = Lists.newArrayList(index);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = db;
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                result = table;
+
+                table.getPartitionInfo();
+                result = partitionInfo;
+
+                table.getSchemaByIndexId(Long.valueOf(12));
+                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                result = Lists.newArrayList(index);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 index.getId();
                 result = indexId;
                 index.getTablets();
@@ -399,7 +452,11 @@ public class SparkLoadJobTest {
                 replica.getLastFailedVersion();
                 result = -1;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = transactionMgr;
                 transactionMgr.commitTransaction(dbId, transactionId, (List<TabletCommitInfo>) any, (List<TabletFailInfo>) any,
                         (LoadJobFinalOperation) any);
@@ -427,7 +484,11 @@ public class SparkLoadJobTest {
         Assert.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId));
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assert.assertTrue(tableToLoadPartitions.containsKey(tableId));
+<<<<<<< HEAD
         Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(partitionId));
+=======
+        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
         Assert.assertTrue(indexToSchemaHash.containsKey(indexId));
         Assert.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
@@ -444,7 +505,13 @@ public class SparkLoadJobTest {
     public void testUpdateEtlStatusFinishedAndCommitTransactionForLake(
             @Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
             @Mocked SparkEtlJobHandler handler, @Mocked AgentTaskExecutor executor,
+<<<<<<< HEAD
             @Injectable Database db, @Injectable LakeTable table, @Injectable Partition partition,
+=======
+            @Injectable Database db, @Injectable LakeTable table,
+            @Injectable Partition partition,
+            @Injectable PhysicalPartition physicalPartition,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Injectable MaterializedIndex index, @Injectable LakeTablet tablet, @Injectable Replica replica,
             @Injectable GlobalTransactionMgr transactionMgr) throws Exception {
         EtlStatus status = new EtlStatus();
@@ -454,7 +521,11 @@ public class SparkLoadJobTest {
         Map<String, Long> filePathToSize = Maps.newHashMap();
         String filePath =
                 String.format("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/V1.label6.%d.%d.%d.0.%d.parquet",
+<<<<<<< HEAD
                         tableId, partitionId, indexId, schemaHash);
+=======
+                        tableId, physicalPartitionId, indexId, schemaHash);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long fileSize = 6L;
         filePathToSize.put(filePath, fileSize);
         PartitionInfo partitionInfo = new RangePartitionInfo();
@@ -470,6 +541,7 @@ public class SparkLoadJobTest {
                 result = status;
                 handler.getEtlFilePaths(etlOutputPath, (BrokerDesc) any);
                 result = filePathToSize;
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
                 result = db;
                 db.getTable(tableId);
@@ -492,6 +564,35 @@ public class SparkLoadJobTest {
                 result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = db;
+
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+                result = table;
+
+                table.getPartitionInfo();
+                result = partitionInfo;
+
+                table.getSchemaByIndexId(Long.valueOf(12));
+                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+
+                physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                result = Lists.newArrayList(index);
+
+                index.getId();
+                result = indexId;
+
+                index.getTablets();
+                result = Lists.newArrayList(tablet);
+
+                tablet.getId();
+                result = tabletId;
+
+                AgentTaskExecutor.submit((AgentBatchTask) any);
+
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = transactionMgr;
             }
         };
@@ -515,7 +616,11 @@ public class SparkLoadJobTest {
         Assert.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(tabletId));
         Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
         Assert.assertTrue(tableToLoadPartitions.containsKey(tableId));
+<<<<<<< HEAD
         Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(partitionId));
+=======
+        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(physicalPartitionId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
         Assert.assertTrue(indexToSchemaHash.containsKey(indexId));
         Assert.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
@@ -530,7 +635,11 @@ public class SparkLoadJobTest {
                                                  @Injectable Database db) throws Exception {
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = db;
             }
         };
@@ -621,7 +730,11 @@ public class SparkLoadJobTest {
                                              @Injectable Database db) throws Exception {
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(dbId);
+=======
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = db;
             }
         };

@@ -292,7 +292,12 @@ TabletSharedPtr TabletManager::_internal_create_tablet_unlocked(AlterTabletType 
                 // if this is a new alter tablet, has to set its state to not ready
                 // because schema change hanlder depends on it to check whether history data
                 // convert finished
+<<<<<<< HEAD
                 tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+=======
+                DCHECK(tablet->tablet_state() != TabletState::TABLET_SHUTDOWN);
+                (void)tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             // Possible cases:
             // 1. Because system time may rollback, creation_time of new table will be earlier
@@ -414,7 +419,11 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             // meta from storage, and assuming that no thread will change the tablet state back
             // to 'RUNNING' from 'SHUTDOWN'.
             std::unique_lock l(dropped_tablet->get_header_lock());
+<<<<<<< HEAD
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+=======
+            (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // Remove tablet meta from storage, crash the program if failed.
@@ -429,7 +438,11 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
         {
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
+<<<<<<< HEAD
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+=======
+            (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             dropped_tablet->save_meta();
         }
 
@@ -669,7 +682,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             if (compaction_type == CompactionType::CUMULATIVE_COMPACTION) {
                 if (tablet_ptr->last_cumu_compaction_failure_status() == TStatusCode::NOT_FOUND) {
                     if (now_ms - last_failure_ts <= 5 * config::cumulative_compaction_check_interval_seconds * 1000) {
+<<<<<<< HEAD
                         VLOG(1) << "Too often to schedule no suitable compaction, skip it."
+=======
+                        VLOG(2) << "Too often to schedule no suitable compaction, skip it."
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 << "compaction_type=" << compaction_type_str
                                 << ", last_failure_timestamp=" << last_failure_ts / 1000
                                 << ", tablet_id=" << tablet_ptr->tablet_id();
@@ -678,7 +695,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
                 } else {
                     last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
                     if (now_ms - last_failure_ts <= config::min_cumulative_compaction_failure_interval_sec * 1000) {
+<<<<<<< HEAD
                         VLOG(1) << "Too often to schedule failure compaction, skip it."
+=======
+                        VLOG(2) << "Too often to schedule failure compaction, skip it."
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 << "compaction_type=" << compaction_type_str
                                 << ", min_cumulative_compaction_failure_interval_sec="
                                 << config::min_cumulative_compaction_failure_interval_sec
@@ -690,7 +711,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             } else if (compaction_type == CompactionType::BASE_COMPACTION) {
                 last_failure_ts = tablet_ptr->last_base_compaction_failure_time();
                 if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+<<<<<<< HEAD
                     VLOG(1) << "Too often to schedule failure compaction, skip it."
+=======
+                    VLOG(2) << "Too often to schedule failure compaction, skip it."
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             << "compaction_type=" << compaction_type_str
                             << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
                             << ", last_failure_timestamp=" << last_failure_ts / 1000
@@ -728,7 +753,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     }
 
     if (best_tablet != nullptr) {
+<<<<<<< HEAD
         VLOG(1) << "Found the best tablet to compact. "
+=======
+        VLOG(2) << "Found the best tablet to compact. "
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
                 << " highest_score=" << highest_score;
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the
@@ -1682,7 +1711,12 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     LOG(INFO) << strings::Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
                                      snapshot_meta->snapshot_version(), schema_hash_path);
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(snapshot_meta, schema_hash_path));
+=======
+    auto tablet_schema = TabletSchema::create(snapshot_meta->tablet_meta().schema());
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(snapshot_meta, schema_hash_path, tablet_schema));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;

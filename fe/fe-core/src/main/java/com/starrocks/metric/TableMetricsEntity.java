@@ -39,6 +39,13 @@ public final class TableMetricsEntity {
     private static final String TABLE_LOAD_UNSELECTED_COMMENT = "total unselected rows in load job of a table";
     public static final String TABLE_LOAD_FINISHED = "table_load_finished";
     private static final String TABLE_LOAD_FINISHED_COMMENT = "total loaded times of this table";
+<<<<<<< HEAD
+=======
+    public static final String TABLE_LOAD_COMMITTED_TASKS = "table_load_committed_tasks";
+    private static final String TABLE_LOAD_COMMITTED_TASKS_COMMENT = "total committed tasks of this table";
+    public static final String TABLE_LOAD_ABORTED_TASKS = "table_load_aborted_tasks";
+    private static final String TABLE_LOAD_ABORTED_TASKS_COMMENT = "total aborted tasks of this table";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private List<Metric> metrics;
 
@@ -55,6 +62,11 @@ public final class TableMetricsEntity {
     public LongCounterMetric counterRoutineLoadErrorRowsTotal;
     public LongCounterMetric counterRoutineLoadUnselectedRowsTotal;
     public LongCounterMetric counterRoutineLoadFinishedTotal;
+<<<<<<< HEAD
+=======
+    public LongCounterMetric counterRoutineLoadCommittedTasksTotal;
+    public LongCounterMetric counterRoutineLoadAbortedTasksTotal;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public LongCounterMetric counterInsertLoadBytesTotal;
     public LongCounterMetric counterInsertLoadRowsTotal;
@@ -122,6 +134,17 @@ public final class TableMetricsEntity {
                 new LongCounterMetric(TABLE_LOAD_FINISHED, MetricUnit.REQUESTS, TABLE_LOAD_FINISHED_COMMENT);
         counterRoutineLoadFinishedTotal.addLabel(new MetricLabel("type", "routine_load"));
         metrics.add(counterRoutineLoadFinishedTotal);
+<<<<<<< HEAD
+=======
+        counterRoutineLoadCommittedTasksTotal = new LongCounterMetric(TABLE_LOAD_COMMITTED_TASKS, MetricUnit.REQUESTS,
+                TABLE_LOAD_COMMITTED_TASKS_COMMENT);
+        counterRoutineLoadCommittedTasksTotal.addLabel(new MetricLabel("type", "routine_load"));
+        metrics.add(counterRoutineLoadCommittedTasksTotal);
+        counterRoutineLoadAbortedTasksTotal =
+                new LongCounterMetric(TABLE_LOAD_ABORTED_TASKS, MetricUnit.REQUESTS, TABLE_LOAD_ABORTED_TASKS_COMMENT);
+        counterRoutineLoadAbortedTasksTotal.addLabel(new MetricLabel("type", "routine_load"));
+        metrics.add(counterRoutineLoadAbortedTasksTotal);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         counterBrokerLoadBytesTotal =
                 new LongCounterMetric(TABLE_LOAD_BYTES, MetricUnit.BYTES, TABLE_LOAD_BYTES_COMMENT);

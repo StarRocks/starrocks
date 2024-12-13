@@ -31,6 +31,10 @@ public class StatsConstants {
     public static final int STATISTIC_EXTERNAL_VERSION = 5;
     public static final int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
     public static final int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
+<<<<<<< HEAD
+=======
+    public static final int STATISTIC_EXTERNAL_QUERY_V2_VERSION = 8;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final int STATISTIC_PARTITION_VERSION = 11;
 
     public static final ImmutableSet<Integer> STATISTIC_SUPPORTED_VERSION =
@@ -43,6 +47,10 @@ public class StatsConstants {
                     .add(STATISTIC_EXTERNAL_VERSION)
                     .add(STATISTIC_EXTERNAL_QUERY_VERSION)
                     .add(STATISTIC_EXTERNAL_HISTOGRAM_VERSION)
+<<<<<<< HEAD
+=======
+                    .add(STATISTIC_EXTERNAL_QUERY_V2_VERSION)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .add(STATISTIC_PARTITION_VERSION)
                     .build();
 
@@ -56,13 +64,34 @@ public class StatsConstants {
 
     public static final String INFORMATION_SCHEMA = "information_schema";
 
+<<<<<<< HEAD
     //Statistics collection threshold
+=======
+    // Statistics collection threshold
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String STATISTIC_AUTO_COLLECT_RATIO = "statistic_auto_collect_ratio";
     public static final String STATISTIC_SAMPLE_COLLECT_ROWS = "statistic_sample_collect_rows";
     public static final String STATISTIC_EXCLUDE_PATTERN = "statistic_exclude_pattern";
     public static final String STATISTIC_AUTO_COLLECT_INTERVAL = "statistic_auto_collect_interval";
 
+<<<<<<< HEAD
     //Histogram Statistics properties
+=======
+    // Sample statistics tablet sample ratio
+    public static final String HIGH_WEIGHT_SAMPLE_RATIO = "high_weight_sample_ratio";
+
+    public static final String MEDIUM_HIGH_WEIGHT_SAMPLE_RATIO = "medium_high_weight_sample_ratio";
+
+    public static final String MEDIUM_LOW_WEIGHT_SAMPLE_RATIO = "medium_low_weight_sample_ratio";
+
+    public static final String LOW_WEIGHT_SAMPLE_RATIO = "low_weight_sample_ratio";
+
+    public static final String MAX_SAMPLE_TABLET_NUM = "max_sample_tablet_num";
+
+    public static final String STATISTIC_SAMPLE_COLLECT_PARTITIONS = "statistic_sample_collect_partitions";
+
+    // Histogram Statistics properties
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
     public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";
     public static final String HISTOGRAM_SAMPLE_RATIO = "histogram_sample_ratio";

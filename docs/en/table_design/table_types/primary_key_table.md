@@ -14,8 +14,15 @@ The primary key of a Primary Key table has a UNIQUE constraint and NOT NULL cons
 
 :::info
 
+<<<<<<< HEAD
 - Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified seperately. As such, table creation flexibility is improved.
 - Since v3.1, StarRocks's shared-data mode supports Primary Key tables. Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
+=======
+- Since v3.0, the sort key of a Primary Key table is decoupled from the table's primary key, and the sort key can be specified separately. As such, table creation flexibility is improved.
+- Since v3.1, StarRocks shared-data clusters support creating Primary Key tables. 
+  - Since v3.1.4, persistent indexes can be created and stored in **local disks**.
+  - Since v3.3.2, persistent indexes can be created and stored in **object storages**.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 :::
 
@@ -153,11 +160,15 @@ When `enable_persistent_index` is set to `true` (default), the primary key index
 
 If the disk is an SSD, it is recommended to set it to `true`. If the disk is an HDD and the load frequency is not high, you can also set it to `true`.
 
+<<<<<<< HEAD
 :::info
 
 Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters further support index persistence onto local disks.
 
 :::
+=======
+Since v3.1.4, Primary Key tables created in StarRocks shared-data clusters support index persistence onto local disks. And from v3.3.2 onwards, StarRocks shared-data clusters further support index persistence onto object storage. You can enable this feature by setting the table property `persistent_index_type` to `CLOUD_NATIVE`.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 </TabItem>
 

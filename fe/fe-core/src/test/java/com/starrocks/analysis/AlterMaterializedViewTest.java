@@ -28,10 +28,15 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
+<<<<<<< HEAD
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.groovy.util.Maps;
+=======
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -138,7 +143,11 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             currentState.alterMaterializedView(stmt);
+=======
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         {
             String alterMvSql = "alter materialized view mv1 set (\"session.not_exists\" = \"10000\")";
@@ -155,7 +164,11 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+=======
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -165,7 +178,11 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
         AlterMaterializedViewStmt stmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
         Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+=======
+        Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -174,14 +191,22 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             currentState.alterMaterializedView(stmt);
+=======
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+<<<<<<< HEAD
             Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+=======
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -238,8 +263,12 @@ public class AlterMaterializedViewTest {
 
         // drop base table would inactive all related MV
         starRocksAssert.dropTable("treload_1");
+<<<<<<< HEAD
         Assert.assertThrows(DmlException.class,
                 () -> starRocksAssert.refreshMvPartition("refresh materialized view mvreload_3"));
+=======
+        starRocksAssert.refreshMV("refresh materialized view mvreload_3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_1").isActive());
         Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_2").isActive());
         Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_3").isActive());
@@ -255,9 +284,15 @@ public class AlterMaterializedViewTest {
         // create the table and refresh
         starRocksAssert.dropTable("treload_1");
         starRocksAssert.withTable(createBaseTable);
+<<<<<<< HEAD
         starRocksAssert.refreshMvPartition("refresh materialized view mvreload_1");
         starRocksAssert.refreshMvPartition("refresh materialized view mvreload_2");
         starRocksAssert.refreshMvPartition("refresh materialized view mvreload_3");
+=======
+        starRocksAssert.refreshMV("refresh materialized view mvreload_1");
+        starRocksAssert.refreshMV("refresh materialized view mvreload_2");
+        starRocksAssert.refreshMV("refresh materialized view mvreload_3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_1").isActive());
         Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_2").isActive());
         Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_3").isActive());
@@ -319,7 +354,11 @@ public class AlterMaterializedViewTest {
         MaterializedView mv = starRocksAssert.getMv("test", "mv_pb_view");
         Map<String, String> columnMap =
                 mv.getColumns().stream().collect(Collectors.toMap(Column::getName, Column::getComment));
+<<<<<<< HEAD
         Assert.assertEquals(Maps.of("order_id", "",
+=======
+        Assert.assertEquals(Map.of("order_id", "",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "order_amt", "",
                 "order_date", "",
                 "description", "",
@@ -416,7 +455,11 @@ public class AlterMaterializedViewTest {
         }
 
         // foreground active
+<<<<<<< HEAD
         starRocksAssert.refreshMvPartition("refresh materialized view " + mvName);
+=======
+        starRocksAssert.refreshMV("refresh materialized view " + mvName + " with sync mode");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(mv.isActive());
 
         // clear the grace period and active it again

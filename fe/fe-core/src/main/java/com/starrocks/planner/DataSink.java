@@ -100,6 +100,11 @@ public abstract class DataSink {
             return true;
         } else if (table instanceof TableFunctionTable) {
             return true;
+<<<<<<< HEAD
+=======
+        } else if (table.isBlackHoleTable()) {
+            return true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         return false;

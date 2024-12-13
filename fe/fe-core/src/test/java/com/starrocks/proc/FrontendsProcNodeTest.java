@@ -78,6 +78,13 @@ public class FrontendsProcNodeTest {
         Method isJoin = clazz.getDeclaredMethod("isJoin", List.class, Frontend.class);
         isJoin.setAccessible(true);
 
+<<<<<<< HEAD
+=======
+        Frontend feCouldNotFoundByPort = new Frontend(FrontendNodeType.LEADER, "test", "127.0.0.1", 2000);
+        boolean result = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldNotFoundByPort);
+        Assert.assertFalse(result);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Frontend feCouldFoundByIP = new Frontend(FrontendNodeType.LEADER, "test", "127.0.0.1", 1000);
         boolean result1 = (boolean) isJoin.invoke(FrontendsProcNode.class, list, feCouldFoundByIP);
         Assert.assertTrue(result1);

@@ -73,7 +73,12 @@ public class ProfilingExecPlanTest {
                         "STREAM_AGG", "STREAM_JOIN", "PROJECT", "PAIMON_SCAN", "TABLE_FUNCTION", "MYSQL_SCAN",
                         "EMPTY_SET", "HUDI_SCAN", "HASH_JOIN", "ES_SCAN", "SCHEMA_SCAN", "ASSERT_NUM_ROWS", "SELECT",
                         "STREAM_LOAD_SCAN", "ANALYTIC_EVAL", "ICEBERG_SCAN", "AGGREGATION", "FILE_SCAN", "EXCHANGE",
+<<<<<<< HEAD
                         "META_SCAN", "OLAP_SCAN", "ODPS_SCAN");
+=======
+                        "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN", "CAPTURE_VERSION",
+                        "ICEBERG_EQUALITY_DELETE_SCAN");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Method method = ProfilingExecPlan.class.getDeclaredMethod("normalizeNodeName", Class.class);
         method.setAccessible(true);
@@ -82,7 +87,11 @@ public class ProfilingExecPlanTest {
             if (Modifier.isAbstract(aClass.getModifiers())) {
                 continue;
             }
+<<<<<<< HEAD
             Assert.assertTrue(names.contains((String) method.invoke(null, aClass)));
+=======
+            Assert.assertTrue(aClass.toString(), names.contains((String) method.invoke(null, aClass)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

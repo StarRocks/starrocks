@@ -36,6 +36,10 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections.CollectionUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -90,9 +94,12 @@ public abstract class StatisticsCollectJob {
         DEFAULT_VELOCITY_ENGINE = new VelocityEngine();
         // close velocity log
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_REFERENCE_LOG_INVALID, false);
+<<<<<<< HEAD
         DEFAULT_VELOCITY_ENGINE.setProperty(VelocityEngine.RUNTIME_LOG_LOGSYSTEM_CLASS,
                 "org.apache.velocity.runtime.log.Log4JLogChute");
         DEFAULT_VELOCITY_ENGINE.setProperty("runtime.log.logsystem.log4j.logger", "velocity");
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public abstract void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception;
@@ -129,6 +136,13 @@ public abstract class StatisticsCollectJob {
         return properties;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isAnalyzeTable() {
+        return CollectionUtils.isEmpty(columnNames);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected void setDefaultSessionVariable(ConnectContext context) {
         SessionVariable sessionVariable = context.getSessionVariable();
         // Statistics collecting is not user-specific, which means response latency is not that important.
@@ -136,6 +150,12 @@ public abstract class StatisticsCollectJob {
         // acceleration, then page cache is better filled with the user's data.
         sessionVariable.setUsePageCache(false);
         sessionVariable.setEnableMaterializedViewRewrite(false);
+<<<<<<< HEAD
+=======
+        // set the max task num of connector io tasks per scan operator to 4, default is 16,
+        // to avoid generate too many chunk source for collect stats in BE
+        sessionVariable.setConnectorIoTasksPerScanOperator(4);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {

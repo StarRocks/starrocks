@@ -51,6 +51,10 @@
 #include <vector>
 
 #include "agent/status.h"
+<<<<<<< HEAD
+=======
+#include "column/chunk.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
@@ -82,6 +86,10 @@ class ReplicationTxnManager;
 class UpdateManager;
 class CompactionManager;
 class PublishVersionManager;
+<<<<<<< HEAD
+=======
+class DictionaryCacheManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -229,6 +237,11 @@ public:
 
     PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
 
+<<<<<<< HEAD
+=======
+    DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
@@ -502,6 +515,11 @@ private:
 
     std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
+<<<<<<< HEAD
+=======
+    std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
     std::mutex _auto_increment_mutex;

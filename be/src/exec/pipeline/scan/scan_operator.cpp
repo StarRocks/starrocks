@@ -27,7 +27,10 @@
 #include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
 #include "testutil/sync_point.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/debug/query_trace.h"
 #include "util/failpoint/fail_point.h"
 #include "util/runtime_profile.h"
@@ -86,6 +89,12 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _peak_io_tasks_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakIOTasks", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
 
+<<<<<<< HEAD
+=======
+    _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
+    _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
 }
@@ -201,7 +210,11 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
+<<<<<<< HEAD
     if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+=======
+    if (_num_running_io_tasks > 0 || _morsel_queue->has_more() || !_morsel_queue->empty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return false;
     }
 
@@ -226,6 +239,21 @@ void ScanOperator::_detach_chunk_sources() {
     }
 }
 
+<<<<<<< HEAD
+=======
+void ScanOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 Status ScanOperator::set_finishing(RuntimeState* state) {
     // check when expired, are there running io tasks or submitted tasks
     if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
@@ -294,6 +322,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
 
+<<<<<<< HEAD
     int cnt = _io_tasks_per_scan_operator;
     int to_sched[_io_tasks_per_scan_operator];
     int size = 0;
@@ -318,6 +347,44 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     }
 
     size = std::min(size, total_cnt);
+=======
+    int to_sched[_io_tasks_per_scan_operator];
+    int size = 0;
+
+    // right here, we want total running io tasks as `total_cnt`
+    {
+        bool skip[_io_tasks_per_scan_operator];
+        // check if we can return earlier.
+        for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
+            if (!_is_io_task_running[i] && _chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+                return Status::OK();
+            }
+        }
+        // update skip vector, and pick up already started chunk source.
+        for (int i = 0; i < _io_tasks_per_scan_operator && total_cnt > 0; i++) {
+            if (_is_io_task_running[i]) {
+                skip[i] = true;
+                total_cnt -= 1;
+            } else if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
+                RETURN_IF_ERROR(_trigger_next_scan(state, i));
+                skip[i] = true;
+                total_cnt -= 1;
+            } else {
+                skip[i] = false;
+            }
+        }
+
+        // now skip vector includes already started chunk source
+        // we are going to pick up `total_cnt` new chunk source to start.
+        for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
+            _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
+            int idx = _chunk_source_idx;
+            if (skip[idx]) continue;
+            to_sched[size++] = idx;
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // pick up new chunk source.
     ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
     if (size > 0 && morsel_ready) {
@@ -359,6 +426,10 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         // must be protected by lock
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
+<<<<<<< HEAD
+=======
+            _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _close_chunk_source_unlocked(state, chunk_source_index);
         }
         _is_io_task_running[chunk_source_index] = false;
@@ -388,13 +459,20 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
+<<<<<<< HEAD
                           io_task_start_nano]() {
+=======
+                          io_task_start_nano](auto& ctx) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (auto sp = wp.lock()) {
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+<<<<<<< HEAD
             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
             SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
@@ -447,7 +525,17 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
         }
     };
 
+<<<<<<< HEAD
     if (_scan_executor->submit(std::move(task))) {
+=======
+    bool submit_success;
+    {
+        SCOPED_TIMER(_submit_io_task_timer);
+        submit_success = _scan_executor->submit(std::move(task));
+    }
+
+    if (submit_success) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _io_task_retry_cnt = 0;
     } else {
         _chunk_sources[chunk_source_index]->unpin_chunk_token();
@@ -501,7 +589,16 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
                     // created from rowsets passed in to itself instead of capturing it from TabletManager again.
                     morsel->set_from_version(delta_version);
+<<<<<<< HEAD
                     morsel->set_delta_rowsets(std::move(delta_rowsets));
+=======
+
+                    std::vector<BaseRowsetSharedPtr> drs;
+                    for (auto& rs : delta_rowsets) {
+                        drs.emplace_back(rs);
+                    }
+                    morsel->set_delta_rowsets(std::move(drs));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 } else {
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
@@ -515,7 +612,15 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
                 if (!delta_rowsets.empty()) {
                     morsel->set_from_version(delta_verrsion);
+<<<<<<< HEAD
                     morsel->set_delta_rowsets(std::move(delta_rowsets));
+=======
+                    std::vector<BaseRowsetSharedPtr> drs;
+                    for (auto& rs : delta_rowsets) {
+                        drs.emplace_back(rs);
+                    }
+                    morsel->set_delta_rowsets(std::move(drs));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 break;
             }
@@ -524,6 +629,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
+<<<<<<< HEAD
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
@@ -531,6 +637,20 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
             set_finishing(state);
             return status;
         }
+=======
+
+        {
+            SCOPED_TIMER(_prepare_chunk_source_timer);
+            _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
+            auto status = _chunk_sources[chunk_source_index]->prepare(state);
+            if (!status.ok()) {
+                _chunk_sources[chunk_source_index] = nullptr;
+                static_cast<void>(set_finishing(state));
+                return status;
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         need_detach = false;
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
     }

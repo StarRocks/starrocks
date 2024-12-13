@@ -23,6 +23,22 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
+=======
+// Options to control how to create DataCache instance
+struct DataCacheOptions {
+    bool enable_datacache = false;
+    bool enable_cache_select = false;
+    bool enable_populate_datacache = false;
+    bool enable_datacache_async_populate_mode = false;
+    bool enable_datacache_io_adaptor = false;
+    int64_t modification_time = 0;
+    int32_t datacache_evict_probability = 100;
+    int8_t datacache_priority = 0;
+    int64_t datacache_ttl_seconds = 0;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 struct DirSpace {
     std::string path;
     size_t size;
@@ -39,14 +55,27 @@ struct CacheOptions {
     bool enable_checksum = false;
     bool enable_direct_io = false;
     bool enable_tiered_cache = true;
+<<<<<<< HEAD
+=======
+    bool enable_datacache_persistence = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string engine;
     size_t max_concurrent_inserts = 0;
     size_t max_flying_memory_mb = 0;
     double scheduler_threads_per_cpu = 0;
     double skip_read_factor = 0;
+<<<<<<< HEAD
 };
 
 struct WriteCacheOptions {
+=======
+    uint32_t inline_item_count_limit = 0;
+    std::string eviction_policy;
+};
+
+struct WriteCacheOptions {
+    int8_t priority = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // If ttl_seconds=0 (default), no ttl restriction will be set. If an old one exists, remove it.
     uint64_t ttl_seconds = 0;
     // If overwrite=true, the cache value will be replaced if it already exists.
@@ -62,6 +91,16 @@ struct WriteCacheOptions {
     // It is expressed as a percentage. If evict_probability is 10, it means the probability to evict other data is 10%.
     int32_t evict_probability = 100;
 
+<<<<<<< HEAD
+=======
+    // The base frequency for target cache.
+    // When using multiple segment lru, a higher frequency may cause the cache is written to warm segment directly.
+    // For the default cache options, that `lru_segment_freq_bits` is 0:
+    // * The default `frequency=0` indicates the cache will be written to cold segment.
+    // * A frequency value greater than 0 indicates writing this cache directly to the warm segment.
+    int8_t frequency = 0;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     struct Stats {
         int64_t write_mem_bytes = 0;
         int64_t write_disk_bytes = 0;
@@ -76,6 +115,7 @@ struct ReadCacheOptions {
         int64_t read_disk_bytes = 0;
     } stats;
 };
+<<<<<<< HEAD
 
 Status parse_conf_datacache_mem_size(const std::string& conf_mem_size_str, int64_t mem_limit, size_t* mem_size);
 
@@ -90,4 +130,6 @@ Status parse_conf_datacache_disk_spaces(const std::string& config_disk_path, con
 
 void clean_residual_datacache(const std::string& disk_path);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

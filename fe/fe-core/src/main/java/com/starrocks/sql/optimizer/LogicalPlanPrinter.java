@@ -50,7 +50,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
@@ -274,9 +277,15 @@ public class LogicalPlanPrinter {
 
             LogicalAggregationOperator aggregate = (LogicalAggregationOperator) optExpression.getOp();
             return new OperatorStr("logical aggregate ("
+<<<<<<< HEAD
                     + aggregate.getGroupingKeys().stream().map(ScalarOperator::debugString)
                     .collect(Collectors.joining(",")) + ") ("
                     + aggregate.getAggregations().values().stream().map(CallOperator::debugString).
+=======
+                    + aggregate.getGroupingKeys().stream().map(scalarOperatorStringFunction)
+                    .collect(Collectors.joining(",")) + ") ("
+                    + aggregate.getAggregations().values().stream().map(scalarOperatorStringFunction).
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     collect(Collectors.joining(",")) + ")",
                     step, Collections.singletonList(child));
         }
@@ -434,6 +443,19 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public OperatorStr visitPhysicalIcebergMetadataScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "ICEBERG METADATA SCAN");
+        }
+
+        @Override
+        public OperatorStr visitPhysicalIcebergEqualityDeleteScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "ICEBERG EQUALITY DELETE SCAN");
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public OperatorStr visitPhysicalPaimonScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "PAIMON SCAN");
         }

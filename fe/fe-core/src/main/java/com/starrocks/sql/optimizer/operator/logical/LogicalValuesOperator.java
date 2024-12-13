@@ -117,5 +117,19 @@ public class LogicalValuesOperator extends LogicalOperator {
             builder.rows = valuesOperator.rows;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public Builder setColumnRefSet(List<ColumnRefOperator> columnRefSet) {
+            builder.columnRefSet = columnRefSet;
+            return this;
+        }
+
+        public Builder setRows(List<List<ScalarOperator>> rows) {
+            builder.rows = rows;
+            return this;
+        }
+        
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

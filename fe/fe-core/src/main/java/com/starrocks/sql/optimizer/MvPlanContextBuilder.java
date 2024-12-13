@@ -32,7 +32,11 @@ public class MvPlanContextBuilder {
         ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext() : ConnectContext.get();
 
         List<MvPlanContext> results = Lists.newArrayList();
+<<<<<<< HEAD
         try (ConnectContext.ScopeGuard guard = connectContext.bindScope()) {
+=======
+        try (var guard = connectContext.bindScope()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             MvPlanContext contextWithoutView = mvOptimizer.optimize(mv, connectContext);
             results.add(contextWithoutView);
 

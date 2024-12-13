@@ -38,6 +38,11 @@ import com.starrocks.sql.optimizer.rewrite.OptOlapPartitionPruner;
 
 import java.util.List;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MVPartitionPruner {
     private final OptimizerContext optimizerContext;
     private final MvRewriteContext mvRewriteContext;
@@ -52,6 +57,7 @@ public class MVPartitionPruner {
     }
 
     private class MVPartitionPrunerVisitor extends OptExpressionVisitor<OptExpression, Void> {
+<<<<<<< HEAD
         @Override
         public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
@@ -91,17 +97,74 @@ public class MVPartitionPruner {
                         prunedOlapScanOperator.getSelectedPartitionId());
 
                 ScalarOperator scanPredicate = prunedOlapScanOperator.getPredicate();
+=======
+        private boolean isAddMVPrunePredicate(LogicalOlapScanOperator olapScanOperator) {
+            if (mvRewriteContext == null) {
+                return false;
+            }
+            return olapScanOperator.getTable().isMaterializedView()
+                    && olapScanOperator.getTable().getId() == mvRewriteContext.getMaterializationContext().getMv().getId()
+                    && mvRewriteContext.getMvPruneConjunct() != null;
+        }
+
+        private ScalarOperator getMVPrunePredicate(LogicalOlapScanOperator scanOperator) {
+            ScalarOperator originPredicate = scanOperator.getPredicate();
+            if (mvRewriteContext == null) {
+                return originPredicate;
+            }
+            return Utils.compoundAnd(originPredicate, mvRewriteContext.getMvPruneConjunct());
+        }
+
+        @Override
+        public OptExpression visitLogicalTableScan(OptExpression optExpression, Void context) {
+            LogicalScanOperator result = null;
+            LogicalScanOperator scanOperator = optExpression.getOp().cast();
+            if (scanOperator instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+                LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) (scanOperator);
+                builder.withOperator(olapScanOperator);
+                // for mv: select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1,
+                // which c3 is partition column and c1 is distribution column.
+                // we should add predicate c3 < 2000 and c1 = 1 into scan operator to do pruning
+                boolean isAddMvPrunePredicate = isAddMVPrunePredicate(olapScanOperator);
+                if (isAddMvPrunePredicate) {
+                    builder.setPredicate(getMVPrunePredicate(olapScanOperator));
+                }
+                LogicalOlapScanOperator cloned = builder.build();
+
+                // prune partition
+                List<Long> selectedPartitionIds = olapScanOperator.getSelectedPartitionId();
+                LogicalOlapScanOperator newOlapScanOperator = cloned;
+                if (selectedPartitionIds == null) {
+                    newOlapScanOperator =  OptOlapPartitionPruner.prunePartitions(cloned);
+                }
+
+                // prune distribution key
+                newOlapScanOperator.buildColumnFilters(newOlapScanOperator.getPredicate());
+                List<Long> selectedTabletIds = OptDistributionPruner.pruneTabletIds(newOlapScanOperator,
+                        newOlapScanOperator.getSelectedPartitionId());
+
+                ScalarOperator scanPredicate = newOlapScanOperator.getPredicate();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (isAddMvPrunePredicate) {
                     List<ScalarOperator> originConjuncts = Utils.extractConjuncts(scanOperator.getPredicate());
                     List<ScalarOperator> pruneConjuncts = Utils.extractConjuncts(mvRewriteContext.getMvPruneConjunct());
                     pruneConjuncts.removeAll(originConjuncts);
+<<<<<<< HEAD
                     List<ScalarOperator> currentConjuncts = Utils.extractConjuncts(prunedOlapScanOperator.getPredicate());
+=======
+                    List<ScalarOperator> currentConjuncts = Utils.extractConjuncts(newOlapScanOperator.getPredicate());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     currentConjuncts.removeAll(pruneConjuncts);
                     scanPredicate = Utils.compoundAnd(currentConjuncts);
                 }
 
                 LogicalOlapScanOperator.Builder rewrittenBuilder = new LogicalOlapScanOperator.Builder();
+<<<<<<< HEAD
                 scanOperator = rewrittenBuilder.withOperator(prunedOlapScanOperator)
+=======
+                result = rewrittenBuilder.withOperator(newOlapScanOperator)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .setPredicate(MvUtils.canonizePredicate(scanPredicate))
                         .setSelectedTabletId(selectedTabletIds)
                         .build();
@@ -115,10 +178,20 @@ public class MVPartitionPruner {
                 Operator.Builder builder = OperatorBuilderFactory.build(scanOperator);
                 LogicalScanOperator copiedScanOperator =
                         (LogicalScanOperator) builder.withOperator(scanOperator).build();
+<<<<<<< HEAD
                 scanOperator = OptExternalPartitionPruner.prunePartitions(optimizerContext,
                         copiedScanOperator);
             }
             return OptExpression.create(scanOperator);
+=======
+                result = OptExternalPartitionPruner.prunePartitions(optimizerContext,
+                        copiedScanOperator);
+            }
+            if (result != null) {
+                result.setOpRuleBit(OP_PARTITION_PRUNED);
+            }
+            return OptExpression.create(result);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         public OptExpression visit(OptExpression optExpression, Void context) {

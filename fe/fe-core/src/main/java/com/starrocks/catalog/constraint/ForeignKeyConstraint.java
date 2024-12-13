@@ -20,6 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.BaseTableInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
@@ -28,6 +29,23 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+=======
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.math.NumberUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -54,6 +72,7 @@ public class ForeignKeyConstraint extends Constraint {
     // table with foreign key, it only used for materialized view.
     private final BaseTableInfo childTableInfo;
 
+<<<<<<< HEAD
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
     // eg: [column1 -> column1', column2 -> column2']
@@ -63,6 +82,14 @@ public class ForeignKeyConstraint extends Constraint {
             BaseTableInfo parentTableInfo,
             BaseTableInfo childTableInfo,
             List<Pair<String, String>> columnRefPairs) {
+=======
+    // eg: [column1 -> column1', column2 -> column2']
+    private final List<Pair<ColumnId, ColumnId>> columnRefPairs;
+
+    public ForeignKeyConstraint(BaseTableInfo parentTableInfo,
+                                BaseTableInfo childTableInfo,
+                                List<Pair<ColumnId, ColumnId>> columnRefPairs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(ConstraintType.FOREIGN_KEY, TABLE_PROPERTY_CONSTRAINT);
         this.parentTableInfo = parentTableInfo;
         this.childTableInfo = childTableInfo;
@@ -77,10 +104,74 @@ public class ForeignKeyConstraint extends Constraint {
         return childTableInfo;
     }
 
+<<<<<<< HEAD
     public List<Pair<String, String>> getColumnRefPairs() {
         return columnRefPairs;
     }
 
+=======
+    public List<Pair<ColumnId, ColumnId>> getColumnRefPairs() {
+        return columnRefPairs;
+    }
+
+    public List<Pair<String, String>> getColumnNameRefPairs(Table defaultChildTable) {
+        Table parentTable = getParentTable();
+        Table childTable = defaultChildTable;
+        if (childTableInfo != null) {
+            childTable = getChildTable();
+        }
+        List<Pair<String, String>> result = new ArrayList<>(columnRefPairs.size());
+        for (Pair<ColumnId, ColumnId> pair : columnRefPairs) {
+            Column childColumn = childTable.getColumn(pair.first);
+            Column parentColumn = parentTable.getColumn(pair.second);
+            if (childColumn == null || parentColumn == null) {
+                LOG.warn("can not find column by column id: {} in table: {}, the column may have been dropped",
+                        pair.first, childTableInfo);
+                continue;
+            }
+            result.add(Pair.create(childColumn.getName(), parentColumn.getName()));
+        }
+
+        return result;
+    }
+
+    private Table getParentTable() {
+        if (parentTableInfo.isInternalCatalog()) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(parentTableInfo.getDbId(), parentTableInfo.getTableId());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", parentTableInfo.getTableId());
+            }
+            return table;
+        } else {
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(parentTableInfo.getCatalogName(), parentTableInfo.getDbName(), parentTableInfo.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", parentTableInfo.getTableName());
+            }
+            return table;
+        }
+    }
+
+    private Table getChildTable() {
+        if (childTableInfo.isInternalCatalog()) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(childTableInfo.getDbId(), childTableInfo.getTableId());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", childTableInfo.getTableId());
+            }
+            return table;
+        } else {
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(childTableInfo.getCatalogName(), childTableInfo.getDbName(), childTableInfo.getTableName());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", childTableInfo.getTableName());
+            }
+            return table;
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // for olap table, the format is: (column1, column2) REFERENCES default_catalog.dbid.tableid(column1', column2')
     // for materialized view, the format is: catalog1.dbName1.tableName1(column1, column2) REFERENCES
     // catalog2.dbName2.tableName2(column1', column2')
@@ -130,10 +221,17 @@ public class ForeignKeyConstraint extends Constraint {
             String targetTablePath = foreignKeyMatcher.group(6);
             String targetColumns = foreignKeyMatcher.group(8);
 
+<<<<<<< HEAD
             List<String> childColumns = Arrays.stream(sourceColumns.split(",")).
                     map(String::trim).collect(Collectors.toList());
             List<String> parentColumns = Arrays.stream(targetColumns.split(",")).
                     map(String::trim).collect(Collectors.toList());
+=======
+            List<ColumnId> childColumns = Arrays.stream(sourceColumns.split(",")).
+                    map(colStr -> ColumnId.create(colStr.trim())).collect(Collectors.toList());
+            List<ColumnId> parentColumns = Arrays.stream(targetColumns.split(",")).
+                    map(colStr -> ColumnId.create(colStr.trim())).collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             String[] targetTableParts = targetTablePath.split("\\.");
             Preconditions.checkState(targetTableParts.length == 3);
@@ -163,26 +261,60 @@ public class ForeignKeyConstraint extends Constraint {
                 }
             }
 
+<<<<<<< HEAD
             List<Pair<String, String>> columnRefPairs =
+=======
+            List<Pair<ColumnId, ColumnId>> columnRefPairs =
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     Streams.zip(childColumns.stream(), parentColumns.stream(), Pair::create).collect(Collectors.toList());
             foreignKeyConstraints.add(new ForeignKeyConstraint(parentTableInfo, childTableInfo, columnRefPairs));
         }
         return foreignKeyConstraints;
     }
 
+<<<<<<< HEAD
     private static BaseTableInfo getTableBaseInfo(String catalog, String db, String table, String tableIdentifier) {
         BaseTableInfo baseTableInfo;
         if (catalog.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
             baseTableInfo = new BaseTableInfo(Long.parseLong(db), Long.parseLong(table));
         } else {
             baseTableInfo = new BaseTableInfo(catalog, db, table, tableIdentifier);
+=======
+    private static BaseTableInfo getTableBaseInfo(String catalogName, String db, String table, String tableIdentifier) {
+        BaseTableInfo baseTableInfo;
+        if (catalogName.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+            Preconditions.checkArgument(NumberUtils.isNumber(db),
+                    "BaseTableInfo db %s should be dbId for internal catalog", db);
+            Preconditions.checkArgument(NumberUtils.isNumber(table),
+                    "BaseTableInfo table %s should be tableId for internal catalog", table);
+            long dbId = Long.parseLong(db);
+            long tableId = Long.parseLong(table);
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+            if (database == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo's db %s should not be null in the foreign key " +
+                        "constraint, please drop foreign key constraints and retry", dbId));
+            }
+            Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+            if (baseTable == null) {
+                throw new IllegalArgumentException(String.format("BaseInfo' base table %s should not be null in the foreign kee" +
+                                " constraint, please drop foreign key constraints and retry",
+                        tableId));
+            }
+            baseTableInfo = new BaseTableInfo(dbId, database.getFullName(), baseTable.getName(), tableId);
+        } else {
+            baseTableInfo = new BaseTableInfo(catalogName, db, table, tableIdentifier);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return baseTableInfo;
     }
 
+<<<<<<< HEAD
     public static String getShowCreateTableConstraintDesc(List<ForeignKeyConstraint> constraints) {
         StringBuilder sb = new StringBuilder();
 
+=======
+    public static String getShowCreateTableConstraintDesc(OlapTable baseTable, List<ForeignKeyConstraint> constraints) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<String> constraintStrs = Lists.newArrayList();
         for (ForeignKeyConstraint constraint : constraints) {
             BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
@@ -193,7 +325,11 @@ public class ForeignKeyConstraint extends Constraint {
                 constraintSb.append(childTableInfo.getReadableString());
             }
             constraintSb.append("(");
+<<<<<<< HEAD
             String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+=======
+            String baseColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .stream().map(pair -> pair.first).collect(Collectors.toList()));
             constraintSb.append(baseColumns);
             constraintSb.append(")");
@@ -201,15 +337,23 @@ public class ForeignKeyConstraint extends Constraint {
             constraintSb.append(parentTableInfo.getReadableString());
 
             constraintSb.append("(");
+<<<<<<< HEAD
             String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+=======
+            String parentColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .stream().map(pair -> pair.second).collect(Collectors.toList()));
             constraintSb.append(parentColumns);
             constraintSb.append(")");
             constraintStrs.add(constraintSb.toString());
         }
 
+<<<<<<< HEAD
         sb.append(Joiner.on(";").join(constraintStrs));
         return sb.toString();
+=======
+        return Joiner.on(";").join(constraintStrs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

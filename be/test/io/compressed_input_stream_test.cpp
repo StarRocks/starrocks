@@ -74,7 +74,11 @@ protected:
     void read_compressed_file_ctx(CompressionTypePB type, const char* path, std::string& out, const ReadContext& ctx) {
         auto fs = new_fs_posix();
         auto st = fs->new_random_access_file(path);
+<<<<<<< HEAD
         ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
+=======
+        ASSERT_TRUE(st.ok()) << st.status().message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto file = std::move(st.value());
 
         using DecompressorPtr = std::shared_ptr<StreamCompression>;
@@ -89,7 +93,11 @@ protected:
 
         for (;;) {
             auto st = compressed_input_stream->read(buf, ctx.read_buffer_size);
+<<<<<<< HEAD
             ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
+=======
+            ASSERT_TRUE(st.ok()) << st.status().message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             uint64_t sz = st.value();
             if (sz == 0) break;
             buf[sz] = 0;

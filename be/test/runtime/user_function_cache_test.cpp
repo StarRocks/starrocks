@@ -123,7 +123,11 @@ public:
 
         // my_add_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
 
+<<<<<<< HEAD
         system("touch ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
+=======
+        res = system("touch ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ASSERT_EQ(res, 0) << res;
 
@@ -177,8 +181,12 @@ TEST_F(UserFunctionCacheTest, download_normal) {
         std::string libpath;
         int fid = 0;
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
+<<<<<<< HEAD
         st = cache.get_libpath(fid, URL, jar_md5sum, &libpath);
         st.permit_unchecked_error();
+=======
+        (void)cache.get_libpath(fid, URL, jar_md5sum, &libpath);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

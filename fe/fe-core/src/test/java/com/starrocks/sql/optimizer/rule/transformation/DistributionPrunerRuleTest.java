@@ -22,11 +22,19 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PhysicalPartition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
@@ -49,13 +57,22 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static org.junit.Assert.assertEquals;
 
 public class DistributionPrunerRuleTest {
 
     @Test
+<<<<<<< HEAD
     public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked MaterializedIndex index,
+=======
+    public void transform(@Mocked OlapTable olapTable, @Mocked Partition partition, @Mocked PhysicalPartition physicalPartition,
+                          @Mocked MaterializedIndex index,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                           @Mocked HashDistributionInfo distributionInfo) {
         List<Long> tabletIds = Lists.newArrayListWithExpectedSize(300);
         for (long i = 0; i < 300; i++) {
@@ -69,6 +86,16 @@ public class DistributionPrunerRuleTest {
                 new Column("channel", Type.CHAR, false),
                 new Column("shop_type", Type.CHAR, false)
         );
+<<<<<<< HEAD
+=======
+        List<ColumnId> columnNames = columns.stream()
+                .map(column -> ColumnId.create(column.getName()))
+                .collect(Collectors.toList());
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        for (Column column : columns) {
+            idToColumn.put(column.getColumnId(), column);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // filters
         PartitionColumnFilter dealDateFilter = new PartitionColumnFilter();
@@ -156,10 +183,20 @@ public class DistributionPrunerRuleTest {
                 olapTable.getPartition(anyLong);
                 result = partition;
 
+<<<<<<< HEAD
                 partition.getSubPartitions();
                 result = Arrays.asList(partition);
 
                 partition.getIndex(anyLong);
+=======
+                olapTable.getIdToColumn();
+                result = idToColumn;
+
+                partition.getSubPartitions();
+                result = Arrays.asList(physicalPartition);
+
+                physicalPartition.getIndex(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = index;
 
                 partition.getDistributionInfo();
@@ -169,7 +206,11 @@ public class DistributionPrunerRuleTest {
                 result = tabletIds;
 
                 distributionInfo.getDistributionColumns();
+<<<<<<< HEAD
                 result = columns;
+=======
+                result = columnNames;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 distributionInfo.getType();
                 result = DistributionInfo.DistributionInfoType.HASH;

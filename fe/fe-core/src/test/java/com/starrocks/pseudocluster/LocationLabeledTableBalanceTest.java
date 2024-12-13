@@ -18,6 +18,10 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
+<<<<<<< HEAD
+=======
+import com.starrocks.clone.TabletScheduler;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -28,6 +32,10 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
+<<<<<<< HEAD
+=======
+import org.junit.Ignore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
@@ -56,6 +64,10 @@ public class LocationLabeledTableBalanceTest {
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         Config.tablet_sched_slot_num_per_path = 32;
         Config.tablet_sched_consecutive_full_clone_delay_sec = 1;
+<<<<<<< HEAD
+=======
+        TabletScheduler.stateUpdateIntervalMs = 1000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -72,6 +84,10 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void test1BestEffortBalance() throws SQLException, InterruptedException {
         // Initialize 3 backends with location: rack:r1, rack:r1, rack:r2
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -101,7 +117,11 @@ public class LocationLabeledTableBalanceTest {
                 ");";
         cluster.runSql("test", sql);
 
+<<<<<<< HEAD
         Database test = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");
 
         // Add another backend without location property, with best-effort balance strategy,
@@ -115,7 +135,11 @@ public class LocationLabeledTableBalanceTest {
             System.out.println("new backend tablets(no loc): " +
                     getBackendTabletsByTable(newBackend, olapTable.getId()) +
                     ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
+<<<<<<< HEAD
             Thread.sleep(1000);
+=======
+            Thread.sleep(500);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
                 Assert.fail("wait for enough clone tasks for location balance finished timeout");
             }
@@ -128,12 +152,19 @@ public class LocationLabeledTableBalanceTest {
         // Replicas will be moved from last added backend(with no location) to this backend.
         printTabletReplicaInfo(olapTable);
         newBackend = addPseudoBackendWithLocation("rack:r3");
+<<<<<<< HEAD
         start = System.currentTimeMillis();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         while (getBackendTabletsByTable(newBackend, olapTable.getId()).size() < 5) {
             System.out.println("new backend tablets(rack:r3): " +
                     getBackendTabletsByTable(newBackend, olapTable.getId()) +
                     ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
+<<<<<<< HEAD
             Thread.sleep(1000);
+=======
+            Thread.sleep(500);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
                 Assert.fail("wait for enough clone tasks for location balance finished timeout");
             }
@@ -157,7 +188,11 @@ public class LocationLabeledTableBalanceTest {
 
     private void printTabletReplicaInfo(OlapTable table) {
         table.getPartitions().forEach(partition -> {
+<<<<<<< HEAD
             partition.getBaseIndex().getTablets().forEach(tablet -> {
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().forEach(tablet -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StringBuffer stringBuffer = new StringBuffer();
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {
@@ -172,8 +207,14 @@ public class LocationLabeledTableBalanceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void test2LocationMatchedBalance() throws InterruptedException, SQLException {
         Database test = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+    @Ignore
+    public void test2LocationMatchedBalance() throws InterruptedException, SQLException {
+        Database test = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OlapTable olapTable = (OlapTable) test.getTable("test_table_best_effort_balance");
 
         long start = System.currentTimeMillis();

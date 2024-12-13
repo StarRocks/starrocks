@@ -50,9 +50,15 @@ class LakeMetaScannerTest : public ::testing::Test {
 public:
     LakeMetaScannerTest() : _tablet_id(next_id()) {
         // setup TabletManager
+<<<<<<< HEAD
         _location_provider = std::make_unique<lake::FixedLocationProvider>(kRootLocation);
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider.get());
+=======
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
+        _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
+        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
@@ -84,12 +90,18 @@ public:
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
 
         std::vector<::starrocks::TTupleId> tuple_ids{0};
+<<<<<<< HEAD
         std::vector<bool> nullable_tuples{true};
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _tnode = std::make_unique<TPlanNode>();
         _tnode->__set_node_id(1);
         _tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
         _tnode->__set_row_tuples(tuple_ids);
+<<<<<<< HEAD
         _tnode->__set_nullable_tuples(nullable_tuples);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _tnode->__set_limit(-1);
 
         TDescriptorTableBuilder table_desc_builder;
@@ -112,6 +124,7 @@ public:
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
     }
 
+<<<<<<< HEAD
     void TearDown() override {}
 
 public:
@@ -119,6 +132,13 @@ public:
     lake::TabletManager* _tablet_mgr;
     std::unique_ptr<lake::LocationProvider> _location_provider;
     lake::LocationProvider* _backup_location_provider;
+=======
+public:
+    constexpr static const char* const kRootLocation = "./LakeMetaScannerTest";
+    lake::TabletManager* _tablet_mgr;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
+    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t _tablet_id;
 
     ObjectPool _pool;

@@ -99,7 +99,11 @@ public:
         ASSERT_EQ(1024, src_rowset->num_rows());
         to_delete.push_back(src_rowset);
 
+<<<<<<< HEAD
         tablet->modify_rowsets(to_add, to_delete, &to_replace);
+=======
+        tablet->modify_rowsets_without_lock(to_add, to_delete, &to_replace);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(to_replace.size(), 1);
         ASSERT_EQ(to_replace[0]->rowset_id(), to_check->rowset_id());
     }

@@ -34,16 +34,25 @@
 
 #include "types/hll.h"
 
+<<<<<<< HEAD
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <cmath>
 #include <map>
 
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "runtime/string_value.h"
+=======
+#include "runtime/mem_pool.h"
+#include "runtime/string_value.h"
+#include "simd/multi_version.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/coding.h"
 #include "util/phmap/phmap.h"
 
@@ -172,6 +181,51 @@ void HyperLogLog::update(uint64_t hash_value) {
     }
 }
 
+<<<<<<< HEAD
+=======
+MFV_AVX512(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m512i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m512i xa = _mm512_loadu_si512((const __m512i*)dest);
+        __m512i xb = _mm512_loadu_si512((const __m512i*)other);
+        _mm512_storeu_si512((__m512i*)dest, _mm512_max_epu8(xa, xb));
+    }
+})
+
+MFV_AVX2(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m256i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m256i xa = _mm256_loadu_si256((const __m256i*)dest);
+        __m256i xb = _mm256_loadu_si256((const __m256i*)other);
+        _mm256_storeu_si256((__m256i*)dest, _mm256_max_epu8(xa, xb));
+    }
+})
+
+MFV_SSE42(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    constexpr int SIMD_SIZE = sizeof(__m128i);
+    constexpr int loop = HLL_REGISTERS_COUNT / SIMD_SIZE;
+    assert(HLL_REGISTERS_COUNT % SIMD_SIZE == 0);
+
+    for (int i = 0; i < loop; i++, other += SIMD_SIZE, dest += SIMD_SIZE) {
+        __m128i xa = _mm_loadu_si128((const __m128i*)dest);
+        __m128i xb = _mm_loadu_si128((const __m128i*)other);
+        _mm_storeu_si128((__m128i*)dest, _mm_max_epu8(xa, xb));
+    }
+})
+
+MFV_DEFAULT(void merge_registers_impl(uint8_t* dest, const uint8_t* other) {
+    for (int i = 0; i < HLL_REGISTERS_COUNT; i++) {
+        dest[i] = std::max(dest[i], other[i]);
+    }
+})
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void HyperLogLog::merge(const HyperLogLog& other) {
     // fast path
     if (other._type == HLL_DATA_EMPTY) {
@@ -212,7 +266,11 @@ void HyperLogLog::merge(const HyperLogLog& other) {
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
             _convert_explicit_to_register();
+<<<<<<< HEAD
             _merge_registers(other._registers.data);
+=======
+            merge_registers_impl(_registers.data, other._registers.data);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _type = HLL_DATA_FULL;
             break;
         default:
@@ -230,7 +288,11 @@ void HyperLogLog::merge(const HyperLogLog& other) {
             break;
         case HLL_DATA_SPARSE:
         case HLL_DATA_FULL:
+<<<<<<< HEAD
             _merge_registers(other._registers.data);
+=======
+            merge_registers_impl(_registers.data, other._registers.data);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             break;
         default:
             break;
@@ -562,6 +624,7 @@ void HyperLogLog::clear() {
     _hash_set.clear();
 }
 
+<<<<<<< HEAD
 void HyperLogLog::_merge_registers(uint8_t* other_registers) {
 #ifdef __AVX2__
     int loop = HLL_REGISTERS_COUNT / 32;
@@ -581,4 +644,6 @@ void HyperLogLog::_merge_registers(uint8_t* other_registers) {
 #endif
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

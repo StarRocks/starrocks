@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dict_mapping
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 通过指定字典表和 key，返回该 key 所映射的 value。
 

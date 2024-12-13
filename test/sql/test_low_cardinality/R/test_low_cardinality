@@ -15,7 +15,10 @@ DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -38,7 +41,10 @@ DISTRIBUTED BY HASH(`c2`, `c1`, `c0`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c3, c4",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -613,11 +619,27 @@ INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
 -- !result
 [UC] analyze full table common_duplicate;
 -- result:
+<<<<<<< HEAD
 test_db_e015f9503b1711ee914c2207f0c28980.common_duplicate	analyze	status	OK
 -- !result
 [UC] analyze full table low_card_duplicate;
 -- result:
 test_db_e015f9503b1711ee914c2207f0c28980.low_card_duplicate	analyze	status	OK
+=======
+test_db_d992a13ebf6811eeb62000163e04d4c2.common_duplicate	analyze	status	OK
+-- !result
+[UC] analyze full table low_card_duplicate;
+-- result:
+test_db_d992a13ebf6811eeb62000163e04d4c2.low_card_duplicate	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('c3', 'low_card_duplicate')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('c4', 'low_card_duplicate')
+-- result:
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT LOWER(lcd.c3) AS upper_c1, CASE WHEN lcd.c4 = 'shenzhen' THEN 'cityA' WHEN lcd.c4 = 'guangzhou' THEN 'cityB' ELSE 'other city' END AS case_result FROM low_card_duplicate lcd right JOIN common_duplicate cd ON lcd.c0 = cd.c0 order by upper_c1 limit 5;
 -- result:
@@ -658,7 +680,11 @@ SELECT
     SUBSTRING(lcd.c4, 3) AS substring_c4,
     TRIM(CONCAT(lcd.c4, ' - ', 'a')) AS trimmed,
     UPPER(lcd.c4) AS upper_c4,
+<<<<<<< HEAD
     IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result,
+=======
+    IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 FROM
     low_card_duplicate lcd
 group by
@@ -669,7 +695,20 @@ order by
 limit
     10;
 -- result:
+<<<<<<< HEAD
 E: (1064, "Getting syntax error at line 25, column 0. Detail message: Unexpected input 'FROM', the most similar input is {a legal identifier}.")
+=======
+None	beijing - a	beijing-a	68616E677A686F75	hangz	1	hangzhou	000beijing	beijing		zhengzhou	hangzhouhangzhouhangzhou	hangsu	gnijieb	hou	hangzhou  	beijing	None	angz	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	6265696A696E67	beiji	0	beijing	000beijing	beijing		beijing	beijingbeijingbeijing	beijing	gnijieb	ing	beijing   	beijing	None	eiji	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	7368656E7A68656E	shenz	0	shenzhen	000beijing	beijing		shenzhen	shenzhenshenzhenshenzhen	shenzhen	gnijieb	hen	shenzhen  	beijing	None	henz	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	7368616E67686169	shang	0	shanghai	000beijing	beijing		szhenghai	shanghaishanghaishanghai	shanghai	gnijieb	hai	shanghai  	beijing	None	hang	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	6775616E677A686F75	guang	0	guangzhou	000beijing	beijing		guangzhou	guangzhouguangzhouguangzhou	guangsu	gnijieb	hou	guangzhou 	beijing	None	uang	ijing	beijing - a	BEIJING	a
+None	guangzhou - a	guangzhou-a	6265696A696E67	beiji	0	beijing	0guangzhou	guangzhou		beijing	beijingbeijingbeijing	beijing	uohzgnaug	ing	beijing   	guangzhou	None	eiji	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	6775616E677A686F75	guang	0	guangzhou	0guangzhou	guangzhou		guangzhou	guangzhouguangzhouguangzhou	guangsu	uohzgnaug	hou	guangzhou 	guangzhou	None	uang	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	7368616E67686169	shang	0	shanghai	0guangzhou	guangzhou		szhenghai	shanghaishanghaishanghai	shanghai	uohzgnaug	hai	shanghai  	guangzhou	None	hang	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	68616E677A686F75	hangz	1	hangzhou	0guangzhou	guangzhou		zhengzhou	hangzhouhangzhouhangzhou	hangsu	uohzgnaug	hou	hangzhou  	guangzhou	None	angz	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	7368656E7A68656E	shenz	0	shenzhen	0guangzhou	guangzhou		shenzhen	shenzhenshenzhenshenzhen	shenzhen	uohzgnaug	hen	shenzhen  	guangzhou	None	henz	angzhou	guangzhou - a	GUANGZHOU	a
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select
     CONCAT(concatenated_values, '-', lower_c3),
@@ -694,11 +733,19 @@ group by
     lower_c3
 order by max(lower_c3) limit 5;
 -- result:
+<<<<<<< HEAD
 shanghai - a-beijing	beijing	1	["iahgnahs"]
 hangzhou - a-beijing	beijing	1	["uohzgnah"]
 guangzhou - a-beijing	beijing	1	["uohzgnaug"]
 shenzhen - a-beijing	beijing	1	["nehznehs"]
 beijing - a-beijing	beijing	1	["gnijieb"]
+=======
+shenzhen - a-beijing	beijing	1	["nehznehs"]
+beijing - a-beijing	beijing	1	["gnijieb"]
+guangzhou - a-beijing	beijing	1	["uohzgnaug"]
+hangzhou - a-beijing	beijing	1	["uohzgnah"]
+shanghai - a-beijing	beijing	1	["iahgnahs"]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT
     CONCAT(lcd.c4, ' - ', 'a') AS concatenated_values,
@@ -769,11 +816,19 @@ select
 from
     low_card_duplicate lcd;
 -- result:
+<<<<<<< HEAD
 guangzhou
 beijing
 hangzhou
 shanghai
 shenzhen
+=======
+shanghai
+beijing
+guangzhou
+shenzhen
+hangzhou
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT
     c4,
@@ -983,11 +1038,18 @@ FROM
 GROUP BY
     grouped_results.upper_c1;
 -- result:
+<<<<<<< HEAD
+=======
+SHENZHEN	770	c
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 BEIJING	1034	c
 GUANGZHOU	968	c
 HANGZHOU	1056	c
 SHANGHAI	990	c
+<<<<<<< HEAD
 SHENZHEN	770	c
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 SELECT
     lcd.c0,
@@ -1069,6 +1131,7 @@ FROM
     low_card_duplicate lcd
     INNER JOIN low_card_duplicate lcp ON lcd.c0 = lcp.c0
     right JOIN common_duplicate cd ON lcd.c0 = cd.c0
+<<<<<<< HEAD
     order by c0, upper_c1 limit 5;
 -- result:
 None	None	-1.5167388e+09	DefaultValue	other city	None	None
@@ -1076,6 +1139,15 @@ None	None	-7.656731e+08	DefaultValue	other city	None	None
 None	None	-1.451903e+09	DefaultValue	other city	None	None
 None	None	0.43250552	DefaultValue	other city	None	None
 None	None	-8.338103e+08	DefaultValue	other city	None	None
+=======
+    order by c0, upper_c1, coalesce_c2 desc limit 5;
+-- result:
+None	None	6.883423e+08	DefaultValue	other city	None	None
+None	None	5.535997e+08	DefaultValue	other city	None	None
+None	None	4.954498e+08	DefaultValue	other city	None	None
+None	None	4.6972787e+08	DefaultValue	other city	None	None
+None	None	2.0941956e+09	DefaultValue	other city	None	None
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 WITH CTE1 AS (
     SELECT
@@ -1274,6 +1346,7 @@ FROM
     low_card_duplicate
 ORDER BY c1, c2, rank limit 10;
 -- result:
+<<<<<<< HEAD
 		1	9896154.00000000000000000000
 		1	0.00175303445490039722
 		6	7954463.00000000000000000000
@@ -1284,6 +1357,18 @@ ORDER BY c1, c2, rank limit 10;
 		7	0.00952553311745999506
 		11	7077253.00000000000000000000
 		11	2.0835238245287E-7
+=======
+		1	0.00175303445490039722
+		1	9896154.00000000000000000000
+		6	0.00738631979156705382
+		6	7954463.00000000000000000000
+		6	0.00142515312812037520
+		6	8983395.00000000000000000000
+		7	7953378.00000000000000000000
+		7	0.00952553311745999506
+		11	2.0835238245287E-7
+		11	7077253.00000000000000000000
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select
     unnest
@@ -1345,4 +1430,8 @@ SELECT CASE WHEN c3 = 'hangzhouxx' THEN 'hang' ELSE SUBSTR(MD5(c3), 1, 8) END AS
 0420a206
 0420a206
 0420a206
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

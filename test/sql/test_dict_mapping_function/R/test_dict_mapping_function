@@ -13,7 +13,10 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -31,7 +34,10 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -308,4 +314,33 @@ drop table t_dictmapping_null_if_not_found;
 -- !result
 drop database test_dictmapping_null_if_not_found;
 -- result:
+<<<<<<< HEAD
+=======
+-- !result
+-- name: test_dictmapping_multiple_open_crash
+CREATE TABLE `t_dictmapping_multiple_open_crash` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AUTO_INCREMENT
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_dictmapping_multiple_open_crash VALUES (1, DEFAULT);
+-- result:
+-- !result
+select dict_mapping("t_dictmapping_multiple_open_crash", k) from t_dictmapping_multiple_open_crash where dict_mapping("t_dictmapping_multiple_open_crash", k) != 0;
+-- result:
+1
+-- !result
+DROP TABLE t_dictmapping_multiple_open_crash;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result

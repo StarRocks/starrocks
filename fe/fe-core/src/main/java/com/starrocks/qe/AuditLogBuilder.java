@@ -173,7 +173,11 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
 
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.debug("failed to process audit event", e);
+=======
+            LOG.warn("failed to process audit event", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

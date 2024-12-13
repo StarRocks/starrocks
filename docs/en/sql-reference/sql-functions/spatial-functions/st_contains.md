@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # ST_Contains
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Checks whether the geometric figure shape1 can fully contain shape2.
 

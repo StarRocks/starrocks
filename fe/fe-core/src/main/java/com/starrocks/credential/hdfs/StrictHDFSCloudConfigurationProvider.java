@@ -14,8 +14,13 @@
 
 package com.starrocks.credential.hdfs;
 
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.credential.CloudConfiguration;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Map;
 

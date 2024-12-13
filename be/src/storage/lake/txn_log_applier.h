@@ -45,7 +45,11 @@ protected:
     bool _has_empty_compaction = false;
 };
 
+<<<<<<< HEAD
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(Tablet tablet, MutableTabletMetadataPtr metadata,
+=======
+std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                    int64_t new_version);
 
 } // namespace starrocks::lake

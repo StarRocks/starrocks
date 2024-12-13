@@ -32,7 +32,11 @@ public class CancelLoadStmtAnalyzer {
         new CancelLoadStmtAnalyzerVisitor().analyze(statement, context);
     }
 
+<<<<<<< HEAD
     static class CancelLoadStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class CancelLoadStmtAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private String label;
 

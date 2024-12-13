@@ -18,6 +18,10 @@
 
 #include "column/binary_column.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
+=======
+#include "common/status.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/global_dict/types.h"
 #include "storage/rowset/column_iterator.h"
 
@@ -55,6 +59,14 @@ public:
     int16_t* code_convert_data() { return _code_convert_map.has_value() ? _code_convert_map->data() + 1 : nullptr; }
 
 private:
+<<<<<<< HEAD
+=======
+    Status _encode_string_to_global_id(Column* datas, Column* codes);
+
+    Status _encode_array_to_global_id(Column* datas, Column* codes);
+
+private:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::optional<std::vector<int16_t>> _code_convert_map;
     ColumnIterator* _iter = nullptr;
     GlobalDictMap* _global_dict = nullptr;

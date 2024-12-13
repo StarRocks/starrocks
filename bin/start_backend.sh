@@ -159,7 +159,10 @@ export CLASSPATH=${STARROCKS_HOME}/lib/jni-packages/starrocks-hadoop-ext.jar:$ST
 
 # ================= native section =====================
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+<<<<<<< HEAD
 export_cachelib_lib_path
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 
 # ====== handle meta_tool sub command before any modification change
@@ -177,10 +180,13 @@ if [ ! -d $UDF_RUNTIME_DIR ]; then
     mkdir -p ${UDF_RUNTIME_DIR}
 fi
 
+<<<<<<< HEAD
 if [ ! -z ${UDF_RUNTIME_DIR} ]; then
     rm -f ${UDF_RUNTIME_DIR}/*
 fi
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 if [ ${RUN_BE} -eq 1 ]; then
     pidfile=$PID_DIR/be.pid
 fi

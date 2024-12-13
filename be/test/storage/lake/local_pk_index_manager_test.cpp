@@ -107,8 +107,13 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+=======
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
     ASSERT_OK(writer->open());
 
@@ -294,8 +299,13 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+=======
+    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
     ASSERT_OK(writer->open());
 

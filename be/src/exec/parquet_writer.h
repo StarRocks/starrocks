@@ -35,20 +35,34 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 struct TableInfo {
     static const int64_t DEFAULT_MAX_FILE_SIZE = 1024L * 1024 * 1024; // 1GB;
 
+=======
+struct TableInfo;
+
+struct TableInfo {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TCompressionType::type compress_type = TCompressionType::SNAPPY;
     bool enable_dictionary = true;
     std::string partition_location = "";
     std::shared_ptr<::parquet::schema::GroupNode> schema;
+<<<<<<< HEAD
     int64_t max_file_size = DEFAULT_MAX_FILE_SIZE;
+=======
+    int64_t max_file_size = 1024 * 1024 * 1024; // 1GB
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     TCloudConfiguration cloud_conf;
 };
 
 class RollingAsyncParquetWriter {
 public:
+<<<<<<< HEAD
     RollingAsyncParquetWriter(TableInfo tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
+=======
+    RollingAsyncParquetWriter(TableInfo tableInfo, std::vector<ExprContext*> output_expr_ctxs,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                               RuntimeProfile* parent_profile,
                               std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func,
                               RuntimeState* state, int32_t driver_id);

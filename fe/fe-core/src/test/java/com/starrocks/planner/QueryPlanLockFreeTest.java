@@ -25,7 +25,10 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+<<<<<<< HEAD
 import org.junit.After;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -113,10 +116,13 @@ public class QueryPlanLockFreeTest {
 
         Assert.assertTrue("copied tables should share the same object", node2.getOlapTable() == node1.getOlapTable());
     }
+<<<<<<< HEAD
     @After
     public void after() {
         connectContext.getSessionVariable().setCboUseDBLock(false);
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 }

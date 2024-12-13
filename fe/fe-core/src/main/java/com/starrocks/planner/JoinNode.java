@@ -50,7 +50,11 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
@@ -92,6 +96,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // contains both the cols required by parent node and cols required by
     // other join conjuncts and predicates
     protected List<Integer> outputSlots;
+<<<<<<< HEAD
+=======
+    protected boolean enableLateMaterialization = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
@@ -171,6 +179,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableLateMaterialization(boolean enableLateMaterialization) {
+        this.enableLateMaterialization = enableLateMaterialization;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setProbePartitionByExprs(List<Expr> probePartitionByExprs) {
         this.probePartitionByExprs = probePartitionByExprs;
     }
@@ -180,7 +195,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl) {
+=======
+    public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl,
+                                    ExecGroupSets execGroupSets) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         JoinOperator joinOp = getJoinOp();
         PlanNode inner = getChild(1);
@@ -229,7 +249,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 // push down rf to left child node, and build it only when it
                 // can be accepted by left child node.
                 rf.setBuildExpr(left);
+<<<<<<< HEAD
                 if (getChild(0).pushDownRuntimeFilters(descTbl, rf, right, probePartitionByExprs)) {
+=======
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, right, probePartitionByExprs)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     buildRuntimeFilters.add(rf);
                 }
             } else {
@@ -245,7 +271,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 rf.setBuildExpr(right);
                 rf.setOnlyLocal(true);
+<<<<<<< HEAD
                 if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
+=======
+                RuntimeFilterPushDownContext rfPushDownCxt =
+                        new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
+                if (getChild(0).pushDownRuntimeFilters(rfPushDownCxt, left, probePartitionByExprs)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     this.getBuildRuntimeFilters().add(rf);
                 }
             }
@@ -287,15 +319,26 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
     }
 
+<<<<<<< HEAD
     public boolean pushDownRuntimeFiltersForChild(DescriptorTable descTbl, RuntimeFilterDescription description,
                                                   Expr probeExpr,
                                                   List<Expr> partitionByExprs, int childIdx) {
         return pushdownRuntimeFilterForChildOrAccept(descTbl, description, probeExpr,
+=======
+    public boolean pushDownRuntimeFiltersForChild(RuntimeFilterPushDownContext context,
+                                                  Expr probeExpr,
+                                                  List<Expr> partitionByExprs, int childIdx) {
+        return pushdownRuntimeFilterForChildOrAccept(context, probeExpr,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 candidatesOfSlotExprForChild(probeExpr, childIdx),
                 partitionByExprs, candidatesOfSlotExprsForChild(partitionByExprs, childIdx), childIdx, false);
     }
 
+<<<<<<< HEAD
     private Optional<Boolean> pushDownRuntimeFilterBilaterally(DescriptorTable descTbl, RuntimeFilterDescription rfDesc,
+=======
+    private Optional<Boolean> pushDownRuntimeFilterBilaterally(RuntimeFilterPushDownContext context,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                                       Expr probeExpr,
                                                                       List<Expr> partitionByExprs) {
         if (joinOp.isCrossJoin() || joinOp.isNullAwareLeftAntiJoin() || eqJoinConjuncts.isEmpty()) {
@@ -317,14 +360,23 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
         // for join types except null-aware-left-anti-join and cross join
         // runtime-filer probe expr uses join column, it can always be push down to both side of the join.
+<<<<<<< HEAD
         boolean hasPushedDown = pushDownRuntimeFiltersForChild(descTbl, rfDesc, probeExpr, partitionByExprs, 0);
         hasPushedDown |= pushDownRuntimeFiltersForChild(descTbl, rfDesc, probeExpr, partitionByExprs, 1);
+=======
+        boolean hasPushedDown = pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 0);
+        hasPushedDown |= pushDownRuntimeFiltersForChild(context, probeExpr, partitionByExprs, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Optional.of(hasPushedDown);
     }
 
 
+<<<<<<< HEAD
     private Optional<Boolean> pushDownRuntimeFilterUnilaterally(DescriptorTable descTbl,
                                                                 RuntimeFilterDescription rfDesc,
+=======
+    private Optional<Boolean> pushDownRuntimeFilterUnilaterally(RuntimeFilterPushDownContext context,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                                 Expr probeExpr,
                                                                 List<Expr> partitionByExprs) {
         List<Integer> sides = ImmutableList.of();
@@ -339,16 +391,27 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         boolean result = false;
         Optional<List<List<Expr>>> optCandidatePartitionByExprs =
                 canPushDownRuntimeFilterCrossExchange(partitionByExprs);
+<<<<<<< HEAD
         if (!optCandidatePartitionByExprs.isPresent()) {
+=======
+        if (optCandidatePartitionByExprs.isEmpty()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Optional.of(false);
         }
         List<List<Expr>> candidatePartitionByExprs = optCandidatePartitionByExprs.get();
         for (Integer side : sides) {
             if (candidatePartitionByExprs.isEmpty()) {
+<<<<<<< HEAD
                 result = getChild(side).pushDownRuntimeFilters(descTbl, rfDesc, probeExpr, Lists.newArrayList());
             } else {
                 for (List<Expr> partByExprs : candidatePartitionByExprs) {
                     result = getChild(side).pushDownRuntimeFilters(descTbl, rfDesc, probeExpr, partByExprs);
+=======
+                result = getChild(side).pushDownRuntimeFilters(context, probeExpr, Lists.newArrayList());
+            } else {
+                for (List<Expr> partByExprs : candidatePartitionByExprs) {
+                    result = getChild(side).pushDownRuntimeFilters(context, probeExpr, partByExprs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (result) {
                         break;
                     }
@@ -362,17 +425,29 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription rfDesc, Expr probeExpr,
                                           List<Expr> partitionByExprs) {
+=======
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        RuntimeFilterDescription description = context.getDescription();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
 
         if (probeExpr.isBoundByTupleIds(getTupleIds())) {
 
+<<<<<<< HEAD
             Optional<Boolean> pushDownResult = pushDownRuntimeFilterBilaterally(descTbl, rfDesc, probeExpr, partitionByExprs);
             if (!pushDownResult.isPresent()) {
                 pushDownResult = pushDownRuntimeFilterUnilaterally(descTbl, rfDesc, probeExpr, partitionByExprs);
+=======
+            Optional<Boolean> pushDownResult = pushDownRuntimeFilterBilaterally(context, probeExpr, partitionByExprs);
+            if (pushDownResult.isEmpty()) {
+                pushDownResult = pushDownRuntimeFilterUnilaterally(context, probeExpr, partitionByExprs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (pushDownResult.isPresent() && pushDownResult.get()) {
@@ -380,10 +455,17 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
 
             // use runtime filter at this level if rf can not be pushed down to children.
+<<<<<<< HEAD
             if (rfDesc.canProbeUse(this)) {
                 rfDesc.addProbeExpr(id.asInt(), probeExpr);
                 rfDesc.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
                 probeRuntimeFilters.add(rfDesc);
+=======
+            if (description.canProbeUse(this, context)) {
+                description.addProbeExpr(id.asInt(), probeExpr);
+                description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
+                probeRuntimeFilters.add(description);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return true;
             }
         }
@@ -428,7 +510,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -522,11 +608,14 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return output.toString();
     }
 
+<<<<<<< HEAD
     @Override
     public int getNumInstances() {
         return Math.max(children.get(0).getNumInstances(), children.get(1).getNumInstances());
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public enum DistributionMode {
         NONE("NONE"),
         BROADCAST("BROADCAST"),
@@ -594,4 +683,12 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     public void setOutputSlots(List<Integer> outputSlots) {
         this.outputSlots = outputSlots;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean needCollectExecStats() {
+        return true;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

@@ -23,6 +23,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.SchemaConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.TimeUtils;
 
 import java.sql.Connection;
@@ -61,7 +65,11 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 columnName = "\"" + columnName + "\"";
             }
             fullSchema.add(new Column(columnName, type,
+<<<<<<< HEAD
                     columnSet.getString("IS_NULLABLE").equals("YES")));
+=======
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return fullSchema;
     }

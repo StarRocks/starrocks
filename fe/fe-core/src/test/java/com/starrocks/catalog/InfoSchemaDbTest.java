@@ -16,19 +16,35 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
+<<<<<<< HEAD
+=======
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.DefaultAuthorizationProvider;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeEntry;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+<<<<<<< HEAD
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeEntry;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;
+=======
+import com.starrocks.sql.analyzer.AuthorizationAnalyzer;
+import com.starrocks.sql.analyzer.CreateFunctionAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -72,8 +88,11 @@ public class InfoSchemaDbTest {
         globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         globalStateMgr.getAuthorizationMgr().initBuiltinRolesAndUsers();
 
+<<<<<<< HEAD
         authorizationManager = globalStateMgr.getAuthorizationMgr();
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withDatabase("db");
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
@@ -82,6 +101,12 @@ public class InfoSchemaDbTest {
         starRocksAssert.withMaterializedView(
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
+<<<<<<< HEAD
+=======
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(),
+                new DefaultAuthorizationProvider()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -92,6 +117,11 @@ public class InfoSchemaDbTest {
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create role test_role", ctx);
         globalStateMgr.getAuthorizationMgr().createRole(createRoleStmt);
+<<<<<<< HEAD
+=======
+
+        authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -101,7 +131,11 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
         db.write(null);
+<<<<<<< HEAD
         Assert.assertNull(db.getTable("authors"));
+=======
+        Assert.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "authors"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -270,14 +304,21 @@ public class InfoSchemaDbTest {
         Assert.assertFalse(GrantsTo.getGrantsTo(request).isSetGrants_to());
     }
 
+<<<<<<< HEAD
 
     @Test
     public void testShowFunctionsWithPriv() throws Exception {
         new MockUp<CreateFunctionStmt>() {
+=======
+    @Test
+    public void testShowFunctionsWithPriv() throws Exception {
+        new MockUp<AuthorizationAnalyzer>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             @Mock
             public void analyze(ConnectContext context) throws AnalysisException {
             }
         };
+<<<<<<< HEAD
 
         new MockUp<PrivilegeStmtAnalyzer>() {
             @Mock
@@ -285,6 +326,14 @@ public class InfoSchemaDbTest {
             }
         };
 
+=======
+        new MockUp<CreateFunctionAnalyzer>() {
+            @Mock
+            public void analyze(CreateFunctionStmt stmt, ConnectContext context) {
+
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String createSql = "CREATE FUNCTION db.MY_UDF_JSON_GET(string, string) RETURNS string " +
                 "properties ( " +
                 "'symbol' = 'com.starrocks.udf.sample.UDFSplit', 'object_file' = 'test' " +
@@ -320,8 +369,14 @@ public class InfoSchemaDbTest {
     @Test
     public void testShowExternalCatalogPrivilege(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws Exception {
 
+<<<<<<< HEAD
         String createCatalog = "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
                 "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
+=======
+        String createCatalog =
+                "CREATE EXTERNAL CATALOG hive_catalog_1 COMMENT \"hive_catalog\" PROPERTIES(\"type\"=\"hive\", " +
+                        "\"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\");";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(createCatalog, ctx);
         Assert.assertTrue(stmt instanceof CreateCatalogStmt);
         ConnectContext connectCtx = new ConnectContext();
@@ -355,7 +410,11 @@ public class InfoSchemaDbTest {
             }
         };
 
+<<<<<<< HEAD
         ctx.getGlobalStateMgr().changeCatalog(ctx, "hive_catalog_1");
+=======
+        ctx.changeCatalog("hive_catalog_1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         String sql = "grant usage on catalog hive_catalog_1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -453,7 +512,10 @@ public class InfoSchemaDbTest {
         RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.revoke(revokePrivilegeStmt);
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         sql = "grant select on all views in database db to test_user";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.grant(grantStmt);
@@ -489,4 +551,8 @@ public class InfoSchemaDbTest {
         revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.revoke(revokePrivilegeStmt);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

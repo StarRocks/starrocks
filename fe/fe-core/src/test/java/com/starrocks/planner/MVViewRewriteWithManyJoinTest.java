@@ -15,8 +15,11 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Stopwatch;
+<<<<<<< HEAD
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang3.RandomStringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,7 +36,10 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MaterializedViewTestBase.beforeClass();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
         starRocksAssert.withTable(
@@ -75,12 +81,19 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
                                     "\"compression\"=\"LZ4\"\n" +
                                     ")", i));
         }
+<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @ParameterizedTest(name = "{index}-{0}")
     @MethodSource("generateManyJoinArguments")
+<<<<<<< HEAD
     @Timeout(5)
+=======
+    @Timeout(30)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testManyJoins(String name, String query) throws Exception {
         LOG.info("test {}, query: {}", name, query);
         String mvName = "mv_manyjoin";
@@ -100,8 +113,12 @@ public class MVViewRewriteWithManyJoinTest extends MaterializedViewTestBase {
         starRocksAssert.withMaterializedView(createMv);
         Stopwatch watch = Stopwatch.createStarted();
         // Make sure it's not empty
+<<<<<<< HEAD
         String plan = UtFrameUtils.getFragmentPlan(connectContext, viewQuery);
         PlanTestBase.assertContains(plan, mvName);
+=======
+        starRocksAssert.query(viewQuery).explainContains(mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG.info("query takes {}ms: {}", watch.elapsed(TimeUnit.MILLISECONDS), query);
         starRocksAssert.dropView(viewName);
         starRocksAssert.dropMaterializedView(mvName);

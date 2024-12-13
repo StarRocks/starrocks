@@ -247,6 +247,7 @@ Description: Number of times the pipeline is blocked due to unmet preconditions.
 
 ### Operator General Metrics
 
+<<<<<<< HEAD
 ##### OperatorAllocatedMemoryUsage
 
 Description: Cumulative memory allocated by the Operator.
@@ -259,6 +260,8 @@ Description: Cumulative memory deallocated by the Operator.
 
 Description: Peak memory usage by the Operator across all compute nodes. This metric is meaningful for certain materialization operators, such as aggregation, sorting, Join, etc. It is not relevant for operators like Project because memory is allocated by the current operator and released by subsequent operators, making peak memory equivalent to cumulative allocated memory for the current operator. In versions earlier than v3.1.8 and v3.2.3, this metric represents the peak memory usage by the Operator across all *PipelineDrivers*.
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### PrepareTime
 
 Description: Time spent on preparation.
@@ -1366,3 +1369,55 @@ Description: Number of shuffles. This metric is only valid when `Type` is `Parti
 ##### LocalExchangePeakMemoryUsage
 
 Description: Peak memory usage.
+<<<<<<< HEAD
+=======
+
+#### OlapTableSink Operator
+
+OlapTableSink is the operator that profiles data loading with INSERT INTO FILES() and Broker Load. This feature is supported from v3.3.0 onwards.
+
+:::tip
+- An excessive difference between the Max and Min values of the PushChunkNum metric of OlapTableSink indicates data skew in the upstream operators, which may lead to a bottleneck in loading performance.
+- RpcClientSideTime equals RpcServerSideTime plus network transmission time plus RPC framework processing time. If there is a significant difference between RpcClientSideTime and RpcServerSideTime, consider enabling compression to reduce transmission time.
+:::
+
+##### IndexNum
+
+Description: Number of the synchronous materialized views created for the destination table.
+
+##### ReplicatedStorage
+
+Description: Whether Single Leader Replication is enabled.
+
+##### TxnID
+
+Description: ID of the loading transaction.
+
+##### RowsRead
+
+Description: Number of rows read from upstream operators.
+
+##### RowsFiltered
+
+Description: Number of rows filtered out due to inadequate data quality.
+
+##### RowsReturned
+
+Description: Number of rows written to the destination table.
+
+##### RpcClientSideTime
+
+Description: Total RPC time consumption for loading recorded by the client side.
+
+##### RpcServerSideTime
+
+Description: Total RPC time consumption for loading recorded by the server side.
+
+##### PrepareDataTime
+
+Description: Total time consumption for the data preparation phase, including data format conversion and data quality check.
+
+##### SendDataTime
+
+Description: Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

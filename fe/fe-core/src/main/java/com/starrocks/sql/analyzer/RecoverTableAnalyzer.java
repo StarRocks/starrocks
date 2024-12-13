@@ -17,12 +17,19 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.TableName;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.RecoverTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class RecoverTableAnalyzer {
 
     public static void analyze(RecoverTableStmt statement, ConnectContext context) {
         TableName tableName = statement.getTableNameObject();
+<<<<<<< HEAD
         MetaUtils.normalizationTableName(context, tableName);
+=======
+        tableName.normalization(context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

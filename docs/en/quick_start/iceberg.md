@@ -277,6 +277,10 @@ configuration properties will be detailed after the command.
 
 ```sql
 CREATE EXTERNAL CATALOG 'iceberg'
+<<<<<<< HEAD
+=======
+COMMENT "External catalog to Apache Iceberg on MinIO"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 PROPERTIES
 (
   "type"="iceberg",
@@ -287,7 +291,11 @@ PROPERTIES
   "aws.s3.secret_key"="password",
   "aws.s3.endpoint"="http://minio:9000",
   "aws.s3.enable_path_style_access"="true",
+<<<<<<< HEAD
   "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"
+=======
+  "client.factory"="com.starrocks.connector.iceberg.IcebergAwsClientFactory"  
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 );
 ```
 
@@ -314,7 +322,11 @@ SHOW CATALOGS;
 | Catalog         | Type     | Comment                                                          |
 +-----------------+----------+------------------------------------------------------------------+
 | default_catalog | Internal | An internal catalog contains this cluster's self-managed tables. |
+<<<<<<< HEAD
 | iceberg         | Iceberg  | NULL                                                             |
+=======
+| iceberg         | Iceberg  | External catalog to Apache Iceberg on MinIO                      |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 +-----------------+----------+------------------------------------------------------------------+
 2 rows in set (0.03 sec)
 ```
@@ -334,12 +346,22 @@ database `nyc` became visible in StarRocks.
 :::
 
 ```plaintext
+<<<<<<< HEAD
 +----------+
 | Database |
 +----------+
 | nyc      |
 +----------+
 1 row in set (0.07 sec)
+=======
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| nyc                |
++--------------------+
+2 rows in set (0.07 sec)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ```sql
@@ -375,6 +397,7 @@ Compare the schema that StarRocks uses with the output of `df.printSchema()` fro
 :::
 
 ```plaintext
+<<<<<<< HEAD
 +-----------------------+------------------+------+-------+---------+-------+
 | Field                 | Type             | Null | Key   | Default | Extra |
 +-----------------------+------------------+------+-------+---------+-------+
@@ -400,6 +423,33 @@ Compare the schema that StarRocks uses with the output of `df.printSchema()` fro
 | congestion_surcharge  | DOUBLE           | Yes  | false | NULL    |       |
 +-----------------------+------------------+------+-------+---------+-------+
 20 rows in set (0.04 sec)
+=======
++-----------------------+---------------------+------+-------+---------+-------+---------+
+| Field                 | Type                | Null | Key   | Default | Extra | Comment |
++-----------------------+---------------------+------+-------+---------+-------+---------+
+| VendorID              | INT                 | Yes  | false | NULL    |       | NULL    |
+| lpep_pickup_datetime  | DATETIME            | Yes  | false | NULL    |       | NULL    |
+| lpep_dropoff_datetime | DATETIME            | Yes  | false | NULL    |       | NULL    |
+| store_and_fwd_flag    | VARCHAR(1073741824) | Yes  | false | NULL    |       | NULL    |
+| RatecodeID            | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| PULocationID          | INT                 | Yes  | false | NULL    |       | NULL    |
+| DOLocationID          | INT                 | Yes  | false | NULL    |       | NULL    |
+| passenger_count       | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| trip_distance         | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| fare_amount           | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| extra                 | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| mta_tax               | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| tip_amount            | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| tolls_amount          | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| ehail_fee             | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| improvement_surcharge | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| total_amount          | DOUBLE              | Yes  | false | NULL    |       | NULL    |
+| payment_type          | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| trip_type             | BIGINT              | Yes  | false | NULL    |       | NULL    |
+| congestion_surcharge  | DOUBLE              | Yes  | false | NULL    |       | NULL    |
++-----------------------+---------------------+------+-------+---------+-------+---------+
+20 rows in set (0.03 sec)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip

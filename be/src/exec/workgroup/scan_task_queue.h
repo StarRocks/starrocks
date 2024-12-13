@@ -14,6 +14,10 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <any>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -25,6 +29,10 @@
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/blocking_priority_queue.hpp"
+<<<<<<< HEAD
+=======
+#include "util/race_detect.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/runtime_profile.h"
 
 namespace starrocks::workgroup {
@@ -34,6 +42,7 @@ struct ScanTaskGroup {
     int sub_queue_level = 0;
 };
 
+<<<<<<< HEAD
 struct ScanTask {
 public:
     using WorkFunction = std::function<void()>;
@@ -42,6 +51,49 @@ public:
     explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
     ScanTask(WorkGroupPtr workgroup, WorkFunction work_function)
             : workgroup(std::move(workgroup)), work_function(std::move(work_function)) {}
+=======
+#define TO_NEXT_STAGE(yield_point) yield_point++;
+
+struct YieldContext {
+    YieldContext() = default;
+    YieldContext(size_t total_yield_point_cnt) : total_yield_point_cnt(total_yield_point_cnt) {}
+
+    ~YieldContext() = default;
+
+    DISALLOW_COPY(YieldContext);
+    YieldContext(YieldContext&&) = default;
+    YieldContext& operator=(YieldContext&&) = default;
+
+    bool is_finished() const { return yield_point >= total_yield_point_cnt; }
+    void set_finished() {
+        yield_point = total_yield_point_cnt = 0;
+        task_context_data.reset();
+    }
+
+    std::any task_context_data;
+    size_t yield_point{};
+    size_t total_yield_point_cnt{};
+    const WorkGroup* wg = nullptr;
+    // used to record the runtime information of a single call in order to decide whether to trigger yield.
+    // It needs to be reset every time when the task is executed.
+    int64_t time_spent_ns = 0;
+    bool need_yield = false;
+};
+
+struct ScanTask {
+public:
+    using WorkFunction = std::function<void(YieldContext&)>;
+    using YieldFunction = std::function<void(ScanTask&&)>;
+
+    ScanTask() : ScanTask(nullptr, nullptr) {}
+    explicit ScanTask(WorkFunction work_function) : ScanTask(nullptr, std::move(work_function)) {}
+    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function)
+            : workgroup(std::move(workgroup)), work_function(std::move(work_function)) {}
+    ScanTask(WorkGroupPtr workgroup, WorkFunction work_function, YieldFunction yield_function)
+            : workgroup(std::move(workgroup)),
+              work_function(std::move(work_function)),
+              yield_function(std::move(yield_function)) {}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ~ScanTask() = default;
 
     DISALLOW_COPY(ScanTask);
@@ -55,14 +107,36 @@ public:
         return *this;
     }
 
+<<<<<<< HEAD
 public:
     WorkGroupPtr workgroup;
     WorkFunction work_function;
+=======
+    void run() { work_function(work_context); }
+
+    bool is_finished() const { return work_context.is_finished(); }
+
+    bool has_yield_function() const { return yield_function != nullptr; }
+
+    void execute_yield_function() {
+        DCHECK(yield_function != nullptr) << "yield function must be set";
+        yield_function(std::move(*this));
+    }
+
+    const YieldContext& get_work_context() const { return work_context; }
+
+public:
+    WorkGroupPtr workgroup;
+    YieldContext work_context;
+    WorkFunction work_function;
+    YieldFunction yield_function;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int priority = 0;
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;
 };
 
+<<<<<<< HEAD
 /// There are three types of ScanTaskQueue:
 /// - WorkGroupScanTaskQueue, which is a two-level queue.
 ///   - The first level selects the workgroup with the shortest execution time.
@@ -70,6 +144,13 @@ public:
 /// - PriorityScanTaskQueue, which prioritizes scan tasks with lower committed times.
 /// - MultiLevelFeedScanTaskQueue, which prioritizes scan tasks with shorter execution time.
 ///   It is advisable to use MultiLevelFeedScanTaskQueue when scan tasks from large queries may impact those from small queries.
+=======
+/// There are two types of ScanTaskQueue:
+/// - WorkGroupScanTaskQueue, which is a two-level queue.
+///   - The first level selects the workgroup with the shortest execution time.
+///   - The second level selects an appropriate task using either PriorityScanTaskQueue.
+/// - PriorityScanTaskQueue, which prioritizes scan tasks with lower committed times.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class ScanTaskQueue {
 public:
     ScanTaskQueue() = default;
@@ -79,6 +160,10 @@ public:
 
     virtual StatusOr<ScanTask> take() = 0;
     virtual bool try_offer(ScanTask task) = 0;
+<<<<<<< HEAD
+=======
+    virtual void force_put(ScanTask task) = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual size_t size() const = 0;
     bool empty() const { return size() == 0; }
@@ -87,6 +172,7 @@ public:
     virtual bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const = 0;
 };
 
+<<<<<<< HEAD
 class MultiLevelFeedScanTaskQueue final : public ScanTaskQueue {
 public:
     MultiLevelFeedScanTaskQueue();
@@ -133,6 +219,8 @@ private:
     std::atomic<size_t> _num_tasks = 0;
 };
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class PriorityScanTaskQueue final : public ScanTaskQueue {
 public:
     explicit PriorityScanTaskQueue(size_t max_elements);
@@ -142,6 +230,10 @@ public:
 
     StatusOr<ScanTask> take() override;
     bool try_offer(ScanTask task) override;
+<<<<<<< HEAD
+=======
+    void force_put(ScanTask task) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t size() const override { return _queue.get_size(); }
 
@@ -161,6 +253,10 @@ public:
 
     StatusOr<ScanTask> take() override;
     bool try_offer(ScanTask task) override;
+<<<<<<< HEAD
+=======
+    void force_put(ScanTask task) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t size() const override { return _num_tasks.load(std::memory_order_acquire); }
 
@@ -169,6 +265,7 @@ public:
 
 private:
     /// These methods should be guarded by the outside _global_mutex.
+<<<<<<< HEAD
     workgroup::WorkGroupScanSchedEntity* _take_next_wg();
     // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
     void _update_min_wg();
@@ -196,11 +293,37 @@ private:
         bool operator()(const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const;
     };
     using WorkgroupSet = std::set<workgroup::WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
+=======
+    WorkGroupScanSchedEntity* _pick_next_wg() const;
+    // _update_min_wg is invoked when an entity is enqueued or dequeued from _wg_entities.
+    void _update_min_wg();
+    void _enqueue_workgroup(WorkGroupScanSchedEntity* wg_entity);
+    void _dequeue_workgroup(WorkGroupScanSchedEntity* wg_entity);
+
+    // The ideal runtime of a work group is the weighted average of the schedule period.
+    int64_t _ideal_runtime_ns(WorkGroupScanSchedEntity* wg_entity) const;
+
+    WorkGroupScanSchedEntity* _sched_entity(WorkGroup* wg);
+    const WorkGroupScanSchedEntity* _sched_entity(const WorkGroup* wg) const;
+
+private:
+    static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
+
+    struct WorkGroupScanSchedEntityComparator {
+        using WorkGroupScanSchedEntityPtr = WorkGroupScanSchedEntity*;
+        bool operator()(const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const;
+    };
+    using WorkgroupSet = std::set<WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     const ScanSchedEntityType _sched_entity_type;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
+<<<<<<< HEAD
+=======
+    std::condition_variable _cv_for_borrowed_cpus;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool _is_closed = false;
 
     // Contains the workgroups which include the tasks ready to be run.
@@ -208,6 +331,7 @@ private:
     // MUST guarantee the entity is not in set, when updating its vruntime.
     WorkgroupSet _wg_entities;
 
+<<<<<<< HEAD
     size_t _sum_cpu_limit = 0;
 
     // Cache the minimum entity, used to check should_yield() without lock.
@@ -225,6 +349,12 @@ private:
     // - Otherwise, don't apply the control.
     int64_t _bandwidth_control_period_end_ns = 0;
     std::atomic<int64_t> _bandwidth_usage_ns = 0;
+=======
+    size_t _sum_cpu_weight = 0;
+
+    // Cache the minimum entity, used to check should_yield() without lock.
+    std::atomic<WorkGroupScanSchedEntity*> _min_wg_entity = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::atomic<size_t> _num_tasks = 0;
 };

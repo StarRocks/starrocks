@@ -19,6 +19,10 @@
 
 #include <cstdint>
 #include <string>
+<<<<<<< HEAD
+=======
+#include <string_view>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "http/http_status.h"
 
@@ -36,13 +40,21 @@ public:
     static void send_error(HttpRequest* request, HttpStatus status);
 
     // send 200(OK) reply with content
+<<<<<<< HEAD
     static void send_reply(HttpRequest* request, const std::string& content) {
+=======
+    static void send_reply(HttpRequest* request, std::string_view content) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         send_reply(request, HttpStatus::OK, content);
     }
 
     static void send_reply(HttpRequest* request, HttpStatus status = HttpStatus::OK);
 
+<<<<<<< HEAD
     static void send_reply(HttpRequest* request, HttpStatus status, const std::string& content);
+=======
+    static void send_reply(HttpRequest* request, HttpStatus status, std::string_view content);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static void send_file(HttpRequest* request, int fd, size_t off, size_t size);
 };

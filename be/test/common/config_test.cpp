@@ -346,31 +346,67 @@ TEST_F(ConfigTest, test_set_config) {
     ASSERT_FALSE(cfg_bool);
     ASSERT_TRUE(config::set_config("cfg_bool", "true").ok());
     ASSERT_TRUE(cfg_bool);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_bool").ok());
+    ASSERT_FALSE(cfg_bool);
+    ASSERT_TRUE(config::set_config("cfg_bool", "true").ok());
+    ASSERT_TRUE(cfg_bool);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // double
     ASSERT_EQ(cfg_double, 123.456);
     ASSERT_TRUE(config::set_config("cfg_double", "654.321").ok());
     ASSERT_EQ(cfg_double, 654.321);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_double").ok());
+    ASSERT_EQ(cfg_double, 123.456);
+    ASSERT_TRUE(config::set_config("cfg_double", "654.321").ok());
+    ASSERT_EQ(cfg_double, 654.321);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // int16
     ASSERT_EQ(cfg_int16_t, 2561);
     ASSERT_TRUE(config::set_config("cfg_int16_t", "2562").ok());
     ASSERT_EQ(cfg_int16_t, 2562);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_int16_t").ok());
+    ASSERT_EQ(cfg_int16_t, 2561);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // int32
     ASSERT_EQ(cfg_int32_t, 65536123);
     ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
     ASSERT_EQ(cfg_int32_t, 65536124);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_int32_t").ok());
+    ASSERT_EQ(cfg_int32_t, 65536123);
+    ASSERT_TRUE(config::set_config("cfg_int32_t", "65536124").ok());
+    ASSERT_EQ(cfg_int32_t, 65536124);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // int64
     ASSERT_EQ(cfg_int64_t, 4294967296123);
     ASSERT_TRUE(config::set_config("cfg_int64_t", "4294967296124").ok());
     ASSERT_EQ(cfg_int64_t, 4294967296124);
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_int64_t").ok());
+    ASSERT_EQ(cfg_int64_t, 4294967296123);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // string
     ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
     ASSERT_TRUE(config::set_config("cfg_std_string_mutable", "hello SR").ok());
     ASSERT_EQ(cfg_std_string_mutable.value(), "hello SR");
+<<<<<<< HEAD
+=======
+    ASSERT_TRUE(config::rollback_config("cfg_std_string_mutable").ok());
+    ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");

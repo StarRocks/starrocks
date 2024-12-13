@@ -162,6 +162,13 @@ public class DateLiteral extends LiteralExpr {
         return new DateLiteral(type, false);
     }
 
+<<<<<<< HEAD
+=======
+    public static DateLiteral createMaxValue(Type type) {
+        return new DateLiteral(type, true);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void init(String s, Type type) throws AnalysisException {
         try {
             Preconditions.checkArgument(type.isDateType());

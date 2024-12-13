@@ -33,6 +33,10 @@ public class SubfieldOperator extends ScalarOperator {
     // Only one child
     private List<ScalarOperator> children = new ArrayList<>();
     private final ImmutableList<String> fieldNames;
+<<<<<<< HEAD
+=======
+    private boolean copyFlag = true;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Build based on SlotRef which contains struct subfield access information
     public static SubfieldOperator build(ScalarOperator child, Type type, List<Integer> usedSubfieldPos) {
@@ -50,15 +54,38 @@ public class SubfieldOperator extends ScalarOperator {
     }
 
     public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames) {
+<<<<<<< HEAD
         super(OperatorType.SUBFIELD, type);
         this.children.add(child);
         this.fieldNames = ImmutableList.copyOf(fieldNames); 
+=======
+        this(child, type, fieldNames, true);
+    }
+
+    public SubfieldOperator(ScalarOperator child, Type type, List<String> fieldNames, boolean copyFlag) {
+        super(OperatorType.SUBFIELD, type);
+        this.children.add(child);
+        this.fieldNames = ImmutableList.copyOf(fieldNames);
+        this.copyFlag = copyFlag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public List<String> getFieldNames() {
         return fieldNames;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getCopyFlag() {
+        return copyFlag;
+    }
+
+    public void setCopyFlag(boolean copyFlag) {
+        this.copyFlag = copyFlag;
+    }
+
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public boolean isNullable() {
         return children.get(0).isNullable();
@@ -98,7 +125,11 @@ public class SubfieldOperator extends ScalarOperator {
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(getChild(0), fieldNames);
+=======
+        return Objects.hash(getChild(0), fieldNames, copyFlag);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -111,7 +142,12 @@ public class SubfieldOperator extends ScalarOperator {
             return false;
         }
         SubfieldOperator otherOp = (SubfieldOperator) other;
+<<<<<<< HEAD
         return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0));
+=======
+        return fieldNames.equals(otherOp.fieldNames) && getChild(0).equals(otherOp.getChild(0))
+                && copyFlag == otherOp.getCopyFlag();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

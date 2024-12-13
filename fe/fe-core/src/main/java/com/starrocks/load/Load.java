@@ -34,8 +34,11 @@
 
 package com.starrocks.load;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -60,8 +63,12 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.authentication.AuthenticationMgr;
+<<<<<<< HEAD
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Status;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -73,10 +80,15 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.load.loadv2.JobState;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -91,13 +103,20 @@ import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TFileFormatType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TOpType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -130,7 +149,11 @@ public class Load {
      * @param mergeCondition
      * @param table
      * @return
+<<<<<<< HEAD
      * @throws UserException
+=======
+     * @throws StarRocksException
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      */
     public static void checkMergeCondition(String mergeCondition, OlapTable table, List<Column> columns,
             boolean missAutoIncrementColumn) throws DdlException {
@@ -187,8 +210,12 @@ public class Load {
     public static List<ImportColumnDesc> getSchemaChangeShadowColumnDesc(Table tbl, Map<String, Expr> columnExprMap) {
         List<ImportColumnDesc> shadowColumnDescs = Lists.newArrayList();
         for (Column column : tbl.getFullSchema()) {
+<<<<<<< HEAD
             if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) &&
                     !column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+=======
+            if (!column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PREFIX)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 continue;
             }
 
@@ -249,7 +276,11 @@ public class Load {
             connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
 
             // If fe restart and execute the streamload, this re-analyze is needed.
+<<<<<<< HEAD
             Expr expr = column.generatedColumnExpr();
+=======
+            Expr expr = column.getGeneratedColumnExpr(tbl.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // In case of spark load, we should get the unanalyzed expression
             if (analyze) {
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(),
@@ -281,7 +312,11 @@ public class Load {
      */
     public static void initColumns(Table tbl, List<ImportColumnDesc> columnExprs,
                                    Map<String, Pair<String, List<String>>> columnToHadoopFunction)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         initColumns(tbl, columnExprs, columnToHadoopFunction, null, null,
                 null, null, null, false, false, Lists.newArrayList());
     }
@@ -301,7 +336,11 @@ public class Load {
                                    Map<String, Expr> exprsByName, Analyzer analyzer, TupleDescriptor srcTupleDesc,
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
+<<<<<<< HEAD
                                    List<String> columnsFromPath) throws UserException {
+=======
+                                   List<String> columnsFromPath) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         initColumns(tbl, columnExprs, columnToHadoopFunction, exprsByName, analyzer,
                 srcTupleDesc, slotDescByName, params, needInitSlotAndAnalyzeExprs, useVectorizedLoad,
                 columnsFromPath, false, false);
@@ -313,7 +352,11 @@ public class Load {
                                    Map<String, SlotDescriptor> slotDescByName, TBrokerScanRangeParams params,
                                    boolean needInitSlotAndAnalyzeExprs, boolean useVectorizedLoad,
                                    List<String> columnsFromPath, boolean isStreamLoadJson,
+<<<<<<< HEAD
                                    boolean partialUpdate) throws UserException {
+=======
+                                   boolean partialUpdate) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check mapping column exist in schema
         // !! all column mappings are in columnExprs !!
         Set<String> importColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -456,10 +499,17 @@ public class Load {
         }
 
         String dbName = "";
+<<<<<<< HEAD
         if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
             for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
                 Database db = entry.getValue();
                 if (db.getTable(tbl.getId()) != null) {
+=======
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
+                Database db = entry.getValue();
+                if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tbl.getId()) != null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     dbName = db.getFullName();
                 }
             }
@@ -671,7 +721,11 @@ public class Load {
     }
 
     public static List<Column> getPartialUpateColumns(Table tbl, List<ImportColumnDesc> columnExprs,
+<<<<<<< HEAD
              List<Boolean> missAutoIncrementColumn) throws UserException {
+=======
+             List<Boolean> missAutoIncrementColumn) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Set<String> specified = columnExprs.stream().map(desc -> desc.getColumnName()).collect(Collectors.toSet());
         List<Column> ret = new ArrayList<>();
         for (Column col : tbl.getBaseSchema()) {
@@ -693,7 +747,11 @@ public class Load {
             OlapTable olaptable = ((OlapTable) tbl);
             if (olaptable.hasGeneratedColumn()) {
                 for (Column col : olaptable.getBaseSchema()) {
+<<<<<<< HEAD
                     List<SlotRef> slots = col.getGeneratedColumnRef();
+=======
+                    List<SlotRef> slots = col.getGeneratedColumnRef(tbl.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (slots != null) {
                         for (SlotRef slot : slots) {
                             Column originColumn = olaptable.getColumn(slot.getColumnName());
@@ -718,7 +776,11 @@ public class Load {
      *                         and column exists in both schema and expr args.
      */
     private static void replaceSrcSlotDescType(Table tbl, Map<String, Expr> exprsByName, TupleDescriptor srcTupleDesc,
+<<<<<<< HEAD
                                                Set<String> excludedColumns) throws UserException {
+=======
+                                               Set<String> excludedColumns) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
             // if expr is a simple SlotRef such as set(k1=k)
             // we can use k1's type for k, no need to convert to varchar
@@ -762,7 +824,11 @@ public class Load {
                 int slotId = slotRef.getSlotId().asInt();
                 SlotDescriptor srcSlotDesc = srcTupleDesc.getSlot(slotId);
                 if (srcSlotDesc == null) {
+<<<<<<< HEAD
                     throw new UserException("Unknown source slot descriptor. id: " + slotId);
+=======
+                    throw new StarRocksException("Unknown source slot descriptor. id: " + slotId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 srcSlotDesc.setType(type);
                 srcSlotDesc.setColumn(new Column(columnName, type));
@@ -772,7 +838,11 @@ public class Load {
 
     private static void analyzeMappingExprs(Table tbl, Analyzer analyzer, Map<String, Expr> exprsByName,
                                             Map<String, Expr> mvDefineExpr, Map<String, SlotDescriptor> slotDescByName,
+<<<<<<< HEAD
                                             boolean useVectorizedLoad) throws UserException {
+=======
+                                            boolean useVectorizedLoad) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Map.Entry<String, Expr> entry : exprsByName.entrySet()) {
             // only for normal column here
             if (tbl.getColumn(entry.getKey()) != null && tbl.getColumn(entry.getKey()).isGeneratedColumn()) {
@@ -810,7 +880,11 @@ public class Load {
             expr.collect(FunctionCallExpr.class, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
+<<<<<<< HEAD
                     throw new UserException("Don't support aggregation function in load expression");
+=======
+                    throw new StarRocksException("Don't support aggregation function in load expression");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             exprsByName.put(entry.getKey(), expr);
@@ -863,7 +937,11 @@ public class Load {
             expr.collect(FunctionCallExpr.class, funcs);
             for (FunctionCallExpr fn : funcs) {
                 if (fn.isAggregateFunction()) {
+<<<<<<< HEAD
                     throw new UserException("Don't support aggregation function in load expression");
+=======
+                    throw new StarRocksException("Don't support aggregation function in load expression");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
             exprsByName.put(entry.getKey(), expr);
@@ -909,10 +987,17 @@ public class Load {
      * @param columnName
      * @param originExpr
      * @return
+<<<<<<< HEAD
      * @throws UserException
      */
     private static Expr transformHadoopFunctionExpr(Table tbl, String columnName, Expr originExpr)
             throws UserException {
+=======
+     * @throws StarRocksException
+     */
+    private static Expr transformHadoopFunctionExpr(Table tbl, String columnName, Expr originExpr)
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Column column = tbl.getColumn(columnName);
         if (column == null) {
             // the unknown column will be checked later.
@@ -952,14 +1037,22 @@ public class Load {
                             if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
                                 exprs.add(column.getDefaultExpr().obtainExpr());
                             } else {
+<<<<<<< HEAD
                                 throw new UserException("Column(" + columnName + ") has unsupported default value:"
+=======
+                                throw new StarRocksException("Column(" + columnName + ") has unsupported default value:"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                         + column.getDefaultExpr().getExpr());
                             }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 exprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {
+<<<<<<< HEAD
                                 throw new UserException("Column(" + columnName + ") has no default value.");
+=======
+                                throw new StarRocksException("Column(" + columnName + ") has no default value.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             }
                         }
                     }
@@ -979,14 +1072,22 @@ public class Load {
                             if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
                                 innerIfExprs.add(column.getDefaultExpr().obtainExpr());
                             } else {
+<<<<<<< HEAD
                                 throw new UserException("Column(" + columnName + ") has unsupported default value:"
+=======
+                                throw new StarRocksException("Column(" + columnName + ") has unsupported default value:"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                         + column.getDefaultExpr().getExpr());
                             }
                         } else if (defaultValueType == Column.DefaultValueType.NULL) {
                             if (column.isAllowNull()) {
                                 innerIfExprs.add(NullLiteral.create(Type.VARCHAR));
                             } else {
+<<<<<<< HEAD
                                 throw new UserException("Column(" + columnName + ") has no default value.");
+=======
+                                throw new StarRocksException("Column(" + columnName + ") has no default value.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             }
                         }
                     }
@@ -1043,7 +1144,11 @@ public class Load {
                 } else if (precision.getStringValue().equalsIgnoreCase("hour")) {
                     format = new StringLiteral("%Y-%m-%d %H:00:00");
                 } else {
+<<<<<<< HEAD
                     throw new UserException("Unknown precision(" + precision.getStringValue() + ")");
+=======
+                    throw new StarRocksException("Unknown precision(" + precision.getStringValue() + ")");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 FunctionName dateFormatName = new FunctionName(FunctionSet.DATE_FORMAT);
                 List<Expr> dateFormatArgs = Lists.newArrayList(fromUnixFunc, format);
@@ -1078,14 +1183,18 @@ public class Load {
         return originExpr;
     }
 
+<<<<<<< HEAD
     public LoadErrorHub.Param getLoadErrorHubInfo() {
         return loadErrorHubParam;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setLoadErrorHubInfo(LoadErrorHub.Param info) {
         this.loadErrorHubParam = info;
     }
 
+<<<<<<< HEAD
     // TODO [meta-format-change] deprecated
     public void setLoadErrorHubInfo(Map<String, String> properties) throws DdlException {
         String type = properties.get("type");
@@ -1156,6 +1265,8 @@ public class Load {
         LOG.info("set load error hub info: {}", loadErrorHubParam);
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static class JobInfo {
         public String dbName;
         public Set<String> tblNames = Sets.newHashSet();
@@ -1170,6 +1281,7 @@ public class Load {
         }
     }
 
+<<<<<<< HEAD
     public long loadLoadJob(DataInputStream dis, long checksum) throws IOException {
         if (GlobalStateMgr.getCurrentStateStarRocksMetaVersion() <= StarRocksFEMetaVersion.VERSION_3) {
             return loadLoadJobV1(dis, checksum);
@@ -1227,4 +1339,43 @@ public class Load {
         return checksum;
     }
 
+=======
+    public static class CSVOptions {
+        public String columnSeparator = "\t";
+        public String rowDelimiter = "\n";
+    }
+
+    public static TFileFormatType getFormatType(String fileFormat, String path) {
+        if (fileFormat != null) {
+            if (fileFormat.toLowerCase().equals("parquet")) {
+                return TFileFormatType.FORMAT_PARQUET;
+            } else if (fileFormat.toLowerCase().equals("orc")) {
+                return TFileFormatType.FORMAT_ORC;
+            } else if (fileFormat.toLowerCase().equals("json")) {
+                return TFileFormatType.FORMAT_JSON;
+            }
+            // Attention: The compression type of csv format is from the suffix of filename.
+        }
+
+        String lowerCasePath = path.toLowerCase();
+        if (lowerCasePath.endsWith(".parquet") || lowerCasePath.endsWith(".parq")) {
+            return TFileFormatType.FORMAT_PARQUET;
+        } else if (lowerCasePath.endsWith(".orc")) {
+            return TFileFormatType.FORMAT_ORC;
+        } else if (lowerCasePath.endsWith(".gz")) {
+            return TFileFormatType.FORMAT_CSV_GZ;
+        } else if (lowerCasePath.endsWith(".bz2")) {
+            return TFileFormatType.FORMAT_CSV_BZ2;
+        } else if (lowerCasePath.endsWith(".lz4")) {
+            return TFileFormatType.FORMAT_CSV_LZ4_FRAME;
+        } else if (lowerCasePath.endsWith(".deflate")) {
+            return TFileFormatType.FORMAT_CSV_DEFLATE;
+        } else if (lowerCasePath.endsWith(".zst")) {
+            return TFileFormatType.FORMAT_CSV_ZSTD;
+        } else {
+            return TFileFormatType.FORMAT_CSV_PLAIN;
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

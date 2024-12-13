@@ -17,6 +17,11 @@ package com.starrocks.qe.scheduler.dag;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Sets;
+import com.starrocks.common.util.DebugUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -25,9 +30,19 @@ import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ScanNode;
+<<<<<<< HEAD
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.SchedulerException;
+=======
+import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.qe.QueryStatisticsItem;
+import com.starrocks.qe.SimpleScheduler;
+import com.starrocks.qe.scheduler.NonRecoverableException;
+import com.starrocks.qe.scheduler.SchedulerException;
+import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.RpcException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
@@ -66,6 +81,10 @@ public class ExecutionDAG {
 
     private final JobSpec jobSpec;
     private final List<ExecutionFragment> fragments;
+<<<<<<< HEAD
+=======
+    private ExecutionFragment captureVersionFragment = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final Map<PlanFragmentId, ExecutionFragment> idToFragment;
 
     /**
@@ -78,7 +97,12 @@ public class ExecutionDAG {
     /**
      * The executions will be added to {@code indexInJobToExecState}, when it is deploying.
      */
+<<<<<<< HEAD
     private final ConcurrentMap<Integer, FragmentInstanceExecState> indexInJobToExecState = new ConcurrentSkipListMap<>();
+=======
+    private final ConcurrentMap<Integer, FragmentInstanceExecState> indexInJobToExecState =
+            new ConcurrentSkipListMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * Backend which state need to be checked when joining this coordinator.
@@ -114,6 +138,13 @@ public class ExecutionDAG {
         }
     }
 
+<<<<<<< HEAD
+=======
+    ExecutionFragment getCaptureVersionFragment() {
+        return captureVersionFragment;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Set<TUniqueId> getInstanceIds() {
         return instanceIdToInstance.keySet();
     }
@@ -256,6 +287,23 @@ public class ExecutionDAG {
         return fragments.get(0).getPlanFragment().getDataPartition() == DataPartition.UNPARTITIONED;
     }
 
+<<<<<<< HEAD
+=======
+    public void prepareCaptureVersion(boolean isPhasedSchedule) {
+        if (!isPhasedSchedule) {
+            return;
+        }
+        final CaptureVersionFragmentBuilder builder =
+                new CaptureVersionFragmentBuilder(fragments);
+        final ExecutionFragment build = builder.build(this);
+        if (build != null) {
+            captureVersionFragment = build;
+            fragments.add(build);
+            idToFragment.put(captureVersionFragment.getFragmentId(), captureVersionFragment);
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Do the finalize work after all the fragment instances have already been added to the DAG, including:
      *
@@ -374,7 +422,12 @@ public class ExecutionDAG {
      */
     private void connectFragmentToDestFragments(ExecutionFragment execFragment) throws SchedulerException {
         if (execFragment.getPlanFragment() instanceof MultiCastPlanFragment) {
+<<<<<<< HEAD
             connectMultiCastFragmentToDestFragments(execFragment, (MultiCastPlanFragment) execFragment.getPlanFragment());
+=======
+            connectMultiCastFragmentToDestFragments(execFragment,
+                    (MultiCastPlanFragment) execFragment.getPlanFragment());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             connectNormalFragmentToDestFragments(execFragment);
         }
@@ -448,6 +501,10 @@ public class ExecutionDAG {
 
         // Set params for pipeline level shuffle.
         fragment.getDestNode().setPartitionType(fragment.getOutputPartition().getType());
+<<<<<<< HEAD
+=======
+        int destDop = destFragment.getPipelineDop();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (sink instanceof DataStreamSink) {
             DataStreamSink dataStreamSink = (DataStreamSink) sink;
             dataStreamSink.setExchDop(destFragment.getPipelineDop());
@@ -495,7 +552,11 @@ public class ExecutionDAG {
 
                     int driverSeq = destInstance.getDriverSeqOfBucketSeq(bucketSeq);
                     if (driverSeq != FragmentInstance.ABSENT_DRIVER_SEQUENCE) {
+<<<<<<< HEAD
                         dest.setPipeline_driver_sequence(driverSeq);
+=======
+                        dest.setPipeline_driver_sequence(driverSeq % destDop);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 }
                 execFragment.addDestination(dest);
@@ -526,4 +587,35 @@ public class ExecutionDAG {
         instanceIdToInstance.put(instanceId, instance);
     }
 
+<<<<<<< HEAD
+=======
+    public void cancelQueryContext(PPlanFragmentCancelReason cancelReason) {
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("cancel query context id:{} reason:{}", DebugUtil.printId(jobSpec.getQueryId()),
+                    cancelReason.name());
+        }
+
+        Set<ComputeNode> workers = Sets.newHashSet();
+        for (FragmentInstanceExecState execution : this.getExecutions()) {
+            final ComputeNode worker = execution.getWorker();
+            workers.add(worker);
+        }
+
+        final TUniqueId dummyInstanceId = new TUniqueId(0, 0);
+
+        for (ComputeNode worker : workers) {
+            TNetworkAddress brpcAddress = worker.getBrpcAddress();
+            try {
+                BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
+                        jobSpec.getQueryId(), dummyInstanceId, cancelReason,
+                        jobSpec.isEnablePipeline());
+            } catch (RpcException e) {
+                LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
+                        brpcAddress.getPort(), e);
+                SimpleScheduler.addToBlocklist(worker.getId());
+            }
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

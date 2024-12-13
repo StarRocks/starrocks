@@ -18,7 +18,13 @@
 #include <vector>
 
 #include "common/statusor.h"
+<<<<<<< HEAD
 #include "gutil/macros.h"
+=======
+#include "gen_cpp/olap_file.pb.h"
+#include "gutil/macros.h"
+#include "storage/lake/delta_writer_finish_mode.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 class MemTracker;
@@ -27,6 +33,10 @@ class Chunk;
 class TabletSchema;
 class ThreadPool;
 struct FileInfo;
+<<<<<<< HEAD
+=======
+class TxnLogPB;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -39,10 +49,14 @@ class DeltaWriter {
     friend class DeltaWriterBuilder;
 
 public:
+<<<<<<< HEAD
     enum FinishMode {
         kWriteTxnLog,
         kDontWriteTxnLog,
     };
+=======
+    using TxnLogPtr = std::shared_ptr<const TxnLogPB>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Return the thread pool used for performing write IO.
     static ThreadPool* io_threads();
@@ -60,7 +74,14 @@ public:
     Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
     // NOTE: Do NOT invoke this method in a bthread.
+<<<<<<< HEAD
     Status finish(FinishMode mode = kWriteTxnLog);
+=======
+    StatusOr<TxnLogPtr> finish_with_txnlog(DeltaWriterFinishMode mode = kWriteTxnLog);
+
+    // NOTE: Do NOT invoke this method in a bthread.
+    Status finish();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Manual flush used by stale memtable flush
     // different from `flush()`, this method will reduce memory usage in `mem_tracker`
@@ -178,6 +199,14 @@ public:
         return *this;
     }
 
+<<<<<<< HEAD
+=======
+    DeltaWriterBuilder& set_partial_update_mode(const PartialUpdateMode& partial_update_mode) {
+        _partial_update_mode = partial_update_mode;
+        return *this;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
         _column_to_expr_value = column_to_expr_value;
         return *this;
@@ -198,6 +227,10 @@ private:
     MemTracker* _mem_tracker{nullptr};
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
+<<<<<<< HEAD
+=======
+    PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
 };
 

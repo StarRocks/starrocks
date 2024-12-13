@@ -104,7 +104,11 @@ Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_
     ColumnViewer<TYPE_VARCHAR> viewer(column);
     auto value = viewer.value(0);
     // construct bloom filter
+<<<<<<< HEAD
     BloomFilter::create(_reader->_algorithm, bf);
+=======
+    RETURN_IF_ERROR(BloomFilter::create(_reader->_algorithm, bf));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RETURN_IF_ERROR((*bf)->init(value.data, value.size, _reader->_hash_strategy));
     return Status::OK();

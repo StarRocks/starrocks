@@ -33,7 +33,10 @@ namespace starrocks {
 //   if this column is the last column: append directly
 //   if not: convert each 0x00 inside the string to 0x00 0x01,
 //           add a tailing 0x00 0x00, then append
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 class PrimaryKeyEncoder {
 public:
     static bool is_supported(const Field& f);
@@ -62,7 +65,11 @@ public:
 
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 
+<<<<<<< HEAD
     static void encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+=======
+    static Status encode_sort_key(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static void encode_selective(const Schema& schema, const Chunk& chunk, const uint32_t* indexes, size_t len,
                                  Column* dest);
@@ -70,7 +77,15 @@ public:
     static bool encode_exceed_limit(const Schema& schema, const Chunk& chunk, size_t offset, size_t len,
                                     size_t limit_size);
 
+<<<<<<< HEAD
     static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest);
 };
 
 } // namespace starrocks
+=======
+    static Status decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
+                         std::vector<uint8_t>* value_encode_flags = nullptr);
+};
+
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

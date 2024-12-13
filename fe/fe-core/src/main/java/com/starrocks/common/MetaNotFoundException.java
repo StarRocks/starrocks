@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Exception for meta info is null, like db table partition tablet replica job
  */
+<<<<<<< HEAD
 public class MetaNotFoundException extends UserException {
+=======
+public class MetaNotFoundException extends StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public MetaNotFoundException(String msg) {
         super(msg);
     }

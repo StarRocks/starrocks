@@ -35,24 +35,34 @@
 #include "storage/utils.h"
 
 #include <bvar/bvar.h>
+<<<<<<< HEAD
 #include <dirent.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <sys/stat.h>
 #include <unistd.h>
+=======
+#include <fmt/format.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include <atomic>
 #include <boost/regex.hpp>
 #include <cerrno>
 #include <chrono>
+<<<<<<< HEAD
 #include <cstdarg>
 #include <cstdint>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+<<<<<<< HEAD
 #include <mutex>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <string>
 #include <vector>
 
@@ -83,11 +93,19 @@ Status gen_timestamp_string(string* out_string) {
     tm local_tm;
 
     if (localtime_r(&now, &local_tm) == nullptr) {
+<<<<<<< HEAD
         return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
     }
     char time_suffix[16] = {0}; // Example: 20150706111404
     if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
         return Status::InternalError("localtime_r", static_cast<int16_t>(errno), std::strerror(errno));
+=======
+        return Status::InternalError(fmt::format("localtime_r: {} ", std::strerror(errno)));
+    }
+    char time_suffix[16] = {0}; // Example: 20150706111404
+    if (strftime(time_suffix, sizeof(time_suffix), "%Y%m%d%H%M%S", &local_tm) == 0) {
+        return Status::InternalError(fmt::format("localtime_r: {}", std::strerror(errno)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     *out_string = time_suffix;

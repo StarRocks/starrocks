@@ -21,11 +21,20 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 SchemaScanner::ColumnDesc SysFeMemoryUsage::_s_columns[] = {{"module_name", TYPE_VARCHAR, sizeof(StringValue), true},
                                                             {"class_name", TYPE_VARCHAR, sizeof(StringValue), true},
                                                             {"current_consumption", TYPE_BIGINT, sizeof(long), true},
                                                             {"peak_consumption", TYPE_BIGINT, sizeof(long), true},
                                                             {"counter_info", TYPE_VARCHAR, sizeof(StringValue), true}};
+=======
+SchemaScanner::ColumnDesc SysFeMemoryUsage::_s_columns[] = {
+        {"module_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"class_name", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"current_consumption", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"peak_consumption", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(long), true},
+        {"counter_info", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 SysFeMemoryUsage::SysFeMemoryUsage()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

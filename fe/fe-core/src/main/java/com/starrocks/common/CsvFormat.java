@@ -16,6 +16,11 @@
 package com.starrocks.common;
 
 public class CsvFormat {
+<<<<<<< HEAD
+=======
+    public static final int MAX_COLUMN_SEPARATOR_LENGTH = 50;
+    public static final int MAX_ROW_DELIMITER_LENGTH = 50;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public CsvFormat(byte enclose, byte escape, long skipheader, boolean trimspace) {
         this.enclose = enclose;
         this.escape = escape;

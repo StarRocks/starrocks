@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minutes_sub
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 从指定的日期时间或日期中减去指定的分钟数。
 

@@ -17,7 +17,11 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -26,6 +30,11 @@ import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TReportFragmentFinishParams;
+import com.starrocks.thrift.TReportFragmentFinishResponse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.List;
@@ -38,10 +47,18 @@ public interface QeProcessor {
     TReportAuditStatisticsResult reportAuditStatistics(TReportAuditStatisticsParams params, TNetworkAddress beAddr);
 
     TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params, TNetworkAddress beAddr);
+<<<<<<< HEAD
 
     void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException;
 
     void registerQuery(TUniqueId queryId, QeProcessorImpl.QueryInfo info) throws UserException;
+=======
+    TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params);
+
+    void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException;
+
+    void registerQuery(TUniqueId queryId, QeProcessorImpl.QueryInfo info) throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void unregisterQuery(TUniqueId queryId);
 

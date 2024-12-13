@@ -53,11 +53,19 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         view.setMaintenancePlan(new ExecPlan());
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+<<<<<<< HEAD
         BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 1L);
         baseTableInfos.add(baseTableInfo1);
         BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 2L);
         baseTableInfos.add(baseTableInfo2);
         BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, 2L);
+=======
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 1L);
+        baseTableInfos.add(baseTableInfo1);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 2L);
+        baseTableInfos.add(baseTableInfo2);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, "db", "tbl3", 2L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         baseTableInfos.add(baseTableInfo3);
 
         view.setBaseTableInfos(baseTableInfos);
@@ -126,7 +134,11 @@ public class MVMaintenanceJobTest extends PlanTestBase {
                 pair.first);
 
         String currentDb = connectContext.getDatabase();
+<<<<<<< HEAD
         long dbId = GlobalStateMgr.getCurrentState().getDb(currentDb).getId();
+=======
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(currentDb).getId();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         MaterializedView view = new MaterializedView();
         view.setDbId(dbId);
         view.setId(1024);

@@ -42,21 +42,36 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.authorization.UserPrivilegeCollectionV2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Dictionary;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
+<<<<<<< HEAD
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -67,17 +82,24 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
+<<<<<<< HEAD
 import com.starrocks.load.DeleteInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+<<<<<<< HEAD
 import com.starrocks.load.LoadErrorHub;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadTask;
+<<<<<<< HEAD
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -85,17 +107,31 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
+=======
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.plugin.PluginInfo;
+import com.starrocks.proto.EncryptionKeyPB;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
+<<<<<<< HEAD
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
+=======
+import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -116,6 +152,10 @@ import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStateBatch;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -140,12 +180,19 @@ public class EditLog {
         this.journalQueue = journalQueue;
     }
 
+<<<<<<< HEAD
     public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
             throws JournalInconsistentException {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID
                 && opCode != OperationType.OP_TIMESTAMP
                 && opCode != OperationType.OP_TIMESTAMP_V2) {
+=======
+    public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
+            throws JournalInconsistentException {
+        short opCode = journal.getOpCode();
+        if (opCode != OperationType.OP_SAVE_NEXTID && opCode != OperationType.OP_TIMESTAMP_V2) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.debug("replay journal op code: {}", opCode);
         }
         try {
@@ -156,6 +203,7 @@ public class EditLog {
                     globalStateMgr.setNextId(id + 1);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_SAVE_TRANSACTION_ID: {
                     String idString = journal.getData().toString();
                     long id = Long.parseLong(idString);
@@ -166,6 +214,11 @@ public class EditLog {
                 case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
                     TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+=======
+                case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
+                    TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             .initTransactionId(idInfo.getTxnId() + 1);
                     break;
                 }
@@ -180,6 +233,7 @@ public class EditLog {
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_CREATE_DB: {
                     Database db = (Database) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
@@ -189,11 +243,17 @@ public class EditLog {
                 case OperationType.OP_CREATE_DB_V2: {
                     CreateDbInfo db = (CreateDbInfo) journal.getData();
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
+=======
+                case OperationType.OP_CREATE_DB_V2: {
+                    CreateDbInfo db = (CreateDbInfo) journal.getData();
+                    LocalMetastore metastore = globalStateMgr.getLocalMetastore();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     metastore.replayCreateDb(db);
                     break;
                 }
                 case OperationType.OP_DROP_DB: {
                     DropDbInfo dropDbInfo = (DropDbInfo) journal.getData();
+<<<<<<< HEAD
                     LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
                     metastore.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
                     break;
@@ -204,10 +264,20 @@ public class EditLog {
                     String dbName = dbInfo.getDbName();
                     LOG.info("Begin to unprotect alter db info {}", dbName);
                     globalStateMgr.replayAlterDatabaseQuota(dbName, dbInfo.getQuota(), dbInfo.getQuotaType());
+=======
+                    LocalMetastore metastore = globalStateMgr.getLocalMetastore();
+                    metastore.replayDropDb(dropDbInfo.getDbName(), dropDbInfo.isForceDrop());
+                    break;
+                }
+                case OperationType.OP_ALTER_DB_V2: {
+                    DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayAlterDatabaseQuota(dbInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_ERASE_DB: {
                     Text dbId = (Text) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayEraseDatabase(Long.parseLong(dbId.toString()));
                     break;
                 }
@@ -218,14 +288,30 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_RENAME_DB:
+=======
+                    globalStateMgr.getLocalMetastore().replayEraseDatabase(Long.parseLong(dbId.toString()));
+                    break;
+                }
+                case OperationType.OP_RECOVER_DB_V2: {
+                    RecoverInfo info = (RecoverInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayRecoverDatabase(info);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_RENAME_DB_V2: {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
                     String dbName = dbInfo.getDbName();
                     LOG.info("Begin to unprotect rename db {}", dbName);
+<<<<<<< HEAD
                     globalStateMgr.replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
                 case OperationType.OP_CREATE_TABLE:
+=======
+                    globalStateMgr.getLocalMetastore().replayRenameDatabase(dbName, dbInfo.getNewDbName());
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_CREATE_TABLE_V2: {
                     CreateTableInfo info = (CreateTableInfo) journal.getData();
 
@@ -237,6 +323,7 @@ public class EditLog {
                         LOG.info("Begin to unprotect create table. db = "
                                 + info.getDbName() + " table = " + info.getTable().getId());
                     }
+<<<<<<< HEAD
                     globalStateMgr.replayCreateTable(info);
                     break;
                 }
@@ -244,12 +331,21 @@ public class EditLog {
                 case OperationType.OP_DROP_TABLE_V2: {
                     DropInfo info = (DropInfo) journal.getData();
                     Database db = globalStateMgr.getDb(info.getDbId());
+=======
+                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
+                    break;
+                }
+                case OperationType.OP_DROP_TABLE_V2: {
+                    DropInfo info = (DropInfo) journal.getData();
+                    Database db = globalStateMgr.getLocalMetastore().getDb(info.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (db == null) {
                         LOG.warn("failed to get db[{}]", info.getDbId());
                         break;
                     }
                     LOG.info("Begin to unprotect drop table. db = "
                             + db.getOriginName() + " table = " + info.getTableId());
+<<<<<<< HEAD
                     globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
@@ -259,6 +355,9 @@ public class EditLog {
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
                     globalStateMgr.replayCreateTable(info);
+=======
+                    globalStateMgr.getLocalMetastore().replayDropTable(db, info.getTableId(), info.isForceDrop());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION_V2: {
@@ -266,6 +365,7 @@ public class EditLog {
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
+<<<<<<< HEAD
                     globalStateMgr.replayAddPartition(info);
                     break;
                 }
@@ -282,19 +382,30 @@ public class EditLog {
                     for (PartitionPersistInfo info : infos.getAddPartitionInfos()) {
                         globalStateMgr.replayAddPartition(info);
                     }
+=======
+                    globalStateMgr.getLocalMetastore().replayAddPartition(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_ADD_PARTITIONS_V2: {
                     AddPartitionsInfoV2 infos = (AddPartitionsInfoV2) journal.getData();
                     for (PartitionPersistInfoV2 info : infos.getAddPartitionInfos()) {
+<<<<<<< HEAD
                         globalStateMgr.replayAddPartition(info);
+=======
+                        globalStateMgr.getLocalMetastore().replayAddPartition(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                     break;
                 }
                 case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
                     AddSubPartitionsInfoV2 infos = (AddSubPartitionsInfoV2) journal.getData();
                     for (PhysicalPartitionPersistInfoV2 info : infos.getAddSubPartitionInfos()) {
+<<<<<<< HEAD
                         globalStateMgr.replayAddSubPartition(info);
+=======
+                        globalStateMgr.getLocalMetastore().replayAddSubPartition(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                     break;
                 }
@@ -303,10 +414,21 @@ public class EditLog {
                     LOG.info("Begin to unprotect drop partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartitionName());
+<<<<<<< HEAD
                     globalStateMgr.replayDropPartition(info);
                     break;
                 }
                 case OperationType.OP_MODIFY_PARTITION:
+=======
+                    globalStateMgr.getLocalMetastore().replayDropPartition(info);
+                    break;
+                }
+                case OperationType.OP_DROP_PARTITIONS: {
+                    DropPartitionsInfo info = (DropPartitionsInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDropPartitions(info);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_MODIFY_PARTITION_V2: {
                     ModifyPartitionInfo info = (ModifyPartitionInfo) journal.getData();
                     LOG.info("Begin to unprotect modify partition. db = " + info.getDbId()
@@ -321,6 +443,7 @@ public class EditLog {
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_ERASE_TABLE: {
                     Text tableId = (Text) journal.getData();
                     globalStateMgr.replayEraseTable(Long.parseLong(tableId.toString()));
@@ -329,6 +452,11 @@ public class EditLog {
                 case OperationType.OP_ERASE_MULTI_TABLES: {
                     MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
                     globalStateMgr.replayEraseMultiTables(multiEraseTableInfo);
+=======
+                case OperationType.OP_ERASE_MULTI_TABLES: {
+                    MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayEraseMultiTables(multiEraseTableInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_DISABLE_TABLE_RECOVERY: {
@@ -336,6 +464,7 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayDisableTableRecovery(disableTableRecoveryInfo);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_ERASE_PARTITION: {
                     Text partitionId = (Text) journal.getData();
                     globalStateMgr.replayErasePartition(Long.parseLong(partitionId.toString()));
@@ -357,35 +486,80 @@ public class EditLog {
                 case OperationType.OP_RENAME_TABLE_V2: {
                     TableInfo info = (TableInfo) journal.getData();
                     globalStateMgr.replayRenameTable(info);
+=======
+                case OperationType.OP_DISABLE_PARTITION_RECOVERY: {
+                    DisablePartitionRecoveryInfo disableRecoveryInfo = (DisablePartitionRecoveryInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDisablePartitionRecovery(disableRecoveryInfo);
+                    break;
+                }
+                case OperationType.OP_ERASE_PARTITION: {
+                    Text partitionId = (Text) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayErasePartition(Long.parseLong(partitionId.toString()));
+                    break;
+                }
+                case OperationType.OP_RECOVER_TABLE_V2: {
+                    RecoverInfo info = (RecoverInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayRecoverTable(info);
+                    break;
+                }
+                case OperationType.OP_RECOVER_PARTITION_V2: {
+                    RecoverInfo info = (RecoverInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayRecoverPartition(info);
+                    break;
+                }
+                case OperationType.OP_RENAME_TABLE_V2: {
+                    TableInfo info = (TableInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayRenameTable(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME: {
                     ChangeMaterializedViewRefreshSchemeLog log =
                             (ChangeMaterializedViewRefreshSchemeLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
+=======
+                    globalStateMgr.getAlterJobMgr().replayChangeMaterializedViewRefreshScheme(log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
                     ModifyTablePropertyOperationLog log =
                             (ModifyTablePropertyOperationLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
+=======
+                    globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewProperties(opCode, log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS: {
                     AlterMaterializedViewStatusLog log =
                             (AlterMaterializedViewStatusLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayAlterMaterializedViewStatus(log);
+=======
+                    globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewStatus(log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS: {
                     AlterMaterializedViewBaseTableInfosLog log =
                             (AlterMaterializedViewBaseTableInfosLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayAlterMaterializedViewBaseTableInfos(log);
+=======
+                    globalStateMgr.getAlterJobMgr().replayAlterMaterializedViewBaseTableInfos(log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
                     RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayRenameMaterializedView(log);
+=======
+                    globalStateMgr.getAlterJobMgr().replayRenameMaterializedView(log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
@@ -393,6 +567,7 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().alterView(info);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_RENAME_PARTITION:
                 case OperationType.OP_RENAME_PARTITION_V2: {
                     TableInfo info = (TableInfo) journal.getData();
@@ -400,19 +575,37 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_BACKUP_JOB:
+=======
+                case OperationType.OP_RENAME_PARTITION_V2: {
+                    TableInfo info = (TableInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayRenamePartition(info);
+                    break;
+                }
+                case OperationType.OP_RENAME_COLUMN_V2: {
+                    ColumnRenameInfo info = (ColumnRenameInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayRenameColumn(info);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_RESTORE_JOB:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_RESTORE_JOB_V2: {
                     RestoreJob job = (RestoreJob) journal.getData();
                     job.setGlobalStateMgr(globalStateMgr);
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_DROP_ROLLUP:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_DROP_ROLLUP_V2: {
                     DropInfo info = (DropInfo) journal.getData();
                     globalStateMgr.getRollupHandler().replayDropRollup(info, globalStateMgr);
@@ -433,6 +626,7 @@ public class EditLog {
                     globalStateMgr.getConsistencyChecker().replayFinishConsistencyCheck(info, globalStateMgr);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_CLEAR_ROLLUP_INFO: {
                     // Nothing to do
                     break;
@@ -444,12 +638,20 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_EXPORT_CREATE:
+=======
+                case OperationType.OP_RENAME_ROLLUP_V2: {
+                    TableInfo info = (TableInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayRenameRollup(info);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_EXPORT_CREATE_V2: {
                     ExportJob job = (ExportJob) journal.getData();
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
                     exportMgr.replayCreateExportJob(job);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_EXPORT_UPDATE_STATE:
                     ExportJob.StateTransfer op = (ExportJob.StateTransfer) journal.getData();
                     ExportMgr exportMgr = globalStateMgr.getExportMgr();
@@ -466,6 +668,12 @@ public class EditLog {
                     deleteHandler.replayDelete(info, globalStateMgr);
                     break;
                 }
+=======
+                case OperationType.OP_EXPORT_UPDATE_INFO_V2:
+                    ExportJob.ExportUpdateInfo exportUpdateInfo = (ExportJob.ExportUpdateInfo) journal.getData();
+                    globalStateMgr.getExportMgr().replayUpdateJobInfo(exportUpdateInfo);
+                    break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_FINISH_MULTI_DELETE: {
                     MultiDeleteInfo info = (MultiDeleteInfo) journal.getData();
                     DeleteMgr deleteHandler = globalStateMgr.getDeleteMgr();
@@ -475,6 +683,7 @@ public class EditLog {
                 case OperationType.OP_ADD_REPLICA:
                 case OperationType.OP_ADD_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayAddReplica(info);
                     break;
                 }
@@ -488,20 +697,42 @@ public class EditLog {
                 case OperationType.OP_DELETE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
                     globalStateMgr.replayDeleteReplica(info);
+=======
+                    globalStateMgr.getLocalMetastore().replayAddReplica(info);
+                    break;
+                }
+                case OperationType.OP_UPDATE_REPLICA_V2: {
+                    ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayUpdateReplica(info);
+                    break;
+                }
+                case OperationType.OP_DELETE_REPLICA_V2: {
+                    ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayDeleteReplica(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_BATCH_DELETE_REPLICA: {
                     BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayBatchDeleteReplica(info);
+=======
+                    globalStateMgr.getLocalMetastore().replayBatchDeleteReplica(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
                     ComputeNode computeNode = (ComputeNode) journal.getData();
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
+=======
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayAddComputeNode(computeNode);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_DROP_COMPUTE_NODE: {
                     DropComputeNodeLog dropComputeNodeLog = (DropComputeNodeLog) journal.getData();
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentSystemInfo().replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
                     break;
                 }
@@ -518,11 +749,28 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_BACKEND_STATE_CHANGE:
+=======
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .replayDropComputeNode(dropComputeNodeLog.getComputeNodeId());
+                    break;
+                }
+                case OperationType.OP_ADD_BACKEND_V2: {
+                    Backend be = (Backend) journal.getData();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayAddBackend(be);
+                    break;
+                }
+                case OperationType.OP_DROP_BACKEND_V2: {
+                    Backend be = (Backend) journal.getData();
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().replayDropBackend(be);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_BACKEND_STATE_CHANGE_V2: {
                     Backend be = (Backend) journal.getData();
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateInMemoryStateBackend(be);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_ADD_FIRST_FRONTEND:
                 case OperationType.OP_ADD_FIRST_FRONTEND_V2:
                 case OperationType.OP_ADD_FRONTEND:
@@ -536,10 +784,23 @@ public class EditLog {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.replayDropFrontend(fe);
                     if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
+=======
+                case OperationType.OP_ADD_FIRST_FRONTEND_V2:
+                case OperationType.OP_ADD_FRONTEND_V2: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.getNodeMgr().replayAddFrontend(fe);
+                    break;
+                }
+                case OperationType.OP_REMOVE_FRONTEND_V2: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.getNodeMgr().replayDropFrontend(fe);
+                    if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_UPDATE_FRONTEND:
                 case OperationType.OP_UPDATE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
@@ -562,17 +823,33 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_TIMESTAMP:
+=======
+                case OperationType.OP_UPDATE_FRONTEND_V2: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
+                    break;
+                }
+                case OperationType.OP_RESET_FRONTENDS: {
+                    Frontend fe = (Frontend) journal.getData();
+                    globalStateMgr.getNodeMgr().replayResetFrontends(fe);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_TIMESTAMP_V2: {
                     Timestamp stamp = (Timestamp) journal.getData();
                     globalStateMgr.setSynchronizedTime(stamp.getTimestamp());
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_LEADER_INFO_CHANGE:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_LEADER_INFO_CHANGE_V2: {
                     LeaderInfo info = (LeaderInfo) journal.getData();
                     globalStateMgr.setLeader(info);
                     break;
                 }
+<<<<<<< HEAD
                 //compatible with old community meta, newly added log using OP_META_VERSION_V2
                 case OperationType.OP_META_VERSION: {
                     break;
@@ -581,10 +858,16 @@ public class EditLog {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
                     if (!MetaVersion
                             .isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+=======
+                case OperationType.OP_META_VERSION_V2: {
+                    MetaVersion metaVersion = (MetaVersion) journal.getData();
+                    if (!MetaVersion.isCompatible(metaVersion.getStarRocksVersion(), FeConstants.STARROCKS_META_VERSION)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         throw new JournalInconsistentException("Not compatible with meta version "
                                 + metaVersion.getStarRocksVersion()
                                 + ", current version is " + FeConstants.STARROCKS_META_VERSION);
                     }
+<<<<<<< HEAD
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
                     break;
                 }
@@ -599,12 +882,19 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_BROKER:
+=======
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_ADD_BROKER_V2: {
                     final BrokerMgr.ModifyBrokerInfo param = (BrokerMgr.ModifyBrokerInfo) journal.getData();
                     globalStateMgr.getBrokerMgr().replayAddBrokers(param.brokerName, param.brokerAddresses);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_DROP_BROKER:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_DROP_BROKER_V2: {
                     final BrokerMgr.ModifyBrokerInfo param = (BrokerMgr.ModifyBrokerInfo) journal.getData();
                     globalStateMgr.getBrokerMgr().replayDropBrokers(param.brokerName, param.brokerAddresses);
@@ -615,6 +905,7 @@ public class EditLog {
                     globalStateMgr.getBrokerMgr().replayDropAllBroker(param);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_SET_LOAD_ERROR_HUB: {
                     final LoadErrorHub.Param param = (LoadErrorHub.Param) journal.getData();
                     globalStateMgr.getLoadInstance().setLoadErrorHubInfo(param);
@@ -629,11 +920,17 @@ public class EditLog {
                 case OperationType.OP_UPSERT_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
+=======
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
+                    final TransactionState state = (TransactionState) journal.getData();
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionState(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
                     break;
                 }
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
                     final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
+<<<<<<< HEAD
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
                     LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
                     break;
@@ -645,6 +942,12 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_REPOSITORY:
+=======
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_CREATE_REPOSITORY_V2: {
                     Repository repository = (Repository) journal.getData();
                     globalStateMgr.getBackupHandler().getRepoMgr().addAndInitRepoIfNotExist(repository, true);
@@ -657,38 +960,54 @@ public class EditLog {
                 }
                 case OperationType.OP_TRUNCATE_TABLE: {
                     TruncateTableInfo info = (TruncateTableInfo) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayTruncateTable(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_ADD_TABLE:
+=======
+                    globalStateMgr.getLocalMetastore().replayTruncateTable(info);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_COLOCATE_ADD_TABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddTableToGroup(info);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_COLOCATE_REMOVE_TABLE: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayRemoveTable(info);
                     break;
                 }
                 case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayAddBackendsPerBucketSeq(info);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_COLOCATE_MARK_UNSTABLE:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_COLOCATE_MARK_UNSTABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupUnstable(info);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_COLOCATE_MARK_STABLE:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_COLOCATE_MARK_STABLE_V2: {
                     final ColocatePersistInfo info = (ColocatePersistInfo) journal.getData();
                     globalStateMgr.getColocateTableIndex().replayMarkGroupStable(info);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_MODIFY_TABLE_COLOCATE:
                 case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
@@ -702,6 +1021,18 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_ADD_FUNCTION:
+=======
+                case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
+                    final TablePropertyInfo info = (TablePropertyInfo) journal.getData();
+                    globalStateMgr.getColocateTableIndex().replayModifyTableColocate(info);
+                    break;
+                }
+                case OperationType.OP_HEARTBEAT_V2: {
+                    final HbPackage hbPackage = (HbPackage) journal.getData();
+                    GlobalStateMgr.getCurrentState().getHeartbeatMgr().replayHearbeat(hbPackage);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_ADD_FUNCTION_V2: {
                     final Function function = (Function) journal.getData();
                     if (function.getFunctionName().isGlobalFunction()) {
@@ -711,7 +1042,10 @@ public class EditLog {
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_DROP_FUNCTION:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_DROP_FUNCTION_V2: {
                     FunctionSearchDesc function = (FunctionSearchDesc) journal.getData();
                     if (function.getName().isGlobalFunction()) {
@@ -721,6 +1055,7 @@ public class EditLog {
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_BACKEND_TABLETS_INFO:
                 case OperationType.OP_BACKEND_TABLETS_INFO_V2: {
                     BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
@@ -729,36 +1064,59 @@ public class EditLog {
                 }
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_ROUTINE_LOAD_JOB: {
+=======
+                case OperationType.OP_BACKEND_TABLETS_INFO_V2: {
+                    BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().replayBackendTabletsInfo(backendTabletsInfo);
+                    break;
+                }
+                case OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     RoutineLoadJob routineLoadJob = (RoutineLoadJob) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadMgr().replayCreateRoutineLoadJob(routineLoadJob);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2:
                 case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB: {
+=======
+                case OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
                     GlobalStateMgr.getCurrentState().getRoutineLoadMgr().replayChangeRoutineLoadJob(operation);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_REMOVE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
                     globalStateMgr.getRoutineLoadMgr().replayRemoveOldRoutineLoad(operation);
                     break;
                 }
                 case OperationType.OP_CREATE_STREAM_LOAD_TASK:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_CREATE_STREAM_LOAD_TASK_V2: {
                     StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
                     globalStateMgr.getStreamLoadMgr().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_CREATE_LOAD_JOB_V2:
                 case OperationType.OP_CREATE_LOAD_JOB: {
+=======
+                case OperationType.OP_CREATE_LOAD_JOB_V2: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
                     globalStateMgr.getLoadMgr().replayCreateLoadJob(loadJob);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_END_LOAD_JOB_V2:
                 case OperationType.OP_END_LOAD_JOB: {
+=======
+                case OperationType.OP_END_LOAD_JOB_V2: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LoadJobFinalOperation operation = (LoadJobFinalOperation) journal.getData();
                     globalStateMgr.getLoadMgr().replayEndLoadJob(operation);
                     break;
@@ -809,23 +1167,39 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayUpdateTaskRun(statusChange);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_DROP_TASK_RUNS: {
                     DropTaskRunsLog dropTaskRunsLog = (DropTaskRunsLog) journal.getData();
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
                 case OperationType.OP_UPDATE_TASK_RUN_STATE:
+=======
+                case OperationType.OP_UPDATE_TASK_RUN_STATE: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     TaskRunPeriodStatusChange taskRunPeriodStatusChange = (TaskRunPeriodStatusChange) journal.getData();
                     globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
                             taskRunPeriodStatusChange.getTaskRunProgressMap());
                     break;
+<<<<<<< HEAD
                 case OperationType.OP_CREATE_SMALL_FILE:
+=======
+                }
+                case OperationType.OP_ARCHIVE_TASK_RUNS: {
+                    ArchiveTaskRunsLog log = (ArchiveTaskRunsLog) journal.getData();
+                    globalStateMgr.getTaskManager().replayArchiveTaskRuns(log);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_CREATE_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_DROP_SMALL_FILE:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_DROP_SMALL_FILE_V2: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayRemoveFile(smallFile);
@@ -846,7 +1220,10 @@ public class EditLog {
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_BATCH_ADD_ROLLUP:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_BATCH_ADD_ROLLUP_V2: {
                     BatchAlterJobPersistInfo batchAlterJobV2 = (BatchAlterJobPersistInfo) journal.getData();
                     for (AlterJobV2 alterJobV2 : batchAlterJobV2.getAlterJobV2List()) {
@@ -854,10 +1231,16 @@ public class EditLog {
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_MODIFY_DISTRIBUTION_TYPE:
                 case OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2: {
                     TableInfo tableInfo = (TableInfo) journal.getData();
                     globalStateMgr.replayConvertDistributionType(tableInfo);
+=======
+                case OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2: {
+                    TableInfo tableInfo = (TableInfo) journal.getData();
+                    globalStateMgr.getLocalMetastore().replayConvertDistributionType(tableInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
@@ -867,6 +1250,11 @@ public class EditLog {
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_BUCKET_SIZE:
+<<<<<<< HEAD
+=======
+                case OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM:
+                case OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES:
                 case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
                 case OperationType.OP_MODIFY_BINLOG_CONFIG:
@@ -876,28 +1264,57 @@ public class EditLog {
                 case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
+=======
+                    globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_REPLACE_TEMP_PARTITION: {
                     ReplacePartitionOperationLog replaceTempPartitionLog =
                             (ReplacePartitionOperationLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayReplaceTempPartition(replaceTempPartitionLog);
+=======
+                    globalStateMgr.getLocalMetastore().replayReplaceTempPartition(replaceTempPartitionLog);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_INSTALL_PLUGIN: {
                     PluginInfo pluginInfo = (PluginInfo) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayInstallPlugin(pluginInfo);
+=======
+                    try {
+                        globalStateMgr.getPluginMgr().replayLoadDynamicPlugin(pluginInfo);
+                    } catch (Exception e) {
+                        LOG.warn("replay install plugin failed.", e);
+                    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_UNINSTALL_PLUGIN: {
                     PluginInfo pluginInfo = (PluginInfo) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayUninstallPlugin(pluginInfo);
+=======
+                    try {
+                        globalStateMgr.getPluginMgr().uninstallPlugin(pluginInfo.getName());
+                    } catch (Exception e) {
+                        LOG.warn("replay uninstall plugin failed.", e);
+                    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_SET_REPLICA_STATUS: {
                     SetReplicaStatusOperationLog log = (SetReplicaStatusOperationLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replaySetReplicaStatus(log);
+=======
+                    globalStateMgr.getLocalMetastore().replaySetReplicaStatus(log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_REMOVE_ALTER_JOB_V2: {
@@ -917,11 +1334,14 @@ public class EditLog {
                     }
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                     AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.getData();
                     globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
                     break;
                 }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_ALTER_LOAD_JOB: {
                     AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.getData();
                     globalStateMgr.getLoadMgr().replayAlterLoadJob(log);
@@ -929,7 +1349,11 @@ public class EditLog {
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayGlobalVariableV2(info);
+=======
+                    globalStateMgr.getVariableMgr().replayGlobalVariableV2(info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_SWAP_TABLE: {
@@ -1053,7 +1477,11 @@ public class EditLog {
                 case OperationType.OP_MODIFY_HIVE_TABLE_COLUMN: {
                     ModifyTableColumnOperationLog modifyTableColumnOperationLog =
                             (ModifyTableColumnOperationLog) journal.getData();
+<<<<<<< HEAD
                     globalStateMgr.replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+=======
+                    globalStateMgr.getLocalMetastore().replayModifyHiveTableColumn(opCode, modifyTableColumnOperationLog);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_CREATE_CATALOG: {
@@ -1080,10 +1508,13 @@ public class EditLog {
                     globalStateMgr.getInsertOverwriteJobMgr().replayInsertOverwriteStateChange(stateChangeInfo);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_ADD_UNUSED_SHARD:
                 case OperationType.OP_DELETE_UNUSED_SHARD:
                     // Deprecated: Nothing to do
                     break;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_STARMGR: {
                     StarMgrJournal j = (StarMgrJournal) journal.getData();
                     StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
@@ -1112,27 +1543,39 @@ public class EditLog {
                 case OperationType.OP_ALTER_USER_V2: {
                     AlterUserInfo info = (AlterUserInfo) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayAlterUser(
+<<<<<<< HEAD
                             info.getUserIdentity(), info.getAuthenticationInfo());
                     break;
                 }
                 case OperationType.OP_UPDATE_USER_PROP_V2:
+=======
+                            info.getUserIdentity(), info.getAuthenticationInfo(), info.getProperties());
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_UPDATE_USER_PROP_V3: {
                     UserPropertyInfo info = (UserPropertyInfo) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayUpdateUserProperty(info);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_DROP_USER_V2:
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_DROP_USER_V3: {
                     UserIdentity userIdentity = (UserIdentity) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayDropUser(userIdentity);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
                     SecurityIntegrationInfo info = (SecurityIntegrationInfo) journal.getData();
                     globalStateMgr.getAuthenticationMgr().replayCreateSecurityIntegration(
                             info.name, info.propertyMap);
                     break;
                 }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getAuthorizationMgr().replayUpdateRolePrivilegeCollection(info);
@@ -1144,8 +1587,12 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_AUTH_UPGRADE_V2: {
+<<<<<<< HEAD
                     AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
                     globalStateMgr.replayAuthUpgrade(info);
+=======
+                    // for compatibility reason, just ignore the auth upgrade log
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
                 case OperationType.OP_MV_JOB_STATE: {
@@ -1188,6 +1635,44 @@ public class EditLog {
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
+<<<<<<< HEAD
+=======
+                case OperationType.OP_CREATE_DICTIONARY: {
+                    Dictionary dictionary = (Dictionary) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayCreateDictionary(dictionary);
+                    break;
+                }
+                case OperationType.OP_DROP_DICTIONARY: {
+                    DropDictionaryInfo dropInfo = (DropDictionaryInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayDropDictionary(dropInfo.getDictionaryName());
+                    break;
+                }
+                case OperationType.OP_MODIFY_DICTIONARY_MGR: {
+                    DictionaryMgrInfo modifyInfo = (DictionaryMgrInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
+                    break;
+                }
+                case OperationType.OP_DECOMMISSION_DISK: {
+                    DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                    CancelDecommissionDiskInfo info = (CancelDecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayCancelDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_DISABLE_DISK: {
+                    DisableDiskInfo info = (DisableDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DISABLE_DISK: {
+                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.getData();
+                    globalStateMgr.getNodeMgr().getClusterInfo().replayCancelDisableDisks(info);
+                    break;
+                }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 case OperationType.OP_REPLICATION_JOB: {
                     ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
                     globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
@@ -1203,6 +1688,7 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getMetaRecoveryDaemon().recoverPartitionVersion(info);
                     break;
                 }
+<<<<<<< HEAD
                 case OperationType.OP_DECOMMISSION_DISK: {
                     DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
                     globalStateMgr.getClusterInfo().replayDecommissionDisks(info);
@@ -1225,6 +1711,34 @@ public class EditLog {
                 }
                 default: {
                     if (Config.ignore_unknown_log_id) {
+=======
+                case OperationType.OP_ADD_KEY: {
+                    Text keyJson = (Text) journal.getData();
+                    EncryptionKeyPB keyPB = GsonUtils.GSON.fromJson(keyJson.toString(), EncryptionKeyPB.class);
+                    GlobalStateMgr.getCurrentState().getKeyMgr().replayAddKey(keyPB);
+                    break;
+                }
+                case OperationType.OP_CREATE_WAREHOUSE: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayCreateWarehouse(wh);
+                    break;
+                }
+                case OperationType.OP_DROP_WAREHOUSE: {
+                    DropWarehouseLog log = (DropWarehouseLog) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayDropWarehouse(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_WAREHOUSE: {
+                    Warehouse wh = (Warehouse) journal.getData();
+                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
+                    warehouseMgr.replayAlterWarehouse(wh);
+                    break;
+                }
+                default: {
+                    if (Config.metadata_ignore_unknown_operation_type) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
                     } else {
                         throw new IOException("UNKNOWN Operation Type " + opCode);
@@ -1242,7 +1756,11 @@ public class EditLog {
     /**
      * submit log to queue, wait for JournalWriter
      */
+<<<<<<< HEAD
     protected void logEdit(short op, Writable writable) {
+=======
+    public void logEdit(short op, Writable writable) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         JournalTask task = submitLog(op, writable, -1);
         waitInfinity(task);
     }
@@ -1331,11 +1849,15 @@ public class EditLog {
     }
 
     public void logSaveTransactionId(long transactionId) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
         } else {
             logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
         }
+=======
+        logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
@@ -1361,6 +1883,7 @@ public class EditLog {
     }
 
     public void logRecoverDb(RecoverInfo info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
         } else {
@@ -1374,6 +1897,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_ALTER_DB, dbInfo);
         }
+=======
+        logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
+    }
+
+    public void logAlterDb(DatabaseInfo dbInfo) {
+        logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logCreateTable(CreateTableInfo info) {
@@ -1400,6 +1930,13 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
     }
 
+<<<<<<< HEAD
+=======
+    public void logArchiveTaskRuns(ArchiveTaskRunsLog log) {
+        logEdit(OperationType.OP_ARCHIVE_TASK_RUNS, log);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void logAlterRunningTaskRunProgress(TaskRunPeriodStatusChange info) {
         logEdit(OperationType.OP_UPDATE_TASK_RUN_STATE, info);
     }
@@ -1420,11 +1957,19 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_PARTITION, info);
     }
 
+<<<<<<< HEAD
+=======
+    public void logDropPartitions(DropPartitionsInfo info) {
+        logEdit(OperationType.OP_DROP_PARTITIONS, info);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void logErasePartition(long partitionId) {
         logEdit(OperationType.OP_ERASE_PARTITION, new Text(Long.toString(partitionId)));
     }
 
     public void logRecoverPartition(RecoverInfo info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
         } else {
@@ -1438,6 +1983,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_MODIFY_PARTITION, info);
         }
+=======
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
+    }
+
+    public void logModifyPartition(ModifyPartitionInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
@@ -1445,11 +1997,19 @@ public class EditLog {
     }
 
     public void logDropTable(DropInfo info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
         } else {
             logEdit(OperationType.OP_DROP_TABLE, info);
         }
+=======
+        logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
+    }
+
+    public void logDisablePartitionRecovery(long partitionId) {
+        logEdit(OperationType.OP_DISABLE_PARTITION_RECOVERY, new DisablePartitionRecoveryInfo(partitionId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logDisableTableRecovery(List<Long> tableIds) {
@@ -1461,6 +2021,7 @@ public class EditLog {
     }
 
     public void logRecoverTable(RecoverInfo info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
         } else {
@@ -1474,6 +2035,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DROP_ROLLUP, info);
         }
+=======
+        logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
+    }
+
+    public void logDropRollup(DropInfo info) {
+        logJsonObject(OperationType.OP_DROP_ROLLUP_V2, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
@@ -1481,11 +2049,15 @@ public class EditLog {
     }
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, info);
         } else {
             logEdit(OperationType.OP_FINISH_CONSISTENCY_CHECK, info);
         }
+=======
+        logJsonObject(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public JournalTask logFinishConsistencyCheckNoWait(ConsistencyCheckInfo info) {
@@ -1497,11 +2069,15 @@ public class EditLog {
     }
 
     public void logAddBackend(Backend be) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_ADD_BACKEND_V2, be);
         } else {
             logEdit(OperationType.OP_ADD_BACKEND, be);
         }
+=======
+        logJsonObject(OperationType.OP_ADD_BACKEND_V2, be);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logDropComputeNode(DropComputeNodeLog log) {
@@ -1509,6 +2085,7 @@ public class EditLog {
     }
 
     public void logDropBackend(Backend be) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
         } else {
@@ -1546,6 +2123,25 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_UPDATE_FRONTEND, fe);
         }
+=======
+        logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
+    }
+
+    public void logAddFrontend(Frontend fe) {
+        logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
+    }
+
+    public void logAddFirstFrontend(Frontend fe) {
+        logJsonObject(OperationType.OP_ADD_FIRST_FRONTEND_V2, fe);
+    }
+
+    public void logRemoveFrontend(Frontend fe) {
+        logJsonObject(OperationType.OP_REMOVE_FRONTEND_V2, fe);
+    }
+
+    public void logUpdateFrontend(Frontend fe) {
+        logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, fe);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logFinishMultiDelete(MultiDeleteInfo info) {
@@ -1553,6 +2149,7 @@ public class EditLog {
     }
 
     public void logAddReplica(ReplicaPersistInfo info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
         } else {
@@ -1574,12 +2171,24 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DELETE_REPLICA, info);
         }
+=======
+        logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
+    }
+
+    public void logUpdateReplica(ReplicaPersistInfo info) {
+        logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
+    }
+
+    public void logDeleteReplica(ReplicaPersistInfo info) {
+        logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
         logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
     }
 
+<<<<<<< HEAD
     public void logTimestamp(Timestamp stamp) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
@@ -1594,6 +2203,22 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_LEADER_INFO_CHANGE, info);
         }
+=======
+    public void logAddKey(EncryptionKeyPB key) {
+        logJsonObject(OperationType.OP_ADD_KEY, key);
+    }
+
+    public void logTimestamp(Timestamp stamp) {
+        logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
+    }
+
+    public void logLeaderInfo(LeaderInfo info) {
+        logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
+    }
+
+    public void logResetFrontends(Frontend frontend) {
+        logEdit(OperationType.OP_RESET_FRONTENDS, frontend);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {
@@ -1601,6 +2226,7 @@ public class EditLog {
     }
 
     public void logBackendStateChange(Backend be) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
         } else {
@@ -1666,6 +2292,17 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_RENAME_TABLE, tableInfo);
         }
+=======
+        logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
+    }
+
+    public void logDatabaseRename(DatabaseInfo databaseInfo) {
+        logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo);
+    }
+
+    public void logTableRename(TableInfo tableInfo) {
+        logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logModifyViewDef(AlterViewInfo alterViewInfo) {
@@ -1673,6 +2310,7 @@ public class EditLog {
     }
 
     public void logRollupRename(TableInfo tableInfo) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
         } else {
@@ -1710,12 +2348,28 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DROP_BROKER, info);
         }
+=======
+        logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
+    }
+
+    public void logPartitionRename(TableInfo tableInfo) {
+        logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
+    }
+
+    public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {
+        logJsonObject(OperationType.OP_ADD_BROKER_V2, info);
+    }
+
+    public void logDropBroker(BrokerMgr.ModifyBrokerInfo info) {
+        logJsonObject(OperationType.OP_DROP_BROKER_V2, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logDropAllBroker(String brokerName) {
         logEdit(OperationType.OP_DROP_ALL_BROKER, new Text(brokerName));
     }
 
+<<<<<<< HEAD
     public void logSetLoadErrorHub(LoadErrorHub.Param param) {
         logEdit(OperationType.OP_SET_LOAD_ERROR_HUB, param);
     }
@@ -1726,6 +2380,10 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_EXPORT_CREATE, job);
         }
+=======
+    public void logExportCreate(ExportJob job) {
+        logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logExportUpdateState(long jobId, ExportJob.JobState newState, long stateChangeTime,
@@ -1733,6 +2391,7 @@ public class EditLog {
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
         ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
                 snapshotPaths, exportTempPath, exportedFiles, failMsg);
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
         } else {
@@ -1742,15 +2401,22 @@ public class EditLog {
 
     public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
         logEdit(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS, info);
+=======
+        logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // for TransactionState
     public void logInsertTransactionState(TransactionState transactionState) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
         } else {
             logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
         }
+=======
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
@@ -1758,6 +2424,7 @@ public class EditLog {
     }
 
     public void logBackupJob(BackupJob job) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
         } else {
@@ -1771,6 +2438,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_CREATE_REPOSITORY, repo);
         }
+=======
+        logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
+    }
+
+    public void logCreateRepository(Repository repo) {
+        logJsonObject(OperationType.OP_CREATE_REPOSITORY_V2, repo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logDropRepository(String repoName) {
@@ -1778,6 +2452,7 @@ public class EditLog {
     }
 
     public void logRestoreJob(RestoreJob job) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
         } else {
@@ -1787,6 +2462,9 @@ public class EditLog {
 
     public void logUpdateUserProperty(UserPropertyInfo propertyInfo) {
         logEdit(OperationType.OP_UPDATE_USER_PROPERTY, propertyInfo);
+=======
+        logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logTruncateTable(TruncateTableInfo info) {
@@ -1794,6 +2472,7 @@ public class EditLog {
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
         } else {
@@ -1835,6 +2514,25 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_MODIFY_TABLE_COLOCATE, info);
         }
+=======
+        logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
+    }
+
+    public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info) {
+        logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
+    }
+
+    public void logColocateMarkUnstable(ColocatePersistInfo info) {
+        logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
+    }
+
+    public void logColocateMarkStable(ColocatePersistInfo info) {
+        logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
+    }
+
+    public void logModifyTableColocate(TablePropertyInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
@@ -1842,6 +2540,7 @@ public class EditLog {
     }
 
     public void logAddFunction(Function function) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function);
         } else {
@@ -1855,6 +2554,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DROP_FUNCTION, function);
         }
+=======
+        logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function);
+    }
+
+    public void logDropFunction(FunctionSearchDesc function) {
+        logJsonObject(OperationType.OP_DROP_FUNCTION_V2, function);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
@@ -1862,6 +2568,7 @@ public class EditLog {
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
         } else {
@@ -1907,6 +2614,29 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_END_LOAD_JOB, loadJobFinalOperation);
         }
+=======
+        logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
+    }
+
+    public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob) {
+        logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob);
+    }
+
+    public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
+        logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation);
+    }
+
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
+        logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
+    }
+
+    public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
+        logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
+    }
+
+    public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
+        logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logUpdateLoadJob(LoadJobStateUpdateInfo info) {
@@ -1922,6 +2652,7 @@ public class EditLog {
     }
 
     public void logCreateSmallFile(SmallFile info) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
         } else {
@@ -1935,6 +2666,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_DROP_SMALL_FILE, info);
         }
+=======
+        logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
+    }
+
+    public void logDropSmallFile(SmallFile info) {
+        logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {
@@ -1946,6 +2684,7 @@ public class EditLog {
     }
 
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
         } else {
@@ -1959,6 +2698,13 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_MODIFY_DISTRIBUTION_TYPE, tableInfo);
         }
+=======
+        logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
+    }
+
+    public void logModifyDistributionType(TableInfo tableInfo) {
+        logJsonObject(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, tableInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logDynamicPartition(ModifyTablePropertyOperationLog info) {
@@ -1997,6 +2743,17 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_BUCKET_SIZE, info);
     }
 
+<<<<<<< HEAD
+=======
+    public void logModifyMutableBucketNum(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_MUTABLE_BUCKET_NUM, info);
+    }
+
+    public void logModifyEnableLoadProfile(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_ENABLE_LOAD_PROFILE, info);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void logModifyBaseCompactionForbiddenTimeRanges(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info);
     }
@@ -2165,12 +2922,19 @@ public class EditLog {
         logEdit(OperationType.OP_CREATE_USER_V2, info);
     }
 
+<<<<<<< HEAD
     public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
         AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo);
+=======
+    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo,
+                             Map<String, String> properties) {
+        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo, properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         logEdit(OperationType.OP_ALTER_USER_V2, info);
     }
 
     public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo) {
+<<<<<<< HEAD
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo);
         } else {
@@ -2189,6 +2953,13 @@ public class EditLog {
     public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
         SecurityIntegrationInfo info = new SecurityIntegrationInfo(name, propertyMap);
         logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
+=======
+        logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo);
+    }
+
+    public void logDropUser(UserIdentity userIdentity) {
+        logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logUpdateUserPrivilege(
@@ -2221,10 +2992,13 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 
+<<<<<<< HEAD
     public void logAuthUpgrade(Map<String, Long> roleNameToId) {
         logEdit(OperationType.OP_AUTH_UPGRADE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {
         logEdit(OperationType.OP_MODIFY_BINLOG_CONFIG, log);
     }
@@ -2249,7 +3023,11 @@ public class EditLog {
         logEdit(OperationType.OP_PIPE, opEntry);
     }
 
+<<<<<<< HEAD
     private void logJsonObject(short op, Object obj) {
+=======
+    public void logJsonObject(short op, Object obj) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         logEdit(op, out -> Text.writeString(out, GsonUtils.GSON.toJson(obj)));
     }
 
@@ -2287,8 +3065,25 @@ public class EditLog {
         logEdit(OperationType.OP_DELETE_REPLICATION_JOB, replicationJobLog);
     }
 
+<<<<<<< HEAD
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+=======
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    }
+
+    public void logCreateDictionary(Dictionary info) {
+        logEdit(OperationType.OP_CREATE_DICTIONARY, info);
+    }
+
+    public void logDropDictionary(DropDictionaryInfo info) {
+        logEdit(OperationType.OP_DROP_DICTIONARY, info);
+    }
+
+    public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
+        logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void logDecommissionDisk(DecommissionDiskInfo info) {
@@ -2306,4 +3101,11 @@ public class EditLog {
     public void logCancelDisableDisk(CancelDisableDiskInfo info) {
         logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
     }
+<<<<<<< HEAD
+=======
+
+    public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
+        logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

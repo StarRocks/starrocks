@@ -37,11 +37,19 @@
 #include "exec/pipeline/spill_process_channel.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
+<<<<<<< HEAD
 #include "gen_cpp/QueryPlanExtra_constants.h"
+=======
+#include "gen_cpp/QueryPlanExtra_types.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
+<<<<<<< HEAD
+=======
+#include "runtime/memory/counting_allocator.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
@@ -293,12 +301,23 @@ public:
     bool is_hash_set() const { return _is_only_group_by_columns; }
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
+<<<<<<< HEAD
 
     const int64_t memory_usage() const {
         if (is_hash_set()) {
             return hash_set_memory_usage();
         } else if (!_group_by_expr_ctxs.empty()) {
             return hash_map_memory_usage();
+=======
+    const int64_t agg_state_memory_usage() const { return _agg_state_mem_usage; }
+    const int64_t allocator_memory_usage() const { return _allocator->memory_usage(); }
+
+    const int64_t memory_usage() const {
+        if (is_hash_set()) {
+            return hash_set_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
+        } else if (!_group_by_expr_ctxs.empty()) {
+            return hash_map_memory_usage() + agg_state_memory_usage() + allocator_memory_usage();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             return 0;
         }
@@ -309,7 +328,11 @@ public:
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
+<<<<<<< HEAD
     const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
+=======
+    const Filter& streaming_selection() { return _streaming_selection; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
     RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
     RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
@@ -329,10 +352,17 @@ public:
                                           int64_t ht_rows) const;
 
     // For aggregate without group by
+<<<<<<< HEAD
     [[nodiscard]] Status compute_single_agg_state(Chunk* chunk, size_t chunk_size);
     // For aggregate with group by
     [[nodiscard]] Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
     [[nodiscard]] Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
+=======
+    Status compute_single_agg_state(Chunk* chunk, size_t chunk_size);
+    // For aggregate with group by
+    Status compute_batch_agg_states(Chunk* chunk, size_t chunk_size);
+    Status compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Convert one row agg states to chunk
     Status convert_to_chunk_no_groupby(ChunkPtr* chunk);
@@ -344,17 +374,28 @@ public:
     Status evaluate_agg_fn_exprs(Chunk* chunk, bool use_intermediate);
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
+<<<<<<< HEAD
     [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
 
     // convert input chunk to spill format
     [[nodiscard]] Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
+=======
+    Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
+
+    // convert input chunk to spill format
+    Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
     // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     // selection[i] = 0: found in hash table
     // selection[1] = 1: not found in hash table
+<<<<<<< HEAD
     [[nodiscard]] Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+=======
+    Status output_chunk_by_streaming_with_selection(Chunk* input_chunk, ChunkPtr* chunk);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // At first, we use single hash map, if hash map is too big,
     // we convert the single hash map to two level hash map.
@@ -385,8 +426,11 @@ public:
     const SpillProcessChannelPtr spill_channel() const { return _spill_channel; }
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
 
+<<<<<<< HEAD
     auto& io_executor() { return *spill_channel()->io_executor(); }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
 
     bool has_pending_data() const { return _spiller != nullptr && _spiller->has_pending_data(); }
@@ -409,6 +453,11 @@ protected:
 
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
+<<<<<<< HEAD
+=======
+    // used to count heap memory usage of agg states
+    std::unique_ptr<CountingAllocatorWithHook> _allocator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // The open phase still relies on the TFunction object for some initialization operations
     std::vector<TFunction> _fns;
 
@@ -492,7 +541,11 @@ protected:
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
     bool _is_pending_reset_state = false;
+<<<<<<< HEAD
     std::vector<uint8_t> _streaming_selection;
+=======
+    Filter _streaming_selection;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool _has_udaf = false;
 
@@ -500,6 +553,15 @@ protected:
 
     std::shared_ptr<spill::Spiller> _spiller;
     SpillProcessChannelPtr _spill_channel;
+<<<<<<< HEAD
+=======
+    bool _is_opened = false;
+    bool _is_prepared = false;
+    int64_t _agg_state_mem_usage = 0;
+
+    // aggregate combinator functions since they are not persisted in agg hash map
+    std::vector<AggregateFunctionPtr> _combinator_function;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
@@ -566,6 +628,14 @@ protected:
 
     void _release_agg_memory();
 
+<<<<<<< HEAD
+=======
+    bool _is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type);
+
+    Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
+                                      const AggregateFunction** ret);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     template <class HashMapWithKey>
     friend struct AllocateState;
 };

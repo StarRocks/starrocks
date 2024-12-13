@@ -80,7 +80,11 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
                 columnStatisticMap.put(new Pair<>(entry.tableName.split("\\.")[1], entry.columnName), entry);
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.warn("parse csv file failed, " + e);
+=======
+            LOG.warn("parse csv file failed, ", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

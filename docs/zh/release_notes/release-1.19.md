@@ -24,7 +24,11 @@ displayed_sidebar: docs
   * group by int 语句
   * or语句
 * 优化磁盘Balance算法，单机增加磁盘后可以自动进行数据均衡。
+<<<<<<< HEAD
 * 支持部分列导出。 [参考文档](../unloading/Export.md)
+=======
+* 支持部分列导出。 [参考文档](https://docs.starrocks.io/zh/docs/unloading/Export/)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * 优化show processlist，显示具体SQL。
 * SET_VAR支持多个变量设置。
 * 完善更多报错信息，包括table_sink、routine load、创建物化视图等。

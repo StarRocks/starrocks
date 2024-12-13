@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_custkey,
@@ -30,6 +31,9 @@ group by
     c_comment
 order by
     revenue desc limit 20;
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F07)
 Output Exprs:1: C_CUSTKEY | 2: C_NAME | 43: sum | 6: C_ACCTBAL | 38: N_NAME | 3: C_ADDRESS | 5: C_PHONE | 8: C_COMMENT

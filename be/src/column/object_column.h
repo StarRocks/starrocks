@@ -20,6 +20,10 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+<<<<<<< HEAD
+=======
+#include "gutil/strings/substitute.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/bitmap_value.h"
 #include "types/hll.h"
 #include "util/json.h"
@@ -27,6 +31,7 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 //class Object {
 //    Object();
 //
@@ -38,6 +43,8 @@ namespace starrocks {
 //    size_t serialize(uint8_t* dst) const;
 //};
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template <typename T>
 class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
     friend class ColumnFactory<Column, ObjectColumn>;
@@ -111,7 +118,11 @@ public:
 
     bool append_nulls(size_t count) override { return false; }
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override;
+=======
+    bool append_strings(const Slice* data, size_t size) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
@@ -224,6 +235,7 @@ public:
         return ss.str();
     }
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override {
         if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
             if (msg != nullptr) {
@@ -233,6 +245,14 @@ public:
             return true;
         }
         return false;
+=======
+    Status capacity_limit_reached() const override {
+        if (_pool.size() > Column::MAX_CAPACITY_LIMIT) {
+            return Status::CapacityLimitExceed(strings::Substitute("row count of object column exceed the limit: $0",
+                                                                   std::to_string(Column::MAX_CAPACITY_LIMIT)));
+        }
+        return Status::OK();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     StatusOr<ColumnPtr> upgrade_if_overflow() override;
@@ -241,6 +261,11 @@ public:
 
     bool has_large_column() const override { return false; }
 
+<<<<<<< HEAD
+=======
+    void check_or_die() const override {}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual
     using Column::append;
@@ -262,8 +287,11 @@ private:
     // Currently, only for data loading
     void _build_slices() const;
 
+<<<<<<< HEAD
     void check_or_die() const override {}
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     Buffer<T> _pool;
     mutable bool _cache_ok = false;

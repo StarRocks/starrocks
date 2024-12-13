@@ -35,7 +35,10 @@
 package com.starrocks.transaction;
 
 import com.google.common.base.Joiner;
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -47,6 +50,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
@@ -55,25 +59,45 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TraceManager;
+import com.starrocks.common.io.Writable;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletLocation;
+<<<<<<< HEAD
 import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.commons.codec.binary.Hex;
+=======
+import com.starrocks.thrift.TUniqueId;
+import io.opentelemetry.api.trace.Span;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+=======
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -82,6 +106,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+<<<<<<< HEAD
+=======
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -108,7 +137,12 @@ public class TransactionState implements Writable {
         LAKE_COMPACTION(7),            // compaction of LakeTable
         FRONTEND_STREAMING(8),          // FE streaming load use this type
         MV_REFRESH(9),                  // Refresh MV
+<<<<<<< HEAD
         REPLICATION(10);                // Replication
+=======
+        REPLICATION(10),                // Replication
+        BYPASS_WRITE(11);               // Bypass BE, and write data file directly
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private final int flag;
 
@@ -121,6 +155,7 @@ public class TransactionState implements Writable {
         }
 
         public static LoadJobSourceType valueOf(int flag) {
+<<<<<<< HEAD
             switch (flag) {
                 case 1:
                     return FRONTEND;
@@ -145,6 +180,16 @@ public class TransactionState implements Writable {
                 default:
                     return null;
             }
+=======
+            return Arrays.stream(values())
+                    .filter(sourceType -> sourceType.flag == flag)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        public int getFlag() {
+            return flag;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -257,12 +302,22 @@ public class TransactionState implements Writable {
     private LoadJobSourceType sourceType;
     @SerializedName("pt")
     private long prepareTime;
+<<<<<<< HEAD
+=======
+    @SerializedName("pet")
+    private long preparedTime;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName("ct")
     private long commitTime;
     @SerializedName("ft")
     private long finishTime;
     @SerializedName("rs")
     private String reason = "";
+<<<<<<< HEAD
+=======
+    @SerializedName("gtid")
+    private long globalTransactionId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // whether this txn is finished using new mechanism
     // this field needs to be persisted, so we shared the serialization field with `reason`.
@@ -275,6 +330,13 @@ public class TransactionState implements Writable {
     // error replica ids
     @SerializedName("er")
     private Set<Long> errorReplicas;
+<<<<<<< HEAD
+=======
+
+    @SerializedName("ctl")
+    private boolean useCombinedTxnLog;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final CountDownLatch latch;
 
     // these states need not be serialized
@@ -322,13 +384,22 @@ public class TransactionState implements Writable {
     @SerializedName("ta")
     private TxnCommitAttachment txnCommitAttachment;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("wid")
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // this map should be set when load execution begin, so that when the txn commit, it will know
     // which tables and rollups it loaded.
     // tbl id -> (index ids)
     private final Map<Long, Set<Long>> loadedTblIndexes = Maps.newHashMap();
 
+<<<<<<< HEAD
     private String errorLogUrl = null;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // record some error msgs during the transaction operation.
     // this msg will be shown in show proc "/transactions/dbId/";
     // no need to persist.
@@ -350,6 +421,21 @@ public class TransactionState implements Writable {
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
+<<<<<<< HEAD
+=======
+    private List<String> createdPartitionNames = Lists.newArrayList();
+
+    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
+
+    public void writeLock() {
+        txnLock.writeLock().lock();
+    }
+
+    public void writeUnlock() {
+        txnLock.writeLock().unlock();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TransactionState() {
         this.dbId = -1;
         this.tableIdList = Lists.newArrayList();
@@ -399,6 +485,13 @@ public class TransactionState implements Writable {
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
+<<<<<<< HEAD
+=======
+    public void setCallbackId(long callbackId) {
+        this.callbackId = callbackId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setErrorReplicas(Set<Long> newErrorReplicas) {
         this.errorReplicas = newErrorReplicas;
     }
@@ -417,11 +510,24 @@ public class TransactionState implements Writable {
         this.tabletCommitInfos.addAll(infos);
     }
 
+<<<<<<< HEAD
+=======
+    public void resetTabletCommitInfos() {
+        // With a high streamload frequency and too many tablets involved,
+        // TabletCommitInfos will take up too much memory.
+        tabletCommitInfos = null;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
             if (LOG.isDebugEnabled()) {
+<<<<<<< HEAD
                 Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+=======
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // if tabletCommitInfos is null, skip this check and return true
                 LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
                         tabletId, backend != null ? backend.toString() : "", transactionId);
@@ -432,7 +538,11 @@ public class TransactionState implements Writable {
             // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
             // We handle version missing in finishTask when change state to NORMAL
             if (LOG.isDebugEnabled()) {
+<<<<<<< HEAD
                 Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+=======
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
                         tabletId, backend != null ? backend.toString() : "", state);
             }
@@ -475,6 +585,13 @@ public class TransactionState implements Writable {
         return transactionId;
     }
 
+<<<<<<< HEAD
+=======
+    public long getGlobalTransactionId() {
+        return globalTransactionId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getLabel() {
         return this.label;
     }
@@ -515,12 +632,21 @@ public class TransactionState implements Writable {
         return timeoutMs;
     }
 
+<<<<<<< HEAD
     public void setErrorLogUrl(String errorLogUrl) {
         this.errorLogUrl = errorLogUrl;
     }
 
     public String getErrorLogUrl() {
         return errorLogUrl;
+=======
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setTransactionStatus(TransactionStatus transactionStatus) {
@@ -560,7 +686,11 @@ public class TransactionState implements Writable {
             throws TransactionException {
         // callback will pass to afterStateTransform since it may be deleted from
         // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
+<<<<<<< HEAD
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+=======
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getCallbackFactory().getCallback(callbackId);
         // before status changed
         if (callback != null) {
@@ -588,9 +718,15 @@ public class TransactionState implements Writable {
         return callback;
     }
 
+<<<<<<< HEAD
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) throws UserException {
         // after status changed
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+=======
+    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) {
+        // after status changed
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getCallbackFactory().getCallback(callbackId);
         if (callback != null) {
             if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
@@ -602,7 +738,11 @@ public class TransactionState implements Writable {
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
                                     TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // after status changed
         if (callback != null) {
             switch (transactionStatus) {
@@ -623,7 +763,11 @@ public class TransactionState implements Writable {
 
     public void replaySetTransactionStatus() {
         TxnStateChangeCallback callback =
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallback(
+=======
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().getCallback(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         callbackId);
         if (callback != null) {
             if (transactionStatus == TransactionStatus.ABORTED) {
@@ -646,10 +790,24 @@ public class TransactionState implements Writable {
         return this.latch.await(timeout, unit);
     }
 
+<<<<<<< HEAD
+=======
+    public void setGlobalTransactionId(long globalTransactionId) {
+        this.globalTransactionId = globalTransactionId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setPrepareTime(long prepareTime) {
         this.prepareTime = prepareTime;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPreparedTime(long preparedTime) {
+        this.preparedTime = preparedTime;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setCommitTime(long commitTime) {
         this.commitTime = commitTime;
     }
@@ -671,6 +829,7 @@ public class TransactionState implements Writable {
     }
 
     public List<Long> getTableIdList() {
+<<<<<<< HEAD
         if (tableIdList.isEmpty()) {
             // Old version sometimes forgot to set the tabletIdList, collect tabletIdList
             // from idToTableCommitInfos.
@@ -684,6 +843,11 @@ public class TransactionState implements Writable {
         this.tableIdList = tableIdList;
     }
 
+=======
+        return tableIdList;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public Map<Long, TableCommitInfo> getIdToTableCommitInfos() {
         return idToTableCommitInfos;
     }
@@ -705,6 +869,14 @@ public class TransactionState implements Writable {
         this.txnCommitAttachment = txnCommitAttachment;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isVersionOverwrite() {
+        return txnCommitAttachment instanceof InsertTxnCommitAttachment
+                && ((InsertTxnCommitAttachment) txnCommitAttachment).getIsVersionOverwrite();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // return true if txn is in final status and label is expired
     public boolean isExpired(long currentMillis) {
         return transactionStatus.isFinalStatus() && (currentMillis - finishTime) / 1000 > Config.label_keep_max_second;
@@ -713,7 +885,11 @@ public class TransactionState implements Writable {
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
         return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
+<<<<<<< HEAD
                 || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
+=======
+                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - preparedTime)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 
@@ -818,12 +994,18 @@ public class TransactionState implements Writable {
         return sourceType;
     }
 
+<<<<<<< HEAD
     public TTxnType getTxnType() {
         return sourceType == LoadJobSourceType.REPLICATION ? TTxnType.TXN_REPLICATION : TTxnType.TXN_NORMAL;
     }
 
     public TxnTypePB getTxnTypePB() {
         return sourceType == LoadJobSourceType.REPLICATION ? TxnTypePB.TXN_REPLICATION : TxnTypePB.TXN_NORMAL;
+=======
+    public TransactionType getTransactionType() {
+        return sourceType == LoadJobSourceType.REPLICATION ? TransactionType.TXN_REPLICATION
+                : TransactionType.TXN_NORMAL;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {
@@ -835,6 +1017,7 @@ public class TransactionState implements Writable {
         finishChecker = null;
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeLong(transactionId);
@@ -971,6 +1154,8 @@ public class TransactionState implements Writable {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setErrorMsg(String errMsg) {
         this.errMsg = errMsg;
         lastErrTimeMs = System.nanoTime() / 1000000;
@@ -1001,7 +1186,12 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
+<<<<<<< HEAD
             List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+=======
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);
@@ -1019,8 +1209,16 @@ public class TransactionState implements Writable {
 
         List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
+<<<<<<< HEAD
             TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
                     commitInfo.getVersion(), 0);
+=======
+            TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPhysicalPartitionId(),
+                    commitInfo.getVersion(), 0);
+            if (commitInfo.isDoubleWrite()) {
+                version.setIs_double_write(true);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             partitionVersions.add(version);
         }
 
@@ -1028,6 +1226,10 @@ public class TransactionState implements Writable {
         for (long backendId : publishBackends) {
             PublishVersionTask task = new PublishVersionTask(backendId,
                     this.getTransactionId(),
+<<<<<<< HEAD
+=======
+                    this.getGlobalTransactionId(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     this.getDbId(),
                     commitTime,
                     partitionVersions,
@@ -1036,7 +1238,12 @@ public class TransactionState implements Writable {
                     createTime,
                     this,
                     Config.enable_sync_publish,
+<<<<<<< HEAD
                     this.getTxnType());
+=======
+                    this.getTransactionType(),
+                    isVersionOverwrite());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }
@@ -1057,19 +1264,27 @@ public class TransactionState implements Writable {
 
     public boolean checkCanFinish() {
         // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             // consider txn finished if db is dropped
             return true;
         }
 
         if (finishChecker == null) {
+<<<<<<< HEAD
             db.readLock();
             try {
                 finishChecker = TransactionChecker.create(this, db);
             } finally {
                 db.readUnlock();
             }
+=======
+            finishChecker = TransactionChecker.create(this, db);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (finishState == null) {
@@ -1144,6 +1359,17 @@ public class TransactionState implements Writable {
         this.writeDurationMs = writeDurationMs;
     }
 
+<<<<<<< HEAD
+=======
+    public void setUseCombinedTxnLog(boolean useCombinedTxnLog) {
+        this.useCombinedTxnLog = useCombinedTxnLog;
+    }
+
+    public boolean isUseCombinedTxnLog() {
+        return useCombinedTxnLog;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
         return partitionNameToTPartition;
     }
@@ -1152,8 +1378,25 @@ public class TransactionState implements Writable {
         return tabletIdToTTabletLocation;
     }
 
+<<<<<<< HEAD
     public void clearAutomaticPartitionSnapshot() {
         partitionNameToTPartition.clear();
         tabletIdToTTabletLocation.clear();
     }
+=======
+    public List<String> getCreatedPartitionNames() {
+        return createdPartitionNames;
+    }
+
+    public void clearAutomaticPartitionSnapshot() {
+        createdPartitionNames = partitionNameToTPartition.keySet().stream().collect(Collectors.toList());
+        partitionNameToTPartition.clear();
+        tabletIdToTTabletLocation.clear();
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

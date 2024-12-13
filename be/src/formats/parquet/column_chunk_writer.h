@@ -26,6 +26,10 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
+<<<<<<< HEAD
+=======
+#include <stdint.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include <utility>
 
@@ -35,6 +39,13 @@
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
+<<<<<<< HEAD
+=======
+namespace parquet {
+class ColumnWriter;
+} // namespace parquet
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks::parquet {
 
 class LevelBuilderResult;

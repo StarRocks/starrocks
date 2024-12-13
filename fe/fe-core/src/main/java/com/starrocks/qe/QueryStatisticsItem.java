@@ -26,6 +26,10 @@ import java.util.List;
 
 public final class QueryStatisticsItem {
 
+<<<<<<< HEAD
+=======
+    private final String customQueryId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final String queryId;
     private final String user;
     private final String sql;
@@ -37,8 +41,15 @@ public final class QueryStatisticsItem {
     private final RuntimeProfile queryProfile;
     private final TUniqueId executionId;
     private final String warehouseName;
+<<<<<<< HEAD
 
     private QueryStatisticsItem(Builder builder) {
+=======
+    private final String resourceGroupName;
+
+    private QueryStatisticsItem(Builder builder) {
+        this.customQueryId = builder.customQueryId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.queryId = builder.queryId;
         this.user = builder.user;
         this.sql = builder.sql;
@@ -49,6 +60,10 @@ public final class QueryStatisticsItem {
         this.queryProfile = builder.queryProfile;
         this.executionId = builder.executionId;
         this.warehouseName = builder.warehouseName;
+<<<<<<< HEAD
+=======
+        this.resourceGroupName = builder.resourceGroupName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getDb() {
@@ -76,6 +91,13 @@ public final class QueryStatisticsItem {
         return currentTime - queryStartTime;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCustomQueryId() {
+        return customQueryId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getQueryId() {
         return queryId;
     }
@@ -96,7 +118,16 @@ public final class QueryStatisticsItem {
         return warehouseName;
     }
 
+<<<<<<< HEAD
     public static final class Builder {
+=======
+    public String getResourceGroupName() {
+        return resourceGroupName;
+    }
+
+    public static final class Builder {
+        private String customQueryId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private String queryId;
         private String db;
         private String user;
@@ -107,11 +138,23 @@ public final class QueryStatisticsItem {
         private RuntimeProfile queryProfile;
         private TUniqueId executionId;
         private String warehouseName;
+<<<<<<< HEAD
+=======
+        private String resourceGroupName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         public Builder() {
             fragmentInstanceInfos = Lists.newArrayList();
         }
 
+<<<<<<< HEAD
+=======
+        public Builder customQueryId(String customQueryId) {
+            this.customQueryId = customQueryId;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public Builder queryId(String queryId) {
             this.queryId = queryId;
             return this;
@@ -162,12 +205,27 @@ public final class QueryStatisticsItem {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        public Builder resourceGroupName(String resourceGroupName) {
+            this.resourceGroupName = resourceGroupName;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public QueryStatisticsItem build() {
             initDefaultValue(this);
             return new QueryStatisticsItem(this);
         }
 
         private void initDefaultValue(Builder builder) {
+<<<<<<< HEAD
+=======
+            if (customQueryId == null) {
+                builder.customQueryId = "";
+            }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (queryId == null) {
                 builder.queryId = "0";
             }

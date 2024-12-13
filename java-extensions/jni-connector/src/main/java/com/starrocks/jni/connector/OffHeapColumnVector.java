@@ -626,11 +626,21 @@ public class OffHeapColumnVector {
                 sb.append("<binary>");
                 break;
             case STRING:
+<<<<<<< HEAD
             case DATE:
             case DATETIME:
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
                 sb.append(getUTF8String(i));
+=======
+                sb.append(getUTF8String(i));
+                break;
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+                // using long
+                sb.append(getLong(i));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 break;
             case DECIMALV2:
             case DECIMAL32:
@@ -716,7 +726,18 @@ public class OffHeapColumnVector {
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
                 if (type.isStruct()) {
+<<<<<<< HEAD
                     if (numNulls != c.numNulls || elementsAppended != c.elementsAppended) {
+=======
+                    // For example
+                    // struct<a: null>
+                    // struct<a: null>
+                    // struct<a: null>
+                    // numNulls for struct level = 0
+                    // c.numNulls for a level = 3
+                    // numNulls must always <= c.numNulls
+                    if (numNulls <= c.numNulls && elementsAppended != c.elementsAppended) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         throw new RuntimeException(
                                 "struct type check failed, root numNulls=" + numNulls + ", elementsAppended=" +
                                 elementsAppended + "; however, child " + c.type.name + " numNulls=" + c.numNulls +

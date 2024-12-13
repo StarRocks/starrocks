@@ -86,7 +86,11 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
                 return false;
             }
             if (!only_check_if_has_data) {
+<<<<<<< HEAD
                 chunks_sorter->get_next(chunk, eos);
+=======
+                (void)chunks_sorter->get_next(chunk, eos);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return true;
         });

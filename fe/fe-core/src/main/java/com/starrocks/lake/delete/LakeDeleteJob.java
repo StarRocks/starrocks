@@ -29,7 +29,13 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.Utils;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
@@ -67,9 +73,18 @@ public class LakeDeleteJob extends DeleteJob {
 
     private Map<Long, List<Long>> beToTablets;
 
+<<<<<<< HEAD
     public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo) {
         super(id, transactionId, label, deleteInfo);
         beToTablets = Maps.newHashMap();
+=======
+    private final long warehouseId;
+
+    public LakeDeleteJob(long id, long transactionId, String label, MultiDeleteInfo deleteInfo, long warehouseId) {
+        super(id, transactionId, label, deleteInfo);
+        beToTablets = Maps.newHashMap();
+        this.warehouseId = warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -78,6 +93,7 @@ public class LakeDeleteJob extends DeleteJob {
             throws DdlException, QueryStateException {
         Preconditions.checkState(table.isCloudNativeTable());
 
+<<<<<<< HEAD
         db.readLock();
         try {
             beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE);
@@ -85,12 +101,26 @@ public class LakeDeleteJob extends DeleteJob {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
             if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
+=======
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+        try {
+            beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, warehouseId);
+        } catch (Throwable t) {
+            LOG.warn("error occurred during delete process", t);
+            // if transaction has been begun, need to abort it
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         // create delete predicate
@@ -101,7 +131,11 @@ public class LakeDeleteJob extends DeleteJob {
         try {
             List<Future<DeleteDataResponse>> responseList = Lists.newArrayListWithCapacity(
                     beToTablets.size());
+<<<<<<< HEAD
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+=======
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -183,7 +217,11 @@ public class LakeDeleteJob extends DeleteJob {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+=======
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .commitAndPublishTransaction(db, getTransactionId(), getTabletCommitInfos(), getTabletFailInfos(),
                         timeoutMs);

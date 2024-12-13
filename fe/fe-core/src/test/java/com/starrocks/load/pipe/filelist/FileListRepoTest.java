@@ -17,13 +17,22 @@ package com.starrocks.load.pipe.filelist;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
@@ -49,6 +58,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileListRepoTest {
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    private WarehouseManager warehouseManager;
+
+    public FileListRepoTest() {
+        warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testTestFileRecord() {
         long lastModified = 191231231231L;
@@ -199,7 +219,11 @@ public class FileListRepoTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreator() throws RuntimeException, UserException {
+=======
+    public void testCreator() throws RuntimeException, StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         mockExecutor();
         new MockUp<RepoCreator>() {
             @Mock
@@ -254,7 +278,10 @@ public class FileListRepoTest {
     }
 
     @Test
+<<<<<<< HEAD
     @Ignore
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testRepo() {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));

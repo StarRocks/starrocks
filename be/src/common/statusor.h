@@ -703,6 +703,14 @@ void StatusOr<T>::IgnoreError() const {
     // no-op
 }
 
+<<<<<<< HEAD
+=======
+template <typename T>
+inline std::ostream& operator<<(std::ostream& os, const StatusOr<T>& st) {
+    return os << st.status();
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define ASSIGN_OR_RETURN_IMPL(varname, lhs, rhs) \
     auto&& varname = (rhs);                      \
     RETURN_IF_ERROR(varname);                    \
@@ -728,4 +736,18 @@ void StatusOr<T>::IgnoreError() const {
 // an lvalue StatusOr which you *don't* want to move out of cast appropriately.
 #define ASSIGN_OR_RETURN(lhs, rhs) ASSIGN_OR_RETURN_IMPL(VARNAME_LINENUM(value_or_err), lhs, rhs)
 
+<<<<<<< HEAD
+=======
+#define ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR_IMPL(err_status, lhs, rhs) \
+    auto&& varname = (rhs);                                                 \
+    SET_STATUE_AND_RETURN_IF_ERROR(err_status, varname);                    \
+    lhs = std::move(varname).value();
+
+// ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR is basiclly the same as ASSIGN_OR_RETURN, except:
+// 1. return void if the status of rhs is NOT ok
+// 2. set the status of rhs into err_status before return
+#define ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(err_status, lhs, rhs) \
+    ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR_IMPL(err_status, lhs, rhs)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

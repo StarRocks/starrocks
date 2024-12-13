@@ -184,6 +184,7 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
     }
 
     @Override
+<<<<<<< HEAD
     public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
@@ -192,19 +193,41 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
 
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : statisticsCollectJobList) {
+=======
+    public List<StatisticsCollectJob> instantiateJobs() {
+        return StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(this);
+    }
+
+    @Override
+    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor,
+                    List<StatisticsCollectJob> jobs) {
+        setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
+
+        boolean hasFailedCollectJob = false;
+        for (StatisticsCollectJob statsJob : jobs) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             AnalyzeStatus analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     statsJob.getCatalogName(), statsJob.getDb().getFullName(), statsJob.getTable().getName(),
                     statsJob.getTable().getUUID(), statsJob.getColumnNames(), statsJob.getType(), statsJob.getScheduleType(),
                     statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             statisticExecutor.collectStatistics(statsConnectContext, statsJob, analyzeStatus, true);
             if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
                 setStatus(StatsConstants.ScheduleStatus.FAILED);
                 setWorkTime(LocalDateTime.now());
                 setReason(analyzeStatus.getReason());
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+=======
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 hasFailedCollectJob = true;
                 break;
             }
@@ -213,7 +236,11 @@ public class ExternalAnalyzeJob implements AnalyzeJob, Writable {
         if (!hasFailedCollectJob) {
             setStatus(ScheduleStatus.FINISH);
             setWorkTime(LocalDateTime.now());
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+=======
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

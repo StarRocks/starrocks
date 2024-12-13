@@ -15,11 +15,16 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.FeConstants;
 
 import java.util.Optional;
 
 public interface IDictManager {
+<<<<<<< HEAD
     boolean hasGlobalDict(long tableId, String columnName, long versionTime);
 
     void updateGlobalDict(long tableId, String columnName, long collectedVersion, long versionTime);
@@ -27,13 +32,26 @@ public interface IDictManager {
     boolean hasGlobalDict(long tableId, String columnName);
 
     void removeGlobalDict(long tableId, String columnName);
+=======
+    boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
+
+    void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime);
+
+    boolean hasGlobalDict(long tableId, ColumnId columnName);
+
+    void removeGlobalDict(long tableId, ColumnId columnName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void disableGlobalDict(long tableId);
 
     void enableGlobalDict(long tableId);
 
     // You should call `hasGlobalDict` firstly to ensure the global dict exist
+<<<<<<< HEAD
     Optional<ColumnDict> getGlobalDict(long tableId, String columnName);
+=======
+    Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static IDictManager getInstance() {
         if (FeConstants.USE_MOCK_DICT_MANAGER) {

@@ -124,7 +124,11 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseStringAndJson() {
         TypeInfo typeInfo = TypeInfoFactory.STRING;
         Type result = EntityConvertUtils.convertType(typeInfo);
+<<<<<<< HEAD
         Type expectedType = ScalarType.createDefaultExternalTableString();
+=======
+        Type expectedType = ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertEquals(expectedType, result);
     }
 
@@ -162,7 +166,11 @@ public class EntityConvertUtilsTest {
         TypeInfo valueTypeInfo = TypeInfoFactory.INT;
         MapTypeInfo mapTypeInfo = TypeInfoFactory.getMapTypeInfo(keyTypeInfo, valueTypeInfo);
         Type result = EntityConvertUtils.convertType(mapTypeInfo);
+<<<<<<< HEAD
         Type expectedType = new MapType(ScalarType.createDefaultExternalTableString(), Type.INT);
+=======
+        Type expectedType = new MapType(ScalarType.createDefaultCatalogString(), Type.INT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         assertEquals(expectedType, result);
     }
 
@@ -183,7 +191,11 @@ public class EntityConvertUtilsTest {
                 TypeInfoFactory.getStructTypeInfo(ImmutableList.of("fieldTypeInfo1", "fieldTypeInfo2"),
                         ImmutableList.of(fieldTypeInfo1, fieldTypeInfo2));
         Type result = EntityConvertUtils.convertType(structTypeInfo);
+<<<<<<< HEAD
         Type expectedType1 = ScalarType.createDefaultExternalTableString();
+=======
+        Type expectedType1 = ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Type expectedType2 = Type.INT;
         Type expectedType = new StructType(ImmutableList.of(expectedType1, expectedType2));
         assertEquals(expectedType, result);

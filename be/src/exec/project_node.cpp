@@ -66,7 +66,11 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
+<<<<<<< HEAD
         RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
+=======
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -77,7 +81,11 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
+<<<<<<< HEAD
         RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
+=======
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state, true));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }
@@ -103,6 +111,7 @@ Status ProjectNode::open(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::open(state));
     RETURN_IF_CANCELLED(state);
     RETURN_IF_ERROR(_children[0]->open(state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
 
@@ -115,6 +124,14 @@ Status ProjectNode::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(init_dict_optimize(_common_sub_expr_ctxs, _common_sub_slot_ids));
     RETURN_IF_ERROR(init_dict_optimize(_expr_ctxs, _slot_ids));
+=======
+
+    DictOptimizeParser::set_output_slot_id(&_common_sub_expr_ctxs, _common_sub_slot_ids);
+    DictOptimizeParser::set_output_slot_id(&_expr_ctxs, _slot_ids);
+
+    RETURN_IF_ERROR(Expr::open(_common_sub_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_expr_ctxs, state));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return Status::OK();
 }
 
@@ -198,7 +215,10 @@ void ProjectNode::close(RuntimeState* state) {
 
     Expr::close(_expr_ctxs, state);
     Expr::close(_common_sub_expr_ctxs, state);
+<<<<<<< HEAD
     _dict_optimize_parser.close(state);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ExecNode::close(state);
 }

@@ -24,6 +24,11 @@ EXPLAIN [ LOGICAL | VERBOSE | COSTS ] <query>
 
 执行计划详细程度：EXPLAIN LOGICAL < EXPLAIN < EXPLAIN VERBOSE < EXPLAIN COSTS。
 
+<<<<<<< HEAD
+=======
+自 v3.3.5 起，默认的执行计划详细级别改为 `COSTS`。您可以使用动态 FE 参数 `query_detail_explain_level` 配置 EXPLAIN 返回的信息详细级别。
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 通常情况下使用 EXPLAIN 即可，EXPLAIN VERBOSE 和 EXPLAIN COSTS 会打印大量冗余信息，主要用于调试计划。
 
 :::

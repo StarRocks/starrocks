@@ -25,7 +25,11 @@ This section describes privileges that are available on different objects.
 | CREATE EXTERNAL CATALOG | Creates an external catalog.                                 |
 | PLUGIN                  | Installs or uninstalls a plugin.                             |
 | REPOSITORY              | Creates, deletes, or views repositories.                     |
+<<<<<<< HEAD
 | BLACKLIST               | Creates, deletes, or displays SQL blacklists.                |
+=======
+| BLACKLIST               | Creates, deletes, or displays SQL blacklists and BE Blacklist.     |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | FILE                    | Creates, deletes, or views files.                            |
 | OPERATE                 | Manages replicas, configuration items, variables, and transactions. |
 | CREATE GLOBAL FUNCTION  | Creates a global UDF.                           |

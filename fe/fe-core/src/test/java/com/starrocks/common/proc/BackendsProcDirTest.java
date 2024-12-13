@@ -34,15 +34,30 @@
 
 package com.starrocks.common.proc;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+=======
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.DefaultWarehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.After;
@@ -71,6 +86,17 @@ public class BackendsProcDirTest {
     @Mocked
     private RunMode runMode;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    private NodeMgr nodeMgr;
+
+    private final VariableMgr variableMgr = new VariableMgr();
+
+    public BackendsProcDirTest() {
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setUp() {
         b1 = new Backend(1000, "host1", 10000);
@@ -80,6 +106,13 @@ public class BackendsProcDirTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
+=======
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 editLog.logAddBackend((Backend) any);
                 minTimes = 0;
 
@@ -124,6 +157,7 @@ public class BackendsProcDirTest {
 
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
@@ -139,12 +173,39 @@ public class BackendsProcDirTest {
                 GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
+=======
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOsAgent;
+<<<<<<< HEAD
             }
         };
+=======
+
+                globalStateMgr.getVariableMgr();
+                minTimes = 0;
+                result = variableMgr;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @After
@@ -215,7 +276,11 @@ public class BackendsProcDirTest {
     public void testFetchResultSharedData() throws AnalysisException {
         new Expectations() {
             {
+<<<<<<< HEAD
                 runMode.isSharedDataMode();
+=======
+                RunMode.isSharedDataMode();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = true;
             }
@@ -232,8 +297,45 @@ public class BackendsProcDirTest {
         }
     }
 
+<<<<<<< HEAD
     @Test    
     public void testIPTitle() {
         Assert.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
     }
+=======
+    @Test
+    public void testIPTitle() {
+        Assert.assertEquals("IP", BackendsProcDir.TITLE_NAMES.get(1));
+    }
+
+    @Test
+    public void testWarehouse(@Mocked WarehouseManager warehouseManager) throws AnalysisException {
+        new Expectations() {
+            {
+                systemInfoService.getBackendIds(anyBoolean);
+                result = Lists.newArrayList(1000L, 1001L);
+            }
+        };
+
+        new Expectations() {
+            {
+                RunMode.isSharedDataMode();
+                minTimes = 0;
+                result = true;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouse(anyLong);
+                minTimes = 0;
+                result = new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        BackendsProcDir dir = new BackendsProcDir(systemInfoService);
+        ProcResult result = dir.fetchResult();
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

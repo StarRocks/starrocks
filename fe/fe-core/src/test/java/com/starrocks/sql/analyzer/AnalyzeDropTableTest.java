@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -27,6 +28,14 @@ import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
+=======
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.utframe.StarRocksAssert;
+import mockit.Expectations;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mocked;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -89,6 +98,7 @@ public class AnalyzeDropTableTest {
     public void testDropHiveNonManagedTable(@Mocked HiveTable hiveTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
 
+<<<<<<< HEAD
         new Expectations(hiveTable) {
             {
                 hiveTable.getHiveTableType();
@@ -107,5 +117,24 @@ public class AnalyzeDropTableTest {
                 "Only support to drop hive managed table",
                 () -> metadata.dropTable(
                         new DropTableStmt(false, new TableName("hive_catalog", "hive_db", "hive_table"), true)));
+=======
+        new Expectations(metadata, hiveTable) {
+            {
+                metadata.getDb(anyString, anyString);
+                result = new Database();
+                minTimes = 0;
+
+                metadata.getTable(anyString, anyString, anyString);
+                result = hiveTable;
+                minTimes = 0;
+
+                hiveTable.getHiveTableType();
+                result = HiveTable.HiveTableType.EXTERNAL_TABLE;
+                minTimes = 0;
+            }
+        };
+
+        analyzeSuccess("DROP TABLE hive_catalog.hive_db.hive_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

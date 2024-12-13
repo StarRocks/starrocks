@@ -17,7 +17,10 @@ package com.starrocks.sql.optimizer.task;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+<<<<<<< HEAD
 import com.starrocks.qe.SessionVariable;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -36,10 +39,17 @@ import java.util.List;
  *
  */
 public class RewriteTreeTask extends OptimizerTask {
+<<<<<<< HEAD
     private final OptExpression planTree;
     private final boolean onlyOnce;
     private final List<Rule> rules;
     private long change = 0;
+=======
+    protected final OptExpression planTree;
+    protected final boolean onlyOnce;
+    protected final List<Rule> rules;
+    protected long change = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public RewriteTreeTask(TaskContext context, OptExpression root, List<Rule> rules, boolean onlyOnce) {
         super(context);
@@ -65,9 +75,22 @@ public class RewriteTreeTask extends OptimizerTask {
         }
     }
 
+<<<<<<< HEAD
     private void rewrite(OptExpression parent, int childIndex, OptExpression root) {
         SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
 
+=======
+    protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
+
+        root = applyRules(parent, childIndex, root);
+        // prune cte column depend on prune right child first
+        for (int i = root.getInputs().size() - 1; i >= 0; i--) {
+            rewrite(root, i, root.getInputs().get(i));
+        }
+    }
+
+    protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (Rule rule : rules) {
             if (rule.exhausted(context.getOptimizerContext())) {
                 continue;
@@ -94,6 +117,7 @@ public class RewriteTreeTask extends OptimizerTask {
             change++;
             deriveLogicalProperty(root);
         }
+<<<<<<< HEAD
 
         // prune cte column depend on prune right child first
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {
@@ -102,6 +126,12 @@ public class RewriteTreeTask extends OptimizerTask {
     }
 
     private boolean match(Pattern pattern, OptExpression root) {
+=======
+        return root;
+    }
+
+    protected boolean match(Pattern pattern, OptExpression root) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (!pattern.matchWithoutChild(root)) {
             return false;
         }
@@ -131,7 +161,11 @@ public class RewriteTreeTask extends OptimizerTask {
         return true;
     }
 
+<<<<<<< HEAD
     private void deriveLogicalProperty(OptExpression root) {
+=======
+    protected void deriveLogicalProperty(OptExpression root) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (OptExpression child : root.getInputs()) {
             deriveLogicalProperty(child);
         }

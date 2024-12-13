@@ -21,6 +21,7 @@
 namespace starrocks {
 
 /*
+<<<<<<< HEAD
  * ----------------------------------------------------------------------------
  * Benchmark                                  Time             CPU   Iterations
  * ----------------------------------------------------------------------------
@@ -30,6 +31,26 @@ namespace starrocks {
  * bench_func/2/40960/iterations:10     1053512 ns      1053442 ns            0
  * bench_func/1/409600/iterations:10   17717984 ns     17716177 ns            0
  * bench_func/2/409600/iterations:10   13466643 ns     13465011 ns            0
+=======
+ * -----------------------------------------------------------------------------
+ * Benchmark                                   Time             CPU   Iterations
+ * -----------------------------------------------------------------------------
+ * bench_func/1/4096/iterations:10        210789 ns       210535 ns            0
+ * bench_func/2/4096/iterations:10        142274 ns       142005 ns            0
+ * bench_func/3/4096/iterations:10        120352 ns       120120 ns            0
+ *
+ * bench_func/1/40960/iterations:10      1892398 ns      1891968 ns            0
+ * bench_func/2/40960/iterations:10      1830962 ns      1830739 ns            0
+ * bench_func/3/40960/iterations:10      1054354 ns      1054389 ns            0
+ *
+ * bench_func/1/409600/iterations:10    18589689 ns     18587890 ns            0
+ * bench_func/2/409600/iterations:10    13372115 ns     13370693 ns            0
+ * bench_func/3/409600/iterations:10    14461226 ns     14459599 ns            0
+ *
+ * bench_func/1/4096000/iterations:10  241755592 ns    241716458 ns            0
+ * bench_func/2/4096000/iterations:10  201392434 ns    201372857 ns            0
+ * bench_func/3/4096000/iterations:10  199784156 ns    199756156 ns            0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
  */
 
 class BinaryColumnCopyBench {
@@ -64,6 +85,18 @@ void BinaryColumnCopyBench::do_bench(benchmark::State& state) {
         }
 
         state.PauseTiming();
+<<<<<<< HEAD
+=======
+    } else if (_mode == 2) {
+        auto& data = column->get_data();
+        state.ResumeTiming();
+
+        for (size_t i = 0; i < _chunk_size; i++) {
+            dest_column.append(data[i]);
+        }
+
+        state.PauseTiming();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else {
         state.ResumeTiming();
 
@@ -111,6 +144,7 @@ static void bench_func(benchmark::State& state) {
 static void process_args(benchmark::internal::Benchmark* b) {
     b->Args({1, 4096})->Iterations(100);
     b->Args({2, 4096})->Iterations(100);
+<<<<<<< HEAD
 
     b->Args({1, 40960})->Iterations(100);
     b->Args({2, 40960})->Iterations(100);
@@ -120,6 +154,21 @@ static void process_args(benchmark::internal::Benchmark* b) {
 
     b->Args({1, 4096000})->Iterations(10);
     b->Args({2, 4096000})->Iterations(10);
+=======
+    b->Args({3, 4096})->Iterations(100);
+
+    b->Args({1, 40960})->Iterations(100);
+    b->Args({2, 40960})->Iterations(100);
+    b->Args({3, 40960})->Iterations(100);
+
+    b->Args({1, 409600})->Iterations(10);
+    b->Args({2, 409600})->Iterations(10);
+    b->Args({3, 409600})->Iterations(10);
+
+    b->Args({1, 4096000})->Iterations(10);
+    b->Args({2, 4096000})->Iterations(10);
+    b->Args({3, 4096000})->Iterations(10);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 BENCHMARK(bench_func)->Apply(process_args);

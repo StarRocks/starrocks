@@ -1,11 +1,17 @@
 -- name: test_add_drop_field_struct
 create database test_add_drop_field_struct;
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 use test_add_drop_field_struct;
 -- result:
 []
+=======
+-- !result
+use test_add_drop_field_struct;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -20,11 +26,17 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 insert into tab1 values (1, row(1, row(1,1))), (2, row(2, row(2,2)));
 -- result:
 []
+=======
+-- !result
+insert into tab1 values (1, row(1, row(1,1))), (2, row(2, row(2,2)));
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select * from tab1;
 -- result:
@@ -45,7 +57,10 @@ E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition
 -- !result
 alter table tab1 modify column c1 add field val1 int;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -58,6 +73,7 @@ select * from tab1;
 -- !result
 insert into tab1 values (3, row(3, row(3,3), 3));
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 select * from tab1;
@@ -65,12 +81,23 @@ select * from tab1;
 1	{"v1":1,"v2":{"v3":1,"v4":1},"val1":null}
 2	{"v1":2,"v2":{"v3":2,"v4":2},"val1":null}
 3	{"v1":3,"v2":{"v3":3,"v4":3},"val1":3}
+=======
+-- !result
+select * from tab1;
+-- result:
+3	{"v1":3,"v2":{"v3":3,"v4":3},"val1":3}
+1	{"v1":1,"v2":{"v3":1,"v4":1},"val1":null}
+2	{"v1":2,"v2":{"v3":2,"v4":2},"val1":null}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE MATERIALIZED VIEW mv1
             distributed by hash(c0) as
             SELECT * from tab1;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_mv_refresh_count('test_add_drop_field_struct', 'mv1', 1)
 -- result:
@@ -92,7 +119,10 @@ E: (1064, 'Getting analyzing error. Detail message: Analyze drop field definitio
 -- !result
 alter table tab1 modify column c1 drop field v1;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -100,6 +130,7 @@ None
 -- !result
 select * from tab1;
 -- result:
+<<<<<<< HEAD
 1	{"v2":{"v3":1,"v4":1},"val1":null}
 2	{"v2":{"v3":2,"v4":2},"val1":null}
 3	{"v2":{"v3":3,"v4":3},"val1":3}
@@ -107,6 +138,14 @@ select * from tab1;
 alter table tab1 modify column c1 add field v1 int AFTER v2;
 -- result:
 []
+=======
+3	{"v2":{"v3":3,"v4":3},"val1":3}
+1	{"v2":{"v3":1,"v4":1},"val1":null}
+2	{"v2":{"v3":2,"v4":2},"val1":null}
+-- !result
+alter table tab1 modify column c1 add field v1 int AFTER v2;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -120,12 +159,16 @@ select * from tab1;
 -- !result
 insert into tab1 values (4, row(row(4,4), 4, 4));
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select * from tab1;
 -- result:
 1	{"v2":{"v3":1,"v4":1},"v1":null,"val1":null}
 2	{"v2":{"v3":2,"v4":2},"v1":null,"val1":null}
+<<<<<<< HEAD
 3	{"v2":{"v3":3,"v4":3},"v1":null,"val1":3}
 4	{"v2":{"v3":4,"v4":4},"v1":4,"val1":4}
 -- !result
@@ -145,6 +188,27 @@ create database test_add_drop_field_array;
 use test_add_drop_field_array;
 -- result:
 []
+=======
+4	{"v2":{"v3":4,"v4":4},"v1":4,"val1":4}
+3	{"v2":{"v3":3,"v4":3},"v1":null,"val1":3}
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_struct;
+-- result:
+-- !result
+
+
+
+
+-- name: test_add_drop_field_array
+create database test_add_drop_field_array;
+-- result:
+-- !result
+use test_add_drop_field_array;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -159,11 +223,17 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 insert into tab1 values (1, [row(1,1), row(1,2)]), (2, [row(2,1), row(2,2)]);
 -- result:
 []
+=======
+-- !result
+insert into tab1 values (1, [row(1,1), row(1,2)]), (2, [row(2,1), row(2,2)]);
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select * from tab1;
 -- result:
@@ -184,7 +254,10 @@ E: (1064, 'Getting analyzing error. Detail message: Analyze add field definition
 -- !result
 alter table tab1 modify column c1 add field [*].val1 int;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -197,7 +270,10 @@ select * from tab1;
 -- !result
 insert into tab1 values (3, [row(3,1,1), row(3,2,1)]);
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select * from tab1;
 -- result:
@@ -209,7 +285,10 @@ CREATE MATERIALIZED VIEW mv1
             distributed by hash(c0) as
             SELECT * from tab1;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_mv_refresh_count('test_add_drop_field_array', 'mv1', 1)
 -- result:
@@ -227,7 +306,10 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 drop field [*].v1;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -235,6 +317,7 @@ None
 -- !result
 select * from tab1;
 -- result:
+<<<<<<< HEAD
 1	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
 2	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
 3	[{"v2":1,"val1":1},{"v2":2,"val1":1}]
@@ -242,6 +325,14 @@ select * from tab1;
 insert into tab1 values (4, [row(4,4), row(4,5)]);
 -- result:
 []
+=======
+3	[{"v2":1,"val1":1},{"v2":2,"val1":1}]
+1	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
+2	[{"v2":1,"val1":null},{"v2":2,"val1":null}]
+-- !result
+insert into tab1 values (4, [row(4,4), row(4,5)]);
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select * from tab1;
 -- result:
@@ -252,7 +343,10 @@ select * from tab1;
 -- !result
 alter table tab1 modify column c1 add field [*].v1 int;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -260,6 +354,7 @@ None
 -- !result
 select * from tab1;
 -- result:
+<<<<<<< HEAD
 1	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
 2	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
 3	[{"v2":1,"val1":1,"v1":null},{"v2":2,"val1":1,"v1":null}]
@@ -268,11 +363,21 @@ select * from tab1;
 insert into tab1 values (5, [row(5,5,5), row(5,6,6)]);
 -- result:
 []
+=======
+3	[{"v2":1,"val1":1,"v1":null},{"v2":2,"val1":1,"v1":null}]
+4	[{"v2":4,"val1":4,"v1":null},{"v2":4,"val1":5,"v1":null}]
+1	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
+2	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
+-- !result
+insert into tab1 values (5, [row(5,5,5), row(5,6,6)]);
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 select * from tab1;
 -- result:
 1	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
 2	[{"v2":1,"val1":null,"v1":null},{"v2":2,"val1":null,"v1":null}]
+<<<<<<< HEAD
 3	[{"v2":1,"val1":1,"v1":null},{"v2":2,"val1":1,"v1":null}]
 4	[{"v2":4,"val1":4,"v1":null},{"v2":4,"val1":5,"v1":null}]
 5	[{"v2":5,"val1":5,"v1":5},{"v2":5,"val1":6,"v1":6}]
@@ -293,6 +398,28 @@ create database test_add_drop_field_not_allowed;
 use test_add_drop_field_not_allowed;
 -- result:
 []
+=======
+5	[{"v2":5,"val1":5,"v1":5},{"v2":5,"val1":6,"v1":6}]
+3	[{"v2":1,"val1":1,"v1":null},{"v2":2,"val1":1,"v1":null}]
+4	[{"v2":4,"val1":4,"v1":null},{"v2":4,"val1":5,"v1":null}]
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_array;
+-- result:
+-- !result
+
+
+
+
+-- name: test_add_drop_field_not_allowed
+create database test_add_drop_field_not_allowed;
+-- result:
+-- !result
+use test_add_drop_field_not_allowed;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -307,6 +434,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 alter table tab1 modify column c1 add field [*].val1 int;
@@ -324,15 +452,37 @@ drop table tab1;
 drop database test_add_drop_field_not_allowed;
 -- result:
 []
+=======
+-- !result
+alter table tab1 modify column c1 add field [*].val1 int;
+-- result:
+E: (1064, 'Add field for struct column require table enable fast schema evolution')
+-- !result
+alter table tab1 modify column c1 drop field [*].v1;
+-- result:
+E: (1064, 'Drop field for struct column require table enable fast schema evolution')
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_add_drop_field_not_allowed;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 -- name: test_drop_last_field
 create database test_drop_last_field;
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 use test_drop_last_field;
 -- result:
 []
+=======
+-- !result
+use test_drop_last_field;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE `tab1` (
   `c0` int(11) NULL COMMENT "",
@@ -347,6 +497,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 alter table tab1 modify column c1 drop field v1;
@@ -369,6 +520,29 @@ create database test_drop_add_same_name_field;
 use test_drop_add_same_name_field;
 -- result:
 []
+=======
+-- !result
+alter table tab1 modify column c1 drop field v1;
+-- result:
+E: (1064, 'Field[v1] is the last field of column[c1], can not drop any more.')
+-- !result
+drop table tab1;
+-- result:
+-- !result
+drop database test_drop_last_field;
+-- result:
+-- !result
+
+
+
+
+-- name: test_drop_add_same_name_field
+create database test_drop_add_same_name_field;
+-- result:
+-- !result
+use test_drop_add_same_name_field;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 CREATE TABLE `t` (
   `c1` int(11) NULL COMMENT "",
@@ -383,6 +557,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 insert into t values(1, row(1)),(2,row(2));
@@ -392,6 +567,14 @@ insert into t values(1, row(1)),(2,row(2));
 alter table t modify column c2 add field v2_2 string;
 -- result:
 []
+=======
+-- !result
+insert into t values(1, row(1)),(2,row(2));
+-- result:
+-- !result
+alter table t modify column c2 add field v2_2 string;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -404,11 +587,17 @@ select * from t;
 -- !result
 insert into t values(3, row(3, 'Beijing')),(4,row(4,'Shanghai'));
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 alter table t modify column c2 drop field v2_2;
 -- result:
 []
+=======
+-- !result
+alter table t modify column c2 drop field v2_2;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -416,7 +605,10 @@ None
 -- !result
 alter table t modify column c2 add field v2_2 date;
 -- result:
+<<<<<<< HEAD
 []
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -431,9 +623,15 @@ select * from t;
 -- !result
 drop table t;
 -- result:
+<<<<<<< HEAD
 []
 -- !result
 drop database test_drop_add_same_name_field;
 -- result:
 []
+=======
+-- !result
+drop database test_drop_add_same_name_field;
+-- result:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 -- !result

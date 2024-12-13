@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # 箭头函数
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 箭头函数 `->` 可以查询 JSON 对象中指定路径（`json_path`）中的值，并输出为 JSON 类型。箭头函数比 JSON_QUERY 函数更简洁易用。
 

@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # array_join
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Concatenates the elements of an array into a string.
 

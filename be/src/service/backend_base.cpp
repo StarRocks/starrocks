@@ -153,7 +153,11 @@ void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenP
     TStatus t_status;
     TUniqueId fragment_instance_id = generate_uuid();
     std::shared_ptr<ScanContext> p_context;
+<<<<<<< HEAD
     _exec_env->external_scan_context_mgr()->create_scan_context(&p_context);
+=======
+    (void)_exec_env->external_scan_context_mgr()->create_scan_context(&p_context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     p_context->fragment_instance_id = fragment_instance_id;
     p_context->offset = 0;
     p_context->last_access_time = time(nullptr);

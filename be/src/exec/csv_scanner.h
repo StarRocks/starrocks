@@ -33,18 +33,33 @@ namespace starrocks {
 class CSVScanner final : public FileScanner {
 public:
     CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
+<<<<<<< HEAD
                ScannerCounter* counter);
+=======
+               ScannerCounter* counter, bool schema_only = false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status open() override;
 
     StatusOr<ChunkPtr> get_next() override;
 
+<<<<<<< HEAD
+=======
+    Status get_schema(std::vector<SlotDescriptor>* schema) override;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void close() override;
 
     // For test
     void use_v2(bool use_v2) { _use_v2 = use_v2; }
 
 private:
+<<<<<<< HEAD
+=======
+    Status _get_schema(std::vector<SlotDescriptor>* schema);
+    Status _get_schema_v2(std::vector<SlotDescriptor>* schema);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     class ScannerCSVReader : public CSVReader {
     public:
         ScannerCSVReader(std::shared_ptr<SequentialFile> file, RuntimeState* state,
@@ -70,6 +85,10 @@ private:
 
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);
 
+<<<<<<< HEAD
+=======
+    Status _init_reader();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status _parse_csv(Chunk* chunk);
     Status _parse_csv_v2(Chunk* chunk);
 
@@ -91,6 +110,14 @@ private:
     bool _use_v2;
     CSVReader::Fields fields;
     CSVRow row;
+<<<<<<< HEAD
+=======
+
+    // An empty chunk that can be reused as the container for the result of get_next().
+    // It's mainly for optimizing the performance where get_next() returns Status::Timeout
+    // frequently by avoiding creating a chunk in each call
+    ChunkPtr _reusable_empty_chunk = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

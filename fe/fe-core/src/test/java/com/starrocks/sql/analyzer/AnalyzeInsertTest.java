@@ -16,6 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.TableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -29,10 +33,19 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.common.MetaUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+<<<<<<< HEAD
+=======
+import mockit.Mock;
+import mockit.MockUp;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -97,7 +110,11 @@ public class AnalyzeInsertTest {
     @Test
     public void testInsertOverwriteWhenSchemaChange() throws Exception {
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
                 .getDb("test").getTable("t0");
+=======
+                .getLocalMetastore().getDb("test").getTable("t0");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
         analyzeFail("insert overwrite t0 select * from t0;",
                 "table state is SCHEMA_CHANGE, please wait to insert overwrite until table state is normal");
@@ -111,6 +128,7 @@ public class AnalyzeInsertTest {
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
 
+<<<<<<< HEAD
         new Expectations(metadata) {
             {
                 metadata.getDb(anyString, anyString);
@@ -120,16 +138,43 @@ public class AnalyzeInsertTest {
                 metadata.getTable(anyString, anyString, anyString);
                 result = null;
                 minTimes = 0;
+=======
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
         analyzeFail("insert into iceberg_catalog.db.err_tbl values (1)",
                 "Table err_tbl is not found");
 
+<<<<<<< HEAD
         new Expectations(metadata) {
             {
                 metadata.getTable(anyString, anyString, anyString);
                 result = icebergTable;
                 minTimes = 0;
+=======
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+        new Expectations(metadata) {
+            {
+                metadata.getDb(anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 icebergTable.supportInsert();
                 result = true;
@@ -141,6 +186,13 @@ public class AnalyzeInsertTest {
 
         new Expectations(metadata) {
             {
+<<<<<<< HEAD
+=======
+                metadata.getDb(anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 icebergTable.getBaseSchema();
                 result = ImmutableList.of(new Column("c1", Type.INT));
                 minTimes = 0;
@@ -152,6 +204,7 @@ public class AnalyzeInsertTest {
     @Test
     public void testPartitionedIcebergTable(@Mocked IcebergTable icebergTable) {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+<<<<<<< HEAD
         new Expectations(metadata) {
             {
                 metadata.getDb(anyString, anyString);
@@ -161,6 +214,28 @@ public class AnalyzeInsertTest {
                 metadata.getTable(anyString, anyString, anyString);
                 result = icebergTable;
                 minTimes = 0;
+=======
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext context, Database database, TableName tableName) {
+                return icebergTable;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb(anyString, anyString);
+                minTimes = 0;
+                result = new Database();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 icebergTable.supportInsert();
                 result = true;
@@ -202,8 +277,12 @@ public class AnalyzeInsertTest {
             }
         };
 
+<<<<<<< HEAD
         analyzeFail("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)",
                 "partition value can't be null.");
+=======
+        analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=NULL) values (1)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeSuccess("insert into iceberg_catalog.db.tbl partition(p1=111, p2=222) values (1)");
 
         new Expectations() {
@@ -233,11 +312,25 @@ public class AnalyzeInsertTest {
 
     @Test
     public void testInsertHiveNonManagedTable(@Mocked HiveTable hiveTable) {
+<<<<<<< HEAD
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadata) {
             {
                 metadata.getTable(anyString, anyString, anyString);
                 result = hiveTable;
+=======
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getSessionAwareTable(ConnectContext conntext, Database database, TableName tableName) {
+                return hiveTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -284,6 +377,7 @@ public class AnalyzeInsertTest {
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"compression\" = \"uncompressed\" ) \n" +
                         "select \"abc\" as k1",
+<<<<<<< HEAD
                 "format is a mandatory property. " +
                         "Use \"format\" = \"parquet\" as only parquet format is supported now");
 
@@ -293,14 +387,28 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
                 "use \"format\" = \"parquet\", as only parquet format is supported now");
+=======
+                "format is a mandatory property. Use any of (parquet, orc, csv).");
+
+        analyzeFail("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"unknown\", \n" +
+                "\t\"compression\" = \"uncompressed\" ) \n" +
+                "select \"abc\" as k1",
+                "Unsupported format unknown. Use any of (parquet, orc, csv).");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"format\"=\"parquet\", \n" +
                         "\t\"compression\" = \"unknown\" ) \n" +
                         "select \"abc\" as k1",
+<<<<<<< HEAD
                 "compression type unknown is not supported. " +
                         "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
+=======
+                "Unsupported compression codec unknown. Use any of (uncompressed, snappy, lz4, zstd, gzip).");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
@@ -318,6 +426,7 @@ public class AnalyzeInsertTest {
                         "\t\"partition_by\"=\"k1\" ) \n" +
                         "select \"abc\" as k1");
 
+<<<<<<< HEAD
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/prefix\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
@@ -326,6 +435,8 @@ public class AnalyzeInsertTest {
                 "select \"abc\" as k1",
                 "If partition_by is used, path should be a directory ends with forward slash(/).");
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         analyzeSuccess("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
@@ -357,6 +468,24 @@ public class AnalyzeInsertTest {
                 "got invalid parameter \"single\" = \"false-false\", expect a boolean value (true or false).");
 
         analyzeFail("insert into files ( \n" +
+<<<<<<< HEAD
+=======
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"f\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2",
+                "got invalid parameter \"parquet.use_legacy_encoding\" = \"f\", expect a boolean value (true or false).");
+
+        analyzeSuccess("insert into files ( \n" +
+                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                        "\t\"format\"=\"parquet\", \n" +
+                        "\t\"compression\" = \"uncompressed\", \n" +
+                        "\t\"parquet.use_legacy_encoding\"=\"true\" ) \n" +
+                        "select \"abc\" as k1, 123 as k2");
+
+        analyzeFail("insert into files ( \n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\", \n" +

@@ -36,7 +36,11 @@ public class ShowSnapshotAnalyzer {
         new ShowSnapshotAnalyzerVisitor().analyze(showSnapshotStmt, session);
     }
 
+<<<<<<< HEAD
     public static class ShowSnapshotAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    public static class ShowSnapshotAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public void analyze(ShowStmt statement, ConnectContext session) {
             visit(statement, session);
         }

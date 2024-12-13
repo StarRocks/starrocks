@@ -135,10 +135,15 @@ pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpF
     using namespace pipeline;
 
     auto workgroup = context->fragment_context()->workgroup();
+<<<<<<< HEAD
     auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
+=======
+    auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
+    auto spill_channel_factory = std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (std::is_same_v<SinkFactory, SpillableAggregateDistinctBlockingSinkOperatorFactory>) {
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
@@ -209,7 +214,13 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops, [this]() {
             std::vector<ExprContext*> group_by_expr_ctxs;
+<<<<<<< HEAD
             Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
+=======
+            WARN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs,
+                                                  runtime_state(), true),
+                          "create grouping expr failed");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return group_by_expr_ctxs;
         });
     };

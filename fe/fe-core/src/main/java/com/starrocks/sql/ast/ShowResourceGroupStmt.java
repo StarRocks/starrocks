@@ -30,6 +30,7 @@ import com.starrocks.sql.parser.NodePosition;
 public class ShowResourceGroupStmt extends ShowStmt {
     private final String name;
     private final boolean listAll;
+<<<<<<< HEAD
 
     public ShowResourceGroupStmt(String name, boolean listAll) {
         this(name, listAll, NodePosition.ZERO);
@@ -39,14 +40,35 @@ public class ShowResourceGroupStmt extends ShowStmt {
         super(pos);
         this.name = name;
         this.listAll = listAll;
+=======
+    private final boolean verbose;
+
+    public ShowResourceGroupStmt(String name, boolean listAll, boolean verbose, NodePosition pos) {
+        super(pos);
+        this.name = name;
+        this.listAll = listAll;
+        this.verbose = verbose;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isListAll() {
         return listAll;
     }
 
+<<<<<<< HEAD
     @Override
     public ShowResultSetMetaData getMetaData() {
+=======
+    public boolean isVerbose() {
+        return verbose;
+    }
+
+    @Override
+    public ShowResultSetMetaData getMetaData() {
+        if (verbose) {
+            return ResourceGroup.VERBOSE_META_DATA;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return ResourceGroup.META_DATA;
     }
 

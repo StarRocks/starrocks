@@ -15,9 +15,15 @@
 
 package com.starrocks.connector.odps;
 
+<<<<<<< HEAD
 import com.starrocks.connector.hive.HiveTableName;
 
 public class OdpsTableName extends HiveTableName {
+=======
+import com.starrocks.connector.DatabaseTableName;
+
+public class OdpsTableName extends DatabaseTableName {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public OdpsTableName(String databaseName, String tableName) {
         super(databaseName, tableName);
     }

@@ -16,7 +16,10 @@
 package com.starrocks.mysql.ssl;
 
 import com.starrocks.StarRocksFE;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -25,7 +28,11 @@ import java.net.URL;
 import java.net.URLClassLoader;
 
 public class SSLChannelImpClassLoader {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(Auth.class);
+=======
+    private static final Logger LOG = LogManager.getLogger(SSLChannelImpClassLoader.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static final String SSL_CHANNEL_CLASS_NAME = "com.starrocks.plugins.ssl.SSLChannelImp";
     public static final String SSL_CHANNEL_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-ssl-1.0.jar";
 

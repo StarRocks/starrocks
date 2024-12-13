@@ -83,6 +83,13 @@ inline unsigned long long operator"" _ms(unsigned long long x) {
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
 #define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
     (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
+<<<<<<< HEAD
+=======
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
+    (profile)->add_child_counter(                                                                                      \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
+            parent)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
     (profile)->add_child_counter(                                  \
             name, TUnit::TIME_NS,                                  \
@@ -125,15 +132,28 @@ class ObjectPool;
 // Thread-safe.
 class RuntimeProfile {
 public:
+<<<<<<< HEAD
     class Counter {
     public:
         static TCounterStrategy create_strategy(TCounterAggregateType::type aggregate_type,
                                                 TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
                                                 int64_t display_threshold = 0) {
+=======
+    inline static const std::string MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
+    inline static const std::string MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
+
+    class Counter {
+    public:
+        static TCounterStrategy create_strategy(
+                TCounterAggregateType::type aggregate_type,
+                TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL, int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             TCounterStrategy strategy;
             strategy.aggregate_type = aggregate_type;
             strategy.merge_type = merge_type;
             strategy.display_threshold = display_threshold;
+<<<<<<< HEAD
             return strategy;
         }
 
@@ -142,6 +162,18 @@ public:
                                                 int64_t display_threshold = 0) {
             auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
             return create_strategy(aggregate_type, merge_type, display_threshold);
+=======
+            strategy.min_max_type = min_max_type;
+            return strategy;
+        }
+
+        static TCounterStrategy create_strategy(
+                TUnit::type type, TCounterMergeType::type merge_type = TCounterMergeType::MERGE_ALL,
+                int64_t display_threshold = 0,
+                TCounterMinMaxType::type min_max_type = TCounterMinMaxType::MIN_MAX_ALL) {
+            auto aggregate_type = is_time_type(type) ? TCounterAggregateType::AVG : TCounterAggregateType::SUM;
+            return create_strategy(aggregate_type, merge_type, display_threshold, min_max_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         explicit Counter(TUnit::type type, int64_t value = 0)
@@ -188,6 +220,11 @@ public:
                    _strategy.merge_type == TCounterMergeType::SKIP_FIRST_MERGE;
         }
 
+<<<<<<< HEAD
+=======
+        bool skip_min_max() const { return _strategy.min_max_type == TCounterMinMaxType::SKIP_ALL; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int64_t display_threshold() const { return _strategy.display_threshold; }
         bool should_display() const {
             int64_t threshold = _strategy.display_threshold;
@@ -537,6 +574,19 @@ public:
     // This function updates _local_time_percent for each profile.
     void compute_time_in_profile();
 
+<<<<<<< HEAD
+=======
+    void inc_version() {
+        std::lock_guard<std::mutex> l(_version_lock);
+        _version += 1;
+    }
+
+    int64_t get_version() const {
+        std::lock_guard<std::mutex> l(_version_lock);
+        return _version;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public:
     // The root counter name for all top level counters.
     const static std::string ROOT_COUNTER;
@@ -609,9 +659,24 @@ private:
     // of the total time in the entire profile tree.
     double _local_time_percent;
 
+<<<<<<< HEAD
     // update a subtree of profiles from nodes, rooted at *idx.
     // On return, *idx points to the node immediately following this subtree.
     void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx);
+=======
+    // Protects _version
+    mutable std::mutex _version_lock;
+    // The version of this profile. It is used to prevent updating this profile
+    // from an old one.
+    int64_t _version{0};
+
+    // update a subtree of profiles from nodes, rooted at *idx. If the version
+    // of the parent node, or the version of root node for this subtree is older,
+    // skip to update the subtree, but still traverse the nodes of subtree to
+    // get the node immediately following this subtree.
+    // On return, *idx points to the node immediately following this subtree.
+    void update(const std::vector<TRuntimeProfileNode>& nodes, int* idx, bool is_parent_node_old);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Helper function to compute compute the fraction of the total time spent in
     // this profile and its children.

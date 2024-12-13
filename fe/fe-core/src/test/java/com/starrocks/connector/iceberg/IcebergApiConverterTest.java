@@ -31,6 +31,10 @@ import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.catalog.Namespace;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.Test;
@@ -69,7 +73,11 @@ public class IcebergApiConverterTest {
 
     @Test
     public void testString() {
+<<<<<<< HEAD
         Type stringType = ScalarType.createDefaultExternalTableString();
+=======
+        Type stringType = ScalarType.createDefaultCatalogString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         org.apache.iceberg.types.Type icebergType = Types.StringType.get();
         Type resType = fromIcebergType(icebergType);
         Assert.assertEquals(resType, stringType);
@@ -92,18 +100,30 @@ public class IcebergApiConverterTest {
         Assert.assertTrue(resType.isUnknown());
 
         org.apache.iceberg.types.Type keyUnknownMapType = Types.MapType.ofRequired(1, 2,
+<<<<<<< HEAD
                 Types.TimeType.get(), Types.StringType.get());
+=======
+                Types.FixedType.ofLength(1), Types.StringType.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Type resKeyUnknowType = fromIcebergType(keyUnknownMapType);
         Assert.assertTrue(resKeyUnknowType.isUnknown());
 
         org.apache.iceberg.types.Type valueUnknownMapType = Types.MapType.ofRequired(1, 2,
+<<<<<<< HEAD
                 Types.StringType.get(), Types.TimeType.get());
+=======
+                Types.StringType.get(), Types.FixedType.ofLength(1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Type resValueUnknowType = fromIcebergType(valueUnknownMapType);
         Assert.assertTrue(resValueUnknowType.isUnknown());
 
         List<Types.NestedField> fields = new ArrayList<>();
         fields.add(Types.NestedField.optional(1, "a", Types.IntegerType.get()));
+<<<<<<< HEAD
         fields.add(Types.NestedField.required(1, "b", Types.TimeType.get()));
+=======
+        fields.add(Types.NestedField.required(1, "b", Types.FixedType.ofLength(1)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         org.apache.iceberg.types.Type unknownSubfieldStructType = Types.StructType.of(fields);
         Type unknownStructType = fromIcebergType(unknownSubfieldStructType);
         Assert.assertTrue(unknownStructType.isUnknown());
@@ -115,7 +135,11 @@ public class IcebergApiConverterTest {
                 Types.StringType.get(), Types.IntegerType.get());
         Type resType = fromIcebergType(icebergType);
         Assert.assertEquals(resType,
+<<<<<<< HEAD
                 new MapType(ScalarType.createDefaultExternalTableString(), ScalarType.createType(PrimitiveType.INT)));
+=======
+                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -188,6 +212,10 @@ public class IcebergApiConverterTest {
         columns.add(new Column("c13", new ArrayType(Type.INT)));
         columns.add(new Column("c14", new MapType(Type.INT, Type.INT)));
         columns.add(new Column("c15", new StructType(ImmutableList.of(Type.INT))));
+<<<<<<< HEAD
+=======
+        columns.add(new Column("c16", Type.TIME));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         Assert.assertEquals("table {\n" +
@@ -205,7 +233,12 @@ public class IcebergApiConverterTest {
                 "  12: c12: required decimal(-1, -1)\n" +
                 "  13: c13: required list<int>\n" +
                 "  14: c14: required map<int, int>\n" +
+<<<<<<< HEAD
                 "  15: c15: required struct<19: col1: optional int>\n" +
+=======
+                "  15: c15: required struct<20: col1: optional int>\n" +
+                "  16: c16: required time\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "}", schema.toString());
 
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));
@@ -231,4 +264,22 @@ public class IcebergApiConverterTest {
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
         Assert.assertEquals("zstd", target.get(AVRO_COMPRESSION));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTime() {
+        Type timeType = ScalarType.createType(PrimitiveType.TIME);
+        org.apache.iceberg.types.Type icebergType = Types.TimeType.get();
+        Type resType = fromIcebergType(icebergType);
+        Assert.assertEquals(resType, timeType);
+    }
+
+    @Test
+    public void testConvertDbNameToNamespace() {
+        Assert.assertEquals(Namespace.of(""), IcebergApiConverter.convertDbNameToNamespace(""));
+        Assert.assertEquals(Namespace.of("a"), IcebergApiConverter.convertDbNameToNamespace("a"));
+        Assert.assertEquals(Namespace.of("a", "b", "c"), IcebergApiConverter.convertDbNameToNamespace("a.b.c"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

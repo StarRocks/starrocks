@@ -32,8 +32,13 @@ public:
 
     using Offset = T;
     using Offsets = Buffer<T>;
+<<<<<<< HEAD
 
     using Bytes = starrocks::raw::RawVectorPad16<uint8_t>;
+=======
+    using Byte = uint8_t;
+    using Bytes = starrocks::raw::RawVectorPad16<uint8_t, ColumnAllocator<uint8_t>>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     struct BinaryDataProxyContainer {
         BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
@@ -172,11 +177,15 @@ public:
     // No complain about the overloaded-virtual for this function
     DIAGNOSTIC_PUSH
     DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
+<<<<<<< HEAD
     void append(const Slice& str) {
         _bytes.insert(_bytes.end(), str.data, str.data + str.size);
         _offsets.emplace_back(_bytes.size());
         _slices_cache = false;
     }
+=======
+    void append(const Slice& str);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DIAGNOSTIC_POP
 
     void append_datum(const Datum& datum) override {
@@ -198,11 +207,19 @@ public:
         _slices_cache = false;
     }
 
+<<<<<<< HEAD
     bool append_strings(const Buffer<Slice>& strs) override;
 
     bool append_strings_overflow(const Buffer<Slice>& strs, size_t max_length) override;
 
     bool append_continuous_strings(const Buffer<Slice>& strs) override;
+=======
+    bool append_strings(const Slice* data, size_t size) override;
+
+    bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
+
+    bool append_continuous_strings(const Slice* data, size_t size) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
 
@@ -220,7 +237,11 @@ public:
         _slices_cache = false;
     }
 
+<<<<<<< HEAD
     ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+=======
+    ColumnPtr replicate(const Buffer<uint32_t>& offsets) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void fill_default(const Filter& filter) override;
 
@@ -339,7 +360,11 @@ public:
         return ss.str();
     }
 
+<<<<<<< HEAD
     bool capacity_limit_reached(std::string* msg = nullptr) const override;
+=======
+    Status capacity_limit_reached() const override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     void _build_slices() const;

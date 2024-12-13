@@ -59,7 +59,11 @@ public class MVMaintenanceTask {
     public static MVMaintenanceTask build(MVMaintenanceJob job, long taskId, TNetworkAddress beRpcAddr,
                                           List<TExecPlanFragmentParams> fragmentInstances) {
         MVMaintenanceTask task = new MVMaintenanceTask();
+<<<<<<< HEAD
         task.dbName = GlobalStateMgr.getCurrentState().getDb(job.getView().getDbId()).getFullName();
+=======
+        task.dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(job.getView().getDbId()).getFullName();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         task.job = job;
         task.beRpcAddr = beRpcAddr;
         task.taskId = taskId;

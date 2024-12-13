@@ -53,4 +53,8 @@ public class TaskTest {
         Assert.assertEquals(false, Constants.TaskRunState.PENDING.isSuccessState());
         Assert.assertEquals(false, Constants.TaskRunState.RUNNING.isSuccessState());
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

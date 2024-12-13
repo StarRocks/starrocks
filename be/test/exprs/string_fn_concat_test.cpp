@@ -574,6 +574,10 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
         col3->append(Slice(std::string(3796 - i, 'v')));
     }
     prepare_concat_ws_data(sep_null_col, null_col, sep, col0, col1, col2, col3);
+<<<<<<< HEAD
     concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 30);
+=======
+    concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 2);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 } // namespace starrocks

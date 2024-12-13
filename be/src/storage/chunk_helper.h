@@ -15,8 +15,18 @@
 #pragma once
 
 #include <memory>
+<<<<<<< HEAD
 #include <queue>
 
+=======
+#include <mutex>
+#include <queue>
+
+#include "column/column_visitor.h"
+#include "column/column_visitor_adapter.h"
+#include "column/datum.h"
+#include "column/fixed_length_column_base.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "column/vectorized_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/olap_type_infra.h"
@@ -42,6 +52,13 @@ public:
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
     static Schema convert_schema(const TabletSchemaCSPtr& schema, const std::vector<ColumnId>& cids);
 
+<<<<<<< HEAD
+=======
+    // Convert TabletColumns to Schema order by col_names
+    static SchemaPtr convert_schema(const std::vector<TabletColumn*>& columns,
+                                    const std::vector<std::string_view>& col_names);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static Schema get_short_key_schema(const TabletSchemaCSPtr& schema);
 
@@ -51,6 +68,12 @@ public:
     // Get schema with format v2 type containing sort key columns filled by primary key columns from TabletSchema.
     static Schema get_sort_key_schema_by_primary_key(const starrocks::TabletSchemaCSPtr& tablet_schema);
 
+<<<<<<< HEAD
+=======
+    // Get non nullable version schema
+    static SchemaPtr get_non_nullable_schema(const starrocks::SchemaPtr& schema, const std::vector<int>* keys);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static ColumnId max_column_id(const Schema& schema);
 
     // Create an empty chunk according to the |schema| and reserve it of size |n|.
@@ -62,7 +85,11 @@ public:
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
 
+<<<<<<< HEAD
     static Chunk* new_chunk_pooled(const Schema& schema, size_t n, bool force);
+=======
+    static Chunk* new_chunk_pooled(const Schema& schema, size_t n);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
@@ -124,6 +151,12 @@ public:
     bool is_finished() const;
 
 private:
+<<<<<<< HEAD
+=======
+    static bool _check_json_schema_equallity(const Chunk* one, const Chunk* two);
+
+private:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75; // 0.75 * chunk_size
 #ifdef BE_TEST
     static constexpr size_t LOW_WATERMARK_BYTES = 64 * 1024; // 64KB.
@@ -139,4 +172,71 @@ private:
     bool _finalized = false;
 };
 
+<<<<<<< HEAD
+=======
+class SegmentedColumn final : public std::enable_shared_from_this<SegmentedColumn> {
+public:
+    SegmentedColumn(const SegmentedChunkPtr& chunk, size_t column_index);
+    SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size);
+    ~SegmentedColumn() = default;
+
+    ColumnPtr clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size);
+    ColumnPtr materialize() const;
+
+    bool is_nullable() const;
+    bool has_null() const;
+    size_t size() const;
+    void upgrade_to_nullable();
+    size_t segment_size() const;
+    size_t num_segments() const;
+    std::vector<ColumnPtr> columns() const;
+
+private:
+    SegmentedChunkWeakPtr _chunk; // The chunk it belongs to
+    size_t _column_index;         // The index in original chunk
+    const size_t _segment_size;
+
+    std::vector<ColumnPtr> _cached_columns; // Only used for SelectiveCopy
+};
+
+// A big-chunk would be segmented into multi small ones, to avoid allocating large-continuous memory
+// It's not a transparent replacement for Chunk, but must be aware of and set a reasonale chunk_size
+class SegmentedChunk final : public std::enable_shared_from_this<SegmentedChunk> {
+public:
+    SegmentedChunk(size_t segment_size);
+    ~SegmentedChunk() = default;
+
+    static SegmentedChunkPtr create(size_t segment_size);
+
+    void append_column(ColumnPtr column, SlotId slot_id);
+    void append_chunk(const ChunkPtr& chunk, const std::vector<SlotId>& slots);
+    void append_chunk(const ChunkPtr& chunk);
+    void append(const SegmentedChunkPtr& chunk, size_t offset);
+    void build_columns();
+
+    SegmentedColumnPtr get_column_by_slot_id(SlotId slot_id);
+    const SegmentedColumns& columns() const;
+    SegmentedColumns& columns();
+    size_t num_segments() const;
+    const std::vector<ChunkPtr>& segments() const;
+    std::vector<ChunkPtr>& segments();
+    ChunkUniquePtr clone_empty(size_t reserve);
+
+    size_t segment_size() const;
+    void reset();
+    size_t memory_usage() const;
+    size_t num_rows() const;
+    Status upgrade_if_overflow();
+    Status downgrade();
+    bool has_large_column() const;
+    void check_or_die();
+
+private:
+    std::vector<ChunkPtr> _segments;
+    SegmentedColumns _columns;
+
+    const size_t _segment_size;
+};
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

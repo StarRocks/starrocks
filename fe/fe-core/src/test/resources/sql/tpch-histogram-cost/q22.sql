@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     cntrycode,
@@ -36,6 +37,8 @@ group by
     cntrycode
 order by
     cntrycode ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F09)
 Output Exprs:32: substring | 33: count | 34: sum

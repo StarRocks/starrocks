@@ -52,8 +52,13 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
+<<<<<<< HEAD
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+=======
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -80,7 +85,11 @@ public class LoadJobTest {
         Deencapsulation.setField(loadJob, "dbId", 1L);
         new Expectations() {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb(1L);
+=======
+                globalStateMgr.getLocalMetastore().getDb(1L);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = null;
             }
@@ -128,13 +137,21 @@ public class LoadJobTest {
     @Test
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor)
+<<<<<<< HEAD
             throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+=======
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
             {
                 globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
                         (TransactionState.TxnCoordinator) any,
+<<<<<<< HEAD
                         (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
+=======
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = 1;
                 leaderTaskExecutor.submit((LeaderTask) any);

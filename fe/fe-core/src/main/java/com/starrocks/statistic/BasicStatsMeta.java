@@ -14,6 +14,11 @@
 
 package com.starrocks.statistic;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -22,6 +27,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.ListUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
@@ -32,6 +41,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class BasicStatsMeta implements Writable {
     @SerializedName("dbId")
@@ -40,6 +53,13 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("tableId")
     private long tableId;
 
+<<<<<<< HEAD
+=======
+    // Deprecated by columnStatsMetaMap
+    // But for backward compatibility, we still need to write into this field, to make sure the behavior is still
+    // correct after rollback
+    @Deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName("columns")
     private List<String> columns;
 
@@ -61,6 +81,18 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("deltaRows")
     private long deltaRows;
 
+<<<<<<< HEAD
+=======
+    // TODO: use ColumnId
+    @SerializedName("columnStats")
+    private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
+
+    // Used for deserialization
+    public BasicStatsMeta() {
+        columnStatsMetaMap = Maps.newConcurrentMap();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public BasicStatsMeta(long dbId, long tableId, List<String> columns,
                           StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
@@ -102,6 +134,12 @@ public class BasicStatsMeta implements Writable {
     }
 
     public List<String> getColumns() {
+<<<<<<< HEAD
+=======
+        if (MapUtils.isNotEmpty(columnStatsMetaMap)) {
+            return Lists.newArrayList(columnStatsMetaMap.keySet());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Just for compatibility, there are no columns in the old code,
         // and the columns may be null after deserialization.
         if (columns == null) {
@@ -123,8 +161,13 @@ public class BasicStatsMeta implements Writable {
     }
 
     public double getHealthy() {
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) database.getTable(tableId);
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long totalPartitionCount = table.getPartitions().size();
 
         long tableRowCount = 1L;
@@ -132,7 +175,11 @@ public class BasicStatsMeta implements Writable {
         long updatePartitionRowCount = 0L;
         long updatePartitionCount = 0L;
 
+<<<<<<< HEAD
         Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentStatisticStorage()
+=======
+        Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTableStatistics(table.getId(), table.getPartitions());
 
         for (Partition partition : table.getPartitions()) {
@@ -190,4 +237,46 @@ public class BasicStatsMeta implements Writable {
             return updateTime.isAfter(loadTime);
         }
     }
+<<<<<<< HEAD
+=======
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+    public void setUpdateTime(LocalDateTime updateTime) {
+        this.updateTime = updateTime;
+    }
+
+    public void setAnalyzeType(StatsConstants.AnalyzeType analyzeType) {
+        this.type = analyzeType;
+    }
+
+    public Map<String, ColumnStatsMeta> getAnalyzedColumns() {
+        Map<String, ColumnStatsMeta> deduplicate = Maps.newHashMap();
+        // TODO: just for compatible, we can remove it at next version
+        for (String column : ListUtils.emptyIfNull(columns)) {
+            deduplicate.put(column, new ColumnStatsMeta(column, type, updateTime));
+        }
+        deduplicate.putAll(columnStatsMetaMap);
+        return deduplicate;
+    }
+
+    public String getColumnStatsString() {
+        if (MapUtils.isEmpty(columnStatsMetaMap)) {
+            return "";
+        }
+        return columnStatsMetaMap.values().stream()
+                .map(ColumnStatsMeta::simpleString).collect(Collectors.joining(","));
+    }
+
+    public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
+        this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
+    }
+
+    public BasicStatsMeta clone() {
+        String json = GsonUtils.GSON.toJson(this);
+        return GsonUtils.GSON.fromJson(json, BasicStatsMeta.class);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

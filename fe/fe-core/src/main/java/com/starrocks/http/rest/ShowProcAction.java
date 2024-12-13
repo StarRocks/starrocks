@@ -38,6 +38,10 @@ import com.google.common.base.Strings;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.analysis.RedirectStatus;
+<<<<<<< HEAD
+=======
+import com.starrocks.authorization.AccessDeniedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -48,7 +52,10 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.LeaderOpExecutor;
 import com.starrocks.qe.OriginStatement;
@@ -130,7 +137,11 @@ public class ShowProcAction extends RestBaseAction {
                     procNode = instance.open(path);
                 }
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 LOG.warn(e.getMessage());
+=======
+                LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 response.getContent().append("[]");
             }
 
@@ -144,7 +155,11 @@ public class ShowProcAction extends RestBaseAction {
                     response.setContentType("application/json");
                     response.getContent().append(formatResultToJson(columnNames, rows));
                 } catch (AnalysisException e) {
+<<<<<<< HEAD
                     LOG.warn(e.getMessage());
+=======
+                    LOG.warn(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     response.getContent().append("[]");
                 }
             }

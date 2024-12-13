@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # atan
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回 `x` 的反正切值（单位为弧度），`x` 为 DOUBLE 类型的数值。
 

@@ -43,6 +43,13 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final boolean useHashBasedPartition;
     private final boolean isSkewed;
 
+<<<<<<< HEAD
+=======
+    // only true when rank <=1 with preAgg optimization is triggered, imply this window should merge input instead of update
+    // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
+    private boolean inputIsBinary;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall,
                                   List<ScalarOperator> partitionExpressions,
                                   List<Ordering> orderByElements,
@@ -50,6 +57,10 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                                   List<Ordering> enforceOrderBy,
                                   boolean useHashBasedPartition,
                                   boolean isSkewed,
+<<<<<<< HEAD
+=======
+                                  boolean inputIsBinary,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                   long limit,
                                   ScalarOperator predicate,
                                   Projection projection) {
@@ -61,6 +72,10 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         this.enforceOrderBy = enforceOrderBy;
         this.useHashBasedPartition = useHashBasedPartition;
         this.isSkewed = isSkewed;
+<<<<<<< HEAD
+=======
+        this.inputIsBinary = inputIsBinary;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
@@ -94,6 +109,13 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         return isSkewed;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isInputIsBinary() {
+        return inputIsBinary;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
@@ -132,13 +154,22 @@ public class PhysicalWindowOperator extends PhysicalOperator {
                 Objects.equals(orderByElements, that.orderByElements) &&
                 Objects.equals(analyticWindow, that.analyticWindow) &&
                 Objects.equals(useHashBasedPartition, that.useHashBasedPartition) &&
+<<<<<<< HEAD
                 Objects.equals(isSkewed, that.isSkewed);
+=======
+                Objects.equals(isSkewed, that.isSkewed) &&
+                Objects.equals(inputIsBinary, that.inputIsBinary);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
+<<<<<<< HEAD
                 useHashBasedPartition, isSkewed);
+=======
+                useHashBasedPartition, isSkewed, inputIsBinary);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

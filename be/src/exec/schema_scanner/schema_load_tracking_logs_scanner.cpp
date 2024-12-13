@@ -26,11 +26,20 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaLoadTrackingLogsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
+<<<<<<< HEAD
         {"JOB_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"LABEL", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TRACKING_LOG", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TYPE", TYPE_VARCHAR, sizeof(StringValue), true}};
+=======
+        {"ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"JOB_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LABEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRACKING_LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 SchemaLoadTrackingLogsScanner::SchemaLoadTrackingLogsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)),
@@ -71,32 +80,59 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
         }
         auto& info = _result.trackingLoads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
+<<<<<<< HEAD
             if (slot_id < 1 || slot_id > 5) {
+=======
+            if (slot_id < 1 || slot_id > 6) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
+<<<<<<< HEAD
                 // job id
+=======
+                // id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
                 break;
             }
             case 2: {
+<<<<<<< HEAD
+=======
+                // job id
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.job_id);
+                break;
+            }
+            case 3: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // label
                 Slice label = Slice(info.label);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&label);
                 break;
             }
+<<<<<<< HEAD
             case 3: {
+=======
+            case 4: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // database
                 Slice db = Slice(info.db);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&db);
                 break;
             }
+<<<<<<< HEAD
             case 4: {
                 // tracking message
                 if (info.__isset.urls) {
                     for (auto url : info.urls) {
+=======
+            case 5: {
+                // tracking message
+                if (info.__isset.urls) {
+                    for (const auto& url : info.urls) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         _fill_tracking_msg(url);
                     }
                     std::stringstream ss;
@@ -112,7 +148,11 @@ Status SchemaLoadTrackingLogsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
+<<<<<<< HEAD
             case 5: {
+=======
+            case 6: {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // type
                 Slice load_type = Slice(info.load_type);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&load_type);

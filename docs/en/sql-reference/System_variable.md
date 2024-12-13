@@ -144,6 +144,20 @@ SELECT /*+ SET_VAR
   */ * FROM TABLE;
 ```
 
+<<<<<<< HEAD
+=======
+### Set variables as user properties
+
+You can set session variables as user properties using the [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
+
+Example:
+
+```SQL
+-- Set the session variable `query_timeout` to `600` for the user jack.
+ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## Descriptions of variables
 
 The variables are described **in alphabetical order**. Variables with the `global` label can only take effect globally. Other variables can take effect either globally or for a single session.
@@ -209,9 +223,21 @@ Used for MySQL client compatibility. No practical usage.
 
 * **Description**: Specifies the maximum number of candidate materialized views allowed during query planning.
 * **Default**: 64
+<<<<<<< HEAD
 * **Data type**: Int
 * **Introduced in**: v3.1.9, v3.2.5
 
+=======
+* **Introduced in**: v3.1.9, v3.2.5
+
+### cbo_prune_subfield
+
+* **Description**: Whether to enable JSON subfield pruning. This variable must be used with the BE dynamic parameter `enable_json_flat`. Otherwise, it may degrade JSON data query performance.
+* **Default**: false
+* **Data type**: Int
+* **Introduced in**: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_sync_materialized_view_rewrite
 
 * **Description**: Whether to enable query rewrite based on synchronous materialized views.
@@ -239,6 +265,15 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: ms
 * **Introduced in**: v3.1.9, v3.2.5
 
+<<<<<<< HEAD
+=======
+### enable_materialized_view_agg_pushdown_rewrite
+
+* **Description**: Whether to enable aggregation pushdown for materialized view query rewrite. If it is set to `true`, aggregate functions will be pushed down to Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance. For detailed information about the scenarios and limitations of this feature, see [Aggregation pushdown](../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#aggregation-pushdown).
+* **Default**: false
+* **Introduced in**: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_materialized_view_text_match_rewrite
 
 * **Description**: Whether to enable text-based materialized view rewrite. When this item is set to true, the optimizer will compare the query with the existing materialized views. A query will be rewritten if the abstract syntax tree of the materialized view's definition matches that of the query or its sub-query.
@@ -251,6 +286,15 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 4
 * **Introduced in**: v3.2.5, v3.3.0
 
+<<<<<<< HEAD
+=======
+### enable_force_rule_based_mv_rewrite
+
+* **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_view_based_mv_rewrite
 
 * **Description**: Whether to enable query rewrite for logical view-based materialized views. If this item is set to `true`, the logical view is used as a unified node to rewrite the queries against itself for better performance. If this item is set to `false`, the system transcribes the queries against logical views into queries against physical tables or materialized views and then rewrites them.
@@ -304,6 +348,17 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v3.2.3
 
+<<<<<<< HEAD
+=======
+### connector_sink_target_max_file_size
+
+* **Description**: Specifies the maximum size of target file for writing data into Hive tables or Iceberg tables, or exporting data with Files(). The limit is not exact and is applied on a best-effort basis.
+* **Unit**: Bytes
+* **Default**: 1073741824
+* **Data type**: Long
+* **Introduced in**: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### count_distinct_column_buckets
 
 * **Description**: The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`.
@@ -365,6 +420,15 @@ Default value: `true`.
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v2.5
 
+<<<<<<< HEAD
+=======
+### enable_gin_filter
+
+* **Description**: Whether to utilize the [fulltext inverted index](../table_design/indexes/inverted_index.md) during queries.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_group_level_query_queue (global)
 
 * **Description**: Whether to enable resource group-level [query queue](../administration/management/resource_management/query_queues.md).
@@ -376,6 +440,31 @@ Default value: `true`.
 * **Description**: Whether to cache pointers and partition names for Iceberg tables. From v3.2.1 to v3.2.3, this parameter is set to `true` by default, regardless of what metastore service is used. In v3.2.4 and later, if the Iceberg cluster uses AWS Glue as metastore, this parameter still defaults to `true`. However, if the Iceberg cluster uses other metastore service such as Hive metastore, this parameter defaults to `false`.
 * **Introduced in**: v3.2.1
 
+<<<<<<< HEAD
+=======
+### enable_metadata_profile
+
+* **Description**: 是否为 Iceberg Catalog 的元数据收集查询开启 Profile。
+* **Default**: true
+* **Introduced in**: v3.3.3
+
+### plan_mode
+
+* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
+  * `auto`: The system will automatically select the retrieval plan.
+  * `local`: Use the local cache plan.
+  * `distributed`: Use the distributed plan.
+* **Default**: auto
+* **Introduced in**: v3.3.3
+
+### metadata_collect_query_timeout
+
+* **Description**: The timeout duration for Iceberg Catalog metadata collection queries.
+* **Unit**: Second
+* **Default**: 60
+* **Introduced in**: v3.3.3
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_insert_strict
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
@@ -404,6 +493,15 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Default**: false
 * **Introduced in**: v3.0
 
+<<<<<<< HEAD
+=======
+### enable_spill_to_remote_storage
+
+* **Description**: Whether to enable intermediate result spilling to object storage. If it is set to `true`, StarRocks spills the intermediate results to the storage volume specified in `spill_storage_volume` after the capacity limit of the local disk is reached. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
+* **Default**: false
+* **Introduced in**: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### enable_strict_order_by
 
 * **Description**: Used to check whether the column name referenced in ORDER BY is ambiguous. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries.
@@ -469,11 +567,34 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 * **Default**: false
 * **Introduced in**: v2.5
 
+<<<<<<< HEAD
 ### enable_populate_datacache
 
 * **Description**: Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5. In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
 * **Default**: true
 * **Introduced in**: v2.5
+=======
+### populate_datacache_mode
+
+* **Description**: Specifies the population behavior of Data Cache when reading data blocks from external storage systems. Valid values:
+  * `auto` (default): the system automatically caches data selectively based on the population rule.
+  * `always`: Always cache the data.
+  * `never`: Never cache the data.
+* **Default**: auto
+* **Introduced in**: v3.3.2
+
+### enable_datacache_io_adaptor
+
+* **Description**: Whether to enable the Data Cache I/O Adaptor. Setting this to `true` enables the feature. When this feature is enabled, the system automatically routes some cache requests to remote storage when the disk I/O load is high, reducing disk pressure.
+* **Default**: true
+* **Introduced in**: v3.3.0
+
+### enable_file_metacache
+
+* **Description**: Whether to enable metadata cache for files in remote storage (Footer Cache). Setting this to `true` enables the feature. Footer Cache directly caches the parsed Footer object in memory. When the same file's Footer is accessed in subsequent queries, the object descriptor can be obtained directly from the cache, avoiding repetitive parsing. This feature uses the memory module of the Data Cache for data caching. Therefore, you must ensure that the BE parameter `datacache_enable` is set to `true` and configure a reasonable value for `datacache_mem_size`.
+* **Default**: true
+* **Introduced in**: v3.3.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### enable_tablet_internal_parallel
 
@@ -591,6 +712,19 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: Int
 * **Introduced in**: v2.5
 
+<<<<<<< HEAD
+=======
+### jit_level
+
+* **Description**: The level at which JIT compilation for expressions is enabled. Valid values:
+  * `1`: The system adaptively enables JIT compilation for compilable expressions.
+  * `-1`: JIT compilation is enabled for all compilable, non-constant expressions.
+  * `0`: JIT compilation is disabled. You can disable it manually if any error is returned for this feature.
+* **Default**: 1
+* **Data type**: Int
+* **Introduced in**: -
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### language (global)
 
 Used for MySQL client compatibility. No practical usage.
@@ -763,30 +897,51 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
+<<<<<<< HEAD
 * **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable.
 * **Default**: 0, which means no limit.
+=======
+* **Description**: Used to set the memory limit of a query on each BE node. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled. When the `Memory Exceed Limit` error happens, you could try to increase this variable. Setting it to `0` indicates no limit is imposed.
+* **Default**: 0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * **Unit**: Byte
 
 ### query_queue_concurrency_limit (global)
 
+<<<<<<< HEAD
 * **Description**: The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`.
+=======
+* **Description**: The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * **Default**: 0
 * **Data type**: Int
 
 ### query_queue_cpu_used_permille_limit (global)
 
+<<<<<<< HEAD
 * **Description**: The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`.
+=======
+* **Description**: The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * **Value range**: [0, 1000]
 * **Default**: `0`
 
 ### query_queue_max_queued_queries (global)
 
+<<<<<<< HEAD
 * **Description**: The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`.
+=======
+* **Description**: The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * **Default**: `1024`.
 
 ### query_queue_mem_used_pct_limit (global)
 
+<<<<<<< HEAD
 * **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`.
+=======
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 * **Value range**: [0, 1]
 * **Default**: 0
 
@@ -845,6 +1000,15 @@ The execution mode of intermediate result spilling. Valid values:
 
 This variable takes effect only when the variable `enable_spill` is set to `true`.
 
+<<<<<<< HEAD
+=======
+### spill_storage_volume
+
+* **Description**: The storage volume with which you want to store the intermediate results of queries that triggered spilling. For more information, see [Spill to object storage](../administration/management/resource_management/spill_to_disk.md#preview-spill-intermediate-result-to-object-storage).
+* **Default**: Empty string
+* **Introduced in**: v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### SQL_AUTO_IS_NULL
 
 Used for compatibility with the JDBC connection pool C3P0. No practical usage.

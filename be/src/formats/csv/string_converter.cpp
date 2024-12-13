@@ -73,7 +73,10 @@ bool StringConverter::read_string(Column* column, const Slice& s, const Options&
         }
         down_cast<BinaryColumn*>(column)->append(s);
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return true;
 }
 
@@ -114,8 +117,25 @@ bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, con
         max_size = options.type_desc->len;
     }
     size_t ext_size = new_size - old_size;
+<<<<<<< HEAD
     if (config::enable_check_string_lengths &&
         ((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
+=======
+
+    bool length_check_status = true;
+    // Hive table, not limit string length <= 1mb anymore
+    if (options.is_hive) {
+        if (max_size > 0 && ext_size > max_size) {
+            length_check_status = false;
+        }
+    } else {
+        if (config::enable_check_string_lengths &&
+            ((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
+            length_check_status = false;
+        }
+    }
+    if (!length_check_status) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         bytes.resize(old_size);
         VLOG(3) << strings::Substitute(
                 "Column [$0]'s length exceed max varchar length. old_size($1), new_size($2), ext_size($3), "
@@ -123,6 +143,10 @@ bool StringConverter::read_quoted_string(Column* column, const Slice& tmp_s, con
                 column->get_name(), old_size, new_size, ext_size, max_size);
         return false;
     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     offsets.push_back(bytes.size());
     return true;
 }

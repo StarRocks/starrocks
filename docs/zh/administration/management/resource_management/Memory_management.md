@@ -1,5 +1,9 @@
 ---
+<<<<<<< HEAD
 displayed_sidebar: "docs"
+=======
+displayed_sidebar: docs
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ---
 
 # 管理内存
@@ -102,6 +106,10 @@ StarRocks BE 中的内存分为以下几类。
 | compaction      | starrocks_be_compaction_mem_bytes         | 版本合并总内存。                                   | compaction_max_memory_limit, compaction_max_memory_limit_percent           |
 | column_pool     | starrocks_be_column_pool_mem_bytes        | column pool 内存池，用于加速存储层数据读取的 Column Cache。 |                                                                            |
 | page_cache      | starrocks_be_storage_page_cache_mem_bytes | BE 存储层 page 缓存。                            | disable_storage_page_cache, storage_page_cache_limit                       |
+<<<<<<< HEAD
+=======
+| jit_cache       | starrocks_be_jit_cache_mem_bytes          | BE jit 编译函数的缓存。                            | jit_lru_cache_size                                                         |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | chunk_allocator | starrocks_be_chunk_allocator_mem_bytes    | CPU per core 缓存，用于加速小块内存申请的 Cache。         | chunk_reserved_bytes_limit                                                 |
 | consistency     | starrocks_be_consistency_mem_bytes        | 定期一致性校验使用的内存。                              | consistency_max_memory_limit_percent, consistency_max_memory_limit         |
 | schema_change   | starrocks_be_schema_change_mem_bytes      | Schema Change 任务使用的总内存。                    | memory_limitation_per_thread_for_schema_change                             |
@@ -121,6 +129,10 @@ StarRocks BE 中的内存分为以下几类。
 | compaction_max_memory_limit_percent | 100          | 所有 Compaction 线程的最大内存使用百分比，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。                                       |
 | disable_storage_page_cache | false        | 是否开启 PageCache。开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。该配置项与 storage_page_cache_limit 配合使用，在内存资源充足和有大数据量 Scan 的场景中启用能够加速查询性能。自 2.4 版本起，该参数默认值由 `TRUE` 变更为 `FALSE`。 自 3.1 版本开始，该参数由静态变为动态。 |
 | storage_page_cache_limit | 20%          | BE 存储层 page 缓存可以使用的内存上限。                                                                                                                                                                                                  |
+<<<<<<< HEAD
+=======
+| jit_lru_cache_size | 0          | BE jit LRU 缓存可以使用的内存配置，如果大于0，那么就是 cache size，否则将自适应设置 size：可用内存 >= 16 GB 才开启，数值是内存的 1%，上限 1GB。                                                                                                                                                                                                   |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | chunk_reserved_bytes_limit | 2147483648   | 用于加速小块内存分配的 Cache，默认上限为 2GB。您可以在内存资源充足的情况下打开。                                                                                                                                                                             |
 | consistency_max_memory_limit_percent | 20           | 一致性校验任务使用的内存上限，取 mem_limit * consistency_max_memory_limit_percent / 100 和 consistency_max_memory_limit 中较小的值。内存使用超限，会导致一致性校验任务失败。                                                                                         |
 | consistency_max_memory_limit | 10G          | 一致性校验任务使用的内存上限，取 mem_limit * consistency_max_memory_limit_percent / 100 和 consistency_max_memory_limit 中较小的值。内存使用超限，会导致一致性校验任务失败。                                                                                         |

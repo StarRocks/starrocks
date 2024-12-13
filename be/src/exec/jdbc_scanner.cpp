@@ -27,6 +27,10 @@
 #include "exprs/expr_context.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
+=======
+#include "types/type_checker_manager.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
@@ -139,7 +143,10 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     // use query timeout or default value of HikariConfig
     int connection_timeout_ms =
             state->query_options().__isset.query_timeout ? state->query_options().query_timeout * 1000 : 30 * 1000;
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
                                    statement_fetch_size, connection_pool_size, minimum_idle_connections,
                                    idle_timeout_ms, connection_timeout_ms);
@@ -199,6 +206,7 @@ void JDBCScanner::_init_profile() {
 }
 
 StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
+<<<<<<< HEAD
     auto type = slot_desc->type().type;
     if (java_class == "java.lang.Short") {
         if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {
@@ -331,6 +339,9 @@ StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_c
         return TYPE_VARCHAR;
     }
     __builtin_unreachable();
+=======
+    return TypeCheckerManager::getInstance().checkType(java_class, slot_desc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status JDBCScanner::_init_column_class_name(RuntimeState* state) {

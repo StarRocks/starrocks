@@ -286,7 +286,11 @@ Status ReplicationUtils::download_remote_snapshot(
             estimate_timeout_sec = config::replication_min_speed_time_seconds;
         }
 
+<<<<<<< HEAD
         VLOG(1) << "Downloading " << remote_file_url << ", bytes: " << file_size
+=======
+        VLOG(2) << "Downloading " << remote_file_url << ", bytes: " << file_size
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 << ", timeout: " << estimate_timeout_sec << "s";
 
         RETURN_IF_ERROR(download_remote_file(remote_file_url, estimate_timeout_sec,

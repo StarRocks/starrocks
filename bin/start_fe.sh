@@ -36,6 +36,11 @@ HELPER=
 HOST_TYPE=
 ENABLE_DEBUGGER=0
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
+<<<<<<< HEAD
+=======
+# min jdk version required
+MIN_JDK_VERSION=11
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
@@ -75,6 +80,7 @@ if [[ -z ${JAVA_HOME} ]]; then
     if command -v javac &> /dev/null; then
         export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which javac))))"
         echo "Infered JAVA_HOME=$JAVA_HOME"
+<<<<<<< HEAD
     else
       cat << EOF
 Error: The environment variable JAVA_HOME is not set. The FE program requires JDK version 8 or higher in order to run.
@@ -87,11 +93,29 @@ sudo yum install java-1.8.0-openjdk-devel (on CentOS/RHEL)
 For example:
 export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 3. Try running this script again.
+=======
+    elif command -v java &> /dev/null; then
+        export JAVA_HOME="$(dirname $(dirname $(readlink -f $(which java))))"
+    else
+      cat << EOF
+Error: The environment variable JAVA_HOME is not set, and neither JDK or JRE is found.
+The FE program requires JDK/JRE version $MIN_JDK_VERSION  or higher in order to run.
+Please take the following steps to resolve this issue:
+1. Install OpenJDK $MIN_JDK_VERSION or higher using your Linux distribution's package manager,
+   or following the openjdk installation instructions at https://openjdk.org/install/
+2. Set the JAVA_HOME environment variable to point to your installed OpenJDK directory.
+   For example:
+   export JAVA_HOME=/usr/lib/jvm/java-$MIN_JDK_VERSION
+3. Try running this script again.
+Note: If you are using a JRE environment, you should set your JAVA_HOME to your JRE directory.
+For full development tools, JDK is recommended.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 EOF
       exit 1
     fi
 fi
 
+<<<<<<< HEAD
 # cannot be jre
 if [ ! -f "$JAVA_HOME/bin/javac" ]; then
   cat << EOF
@@ -102,13 +126,20 @@ EOF
   exit 1
 fi
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 JAVA=$JAVA_HOME/bin/java
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
+<<<<<<< HEAD
 # JDK8 is still OK for v3.2.x, so this line will just block jdk9 and jdk10
 if [[ "$JAVA_VERSION" -gt 8 && "$JAVA_VERSION" -lt 11 ]]; then
     echo "JDK $JAVA_VERSION is not supported, please use JDK 8, 11 or 17"
+=======
+if [[ "$JAVA_VERSION" -lt $MIN_JDK_VERSION ]]; then
+    echo "Error: JDK $JAVA_VERSION is not supported, please use JDK version $MIN_JDK_VERSION or higher"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     exit -1
 fi
 
@@ -124,6 +155,11 @@ fi
 # For JDK11, it takes the following precedences:
 #    JAVA_OPTS_FOR_JDK_11 > JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
 # (The `JAVA_OPTS_FOR_JDK_9` here is just for historic reason)
+<<<<<<< HEAD
+=======
+# For JDK9, it takes the following precedences:
+#    JAVA_OPTS_FOR_JDK_9 > JAVA_OPTS
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 # For all remain jdk versions, only JAVA_OPTS takes effect.
 #
 # NOTE: try not adding new JAVA_OPTS_FOR_JDK_## for a new JDK version.
@@ -135,6 +171,13 @@ case $JAVA_VERSION in
     final_java_opt=${JAVA_OPTS_FOR_JDK_11:-$JAVA_OPTS_FOR_JDK_9}
     final_java_opt=${final_java_opt:-$JAVA_OPTS}
     ;;
+<<<<<<< HEAD
+=======
+  9)
+    # take JAVA_OPTS_FOR_JDK_9 or JAVA_OPTS if the former is empty
+    final_java_opt=${JAVA_OPTS_FOR_JDK_9:-$JAVA_OPTS}
+    ;;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   *)
     final_java_opt=$JAVA_OPTS
     ;;
@@ -145,7 +188,11 @@ if [ -z "$final_java_opt" ] ; then
     if [ -z "$DATE" ] ; then
         DATE=`date +%Y%m%d-%H%M%S`
     fi
+<<<<<<< HEAD
     final_java_opt="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
+=======
+    final_java_opt="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     echo "JAVA_OPTS is not set in fe.conf, use default java options to start fe process: $final_java_opt"
 fi
 
@@ -155,6 +202,7 @@ fi
 xmx=$(detect_jvm_xmx)
 final_java_opt="${final_java_opt} ${xmx}"
 
+<<<<<<< HEAD
 if [[ "$JAVA_VERSION" -lt 11 ]]; then
     echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
     if [[ "$JAVA_VERSION" == 8 ]]; then
@@ -174,6 +222,12 @@ if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
     else
         final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
     fi
+=======
+if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
+    # Allow attaching debuggers to the FE process:
+    # https://www.jetbrains.com/help/idea/attaching-to-local-process.html
+    final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     echo "Start debugger with: $final_java_opt"
 fi
 

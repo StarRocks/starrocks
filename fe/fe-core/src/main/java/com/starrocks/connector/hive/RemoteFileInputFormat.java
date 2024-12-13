@@ -28,7 +28,11 @@ import static com.starrocks.connector.hive.HiveClassNames.TEXT_INPUT_FORMAT_CLAS
 public enum RemoteFileInputFormat {
     PARQUET,
     ORC,
+<<<<<<< HEAD
     TEXT,
+=======
+    TEXTFILE,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     AVRO,
     RCBINARY,
     RCTEXT,
@@ -38,7 +42,11 @@ public enum RemoteFileInputFormat {
             new ImmutableMap.Builder<String, RemoteFileInputFormat>()
                     .put(MAPRED_PARQUET_INPUT_FORMAT_CLASS, PARQUET)
                     .put(ORC_INPUT_FORMAT_CLASS, ORC)
+<<<<<<< HEAD
                     .put(TEXT_INPUT_FORMAT_CLASS, TEXT)
+=======
+                    .put(TEXT_INPUT_FORMAT_CLASS, TEXTFILE)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .put(AVRO_INPUT_FORMAT_CLASS, AVRO)
                     .put(RCFILE_INPUT_FORMAT_CLASS, RCBINARY)
                     .put(SEQUENCE_INPUT_FORMAT_CLASS, SEQUENCE)
@@ -72,13 +80,29 @@ public enum RemoteFileInputFormat {
         return INPUT_FORMAT_BACKEND_SPLITTABLE.getOrDefault(this, false);
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isTextFormat() {
+        switch (this) {
+            case TEXTFILE:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public THdfsFileFormat toThrift() {
         switch (this) {
             case PARQUET:
                 return THdfsFileFormat.PARQUET;
             case ORC:
                 return THdfsFileFormat.ORC;
+<<<<<<< HEAD
             case TEXT:
+=======
+            case TEXTFILE:
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return THdfsFileFormat.TEXT;
             case AVRO:
                 return THdfsFileFormat.AVRO;

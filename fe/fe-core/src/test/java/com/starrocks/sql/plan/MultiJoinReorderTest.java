@@ -34,6 +34,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
 
+<<<<<<< HEAD
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, 1);
 
@@ -43,6 +44,17 @@ public class MultiJoinReorderTest extends PlanTestBase {
         setTableStatistics(t2, 100000);
 
         OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("t3");
+=======
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
+        setTableStatistics(t0, 1);
+
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
+        setTableStatistics(t1, 10);
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t2");
+        setTableStatistics(t2, 100000);
+
+        OlapTable t3 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t3, 1000000000);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(2);
         FeConstants.runningUnitTest = true;
@@ -72,7 +84,10 @@ public class MultiJoinReorderTest extends PlanTestBase {
         connectContext.getSessionVariable().disableDPJoinReorder();
         String sql = "select * from t1 join t3 on t1.v4 = t3.v10 join t0 join t2";
         String planFragment = getFragmentPlan(sql);
+<<<<<<< HEAD
         System.out.println(planFragment);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(planFragment.contains("3:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains(" |----8:EXCHANGE\n" +
@@ -308,6 +323,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----28:EXCHANGE\n" +
                 "  |    \n" +
                 "  9:Project\n" +
+<<<<<<< HEAD
                 "  |  <slot 12> : 12: v5\n" +
                 "  |  \n" +
                 "  8:HASH JOIN\n" +
@@ -337,6 +353,11 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "    UNPARTITIONED\n" +
                 "\n" +
                 "  27:Project\n" +
+=======
+                "  |  <slot 12> : 12: v5");
+
+        Assert.assertTrue(planFragment, planFragment.contains("27:Project\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  <slot 10> : 10: count\n" +
                 "  |  \n" +
                 "  26:NESTLOOP JOIN\n" +
@@ -349,7 +370,29 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  <slot 26> : 1\n" +
                 "  |  \n" +
                 "  10:OlapScanNode\n" +
+<<<<<<< HEAD
                 "     TABLE: t2");
+=======
+                "     TABLE: t2"));
+
+        // Right sub join tree (a)
+        assertContains(planFragment, "22:AGGREGATE (update serialize)\n" +
+                "  |  output: count(2: v5)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  21:Project\n" +
+                "  |  <slot 2> : 2: v5\n" +
+                "  |  \n" +
+                "  20:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: v10 = 1: v4\n" +
+                "  |  \n" +
+                "  |----19:EXCHANGE\n" +
+                "  |    \n" +
+                "  12:OlapScanNode\n" +
+                "     TABLE: t3");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -398,6 +441,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "join t0 on t1.v4 = t0.v2 " +
                 "join t2 on t1.v5 = t2.v8 ";
         String planFragment = getFragmentPlan(sql);
+<<<<<<< HEAD
         Assert.assertTrue(planFragment.contains("  2:OlapScanNode\n" +
                 "     TABLE: t0"));
         Assert.assertTrue(planFragment.contains("  |----3:EXCHANGE\n" +
@@ -410,6 +454,25 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t3"));
+=======
+        System.out.println(planFragment);
+        Assert.assertTrue(planFragment.contains("2:OlapScanNode\n" +
+                "     TABLE: t0"));
+        Assert.assertTrue(planFragment.contains("|----3:EXCHANGE\n" +
+                "  |    \n" +
+                "  1:OlapScanNode\n" +
+                "     TABLE: t1"));
+        Assert.assertTrue(planFragment.contains("|----5:EXCHANGE\n" +
+                "  |    \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t3"));
+        Assert.assertTrue(planFragment.contains("9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v5 = 11: v8\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test

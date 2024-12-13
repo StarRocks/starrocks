@@ -19,7 +19,11 @@ import TabItem from '@theme/TabItem';
 > - 自 3.1 版本起，您在建表和新增分区时可以不设置分桶键（即 DISTRIBUTED BY 子句）。StarRocks 默认使用随机分桶，将数据随机地分布在分区的所有分桶中。更多信息，请参见[随机分桶](#随机分桶自-v31)。
 > - 自 2.5.7 版本起，您在建表和新增分区时可以不设置分桶数量 (BUCKETS)。StarRocks 默认自动设置分桶数量，如果自动设置分桶数量后性能未能达到预期，并且您比较熟悉分桶机制，则您也可以[手动设置分桶数量](#设置分桶数量)。
 
+<<<<<<< HEAD
 ## 数据分布概览
+=======
+## 功能简介
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### 常见的数据分布方式
 
@@ -167,7 +171,11 @@ StarRocks 支持单独和组合使用数据分布方式。
 
 **选择分区列和分区粒度**
 
+<<<<<<< HEAD
 - 选择合理的分区列可以有效的裁剪查询数据时扫描的数据量。业务系统中⼀般会选择根据时间进行分区，以优化大量删除过期数据带来的性能问题，同时也方便冷热数据分级存储，此时可以使用时间列作为分区列进行表达式分区或者 Range 分区。此外，如果经常按照枚举值查询数据和管理数据，则可以选择枚举值的列作为分区列进行表达式分区或者 List 分区。
+=======
+- 分区键由一个或者多个分区列组成。选择合理的分区列可以有效的裁剪查询数据时扫描的数据量。业务系统中⼀般会选择根据时间进行分区，以优化大量删除过期数据带来的性能问题，同时也方便冷热数据分级存储，此时可以使用时间列作为分区列进行表达式分区或者 Range 分区。此外，如果经常按照枚举值查询数据和管理数据，则可以选择枚举值的列作为分区列进行表达式分区或者 List 分区。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 选择分区单位时需要综合考虑数据量、查询特点、数据管理粒度等因素。
   - 示例 1：表单月数据量很小，可以按月分区，相比于按天分区，可以减少元数据数量，从而减少元数据管理和调度的资源消耗。
   - 示例 2：表单月数据量很大，而大部分查询条件精确到天，如果按天分区，可以做有效的分区裁剪，减少查询扫描的数据量。
@@ -200,16 +208,141 @@ StarRocks 支持单独和组合使用数据分布方式。
 
 #### Range 分区
 
+<<<<<<< HEAD
 Range 分区适用于简单且具有连续性的数据，如时间序列数据（日期或时间戳）或连续的数值数据。并且经常按照连续日期/数值范围，来查询和管理数据。以及一些特殊场景，比如一张表的分区粒度不一致，历史数据需要按月划分分区，而最近数据需要按天划分分区。
 
 StarRocks 会根据您显式定义的范围与分区的映射关系将数据分配到相应的分区中。
 
 **动态分区**
+=======
+Range 分区适用于简单且具有连续性的数据，如时间序列数据或连续的数值数据。并且经常按照连续日期/数值范围，来查询和管理数据。以及一些特殊场景，比如一张表的分区粒度不一致，历史数据需要按月划分分区，而最近数据需要按天划分分区。
+
+您需要显示定义数据分区列，以及分区和分区列值范围的映射关系。数据导入时 StarRocks 会根据数据分区列值所属范围，将数据分配到相应的分区中。
+
+在分区列的数据类型方面，在 3.3.0 之前，Range 分区仅支持分区列为日期和整数类型。自 3.3.0 起，新增支持三个特定时间函数作为分区列。在显式定义分区与分区列值范围的映射关系时，您需要使用特定时间函数将时间戳或字符串的分区列值转成日期，然后按转换后的日期划分分区。
+
+  :::info
+
+  - 如果分区列值是时间戳，则划分分区时，需要使用 from_unixtime 或者 from_unixtime_ms 函数将时间戳转换为日期。并且使用 from_unixtime 函数时，分区列仅支持 INT 和 BIGINT 类型，使用 from_unixtime_ms 函数时，分区列仅支持为 BIGINT 类型。
+  - 如果分区列是字符串（STRING、VARCHAR 或者 CHAR类型），则划分分区时，需要使用 str2date 函数将字符串转换为日期。
+
+  :::
+
+##### 手动创建分区
+
+定义每个分区和分区列值范围的映射关系。
+
+- **分区列为日期类型**
+
+    ```SQL
+    CREATE TABLE site_access(
+        event_day DATE,
+        site_id INT,
+        city_code VARCHAR(100),
+        user_name VARCHAR(32),
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(event_day, site_id, city_code, user_name)
+    PARTITION BY RANGE(event_day)(
+        PARTITION p1 VALUES LESS THAN ("2020-01-31"),
+        PARTITION p2 VALUES LESS THAN ("2020-02-29"),
+        PARTITION p3 VALUES LESS THAN ("2020-03-31")
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+- **分区列为整数类型**
+
+    ```SQL
+    CREATE TABLE site_access(
+        datekey INT,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        PARTITION p1 VALUES LESS THAN ("20200131"),
+        PARTITION p2 VALUES LESS THAN ("20200229"),
+        PARTITION p3 VALUES LESS THAN ("20200331")
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+- **三个特定时间函数作为分区列（自 3.3.0 起支持）**
+  
+  在显式定义分区与分区列值范围的映射关系时，您需要先使用特定时间函数将时间戳或字符串的分区列值转成日期，然后按转换后的日期划分分区。
+
+  <Tabs groupId="manual partitioning">
+  <TabItem value="example1" label="分区列值为时间戳" default>
+
+  ```SQL
+  -- 精确到秒的 10 位时间戳，例如：1703832553
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT SUM DEFAULT '0'
+    )
+  AGGREGATE KEY(event_time, site_id, city_code, user_name)
+  PARTITION BY RANGE(from_unixtime(event_time)) (
+      PARTITION p1 VALUES LESS THAN ("2021-01-01"),
+      PARTITION p2 VALUES LESS THAN ("2021-01-02"),
+      PARTITION p3 VALUES LESS THAN ("2021-01-03")
+  )
+  DISTRIBUTED BY HASH(site_id)
+  ;
+  
+  -- 精确到毫秒的 13 位时间戳，例如：1703832553219
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT SUM DEFAULT '0'
+    )
+  AGGREGATE KEY(event_time, site_id, city_code, user_name)
+  PARTITION BY RANGE(from_unixtime_ms(event_time))(
+      PARTITION p1 VALUES LESS THAN ("2021-01-01"),
+      PARTITION p2 VALUES LESS THAN ("2021-01-02"),
+      PARTITION p3 VALUES LESS THAN ("2021-01-03")
+  )
+  DISTRIBUTED BY HASH(site_id);
+  ```
+
+  </TabItem>
+  <TabItem value="example2" label="分区列值为字符串">
+
+    ```SQL
+    CREATE TABLE site_access (
+         event_time  varchar(100),
+         site_id INT,
+         city_code SMALLINT,
+         user_name VARCHAR(32),
+         pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(event_time, site_id, city_code, user_name)
+    PARTITION BY RANGE(str2date(event_time, '%Y-%m-%d'))(
+        PARTITION p1 VALUES LESS THAN ("2021-01-01"),
+        PARTITION p2 VALUES LESS THAN ("2021-01-02"),
+        PARTITION p3 VALUES LESS THAN ("2021-01-03")
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+  </TabItem>
+  </Tabs>
+
+##### 动态分区
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 建表时[配置动态分区属性](dynamic_partitioning.md)，StarRocks 会⾃动提前创建新的分区，删除过期分区，从而确保数据的时效性，实现对分区的⽣命周期管理（Time to Life，简称 “TTL”）。
 
 区别于表达式分区中自动创建分区功能，动态创建分区只是根据您配置的动态分区属性，定期提前创建一些分区。如果导入的新数据不属于这些提前创建的分区，则导入任务会报错。而表达式分区中自动创建分区功能会根据导入数据创建对应的新分区。
 
+<<<<<<< HEAD
 **手动创建分区**
 
 选择合理的分区键可以有效的裁剪扫描的数据量。**目前仅支持分区键的数据类型为日期和整数类型**。在实际业务场景中，一般从数据管理的角度选择分区键，常见的分区键为时间或者区域。
@@ -238,6 +371,18 @@ DISTRIBUTED BY HASH(site_id);
 - **建表时批量创建日期分区**
 
     当分区键为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
+=======
+##### 批量创建分区
+
+建表时和建表后，支持批量创建分区，通过 START、END 指定批量分区的开始和结束，EVERY 子句指定分区增量值。其中，批量分区包含 START 的值，但是不包含 END 的值。分区的命名规则同动态分区一样。
+
+- **分区列为日期类型**
+
+    当分区列为日期类型时，建表时通过 START、END 指定批量分区的开始日期和结束日期，EVERY 子句指定分区增量值。并且 EVERY 子句中用 INTERVAL 关键字表示日期间隔，目前支持日期间隔的单位为 HOUR（自 3.0 版本起）、DAY、WEEK、MONTH、YEAR。
+
+  <Tabs groupId="batch partitioning(date)">
+  <TabItem value="example1" label="日期间隔相同" default>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     如下示例中，批量分区的开始日期为 `2021-01-01` 和结束日期为 `2021-01-04`，增量值为一天：
 
@@ -249,15 +394,22 @@ DISTRIBUTED BY HASH(site_id);
         user_name VARCHAR(32),
         pv BIGINT DEFAULT '0'
     )
+<<<<<<< HEAD
     ENGINE=olap
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DUPLICATE KEY(datekey, site_id, city_code, user_name)
     PARTITION BY RANGE (datekey) (
         START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
     )
+<<<<<<< HEAD
     DISTRIBUTED BY HASH(site_id)
     PROPERTIES (
         "replication_num" = "3" 
     );
+=======
+    DISTRIBUTED BY HASH(site_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ```
 
     则相当于在建表语句中使用如下 PARTITION BY 子句：
@@ -270,9 +422,16 @@ DISTRIBUTED BY HASH(site_id);
     )
     ```
 
+<<<<<<< HEAD
 - **建表时批量创建不同日期间隔的日期分区**
 
     建表时批量创建日期分区时，支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
+=======
+  </TabItem>
+  <TabItem value="example2" label="日期间隔不同">
+
+    支持针对不同的日期分区区间（日期分区区间不能相重合），使用不同的 EVERY 子句指定日期间隔。一个日期分区区间，按照对应 EVERY 子句定义的日期间隔，批量创建分区，例如：
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ```SQL
     CREATE TABLE site_access (
@@ -282,17 +441,24 @@ DISTRIBUTED BY HASH(site_id);
         user_name VARCHAR(32),
         pv BIGINT DEFAULT '0'
     )
+<<<<<<< HEAD
     ENGINE=olap
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DUPLICATE KEY(datekey, site_id, city_code, user_name)
     PARTITION BY RANGE (datekey) (
         START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
         START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
         START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
     )
+<<<<<<< HEAD
     DISTRIBUTED BY HASH(site_id)
     PROPERTIES (
         "replication_num" = "3"
     );
+=======
+    DISTRIBUTED BY HASH(site_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ```
 
     则相当于在建表语句中使用如下 PARTITION BY 子句：
@@ -311,14 +477,29 @@ DISTRIBUTED BY HASH(site_id);
     )
     ```
 
+<<<<<<< HEAD
 - **建表时批量创建数字分区**
 
     当分区键为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
+=======
+  </TabItem>
+  </Tabs>
+
+- **分区列为数值类型**
+
+    当分区列为整数类型时，建表时通过 START、END 指定批量分区的开始值和结束值，EVERY 子句指定分区增量值。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     > **说明**
     >
     > START、END 所指定的分区列的值需要使用英文引号包裹，而 EVERY 子句中的分区增量值不用英文引号包裹。
 
+<<<<<<< HEAD
+=======
+  <Tabs groupId="batch partitioning(integer)">
+  <TabItem value="example1" label="数值间隔相同" default>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     如下示例中，批量分区的开始值为 `1` 和结束值为 `5`，分区增量值为 `1`：
 
     ```SQL
@@ -329,15 +510,22 @@ DISTRIBUTED BY HASH(site_id);
         user_name VARCHAR(32),
         pv BIGINT DEFAULT '0'
     )
+<<<<<<< HEAD
     ENGINE=olap
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DUPLICATE KEY(datekey, site_id, city_code, user_name)
     PARTITION BY RANGE (datekey) (
         START ("1") END ("5") EVERY (1)
     )
+<<<<<<< HEAD
     DISTRIBUTED BY HASH(site_id)
     PROPERTIES (
         "replication_num" = "3"
     );
+=======
+    DISTRIBUTED BY HASH(site_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ```
 
     则相当于在建表语句中使用如下 PARTITION BY 子句：
@@ -351,6 +539,7 @@ DISTRIBUTED BY HASH(site_id);
     )
     ```
 
+<<<<<<< HEAD
 - **建表后批量创建分区**
 
     建表后，支持通过ALTER TABLE 语句批量创建分区。相关语法与建表时批量创建分区类似，通过指定 ADD PARTITIONS 关键字，以及 START、END 以及 EVERY 子句来批量创建分区。示例如下：
@@ -360,6 +549,86 @@ DISTRIBUTED BY HASH(site_id);
     ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
     ```
 
+=======
+  </TabItem>
+  <TabItem value="example2" label="数值间隔不同">
+
+    支持针对不同的数值分区区间（数值分区区间不能相重合），使用不同的 EVERY 子句指定数值间隔。一个数值分区区间，按照对应 EVERY 子句定义的数值间隔，批量创建分区，例如：
+
+    ```SQL
+    CREATE TABLE site_access (
+        datekey INT,
+        site_id INT,
+        city_code SMALLINT,
+        user_name VARCHAR(32),
+        pv BIGINT DEFAULT '0'
+    )
+    DUPLICATE KEY(datekey, site_id, city_code, user_name)
+    PARTITION BY RANGE (datekey) (
+        START ("1") END ("10") EVERY (1),
+        START ("10") END ("100") EVERY (10)
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+  </TabItem>
+  </Tabs>
+
+- **三个特定时间函数作为分区列（自 3.3.0 起支持）**
+
+  在显式定义分区与分区列值范围的映射关系时，您需要先使用特定时间函数将时间戳或字符串的分区列值转成日期，然后按转换后的日期划分分区。
+
+  <Tabs groupId="batch partitioning(timestamp and string)">
+  <TabItem value="example1" label="分区列值为时间戳" default>
+
+  ```SQL
+  -- 精确到秒的 10 位时间戳，例如：1703832553
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+    )
+  PARTITION BY RANGE(from_unixtime(event_time)) (
+      START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+  )
+  DISTRIBUTED BY HASH(site_id);
+  -- 精确到毫秒的 13 位时间戳，例如：1703832553219
+  CREATE TABLE site_access(
+      event_time bigint,
+      site_id INT,
+      city_code SMALLINT,
+      user_name VARCHAR(32),
+      pv BIGINT DEFAULT '0'
+  )
+  PARTITION BY RANGE(from_unixtime_ms(event_time))(
+      START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+  )
+  DISTRIBUTED BY HASH(site_id);
+  ```
+
+  </TabItem>
+  <TabItem value="example2" label="分区列为字符串类型">
+
+    ```SQL
+    CREATE TABLE site_access (
+         event_time  varchar(100),
+         site_id INT,
+         city_code SMALLINT,
+         user_name VARCHAR(32),
+         pv BIGINT DEFAULT '0'
+  )
+    PARTITION BY RANGE(str2date(event_time, '%Y-%m-%d'))(
+        START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+    )
+    DISTRIBUTED BY HASH(site_id);
+    ```
+
+  </TabItem>
+  </Tabs>
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #### List 分区（自 v3.1）
 
 [List 分区](list_partitioning.md)适用于按照枚举值来查询和管理数据。尤其适用于一个分区中需要包含各分区列的多个值。比如经常按照国家和城市来查询和管理数据，则可以使用该方式，选择分区列为 `city`，一个分区包含属于一个国家的多个城市的数据。

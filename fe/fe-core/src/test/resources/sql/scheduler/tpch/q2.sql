@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     s_acctbal,
@@ -42,12 +43,18 @@ order by
     n_name,
     s_name,
     p_partkey limit 100;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F09)
   DOP: 16
   INSTANCES
     INSTANCE(0-F09#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F08)
   DOP: 16
@@ -219,6 +226,10 @@ PLAN FRAGMENT 1
   |  
   19:SORT
   |  order by: <slot 1> 1: p_partkey ASC
+<<<<<<< HEAD
+=======
+  |  analytic partition by: 1: p_partkey
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   |  offset: 0
   |  
   18:EXCHANGE
@@ -369,5 +380,9 @@ PLAN FRAGMENT 5
      tabletList=1482
      cardinality=1
      avgRowSize=29.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -181,7 +181,11 @@ protected:
     int64_t _tablet_id = 20003;
     int64_t _src_tablet_id = 20004;
     int32_t _schema_hash = 368169781;
+<<<<<<< HEAD
     int64_t _version = 1;
+=======
+    int64_t _version = 2;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     int64_t _src_version = 10;
 };
 

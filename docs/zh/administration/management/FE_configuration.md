@@ -391,6 +391,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：v3.1
 -->
 
+<<<<<<< HEAD
+=======
+<!--
+##### log_register_and_unregister_query_id
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### Server
 
 ##### frontend_address
@@ -408,7 +422,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：String
 - 单位：-
 - 是否动态：否
+<<<<<<< HEAD
 - 描述：为那些有多个 IP 地址的服务器声明一个选择策略。 请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。
+=======
+- 描述：为有多个 IP 地址的服务器声明 IP 选择策略。请注意，最多应该有一个 IP 地址与此列表匹配。此参数的值是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。如果没有 IP 地址匹配此列表中的条目，系统将随机选择服务器的一个可用 IP 地址。从 v3.3.0 开始，StarRocks 支持基于 IPv6 的部署。如果服务器同时具有 IPv4 和 IPv6 地址，并且未指定此参数，系统将默认使用 IPv4 地址。您可以通过将 `net_use_ipv6_when_priority_networks_empty` 设置为 `true` 来更改此行为。
+- 引入版本：-
+
+##### net_use_ipv6_when_priority_networks_empty
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：用于控制在未指定 `priority_networks` 时是否优先使用 IPv6 地址的布尔值。`true` 表示当托管节点的服务器同时具有 IPv4 和 IPv6 地址且未指定 `priority_networks` 时，允许系统优先使用 IPv6 地址。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 引入版本：-
 
 ##### http_port
@@ -1071,6 +1098,45 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否开启元数据恢复模式。开启此模式后，在部分元数据丢失的情况下，系统会根据 BE 上的信息恢复元数据。当前仅支持恢复分区的版本信息。
 - 引入版本：v3.3.0
 
+<<<<<<< HEAD
+=======
+#### lock_manager_enabled
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否开启锁管理。lock manager 可以对锁实现集中管理，例如控制是否将元数据锁的粒度从库级别细化为表级别。
+- 引入版本：v3.3.0
+
+##### lock_manager_enable_using_fine_granularity_lock
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：是否将元数据锁的粒度从库级别细化为表级别。元数据锁细化为表级别后，可以减小锁冲突和竞争，提高导入和查询的并发性能。该参数只在 `lock_manager_enabled` 开启的前提下生效。
+- 引入版本：v3.3.0
+
+##### black_host_history_sec
+
+- 默认值：2 * 60
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：黑名单中 BE 节点连接失败记录的保留时长。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+##### black_host_connect_failures_within_time
+
+- 默认值：5
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：黑名单中的 BE 节点允许连接失败的上限。如果一个 BE 节点被自动添加到 BE 黑名单中，StarRocks 将评估其连接状态，并判断是否可以将其从 BE 黑名单中移除。在 `black_host_history_sec` 内，只有当黑名单中的 BE 节点的连接失败次数少于 `black_host_connect_failures_within_time` 中设置的阈值时，StarRocks 才会将其从 BE 黑名单中移除。
+- 引入版本：v3.3.0
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### enable_legacy_compatibility_for_replication
 
 - 默认值：false
@@ -1166,6 +1232,31 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 引入版本：v3.2.0
 
 <!--
+<<<<<<< HEAD
+=======
+##### enable_show_materialized_views_include_all_task_runs
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### materialized_view_min_refresh_interval
+
+- 默认值：60
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### skip_whole_phase_lock_mv_limit
 
 - 默认值：5
@@ -1230,6 +1321,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。
 - 引入版本：v3.1.6
 
+<<<<<<< HEAD
+=======
+##### enable_active_materialized_view_schema_strict_check
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：在激活失效物化视图时是否严格检查数据类型长度一致性。当设置为 `false` 时，如基表的数据类型长度有变化，也不影响物化视图的激活。
+- 引入版本：v3.3.4
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 <!--
 ##### mv_active_checker_interval_seconds
 
@@ -1242,6 +1345,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### default_mv_partition_refresh_number
+
+- 默认值：1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### mv_auto_analyze_async
 
 - 默认值：true
@@ -1837,6 +1954,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### stream_load_max_txn_num_per_be
+
+- 默认值：-1
+- 类型：Int
+- Unit:
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### prepared_transaction_default_timeout_second
 
 - 默认值：86400
@@ -2303,7 +2434,20 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：是否开启[行列混存表](../../table_design/hybrid_table.md)功能。
+<<<<<<< HEAD
 - 引入版本：-
+=======
+- 引入版本：v3.2.3
+
+##### enable_experimental_gin
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否开启[全文倒排索引](../../table_design/indexes/inverted_index.md)功能。
+- 引入版本：v3.3.0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### storage_usage_soft_limit_percent
 
@@ -2356,7 +2500,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_fast_schema_evolution
 
+<<<<<<< HEAD
 - 默认值：false
+=======
+- 默认值：true
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -2365,7 +2513,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 > **说明**
 >
+<<<<<<< HEAD
 > - StarRocks 存算分离集群不支持该参数。
+=======
+> - StarRocks 存算分离集群自 v3.3.0 起支持该参数。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#设置-fast-schema-evolution)。
 
 ##### recover_with_empty_tablet
@@ -2650,6 +2802,54 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+##### max_automatic_partition_number
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：系统自动创建分区数量上限。
+- 引入版本：v3.1
+
+##### auto_partition_max_creation_number_per_load
+
+- 默认值：4096
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个导入任务在表达式分区表中最多可以创建的分区数量。
+- 引入版本：v3.3.2
+
+##### max_partition_number_per_table
+
+- 默认值：100000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个表中最多可以创建的分区数量。
+- 引入版本：v3.3.2
+
+##### max_bucket_number_per_partition
+
+- 默认值：1024
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个分区中最多可以创建的分桶数量。
+- 引入版本：v3.3.2
+
+##### max_column_number_per_table
+
+- 默认值：10000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：单个表中最多可以创建的列数量。
+- 引入版本：v3.3.2
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### 存算分离
 
 ##### run_mode
@@ -2911,6 +3111,20 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### lake_compaction_default_timeout_second
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### lake_autovacuum_max_previous_versions
 
 - 默认值：0
@@ -3015,6 +3229,27 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：禁止存算分离内表 compaction 的 table id 名单。格式为 `tableId1;tableId2`，table id 之间用分号隔开，例如 `12345;98765`。
 - 引入版本：v3.1.11
 
+<<<<<<< HEAD
+=======
+##### lake_enable_balance_tablets_between_workers
+
+- 默认值：false
+- 类型：Boolean
+- Unit: -
+- 是否动态：是
+- 描述：是否在存算分离集群内表的 Tablet 调度过程中平衡 CN 节点之间的 Tablet 数量。`true` 表示启用平衡 Tablet 数量，`false` 表示禁用此功能。
+- 引入版本：v3.3.4
+
+##### lake_balance_tablets_threshold
+
+- 默认值：0.15
+- 类型：Double
+- Unit: -
+- 是否动态：是
+- 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
+- 引入版本：v3.3.4
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### 其他
 
 ##### tmp_dir
@@ -3109,7 +3344,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 <!--
 ##### lake_enable_batch_publish_version 
 
+<<<<<<< HEAD
 - 默认值：false
+=======
+- 默认值：true
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
@@ -3377,6 +3616,20 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### authorization_enable_column_level_privilege
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### authentication_chain
 
 - 默认值：{AUTHENTICATION_CHAIN_MECHANISM_NATIVE}
@@ -3517,9 +3770,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
+<<<<<<< HEAD
 ##### max_automatic_partition_number
 
 - 默认值：4096
+=======
+##### max_partition_number_per_table
+
+- 默认值：100000
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 类型：Long
 - 单位：-
 - 是否动态：是
@@ -4388,9 +4647,15 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
+<<<<<<< HEAD
 ##### stream_load_profile_collect_second
 
 - 默认值：10
+=======
+##### stream_load_profile_collect_threshold_second
+
+- 默认值：0
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 - 类型：Long
 - 单位：Seconds
 - 是否动态：是
@@ -4633,10 +4898,55 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 -->
 
 <!--
+<<<<<<< HEAD
+=======
+##### lock_manager_enable_resolve_deadlock
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### lock_manager_dead_lock_detection_delay_time_ms
+
+- 默认值：3000
+- 类型：Long
+- 单位：Milliseconds
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+<!--
+##### refresh_dictionary_cache_thread_num
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：
+- 引入版本：-
+-->
+
+##### replication_interval_ms
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：否
+- 描述：调度执行同步任务的最小时间间隔。
+- 引入版本：v3.3.5
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ##### replication_max_parallel_table_count
 
 - 默认值：100
 - 类型：Int
+<<<<<<< HEAD
 - Unit:
 - 是否动态：是
 - 描述：
@@ -4664,6 +4974,39 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 描述：
 - 引入版本：-
 -->
+=======
+- 单位：-
+- 是否动态：是
+- 描述：允许并发执行的数据同步任务数。StarRocks 为一张表创建一个同步任务。
+- 引入版本：v3.3.5
+
+##### replication_max_parallel_replica_count
+
+- 默认值：10240
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：允许并发同步的 Tablet 副本数。
+- 引入版本：v3.3.5
+
+##### replication_max_parallel_data_size_mb
+
+- 默认值：1048576
+- 类型：Int
+- 单位：MB
+- 是否动态：是
+- 描述：允许并发同步的数据量。
+- 引入版本：v3.3.5
+
+##### replication_transaction_timeout_sec
+
+- 默认值：86400
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：同步任务的超时时间。
+- 引入版本：v3.3.5
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ##### jdbc_meta_default_cache_enable
 

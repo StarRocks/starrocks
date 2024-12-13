@@ -28,6 +28,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+<<<<<<< HEAD
+=======
+import java.util.function.Predicate;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 public class CompactionJob {
@@ -122,7 +126,11 @@ public class CompactionJob {
     }
 
     public int getNumTabletCompactionTasks() {
+<<<<<<< HEAD
         return tasks.stream().filter(t -> !t.isDone()).mapToInt(CompactionTask::tabletCount).sum();
+=======
+        return tasks.stream().filter(Predicate.not(CompactionTask::isDone)).mapToInt(CompactionTask::tabletCount).sum();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getStartTs() {

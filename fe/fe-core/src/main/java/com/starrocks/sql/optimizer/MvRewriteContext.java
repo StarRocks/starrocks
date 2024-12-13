@@ -24,6 +24,10 @@ import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.mv.JoinDeriveContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.TableScanDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.tree.pdagg.AggregatePushDownContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 
@@ -51,6 +55,10 @@ public class MvRewriteContext {
     private List<TableScanDesc> queryTableScanDescs;
     private List<TableScanDesc> mvTableScanDescs;
 
+<<<<<<< HEAD
+=======
+    private AggregatePushDownContext aggregatePushDownContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public MvRewriteContext(
             MaterializationContext materializationContext,
@@ -145,4 +153,19 @@ public class MvRewriteContext {
     public void setMvTableScanDescs(List<TableScanDesc> mvTableScanDescs) {
         this.mvTableScanDescs = mvTableScanDescs;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isInAggregatePushDown() {
+        return aggregatePushDownContext != null;
+    }
+
+    public AggregatePushDownContext getAggregatePushDownContext() {
+        return aggregatePushDownContext;
+    }
+
+    public void setAggregatePushDownContext(AggregatePushDownContext aggregatePushDownContext) {
+        this.aggregatePushDownContext = aggregatePushDownContext;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

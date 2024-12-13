@@ -24,6 +24,10 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hadoop.HadoopCatalog;
+<<<<<<< HEAD
+=======
+import org.junit.Assert;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
@@ -74,4 +78,22 @@ public class IcebergHadoopCatalogTest {
                 "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
         assertTrue(icebergHadoopCatalog.tableExists("db1", "tbl1"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRenameTable(@Mocked HadoopCatalog hadoopCatalog) {
+        new Expectations() {
+            {
+                hadoopCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergHadoopCatalog icebergHadoopCatalog = new IcebergHadoopCatalog(
+                "catalog", new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", "s3://path/to/warehouse"));
+        icebergHadoopCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergHadoopCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

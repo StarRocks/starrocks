@@ -38,7 +38,13 @@ Status HashPartitionContext::prepare(RuntimeState* state, RuntimeProfile* profil
     }
 
     _acc.set_max_size(state->chunk_size());
+<<<<<<< HEAD
     _chunks_partitioner = std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types);
+=======
+    _mem_pool = std::make_unique<MemPool>();
+    _chunks_partitioner =
+            std::make_unique<ChunksPartitioner>(_has_nullable_key, _partition_exprs, _partition_types, _mem_pool.get());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     return _chunks_partitioner->prepare(state, profile);
 }
 
@@ -47,6 +53,10 @@ Status HashPartitionContext::push_one_chunk_to_partitioner(RuntimeState* state, 
 }
 
 void HashPartitionContext::sink_complete() {
+<<<<<<< HEAD
+=======
+    _mem_pool.reset();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _is_sink_complete = true;
 }
 
@@ -63,10 +73,17 @@ bool HashPartitionContext::is_finished() {
 
 StatusOr<ChunkPtr> HashPartitionContext::pull_one_chunk(RuntimeState* state) {
     if (!_chunks_partitioner->is_hash_map_eos()) {
+<<<<<<< HEAD
         _chunks_partitioner->consume_from_hash_map([&](int32_t partition_idx, ChunkPtr& chunk) {
             _acc.push(std::move(chunk));
             return _acc.need_input();
         });
+=======
+        RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map([&](int32_t partition_idx, ChunkPtr& chunk) {
+            _acc.push(std::move(chunk));
+            return _acc.need_input();
+        }));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (_chunks_partitioner->is_hash_map_eos()) {
             _acc.finalize();
         }

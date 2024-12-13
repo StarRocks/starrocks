@@ -43,8 +43,15 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
+<<<<<<< HEAD
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
+=======
+#include "runtime/agg_state_desc.h"
+#include "storage/aggregate_type.h"
+#include "storage/olap_define.h"
+#include "storage/tablet_index.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/c_string.h"
@@ -158,6 +165,12 @@ public:
         ext->default_value = std::move(value);
     }
 
+<<<<<<< HEAD
+=======
+    bool has_agg_state_desc() const { return _agg_state_desc != nullptr; }
+    AggStateDesc* get_agg_state_desc() const { return _agg_state_desc; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void add_sub_column(const TabletColumn& sub_column);
     void add_sub_column(TabletColumn&& sub_column);
     uint32_t subcolumn_count() const { return _extra_fields ? _extra_fields->sub_columns.size() : 0; }
@@ -239,11 +252,16 @@ private:
     uint8_t _flags = 0;
 
     ExtraFields* _extra_fields = nullptr;
+<<<<<<< HEAD
+=======
+    AggStateDesc* _agg_state_desc = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 bool operator==(const TabletColumn& a, const TabletColumn& b);
 bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
+<<<<<<< HEAD
 class TabletSchema {
 public:
     using SchemaId = int64_t;
@@ -256,6 +274,25 @@ public:
     static std::shared_ptr<TabletSchema> create_with_uid(const TabletSchemaCSPtr& tablet_schema,
                                                          const std::vector<uint32_t>& unique_column_ids);
     static std::unique_ptr<TabletSchema> copy(const std::shared_ptr<const TabletSchema>& tablet_schema);
+=======
+class TabletIndex;
+
+class TabletSchema {
+public:
+    using SchemaId = int64_t;
+    using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
+    using TabletSchemaCSPtr = std::shared_ptr<const TabletSchema>;
+
+    static TabletSchemaSPtr create(const TabletSchemaPB& schema_pb);
+    static TabletSchemaSPtr create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
+    static TabletSchemaSPtr create(const TabletSchemaCSPtr& tablet_schema, const std::vector<int32_t>& column_indexes);
+    static TabletSchemaSPtr create_with_uid(const TabletSchemaCSPtr& tablet_schema,
+                                            const std::vector<ColumnUID>& unique_column_ids);
+    static StatusOr<TabletSchemaSPtr> create(const TabletSchema& ori_schema, int64_t schema_id, int32_t version,
+                                             const POlapTableColumnParam& column_param);
+    static TabletSchemaSPtr copy(const TabletSchema& tablet_schema);
+    static TabletSchemaCSPtr copy(const TabletSchema& src_schema, const std::vector<TColumn>& cols);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Must be consistent with MaterializedIndexMeta.INVALID_SCHEMA_ID defined in
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
@@ -265,6 +302,10 @@ public:
     explicit TabletSchema(const TabletSchemaPB& schema_pb);
     // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
     TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
+<<<<<<< HEAD
+=======
+    TabletSchema(const TabletSchema& tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~TabletSchema();
 
@@ -276,9 +317,15 @@ public:
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
+<<<<<<< HEAD
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
     void generate_sort_key_idxes();
+=======
+    size_t field_index(std::string_view field_name, std::string_view extra_column_name) const;
+    const TabletColumn& column(size_t ordinal) const;
+    const std::vector<TabletColumn>& columns() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
 
     size_t num_columns() const { return _cols.size(); }
@@ -291,12 +338,19 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
+<<<<<<< HEAD
+=======
+    int compression_level() const { return _compression_level; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
     void set_schema_version(int32_t version) { _schema_version = version; }
+<<<<<<< HEAD
     void clear_columns();
     void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Please call the following function with caution. Most of the time,
     // the following two functions should not be called explicitly.
@@ -322,6 +376,7 @@ public:
 
     std::string debug_string() const;
 
+<<<<<<< HEAD
     int64_t mem_usage() const {
         int64_t mem_usage = sizeof(TabletSchema);
         for (const auto& col : _cols) {
@@ -329,13 +384,23 @@ public:
         }
         return mem_usage;
     }
+=======
+    int64_t mem_usage() const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool shared() const { return _schema_map != nullptr; }
 
     Schema* schema() const;
 
+<<<<<<< HEAD
     Status build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
                                        const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
+=======
+    const std::vector<TabletIndex>* indexes() const { return &_indexes; }
+    Status get_indexes_for_column(int32_t col_unique_id, std::unordered_map<IndexType, TabletIndex>* res) const;
+    Status get_indexes_for_column(int32_t col_unique_id, IndexType index_type, std::shared_ptr<TabletIndex>& res) const;
+    bool has_index(int32_t col_unique_id, IndexType index_type) const;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     friend class SegmentReaderWriterTest;
@@ -345,15 +410,33 @@ private:
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
 
+<<<<<<< HEAD
     void _init_from_pb(const TabletSchemaPB& schema);
 
     void _init_schema() const;
+=======
+    void _generate_sort_key_idxes();
+    void _clear_columns();
+    Status _build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
+                                        const TabletSchema& ori_tablet_schema);
+
+    void _init_from_pb(const TabletSchemaPB& schema);
+
+    void _init_schema() const;
+    void _fill_index_map(const TabletIndex& index);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;
 
     double _bf_fpp = 0;
 
+<<<<<<< HEAD
+=======
+    std::vector<TabletIndex> _indexes;
+    std::unordered_map<IndexType, std::shared_ptr<std::unordered_set<int32_t>>> _index_map_col_unique_id;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<TabletColumn> _cols;
     size_t _num_rows_per_row_block = 0;
     size_t _next_column_unique_id = 0;
@@ -367,6 +450,11 @@ private:
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
+<<<<<<< HEAD
+=======
+    // only use for zstd compression type
+    int _compression_level = -1;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::unordered_map<int32_t, int32_t> _unique_id_to_index;
 

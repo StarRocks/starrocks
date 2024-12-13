@@ -134,7 +134,11 @@ public:
         ASSERT_EQ("Captain", values[1].to_string());
         ASSERT_EQ("Xmas", values[2].to_string());
 
+<<<<<<< HEAD
         page_decoder.seek_to_position_in_page(0);
+=======
+        ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ASSERT_EQ(0, page_decoder.current_index());
         column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
         SparseRange<> read_range;

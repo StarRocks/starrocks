@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # any_value
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Obtains an arbitrary row from each aggregated group. You can use this function to optimize a query that has a `GROUP BY` clause.
 

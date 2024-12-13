@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -26,9 +29,17 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.HashMap;
@@ -47,7 +58,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @Override
+<<<<<<< HEAD
     public AlterJobV2 build() throws UserException {
+=======
+    public AlterJobV2 build() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (newIndexSchema.isEmpty() && !hasIndexChanged) {
             throw new DdlException("Nothing is changed. please check your alter stmt.");
         }
@@ -59,11 +74,21 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
+<<<<<<< HEAD
         schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
         for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
             long originIndexId = entry.getKey();
             // 1. get new schema version/schema version hash, short key column count
             String newIndexName = SchemaChangeHandler.SHADOW_NAME_PRFIX + table.getIndexNameById(originIndexId);
+=======
+        schemaChangeJob.setWarehouseId(warehouseId);
+        schemaChangeJob.setSortKeyIdxes(sortKeyIdxes);
+        schemaChangeJob.setSortKeyUniqueIds(sortKeyUniqueIds);
+        for (Map.Entry<Long, List<Column>> entry : newIndexSchema.entrySet()) {
+            long originIndexId = entry.getKey();
+            // 1. get new schema version/schema version hash, short key column count
+            String newIndexName = SchemaChangeHandler.SHADOW_NAME_PREFIX + table.getIndexNameById(originIndexId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);
             long shadowIndexId = globalStateMgr.getNextId();
 
@@ -71,7 +96,12 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (PhysicalPartition partition : table.getPhysicalPartitions()) {
                 long partitionId = partition.getParentId();
                 long physicalPartitionId = partition.getId();
+<<<<<<< HEAD
                 long shardGroupId = partition.getShardGroupId();
+=======
+                long shardGroupId = partition.getIndex(originIndexId).getShardGroupId();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 // TODO: It is not good enough to create shards into the same group id, schema change PR needs to
                 //  revise the code again.
@@ -81,16 +111,26 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds =
+<<<<<<< HEAD
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
                                      table.getPartitionFileCacheInfo(partitionId), shardGroupId,
                                      originTabletIds, properties);
+=======
+                        createShards(originTablets.size(), table.getPartitionFilePathInfo(physicalPartitionId),
+                                table.getPartitionFileCacheInfo(physicalPartitionId), shardGroupId,
+                                originTabletIds, properties, warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
                 TabletMeta shadowTabletMeta =
                         new TabletMeta(dbId, tableId, physicalPartitionId, shadowIndexId, 0, medium, true);
                 MaterializedIndex shadowIndex =
+<<<<<<< HEAD
                         new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW);
+=======
+                        new MaterializedIndex(shadowIndexId, MaterializedIndex.IndexState.SHADOW, shardGroupId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 for (int i = 0; i < originTablets.size(); i++) {
                     Tablet originTablet = originTablets.get(i);
                     Tablet shadowTablet = new LakeTablet(shadowTabletIds.get(i));
@@ -108,10 +148,22 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
 
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+<<<<<<< HEAD
                                           long groupId, List<Long> matchShardIds, Map<String, String> properties)
         throws DdlException {
         return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
                 properties);
     }
 
+=======
+                                          long groupId, List<Long> matchShardIds, Map<String, String> properties,
+                                          long warehouseId)
+            throws DdlException {
+        WarehouseManager warehouseManager =  GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds, properties,
+                        warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
+                                .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

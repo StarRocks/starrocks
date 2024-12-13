@@ -66,7 +66,11 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(VerboseSessionVariablesSystemTable.create());
             super.registerTableUnlocked(GlobalVariablesSystemTable.create());
             super.registerTableUnlocked(TasksSystemTable.create());
+<<<<<<< HEAD
             super.registerTableUnlocked(TaskRunsSystemTable.create());
+=======
+            super.registerTableUnlocked(TaskRunsSystemTable.getInstance());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             super.registerTableUnlocked(MaterializedViewsSystemTable.create());
             super.registerTableUnlocked(LoadsSystemTable.create());
             super.registerTableUnlocked(LoadTrackingLogsSystemTable.create());
@@ -85,7 +89,13 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(BeCloudNativeCompactionsSystemTable.create());
             super.registerTableUnlocked(PipeFileSystemTable.create());
             super.registerTableUnlocked(PipesSystemTable.create());
+<<<<<<< HEAD
             super.registerTableUnlocked(PartitionsMetaSystemTable.create());
+=======
+            super.registerTableUnlocked(BeDataCacheMetricsTable.create());
+            super.registerTableUnlocked(PartitionsMetaSystemTable.create());
+            super.registerTableUnlocked(TemporaryTablesTable.create());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

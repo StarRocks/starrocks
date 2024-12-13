@@ -21,7 +21,10 @@ PARTITION p20230109 VALUES [("2023-01-09"), ("2023-01-10")))
 DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 4 
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",

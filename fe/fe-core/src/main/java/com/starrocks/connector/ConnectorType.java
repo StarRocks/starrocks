@@ -22,6 +22,10 @@ import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.connector.hudi.HudiConnector;
 import com.starrocks.connector.iceberg.IcebergConnector;
 import com.starrocks.connector.jdbc.JDBCConnector;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.kudu.KuduConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.odps.OdpsConnector;
 import com.starrocks.connector.paimon.PaimonConnector;
 import com.starrocks.connector.unified.UnifiedConnector;
@@ -40,9 +44,16 @@ public enum ConnectorType {
     DELTALAKE("deltalake", DeltaLakeConnector.class, null),
     PAIMON("paimon", PaimonConnector.class, null),
     ODPS("odps", OdpsConnector.class, null),
+<<<<<<< HEAD
     UNIFIED("unified", UnifiedConnector.class, null);
 
     public static Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
+=======
+    KUDU("kudu", KuduConnector.class, null),
+    UNIFIED("unified", UnifiedConnector.class, null);
+
+    public static final Set<ConnectorType> SUPPORT_TYPE_SET = EnumSet.of(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ES,
             HIVE,
             ICEBERG,
@@ -51,6 +62,10 @@ public enum ConnectorType {
             DELTALAKE,
             PAIMON,
             ODPS,
+<<<<<<< HEAD
+=======
+            KUDU,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             UNIFIED
     );
 
@@ -60,9 +75,15 @@ public enum ConnectorType {
         this.configClass = configClass;
     }
 
+<<<<<<< HEAD
     private String name;
     private Class<Connector> connectorClass;
     private Class<ConnectorConfig> configClass;
+=======
+    private final String name;
+    private final Class<Connector> connectorClass;
+    private final Class<ConnectorConfig> configClass;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public String getName() {
         return name;

@@ -144,7 +144,11 @@ CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 >
 > 上述示例中，`queryid` 为导出作业的 ID。
 
+<<<<<<< HEAD
 有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](../sql-reference/sql-statements/loading_unloading/unloading/CANCEL_EXPORT.md)。
+=======
+有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](../sql-reference/sql-statements/loading_unloading/unloading/SHOW_EXPORT.md)。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ## 最佳实践
 

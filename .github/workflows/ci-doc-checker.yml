@@ -24,7 +24,11 @@ jobs:
     outputs:
       output1: ${{ steps.doc-changes-info.outputs.doc }}
     steps:
+<<<<<<< HEAD
       - uses: dorny/paths-filter@v2
+=======
+      - uses: dorny/paths-filter@v3
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         id: changes
         with:
           filters: |
@@ -75,7 +79,11 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
+<<<<<<< HEAD
       - uses: actions/checkout@v3
+=======
+      - uses: actions/checkout@v4
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         with:
           fetch-depth: 0
 
@@ -90,7 +98,15 @@ jobs:
           git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
+<<<<<<< HEAD
           git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+=======
+          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
       - uses: articulate/actions-markdownlint@v1.1.0
         with:
@@ -98,10 +114,18 @@ jobs:
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       - name: docusaurus-mdx-checker
         if: always()
         run: |
           npx docusaurus-mdx-checker -c docs
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       - name: link check
         if: always()
         uses: lycheeverse/lychee-action@v1.8.0
@@ -113,6 +137,10 @@ jobs:
 
       - name: Docusaurus build
         env:
+<<<<<<< HEAD
+=======
+          NODE_OPTIONS: --max-old-space-size=8192
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           DISABLE_VERSIONING: true
         working-directory: ./docs/docusaurus
         run: |
@@ -120,8 +148,16 @@ jobs:
           rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
           mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
           mv ../en ./docs
+<<<<<<< HEAD
           mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
           yarn install --frozen-lockfile
+=======
+          rm -rf ./docs/release_notes ./docs/ecosystem_release
+          mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current/release_notes ./i18n/zh/docusaurus-plugin-content-docs/current/ecosystem_release
+          yarn install --frozen-lockfile
+          yarn clear
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
           yarn build
 
   behavior-unchange:

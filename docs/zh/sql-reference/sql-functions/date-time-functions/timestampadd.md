@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # timestampadd
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将整数表达式间隔添加到日期或日期时间表达式 `datetime_expr` 中。
 

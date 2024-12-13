@@ -45,7 +45,10 @@ public class StatisticProcDirTest {
                         "CREATE TABLE test.t1(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
 
+<<<<<<< HEAD
         UtFrameUtils.PseudoImage.setUpImageVersion();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = AnalysisException.class)

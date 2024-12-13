@@ -19,11 +19,20 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.history.TaskRunHistory;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -116,6 +125,10 @@ public class TaskRunManager implements MemoryTrackable {
             // If the task run is sync-mode, it will hang forever if the task run is merged because
             // user's using `future.get()` to wait and the future will not be set forever.
             ExecuteOption executeOption = taskRun.getExecuteOption();
+<<<<<<< HEAD
+=======
+            boolean isTaskRunContainsToMergeProperties = executeOption.containsToMergeProperties();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (taskRuns != null && executeOption.isMergeRedundant()) {
                 for (TaskRun oldTaskRun : taskRuns) {
                     if (oldTaskRun == null) {
@@ -123,7 +136,12 @@ public class TaskRunManager implements MemoryTrackable {
                     }
                     // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
                     // hanging after removing it.
+<<<<<<< HEAD
                     if (!oldTaskRun.getExecuteOption().isMergeRedundant()) {
+=======
+                    ExecuteOption oldExecuteOption = oldTaskRun.getExecuteOption();
+                    if (!oldExecuteOption.isMergeRedundant()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         continue;
                     }
                     // skip if old task run is not equal to the task run
@@ -134,10 +152,32 @@ public class TaskRunManager implements MemoryTrackable {
                     // and queryId will be changed.
                     if (!oldTaskRun.isEqualTask(taskRun)) {
                         LOG.warn("failed to remove TaskRun definition is [{}]",
+<<<<<<< HEAD
                                 taskRun.getStatus().getDefinition());
                         continue;
                     }
 
+=======
+                                taskRun);
+                        continue;
+                    }
+
+                    // TODO: Here we always merge the older task run to the newer task run which it can
+                    // record the history of the task run. But we can also reject the newer task run directly to
+                    // avoid the merge operation later.
+                    boolean isOldTaskRunContainsToMergeProperties = oldExecuteOption.containsToMergeProperties();
+                    // this should not happen since one task only can one task run in the running queue
+                    if (isTaskRunContainsToMergeProperties && isOldTaskRunContainsToMergeProperties) {
+                        LOG.warn("failed to merge TaskRun, both TaskRun contains toMergeProperties, " +
+                                        "oldTaskRun: {}, taskRun: {}", oldTaskRun, taskRun);
+                        continue;
+                    }
+                    // merge the old execution option into the new task run
+                    if (isOldTaskRunContainsToMergeProperties && !isTaskRunContainsToMergeProperties) {
+                        executeOption.mergeProperties(oldExecuteOption);
+                    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     // prefer higher priority to be better scheduler
                     if (oldTaskRun.getStatus().getPriority() > taskRun.getStatus().getPriority()) {
                         taskRun.getStatus().setPriority(oldTaskRun.getStatus().getPriority());
@@ -147,6 +187,10 @@ public class TaskRunManager implements MemoryTrackable {
                     if (oldTaskRun.getStatus().getCreateTime() < taskRun.getStatus().getCreateTime()) {
                         taskRun.getStatus().setCreateTime(oldTaskRun.getStatus().getCreateTime());
                     }
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",
                             oldTaskRun, taskRun);
                     mergedTaskRuns.add(oldTaskRun);
@@ -236,7 +280,11 @@ public class TaskRunManager implements MemoryTrackable {
             if (!taskRunLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskRunLock.getOwner();
                 if (owner != null) {
+<<<<<<< HEAD
                     LOG.warn("task run lock is held by: {}", () -> Util.dumpThread(owner, 50));
+=======
+                    LOG.warn("task run lock is held by: {}", () -> LogUtil.dumpThread(owner, 50));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 } else {
                     LOG.warn("task run lock owner is null");
                 }

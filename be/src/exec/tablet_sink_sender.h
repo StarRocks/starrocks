@@ -16,7 +16,14 @@
 
 #include "exec/tablet_sink_index_channel.h"
 
+<<<<<<< HEAD
 namespace starrocks::stream_load {
+=======
+namespace starrocks {
+
+class CombinedTxnLogPB;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // TabletSinkSender will control one index/table's send chunks.
 class TabletSinkSender {
 public:
@@ -40,7 +47,12 @@ public:
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
     virtual Status try_close(RuntimeState* state);
+<<<<<<< HEAD
     virtual Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile);
+=======
+    virtual Status close_wait(RuntimeState* state, Status close_status, TabletSinkProfile* ts_profile,
+                              bool write_txn_log);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     virtual bool is_open_done();
     virtual bool is_full();
@@ -65,7 +77,11 @@ public:
 
 protected:
     Status _send_chunk_by_node(Chunk* chunk, IndexChannel* channel, const std::vector<uint16_t>& selection_idx);
+<<<<<<< HEAD
 
+=======
+    Status _write_combined_txn_log();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool _is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
     bool _has_intolerable_failure() {
@@ -85,7 +101,11 @@ protected:
     // index_id -> (tablet_id -> bes) map
     IndexIdToTabletBEMap _index_id_to_tablet_be_map;
     // partition schema
+<<<<<<< HEAD
     OlapTablePartitionParam* _vectorized_partition = nullptr;
+=======
+    OlapTablePartitionParam* _partition_params = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // index_channel
     std::vector<IndexChannel*> _channels;
     std::unordered_map<int64_t, NodeChannel*> _node_channels;
@@ -100,6 +120,14 @@ protected:
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
     std::set<int64_t> _failed_channels;
+<<<<<<< HEAD
 };
 
 } // namespace starrocks::stream_load
+=======
+    // mapping from partition id to CombinedTxnLogPB
+    std::map<int64_t, CombinedTxnLogPB> _txn_log_map;
+};
+
+} // namespace starrocks
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

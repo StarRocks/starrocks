@@ -146,7 +146,11 @@ Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compact
         }
         if (!res.ok()) {
             StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
+<<<<<<< HEAD
             LOG(WARNING) << "failed to perform update compaction. res=" << res.get_error_msg()
+=======
+            LOG(WARNING) << "failed to perform update compaction. res=" << res.message()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                          << ", tablet=" << tablet->full_name();
             return res;
         }

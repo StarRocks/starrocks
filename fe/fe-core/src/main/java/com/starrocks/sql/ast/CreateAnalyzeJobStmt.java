@@ -32,6 +32,11 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private long dbId;
     private long tableId;
     private final TableName tbl;
+<<<<<<< HEAD
+=======
+    private final StatsConstants.AnalyzeType analyzeType;
+    private final AnalyzeTypeDesc analyzeTypeDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private List<Expr> columns;
     private List<String> columnNames = Lists.newArrayList();
@@ -39,6 +44,7 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     private Map<String, String> properties;
 
     public CreateAnalyzeJobStmt(boolean isSample, Map<String, String> properties, NodePosition pos) {
+<<<<<<< HEAD
         this(null, Lists.newArrayList(), isSample, properties, pos);
     }
 
@@ -48,6 +54,23 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
 
     public CreateAnalyzeJobStmt(TableName tbl, List<Expr> columns, boolean isSample,
                                 Map<String, String> properties, NodePosition pos) {
+=======
+        this(null, Lists.newArrayList(), isSample, properties,
+                isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL,
+                null,
+                pos);
+    }
+
+    public CreateAnalyzeJobStmt(String db, boolean isSample, Map<String, String> properties, NodePosition pos) {
+        this(new TableName(db, null), Lists.newArrayList(), isSample, properties,
+                isSample ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL, null, pos);
+    }
+
+    public CreateAnalyzeJobStmt(TableName tbl, List<Expr> columns, boolean isSample,
+                                Map<String, String> properties, StatsConstants.AnalyzeType analyzeType,
+                                AnalyzeTypeDesc analyzeTypeDesc,
+                                NodePosition pos) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(pos);
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.tbl = tbl;
@@ -56,6 +79,11 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.columns = columns;
         this.isSample = isSample;
         this.properties = properties;
+<<<<<<< HEAD
+=======
+        this.analyzeType = analyzeType;
+        this.analyzeTypeDesc = analyzeTypeDesc;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setDbId(long dbId) {
@@ -115,6 +143,17 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
         this.catalogName = catalogName;
     }
 
+<<<<<<< HEAD
+=======
+    public StatsConstants.AnalyzeType getAnalyzeType() {
+        return analyzeType;
+    }
+
+    public AnalyzeTypeDesc getAnalyzeTypeDesc() {
+        return analyzeTypeDesc;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateAnalyzeJobStatement(this, context);

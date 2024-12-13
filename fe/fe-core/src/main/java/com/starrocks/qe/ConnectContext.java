@@ -34,13 +34,34 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
+=======
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.TimeUtils;
+=======
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authentication.UserProperty;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.SqlUtils;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.UUIDUtil;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
@@ -49,10 +70,22 @@ import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.ssl.SSLChannel;
 import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
+<<<<<<< HEAD
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
+=======
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.QueryStatement;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -67,6 +100,10 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -80,8 +117,16 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Set;
 import java.util.UUID;
+=======
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connection context for it.
@@ -134,8 +179,11 @@ public class ConnectContext {
     protected volatile boolean isKilled;
     // Db
     protected String currentDb = "";
+<<<<<<< HEAD
     // warehouse
     protected String currentWarehouse;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // `qualifiedUser` is the user used when the user establishes connection and authentication.
     // It is the real user used for this connection.
     // Different from the `currentUserIdentity` authentication user of execute as,
@@ -157,7 +205,12 @@ public class ConnectContext {
     // all the modified session variables, will forward to leader
     protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
     // user define variable in this session
+<<<<<<< HEAD
     protected HashMap<String, UserVariable> userVariables;
+=======
+    protected Map<String, UserVariable> userVariables;
+    protected Map<String, UserVariable> userVariablesCopyInWrite;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -196,6 +249,11 @@ public class ConnectContext {
     protected boolean isStatisticsConnection = false;
     protected boolean isStatisticsJob = false;
     protected boolean isStatisticsContext = false;
+<<<<<<< HEAD
+=======
+
+    protected boolean isMetadataContext = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     protected boolean needQueued = true;
 
     protected DumpInfo dumpInfo;
@@ -218,10 +276,25 @@ public class ConnectContext {
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
+<<<<<<< HEAD
+=======
+    private UUID sessionId;
+
+    private String proxyHostName;
+    private AtomicInteger pendingForwardRequests = new AtomicInteger(0);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
 
+<<<<<<< HEAD
+=======
+    // In order to ensure the correctness of imported data, in some cases, we don't use connector metadata cache for
+    // `insert into table select external table`. Currently, this feature only supports hive table.
+    private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -230,10 +303,35 @@ public class ConnectContext {
         return threadLocalInfo.get();
     }
 
+<<<<<<< HEAD
+=======
+    public static SessionVariable getSessionVariableOrDefault() {
+        ConnectContext ctx = get();
+        return (ctx != null) ? ctx.sessionVariable : SessionVariable.DEFAULT_SESSION_VARIABLE;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void remove() {
         threadLocalInfo.remove();
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isQueryStmt(StatementBase statement) {
+        if (statement instanceof QueryStatement) {
+            return true;
+        }
+        if (statement instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) statement;
+            PrepareStmtContext prepareStmtContext = getPreparedStmt(executeStmt.getStmtName());
+            if (prepareStmtContext != null) {
+                return prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isSend() {
         return this.isSend;
     }
@@ -253,8 +351,13 @@ public class ConnectContext {
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
         isKilled = false;
         serializer = MysqlSerializer.newInstance();
+<<<<<<< HEAD
         sessionVariable = VariableMgr.newSessionVariable();
         userVariables = new HashMap<>();
+=======
+        sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
+        userVariables = new ConcurrentHashMap<>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
 
@@ -268,6 +371,10 @@ public class ConnectContext {
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
+<<<<<<< HEAD
+=======
+        this.sessionId = UUIDUtil.genUUID();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
@@ -322,6 +429,17 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
+<<<<<<< HEAD
+=======
+    public Optional<Boolean> getUseConnectorMetadataCache() {
+        return useConnectorMetadataCache;
+    }
+
+    public void setUseConnectorMetadataCache(Optional<Boolean> useConnectorMetadataCache) {
+        this.useConnectorMetadataCache = useConnectorMetadataCache;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Set this connect to thread-local if not exists
      *
@@ -382,8 +500,14 @@ public class ConnectContext {
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
+<<<<<<< HEAD
         VariableMgr.setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
         if (!SetType.GLOBAL.equals(setVar.getType()) && VariableMgr.shouldForwardToLeader(setVar.getVariable())) {
+=======
+        GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
+        if (!SetType.GLOBAL.equals(setVar.getType()) && GlobalStateMgr.getCurrentState().getVariableMgr()
+                .shouldForwardToLeader(setVar.getVariable())) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             modifiedSessionVariables.put(setVar.getVariable(), setVar);
         }
     }
@@ -395,6 +519,59 @@ public class ConnectContext {
         userVariables.put(userVariable.getVariable(), userVariable);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * 1. The {@link ConnectContext#userVariables} in the current session should not be modified
+     * until you are sure that the set sql was executed successfully.
+     * 2. Changes to user variables during set sql execution should
+     * be effected in the {@link ConnectContext#userVariablesCopyInWrite}.
+     * */
+    public void modifyUserVariableCopyInWrite(UserVariable userVariable) {
+        if (userVariablesCopyInWrite != null) {
+            if (userVariablesCopyInWrite.size() > 1024) {
+                throw new SemanticException("User variable exceeds the maximum limit of 1024");
+            }
+            userVariablesCopyInWrite.put(userVariable.getVariable(), userVariable);
+        }
+    }
+
+    /**
+     * The SQL execution that sets the variable must reset userVariablesCopyInWrite when it finishes,
+     * either normally or abnormally.
+     *
+     * This method needs to be called at the time of setting the user variable.
+     * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
+     * */
+    public void resetUserVariableCopyInWrite() {
+        userVariablesCopyInWrite = null;
+    }
+
+    /**
+     * After the successful execution of the SQL that set the variable,
+     * the result of the change to the copy of userVariables is set back to the current session.
+     *
+     * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
+     * */
+    public void modifyUserVariables(Map<String, UserVariable> userVarCopyInWrite) {
+        if (userVarCopyInWrite.size() > 1024) {
+            throw new SemanticException("User variable exceeds the maximum limit of 1024");
+        }
+        this.userVariables = userVarCopyInWrite;
+    }
+
+    /**
+     * Instead of using {@link ConnectContext#userVariables} when set userVariables,
+     * use a copy of it, the purpose of which is to ensure atomicity/isolation of modifications to userVariables
+     *
+     * This method needs to be called at the time of setting the user variable.
+     * call by {@link SetExecutor#execute()}, {@link StmtExecutor#processQueryScopeHint()}
+     * */
+    public void modifyUserVariablesCopyInWrite(Map<String, UserVariable> userVariables) {
+        this.userVariablesCopyInWrite = userVariables;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public SetStmt getModifiedSessionVariables() {
         List<SetListItem> sessionVariables = new ArrayList<>();
         if (MapUtils.isNotEmpty(modifiedSessionVariables)) {
@@ -428,10 +605,33 @@ public class ConnectContext {
     }
 
     public void resetSessionVariable() {
+<<<<<<< HEAD
         this.sessionVariable = VariableMgr.newSessionVariable();
         modifiedSessionVariables.clear();
     }
 
+=======
+        this.sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
+        modifiedSessionVariables.clear();
+    }
+
+    public UserVariable getUserVariableCopyInWrite(String variable) {
+        if (userVariablesCopyInWrite == null) {
+            return null;
+        }
+
+        return userVariablesCopyInWrite.get(variable);
+    }
+
+    public Map<String, UserVariable> getUserVariablesCopyInWrite() {
+        if (userVariablesCopyInWrite == null) {
+            return null;
+        }
+
+        return userVariablesCopyInWrite;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void setSessionVariable(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
     }
@@ -465,6 +665,15 @@ public class ConnectContext {
         returnRows = 0;
     }
 
+<<<<<<< HEAD
+=======
+    @VisibleForTesting
+    public void setStartTime(Instant start) {
+        startTime = start;
+        returnRows = 0;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void updateReturnRows(int returnRows) {
         this.returnRows += returnRows;
     }
@@ -489,6 +698,27 @@ public class ConnectContext {
         this.connectionId = connectionId;
     }
 
+<<<<<<< HEAD
+=======
+    public String getProxyHostName() {
+        return proxyHostName;
+    }
+
+    public void setProxyHostName(String address) {
+        this.proxyHostName = address;
+    }
+
+    public boolean hasPendingForwardRequest() {
+        return pendingForwardRequests.intValue() > 0;
+    }
+    public void incPendingForwardRequest() {
+        pendingForwardRequests.incrementAndGet();
+    }
+    public void decPendingForwardRequest() {
+        pendingForwardRequests.decrementAndGet();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void resetConnectionStartTime() {
         this.connectionStartTime = System.currentTimeMillis();
     }
@@ -601,6 +831,13 @@ public class ConnectContext {
         this.lastQueryId = queryId;
     }
 
+<<<<<<< HEAD
+=======
+    public String getCustomQueryId() {
+        return sessionVariable != null ? sessionVariable.getCustomQueryId() : "";
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isProfileEnabled() {
         if (sessionVariable == null) {
             return false;
@@ -687,6 +924,7 @@ public class ConnectContext {
         this.sessionVariable.setCatalog(currentCatalog);
     }
 
+<<<<<<< HEAD
     public String getCurrentWarehouse() {
         if (currentWarehouse != null) {
             return currentWarehouse;
@@ -700,6 +938,32 @@ public class ConnectContext {
 
     public void setCurrentWarehouseId(long id) {
         // not implemented in this codebase
+=======
+    public long getCurrentWarehouseId() {
+        String warehouseName = this.sessionVariable.getWarehouseName();
+        if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+            return WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        }
+
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+        if (warehouse == null) {
+            throw new SemanticException("Warehouse " + warehouseName + " not exist");
+        }
+        return warehouse.getId();
+    }
+
+    public String getCurrentWarehouseName() {
+        return this.sessionVariable.getWarehouseName();
+    }
+
+    public void setCurrentWarehouse(String currentWarehouse) {
+        this.sessionVariable.setWarehouseName(currentWarehouse);
+    }
+
+    public void setCurrentWarehouseId(long warehouseId) {
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseId);
+        this.sessionVariable.setWarehouseName(warehouse.getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -726,6 +990,17 @@ public class ConnectContext {
         this.isStatisticsContext = isStatisticsContext;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isMetadataContext() {
+        return isMetadataContext;
+    }
+
+    public void setMetadataContext(boolean metadataContext) {
+        isMetadataContext = metadataContext;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isNeedQueued() {
         return needQueued;
     }
@@ -754,6 +1029,18 @@ public class ConnectContext {
         return this.forwardTimes;
     }
 
+<<<<<<< HEAD
+=======
+
+    public void setSessionId(UUID sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public UUID getSessionId() {
+        return this.sessionId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public QueryMaterializationContext getQueryMVContext() {
         return queryMVContext;
     }
@@ -781,12 +1068,20 @@ public class ConnectContext {
                     Thread.sleep(10);
                     times++;
                     if (times > 100) {
+<<<<<<< HEAD
                         LOG.warn("wait for close fail, break.");
                         break;
                     }
                 } catch (InterruptedException e) {
                     LOG.warn(e);
                     LOG.warn("sleep exception, ignore.");
+=======
+                        LOG.warn("kill queryId={} connectId={} wait for close fail, break.", queryId, connectionId);
+                        break;
+                    }
+                } catch (InterruptedException e) {
+                    LOG.warn("sleep exception, ignore.", e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     break;
                 }
             }
@@ -795,6 +1090,21 @@ public class ConnectContext {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public int getExecTimeout() {
+        return executor != null ? executor.getExecTimeout() : sessionVariable.getQueryTimeoutS();
+    }
+
+    private String getExecType() {
+        return executor != null ? executor.getExecType() : "Query";
+    }
+
+    private boolean isExecLoadType() {
+        return executor != null && executor.isExecLoadType();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void checkTimeout(long now) {
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
@@ -808,6 +1118,7 @@ public class ConnectContext {
         if (executor != null) {
             sql = executor.getOriginStmtInString();
         }
+<<<<<<< HEAD
         if (command == MysqlCommand.COM_SLEEP) {
             if (delta > sessionVariable.getWaitTimeoutS() * 1000L) {
                 // Need kill this connection.
@@ -829,6 +1140,38 @@ public class ConnectContext {
         }
         if (killFlag) {
             kill(killConnection, "query timeout");
+=======
+        String errMsg = "";
+        if (command == MysqlCommand.COM_SLEEP) {
+            int waitTimeout = sessionVariable.getWaitTimeoutS();
+            if (delta > waitTimeout * 1000L) {
+                // Need kill this connection.
+                LOG.warn("kill wait timeout connection, remote: {}, wait timeout: {}, query id: {}, sql: {}",
+                        getMysqlChannel().getRemoteHostPortString(), waitTimeout, queryId, SqlUtils.sqlPrefix(sql));
+
+                killFlag = true;
+                killConnection = true;
+
+                errMsg = String.format("Connection reached its wait timeout of %d seconds", waitTimeout);
+            }
+        } else {
+            long timeoutSecond = getExecTimeout();
+            if (delta > timeoutSecond * 1000L) {
+                LOG.warn("kill timeout {}, remote: {}, execute timeout: {}, query id: {}, sql: {}",
+                        getExecType().toLowerCase(), getMysqlChannel().getRemoteHostPortString(), timeoutSecond,
+                        queryId, SqlUtils.sqlPrefix(sql));
+
+                // Only kill
+                killFlag = true;
+
+                String suggestedMsg = String.format("please increase the '%s' session variable",
+                        isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT);
+                errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), timeoutSecond, suggestedMsg);
+            }
+        }
+        if (killFlag) {
+            kill(killConnection, errMsg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -845,11 +1188,19 @@ public class ConnectContext {
         if (v > 0) {
             return v;
         }
+<<<<<<< HEAD
         return globalStateMgr.getClusterInfo().getAliveBackendNumber();
     }
 
     public int getTotalBackendNumber() {
         return globalStateMgr.getClusterInfo().getTotalBackendNumber();
+=======
+        return globalStateMgr.getNodeMgr().getClusterInfo().getAliveBackendNumber();
+    }
+
+    public int getTotalBackendNumber() {
+        return globalStateMgr.getNodeMgr().getClusterInfo().getTotalBackendNumber();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public int getAliveComputeNumber() {
@@ -912,6 +1263,151 @@ public class ConnectContext {
         return ScopeGuard.setIfNotExists(this);
     }
 
+<<<<<<< HEAD
+=======
+    // Change current catalog of this session, and reset current database.
+    // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
+    public void changeCatalog(String newCatalogName) throws DdlException {
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        if (!catalogMgr.catalogExists(newCatalogName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
+        }
+        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+            try {
+                Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
+                        this.getCurrentRoleIds(), newCatalogName);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
+            }
+        }
+        this.setCurrentCatalog(newCatalogName);
+        this.setDatabase("");
+    }
+
+    // Change current catalog and database of this session.
+    // identifier could be "CATALOG.DB" or "DB".
+    // For "CATALOG.DB", we change the current catalog database.
+    // For "DB", we keep the current catalog and change the current database.
+    public void changeCatalogDb(String identifier) throws DdlException {
+        CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        String dbName;
+
+        String[] parts = identifier.split("\\.", 2); // at most 2 parts
+        if (parts.length != 1 && parts.length != 2) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
+        }
+
+        if (parts.length == 1) { // use database
+            dbName = identifier;
+        } else { // use catalog.database
+            String newCatalogName = parts[0];
+            if (!catalogMgr.catalogExists(newCatalogName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
+            }
+            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
+                try {
+                    Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
+                            this.getCurrentRoleIds(), newCatalogName);
+                } catch (AccessDeniedException e) {
+                    AccessDeniedException.reportAccessDenied(newCatalogName,
+                            this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
+                }
+            }
+            this.setCurrentCatalog(newCatalogName);
+            dbName = parts[1];
+        }
+
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        // Here we check the request permission that sent by the mysql client or jdbc.
+        // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
+        try {
+            Authorizer.checkAnyActionOnOrInDb(this.getCurrentUserIdentity(),
+                    this.getCurrentRoleIds(), this.getCurrentCatalog(), dbName);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(this.getCurrentCatalog(),
+                    this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), dbName);
+        }
+
+        this.setDatabase(dbName);
+    }
+
+    public void cleanTemporaryTable() {
+        if (sessionId == null) {
+            return;
+        }
+        if (!GlobalStateMgr.getCurrentState().getTemporaryTableMgr().sessionExists(sessionId)) {
+            return;
+        }
+        LOG.debug("clean temporary table on session {}", sessionId);
+        try {
+            setQueryId(UUIDUtil.genUUID());
+            CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
+            cleanTemporaryTableStmt.setOrigStmt(
+                    new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
+            executor = new StmtExecutor(this, cleanTemporaryTableStmt);
+            executor.execute();
+        } catch (Throwable e) {
+            LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);
+        }
+    }
+
+    // We can not make sure the set variables are all valid. Even if some variables are invalid, we should let user continue
+    // to execute SQL.
+    public void updateByUserProperty(UserProperty userProperty) {
+        try {
+            // set session variables
+            Map<String, String> sessionVariables = userProperty.getSessionVariables();
+            for (Map.Entry<String, String> entry : sessionVariables.entrySet()) {
+                String currentValue = GlobalStateMgr.getCurrentState().getVariableMgr().getValue(
+                        sessionVariable, new VariableExpr(entry.getKey()));
+                if (!currentValue.equalsIgnoreCase(
+                        GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(entry.getKey()))) {
+                    // If the current session variable is not default value, we should respect it.
+                    continue;
+                }
+                SystemVariable variable = new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue()));
+                modifySystemVariable(variable, true);
+            }
+
+            // set catalog and database
+            boolean dbHasBeenSetByUser = !getCurrentCatalog().equals(
+                    GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultValue(SessionVariable.CATALOG))
+                    || !getDatabase().isEmpty();
+            if (!dbHasBeenSetByUser) {
+                String catalog = userProperty.getCatalog();
+                String database = userProperty.getDatabase();
+                if (catalog.equals(UserProperty.CATALOG_DEFAULT_VALUE)) {
+                    if (!database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                        changeCatalogDb(userProperty.getCatalogDbName());
+                    }
+                } else {
+                    if (database.equals(UserProperty.DATABASE_DEFAULT_VALUE)) {
+                        changeCatalog(catalog);
+                    } else {
+                        changeCatalogDb(userProperty.getCatalogDbName());
+                    }
+                    SystemVariable variable = new SystemVariable(SessionVariable.CATALOG, new StringLiteral(catalog));
+                    modifySystemVariable(variable, true);
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("set session env failed: ", e);
+            // In handshake, we will send error message to client. But it seems that client will ignore it.
+            getState().setOk(0L, 0,
+                    String.format("set session variables from user property failed: %s", e.getMessage()));
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Set thread-local context for the scope, and remove it after leaving the scope
      */
@@ -980,8 +1476,11 @@ public class ConnectContext {
             } else {
                 row.add(Boolean.toString(isPending));
             }
+<<<<<<< HEAD
 
             row.add(currentWarehouse);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return row;
         }
     }

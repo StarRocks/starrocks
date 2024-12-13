@@ -27,6 +27,10 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/metacache.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/schema_change.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/test_util.h"
@@ -45,7 +49,11 @@ public:
     LakeServiceTest()
             : _tablet_id(next_id()),
               _partition_id(next_id()),
+<<<<<<< HEAD
               _location_provider(new lake::FixedLocationProvider(kRootLocation)),
+=======
+              _location_provider(std::make_shared<lake::FixedLocationProvider>(kRootLocation)),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
               _tablet_mgr(ExecEnv::GetInstance()->lake_tablet_manager()),
               _lake_service(ExecEnv::GetInstance(), ExecEnv::GetInstance()->lake_tablet_manager()) {
         _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
@@ -57,7 +65,10 @@ public:
     ~LakeServiceTest() override {
         CHECK_OK(fs::remove_all(kRootLocation));
         (void)_tablet_mgr->TEST_set_location_provider(_backup_location_provider);
+<<<<<<< HEAD
         delete _location_provider;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void create_tablet() {
@@ -87,6 +98,10 @@ protected:
         auto txn_id = next_id();
         TxnLog log;
         log.set_tablet_id(_tablet_id);
+<<<<<<< HEAD
+=======
+        log.set_partition_id(_partition_id);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         log.set_txn_id(txn_id);
         for (int i = 0; i < num_segments; i++) {
             log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file(txn_id));
@@ -100,9 +115,15 @@ protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
     int64_t _tablet_id;
     int64_t _partition_id;
+<<<<<<< HEAD
     lake::LocationProvider* _location_provider;
     lake::TabletManager* _tablet_mgr;
     lake::LocationProvider* _backup_location_provider;
+=======
+    std::shared_ptr<lake::LocationProvider> _location_provider;
+    lake::TabletManager* _tablet_mgr;
+    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     LakeServiceImpl _lake_service;
 };
 
@@ -798,7 +819,11 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         request.add_tablet_ids(_tablet_id);
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
+<<<<<<< HEAD
         ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+=======
+        ASSERT_EQ("neither txn_ids nor txn_infos is set, one of them must be set", cntl.ErrorText());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // test normal
@@ -815,10 +840,57 @@ TEST_F(LakeServiceTest, test_delete_txn_log) {
         request.add_tablet_ids(_tablet_id);
         request.add_txn_ids(logs.back().txn_id());
         _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+<<<<<<< HEAD
 
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
         ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+=======
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
+        ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
+    }
+    // test delete txn log with new API
+    {
+        std::vector<TxnLog> logs;
+
+        logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+        brpc::Controller cntl;
+        DeleteTxnLogRequest request;
+        DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        auto info = request.add_txn_infos();
+        info->set_txn_id(logs.back().txn_id());
+        info->set_combined_txn_log(false);
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        auto path = _tablet_mgr->txn_log_location(_tablet_id, logs.back().txn_id());
+        ASSERT_EQ(TStatusCode::NOT_FOUND, FileSystem::Default()->path_exists(path).code());
+    }
+    // test delete combined txn log
+    {
+        CombinedTxnLogPB combined_txn_log_pb;
+        combined_txn_log_pb.add_txn_logs()->CopyFrom(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_txn_log_pb));
+        auto txn_id = combined_txn_log_pb.txn_logs(0).txn_id();
+
+        brpc::Controller cntl;
+        DeleteTxnLogRequest request;
+        DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        auto info = request.add_txn_infos();
+        info->set_txn_id(txn_id);
+        info->set_combined_txn_log(true);
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        auto log_path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
+        ASSERT_TRUE(FileSystem::Default()->path_exists(log_path).is_not_found());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -977,7 +1049,11 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         brpc::Controller cntl;
         _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
+<<<<<<< HEAD
         ASSERT_EQ("missing txn_id", cntl.ErrorText());
+=======
+        ASSERT_EQ("missing txn_id and txn_info", cntl.ErrorText());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         PublishLogVersionRequest request;
@@ -1043,6 +1119,49 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
         ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
         EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(_tablet_id, 10)));
     }
+<<<<<<< HEAD
+=======
+    // Publish combined txn log
+    {
+        auto partition_id = next_id();
+        txn_id = next_id();
+        std::vector<int64_t> tablet_ids{next_id(), next_id(), next_id()};
+        CombinedTxnLogPB combined_txn_log;
+        for (auto tablet_id : tablet_ids) {
+            auto* log = combined_txn_log.add_txn_logs();
+            log->set_partition_id(partition_id);
+            log->set_tablet_id(tablet_id);
+            log->set_txn_id(txn_id);
+            log->mutable_op_write()->mutable_rowset()->set_overlapped(true);
+            log->mutable_op_write()->mutable_rowset()->set_num_rows(0);
+            log->mutable_op_write()->mutable_rowset()->set_data_size(0);
+        }
+        ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_txn_log));
+
+        int64_t version = 12;
+        PublishLogVersionRequest request;
+        PublishLogVersionResponse response;
+        for (auto tablet_id : tablet_ids) {
+            request.add_tablet_ids(tablet_id);
+        }
+        request.set_version(version);
+        auto* txn_info = request.mutable_txn_info();
+        txn_info->set_txn_id(txn_id);
+        txn_info->set_combined_txn_log(true);
+        txn_info->set_txn_type(TXN_NORMAL);
+        txn_info->set_commit_time(::time(nullptr));
+        brpc::Controller cntl;
+        _lake_service.publish_log_version(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        for (auto tablet_id : tablet_ids) {
+            EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(tablet_id, txn_id)));
+            EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(tablet_id, version)));
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(LakeServiceTest, test_publish_log_version_batch) {
@@ -1082,7 +1201,11 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         brpc::Controller cntl;
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
+<<<<<<< HEAD
         ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+=======
+        ASSERT_EQ("neither txn_ids nor txn_infos is set, one of them must be set", cntl.ErrorText());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     {
         PublishLogVersionBatchRequest request;
@@ -1163,6 +1286,79 @@ TEST_F(LakeServiceTest, test_publish_log_version_batch) {
         _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
         ASSERT_TRUE(cntl.Failed());
     }
+<<<<<<< HEAD
+=======
+    // Publish combined txn log
+    {
+        auto partition_id = next_id();
+        std::vector<int64_t> txn_ids{next_id(), next_id(), next_id()};
+        std::vector<int64_t> tablet_ids{next_id(), next_id(), next_id()};
+        // prepare combined logs
+        for (auto txn_id : txn_ids) {
+            CombinedTxnLogPB combined_txn_log;
+            for (auto tablet_id : tablet_ids) {
+                auto* log = combined_txn_log.add_txn_logs();
+                log->set_partition_id(partition_id);
+                log->set_tablet_id(tablet_id);
+                log->set_txn_id(txn_id);
+                log->mutable_op_write()->mutable_rowset()->set_overlapped(true);
+                log->mutable_op_write()->mutable_rowset()->set_num_rows(0);
+                log->mutable_op_write()->mutable_rowset()->set_data_size(0);
+            }
+            ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_txn_log));
+        }
+
+        std::vector<int64_t> versions = {12, 13, 14};
+        PublishLogVersionBatchRequest request;
+        PublishLogVersionResponse response;
+        for (auto tablet_id : tablet_ids) {
+            request.add_tablet_ids(tablet_id);
+        }
+        for (auto version : versions) {
+            request.add_versions(version);
+        }
+        for (auto txn_id : txn_ids) {
+            auto* txn_info = request.add_txn_infos();
+            txn_info->set_txn_id(txn_id);
+            txn_info->set_combined_txn_log(true);
+            txn_info->set_txn_type(TXN_NORMAL);
+            txn_info->set_commit_time(::time(nullptr));
+        }
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        for (auto txn_id : txn_ids) {
+            for (auto tablet_id : tablet_ids) {
+                EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(tablet_id, txn_id)));
+                for (auto version : versions) {
+                    EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_vlog_location(tablet_id, version)));
+                }
+            }
+        }
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_empty_txn_log) {
+    // Publish EMPTY_TXN_LOG
+    {
+        PublishVersionRequest request;
+        PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(-1);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
+    ASSERT_EQ(2, metadata->version());
+    ASSERT_EQ(_tablet_id, metadata->id());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
@@ -1831,4 +2027,255 @@ TEST_F(LakeServiceTest, test_drop_table_no_permission) {
     ASSERT_EQ(1, response.status().error_msgs_size());
     ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*Permission denied*"));
 }
+<<<<<<< HEAD
+=======
+
+static TTabletSchema gen_tablet_schema_thrift() {
+    TTabletSchema schema;
+    schema.__set_id(next_id());
+    schema.__set_keys_type(TKeysType::DUP_KEYS);
+    schema.__set_schema_hash(0);
+    schema.__set_schema_version(2);
+    schema.__set_short_key_column_count(1);
+    schema.__set_storage_type(TStorageType::COLUMN);
+    {
+        auto& col = schema.columns.emplace_back();
+        col.__set_column_name("c0");
+        col.__set_is_key(true);
+        col.__set_aggregation_type(TAggregationType::NONE);
+        col.__set_col_unique_id(0);
+        col.__set_is_allow_null(true);
+        col.__set_type_desc(gen_type_desc(TPrimitiveType::BIGINT));
+    }
+    {
+        auto& col = schema.columns.emplace_back();
+        col.__set_column_name("d2");
+        col.__set_is_key(false);
+        col.__set_aggregation_type(TAggregationType::NONE);
+        col.__set_col_unique_id(3);
+        col.__set_is_allow_null(true);
+        col.__set_type_desc(gen_type_desc(TPrimitiveType::DOUBLE));
+    }
+    return schema;
+}
+
+TEST_F(LakeServiceTest, test_publish_version_for_fast_schema_evolution) {
+    int64_t alter_txn_id = next_id();
+    auto new_schema = gen_tablet_schema_thrift();
+    // 1. write txn log for schema evolution
+    {
+        TUpdateTabletMetaInfoReq req;
+        req.__set_tablet_type(TTabletType::TABLET_TYPE_LAKE);
+        req.__set_txn_id(alter_txn_id);
+
+        auto& update = req.tabletMetaInfos.emplace_back();
+        update.__set_tablet_id(_tablet_id);
+        update.__set_create_schema_file(true);
+        update.__set_tablet_schema(new_schema);
+
+        lake::SchemaChangeHandler handler(_tablet_mgr);
+        ASSERT_OK(handler.process_update_tablet_meta(req));
+    }
+    // 2. publish version for schema evolution
+    {
+        brpc::Controller cntl;
+        PublishVersionRequest req;
+        PublishVersionResponse resp;
+        req.set_base_version(1);
+        req.set_new_version(2);
+        req.add_tablet_ids(_tablet_id);
+        req.add_txn_ids(alter_txn_id);
+        req.set_commit_time(::time(nullptr));
+        _lake_service.publish_version(&cntl, &req, &resp, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_EQ(0, resp.status().status_code());
+    }
+    // 3. verify the new schema
+    {
+        auto compare_column = [](const TColumn& col1, const TabletColumn& col2) {
+            EXPECT_EQ(col1.column_name, col2.name());
+            EXPECT_EQ(col1.col_unique_id, col2.unique_id());
+            EXPECT_EQ(col1.is_allow_null, col2.is_nullable());
+            EXPECT_EQ(col1.is_key, col2.is_key());
+            auto t1 = thrift_to_type(col1.type_desc.types[0].scalar_type.type);
+            EXPECT_EQ(t1, col2.type());
+        };
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_id, 2));
+        auto& schema = metadata->schema();
+        EXPECT_EQ(new_schema.id, schema.id());
+        EXPECT_EQ(new_schema.columns.size(), schema.column_size());
+        EXPECT_EQ(new_schema.short_key_column_count, schema.num_short_key_columns());
+        compare_column(new_schema.columns[0], schema.column(0));
+        compare_column(new_schema.columns[1], schema.column(1));
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
+    // Put empty CombinedTxnLog should return error
+    {
+        auto combined_log = CombinedTxnLogPB();
+        ASSERT_FALSE(_tablet_mgr->put_combined_txn_log(combined_log).ok());
+    }
+
+    auto do_test = [&](int64_t txn_id, TStatusCode::type expect_code) {
+        PublishVersionRequest publish_request;
+        publish_request.set_base_version(1);
+        publish_request.set_new_version(2);
+        publish_request.add_tablet_ids(_tablet_id);
+        auto info = publish_request.add_txn_infos();
+        info->set_txn_id(txn_id);
+        info->set_combined_txn_log(true);
+        info->set_commit_time(987654321);
+        info->set_txn_type(TXN_NORMAL);
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &publish_request, &response, nullptr);
+        EXPECT_EQ(expect_code, response.status().status_code());
+    };
+
+    // combined log does not exist
+    { do_test(next_id(), TStatusCode::NOT_FOUND); }
+    // CombinedTxnLog does not contain the target txn log
+    {
+        auto txn_log = generate_write_txn_log(2, 101, 4096);
+        txn_log.set_tablet_id(_tablet_id + 1);
+        auto combined_log = CombinedTxnLogPB();
+        combined_log.add_txn_logs()->CopyFrom(txn_log);
+        ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_log));
+
+        do_test(txn_log.txn_id(), TStatusCode::INTERNAL_ERROR);
+    }
+    // Publish txn success
+    {
+        auto txn_log = std::make_shared<TxnLogPB>(generate_write_txn_log(2, 101, 4096));
+        auto txn_id = txn_log->txn_id();
+        auto combined_log = CombinedTxnLogPB();
+        combined_log.add_txn_logs()->CopyFrom(*txn_log);
+
+        _tablet_mgr->metacache()->cache_txn_log(_tablet_mgr->txn_log_location(_tablet_id, txn_id), txn_log);
+
+        ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_log));
+
+        do_test(txn_id, TStatusCode::OK);
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+        // CombinedTxnLogPB should still exist
+        auto path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
+        ASSERT_OK(FileSystem::Default()->path_exists(path));
+
+        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
+        // publish again without txn log cache
+        do_test(txn_id, TStatusCode::OK);
+
+        // publish again without txn log cache and combined txn log cache
+        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
+        _tablet_mgr->metacache()->erase(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id));
+        do_test(txn_id, TStatusCode::OK);
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_with_txn_info) {
+    std::vector<TxnLog> logs;
+    // TxnLog with 2 segments
+    logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+    ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+    // publish version
+    {
+        PublishVersionRequest request;
+        request.set_base_version(1);
+        request.set_new_version(2);
+        request.add_tablet_ids(_tablet_id);
+        auto info = request.add_txn_infos();
+        info->set_txn_id(logs[0].txn_id());
+        info->set_txn_type(TXN_NORMAL);
+        info->set_combined_txn_log(false);
+        info->set_commit_time(987654321);
+
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    }
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    {
+        ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
+        ASSERT_EQ(2, metadata->version());
+        ASSERT_EQ(_tablet_id, metadata->id());
+        ASSERT_EQ(3, metadata->next_rowset_id());
+        ASSERT_EQ(1, metadata->rowsets_size());
+        ASSERT_EQ(1, metadata->rowsets(0).id());
+        ASSERT_EQ(2, metadata->rowsets(0).segments_size());
+        ASSERT_TRUE(metadata->rowsets(0).overlapped());
+        ASSERT_EQ(logs[0].op_write().rowset().num_rows(), metadata->rowsets(0).num_rows());
+        ASSERT_EQ(logs[0].op_write().rowset().data_size(), metadata->rowsets(0).data_size());
+        ASSERT_EQ(logs[0].op_write().rowset().segments(0), metadata->rowsets(0).segments(0));
+        ASSERT_EQ(logs[0].op_write().rowset().segments(1), metadata->rowsets(0).segments(1));
+        EXPECT_EQ(987654321, metadata->commit_time());
+    }
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    // TxnLog`s should have been deleted
+    ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+}
+
+TEST_F(LakeServiceTest, test_abort_with_combined_txn_log) {
+    auto txn_id = next_id();
+    auto combined_log = std::make_shared<CombinedTxnLogPB>();
+    for (int i = 0; i < 3; i++) {
+        TxnLog log;
+        log.set_tablet_id(_tablet_id);
+        log.set_txn_id(txn_id);
+        log.set_partition_id(_partition_id);
+        log.mutable_op_write()->mutable_rowset()->add_segments(generate_segment_file(txn_id));
+        log.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        log.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        log.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        combined_log->add_txn_logs()->CopyFrom(log);
+    }
+    _tablet_mgr->put_combined_txn_log(*combined_log);
+
+    AbortTxnRequest request;
+    request.add_tablet_ids(_tablet_id);
+    request.set_skip_cleanup(false);
+    auto info = request.add_txn_infos();
+    info->set_txn_id(txn_id);
+    info->set_combined_txn_log(true);
+    info->set_txn_type(TXN_NORMAL);
+
+    {
+        TEST_ENABLE_ERROR_POINT("TabletManager::get_combined_txn_log", Status::IOError("injected error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::load_txn_log");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        AbortTxnResponse response;
+        _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+        for (auto&& log : combined_log->txn_logs()) {
+            for (auto&& s : log.op_write().rowset().segments()) {
+                EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s)));
+            }
+        }
+        EXPECT_TRUE(fs::path_exist(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
+    }
+    {
+        AbortTxnResponse response;
+        _lake_service.abort_txn(nullptr, &request, &response, nullptr);
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+        // TxnLog`s and segments should have been deleted
+        for (auto&& log : combined_log->txn_logs()) {
+            for (auto&& s : log.op_write().rowset().segments()) {
+                EXPECT_FALSE(fs::path_exist(_tablet_mgr->segment_location(_tablet_id, s)));
+            }
+        }
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks

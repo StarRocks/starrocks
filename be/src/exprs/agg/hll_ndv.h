@@ -18,7 +18,13 @@
 #include "column/object_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+<<<<<<< HEAD
 #include "exprs/agg/aggregate.h"
+=======
+#include "common/compiler_util.h"
+#include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/casts.h"
 #include "types/hll.h"
 
@@ -36,9 +42,22 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
+<<<<<<< HEAD
         this->data(state).clear();
     }
 
+=======
+        ctx->add_mem_usage(-this->data(state).mem_usage());
+        this->data(state).clear();
+    }
+
+    ALWAYS_INLINE void update_state(FunctionContext* ctx, AggDataPtr state, uint64_t value) const {
+        int64_t prev_memory = this->data(state).mem_usage();
+        this->data(state).update(value);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         uint64_t value = 0;
@@ -53,7 +72,11 @@ public:
         }
 
         if (value != 0) {
+<<<<<<< HEAD
             this->data(state).update(value);
+=======
+            update_state(ctx, state, value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -69,7 +92,11 @@ public:
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
 
                 if (value != 0) {
+<<<<<<< HEAD
                     this->data(state).update(value);
+=======
+                    update_state(ctx, state, value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         } else {
@@ -79,7 +106,11 @@ public:
                 value = HashUtil::murmur_hash64A(&v[i], sizeof(v[i]), HashUtil::MURMUR_SEED);
 
                 if (value != 0) {
+<<<<<<< HEAD
                     this->data(state).update(value);
+=======
+                    update_state(ctx, state, value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         }
@@ -90,7 +121,13 @@ public:
 
         const auto* hll_column = down_cast<const BinaryColumn*>(column);
         HyperLogLog hll(hll_column->get(row_num).get_slice());
+<<<<<<< HEAD
         this->data(state).merge(hll);
+=======
+        int64_t prev_memory = this->data(state).mem_usage();
+        this->data(state).merge(hll);
+        ctx->add_mem_usage(this->data(state).mem_usage() - prev_memory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,

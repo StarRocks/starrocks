@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # weekofyear
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算指定时间为一年中的第几周。
 

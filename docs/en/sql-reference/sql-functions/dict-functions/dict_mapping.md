@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # dict_mapping
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the value mapped to the specified key in a dictionary table.
 

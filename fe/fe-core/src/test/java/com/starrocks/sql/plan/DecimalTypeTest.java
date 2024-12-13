@@ -269,6 +269,17 @@ public class DecimalTypeTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testDateToDecimal() throws Exception {
+        String sql = "select '1969-12-10 23:46:53' > c_0_0 from tab0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 16> : CAST(1: c_0_0 AS DOUBLE) < CAST('1969-12-10 23:46:53' AS DOUBLE)");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testSameValueDiffTypeDecimal() throws Exception {
         String sql = "SELECT t1a,\n" +
                 "    sum(t1f * 1.00000000000) / NULLIF(sum(t1c), 0) AS aaaa,\n" +

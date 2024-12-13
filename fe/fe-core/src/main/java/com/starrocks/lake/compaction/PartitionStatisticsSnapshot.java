@@ -42,4 +42,13 @@ public class PartitionStatisticsSnapshot {
     Quantiles getCompactionScore() {
         return compactionScore;
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public String toString() {
+        return String.format("partition=%s score=%s priority=%s",
+                partition.toString(), compactionScore.toString(), priority.toString());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

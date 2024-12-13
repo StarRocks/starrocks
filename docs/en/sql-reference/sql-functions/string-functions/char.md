@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # char 
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 CHAR() returns the character value of the given integer value according to the ASCII table.
 

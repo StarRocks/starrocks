@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # quarter
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 返回给定的日期值对应的季度，范围 1~4。
 

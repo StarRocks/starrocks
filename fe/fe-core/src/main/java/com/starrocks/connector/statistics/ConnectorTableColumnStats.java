@@ -20,6 +20,7 @@ public class ConnectorTableColumnStats {
 
     private final ColumnStatistic columnStatistic;
     private final long rowCount;
+<<<<<<< HEAD
 
     private static final ConnectorTableColumnStats UNKNOWN =
             new ConnectorTableColumnStats(ColumnStatistic.unknown(), -1);
@@ -27,6 +28,17 @@ public class ConnectorTableColumnStats {
     public ConnectorTableColumnStats(ColumnStatistic columnStatistic, long rowCount) {
         this.columnStatistic = columnStatistic;
         this.rowCount = rowCount;
+=======
+    private final String updateTime;
+
+    private static final ConnectorTableColumnStats UNKNOWN =
+            new ConnectorTableColumnStats(ColumnStatistic.unknown(), -1, "");
+
+    public ConnectorTableColumnStats(ColumnStatistic columnStatistic, long rowCount, String updateTime) {
+        this.columnStatistic = columnStatistic;
+        this.rowCount = rowCount;
+        this.updateTime = updateTime;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static ConnectorTableColumnStats unknown() {
@@ -44,4 +56,11 @@ public class ConnectorTableColumnStats {
     public long getRowCount() {
         return rowCount;
     }
+<<<<<<< HEAD
+=======
+
+    public String getUpdateTime() {
+        return updateTime;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

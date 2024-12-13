@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
@@ -27,6 +28,28 @@ import org.junit.runners.MethodSorters;
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
+=======
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.plan.MockTpchStatisticStorage;
+import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+@TestMethodOrder(MethodOrderer.MethodName.class)
+public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
+    @BeforeAll
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         MaterializedViewTestBase.beforeClass();
@@ -41,15 +64,22 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         int scale = 1;
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, scale));
+<<<<<<< HEAD
         OlapTable t4 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("customer");
         setTableStatistics(t4, 150000 * scale);
         OlapTable t7 = (OlapTable) globalStateMgr.getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
+=======
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("customer");
+        setTableStatistics(t4, 150000 * scale);
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb(MATERIALIZED_DB_NAME).getTable("lineitem");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setTableStatistics(t7, 6000000 * scale);
 
         // When force rule based rewrite is enabled, query will be transformed into scan in Rule Rewrite Phase.
         // And OneTabletExecutorVisitor#visitLogicalTableScan will deduce `supportOneTabletOpt` because this test
         // case has no tablets left after mv rewrite.
         connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(false);
+<<<<<<< HEAD
     }
 
     @Test
@@ -163,5 +193,28 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     public void testQuery22() {
         runFileUnitTest("materialized-view/tpch/q22");
+=======
+        QueryDebugOptions queryDebugOptions = new QueryDebugOptions();
+        queryDebugOptions.setEnableQueryTraceLog(true);
+        connectContext.getSessionVariable().setQueryDebugOptions(queryDebugOptions.toString());
+    }
+
+    @ParameterizedTest(name = "Tpch.{0}")
+    @MethodSource("tpchSource")
+    public void testTPCH(String name, String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile);
+    }
+
+    private static Stream<Arguments> tpchSource() {
+        List<Arguments> cases = Lists.newArrayList();
+        for (Map.Entry<String, String> entry : TpchSQL.getAllSQL().entrySet()) {
+            if (!entry.getKey().equalsIgnoreCase("q1")) {
+                continue;
+
+            }
+            cases.add(Arguments.of(entry.getKey(), entry.getValue(), "materialized-view/tpch/" + entry.getKey()));
+        }
+        return cases.stream();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

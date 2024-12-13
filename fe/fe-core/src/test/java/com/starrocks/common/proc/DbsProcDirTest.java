@@ -83,6 +83,7 @@ public class DbsProcDirTest {
     public void testLookupNormal() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDb("db1");
                 minTimes = 0;
                 result = db1;
@@ -104,6 +105,29 @@ public class DbsProcDirTest {
                 result = db2;
 
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().getDb("db1");
+                minTimes = 0;
+                result = db1;
+
+                globalStateMgr.getLocalMetastore().getDb("db2");
+                minTimes = 0;
+                result = db2;
+
+                globalStateMgr.getLocalMetastore().getDb("db3");
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getLocalMetastore().getDb(db1.getId());
+                minTimes = 0;
+                result = db1;
+
+                globalStateMgr.getLocalMetastore().getDb(db2.getId());
+                minTimes = 0;
+                result = db2;
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = null;
             }
@@ -160,6 +184,7 @@ public class DbsProcDirTest {
     public void testFetchResultNormal() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDbNames();
                 minTimes = 0;
                 result = Lists.newArrayList("db1", "db2");
@@ -185,6 +210,33 @@ public class DbsProcDirTest {
                 result = db2;
 
                 globalStateMgr.getDb(anyLong);
+=======
+                globalStateMgr.getLocalMetastore().listDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList("db1", "db2");
+
+                globalStateMgr.getLocalMetastore().getDb("db1");
+                minTimes = 0;
+                result = db1;
+
+                globalStateMgr.getLocalMetastore().getDb("db2");
+                minTimes = 0;
+                result = db2;
+
+                globalStateMgr.getLocalMetastore().getDb("db3");
+                minTimes = 0;
+                result = null;
+
+                globalStateMgr.getLocalMetastore().getDb(db1.getId());
+                minTimes = 0;
+                result = db1;
+
+                globalStateMgr.getLocalMetastore().getDb(db2.getId());
+                minTimes = 0;
+                result = db2;
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = null;
             }
@@ -213,7 +265,11 @@ public class DbsProcDirTest {
     public void testFetchResultInvalid() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
+<<<<<<< HEAD
                 globalStateMgr.getDbNames();
+=======
+                globalStateMgr.getLocalMetastore().listDbNames();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = null;
             }

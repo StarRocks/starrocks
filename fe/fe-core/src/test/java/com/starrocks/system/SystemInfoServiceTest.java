@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
 package com.starrocks.system;
 
@@ -23,6 +24,21 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+=======
+package com.starrocks.system;
+
+import com.google.api.client.util.Maps;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.persist.EditLog;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.ModifyBackendClause;
 import mockit.Expectations;
 import mockit.Mock;
@@ -177,12 +193,21 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
 
+<<<<<<< HEAD
+=======
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
+        WarehouseManager warehouseManager = new WarehouseManager();
+        warehouseManager.initDefaultWarehouse();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
                 minTimes = 0;
                 result = be;
 
+<<<<<<< HEAD
                 globalStateMgr.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
@@ -192,6 +217,21 @@ public class SystemInfoServiceTest {
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, false);
+=======
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+            }
+        };
+
+        service.addBackend(be);
+        be.setStarletPort(1001);
+        service.dropBackend("newHost", 1000, WarehouseManager.DEFAULT_WAREHOUSE_NAME, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
     }
@@ -208,15 +248,25 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(1001);
 
+<<<<<<< HEAD
+=======
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
                 minTimes = 0;
                 result = be;
 
+<<<<<<< HEAD
                 globalStateMgr.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
+=======
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
 
@@ -226,7 +276,10 @@ public class SystemInfoServiceTest {
         Assert.assertTrue(beIP == null);
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Mocked
     InetAddress addr;
 
@@ -314,6 +367,38 @@ public class SystemInfoServiceTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testGetHostAndPort() {
+        String ipv4 = "192.168.1.2:9050";
+        String ipv6 = "[fe80::5054:ff:fec9:dee0]:9050";
+        String ipv6Error = "fe80::5054:ff:fec9:dee0:dee0";
+        try {
+            Pair<String, Integer> ipv4Addr = SystemInfoService.validateHostAndPort(ipv4, false);
+            Assert.assertEquals("192.168.1.2", ipv4Addr.first);
+            Assert.assertEquals(9050, ipv4Addr.second.intValue());
+        } catch (SemanticException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        try {
+            Pair<String, Integer> ipv6Addr = SystemInfoService.validateHostAndPort(ipv6, false);
+            Assert.assertEquals("fe80::5054:ff:fec9:dee0", ipv6Addr.first);
+            Assert.assertEquals(9050, ipv6Addr.second.intValue());
+        } catch (SemanticException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+        try {
+            SystemInfoService.validateHostAndPort(ipv6Error, false);
+            Assert.fail();
+        } catch (SemanticException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testGetComputeNodeWithBePort() throws Exception {
         mockNet();
 
@@ -339,4 +424,23 @@ public class SystemInfoServiceTest {
         ComputeNode beIP3 = service.getComputeNodeWithBePort("127.0.0.2", 1001);
         Assert.assertTrue(beIP3 == null);
     }
+<<<<<<< HEAD
+=======
+
+    @Test(expected = DdlException.class)
+    public void testUpdateBackendAddressInSharedDataMode() throws Exception {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        Backend be = new Backend(100, "originalHost", 1000);
+        service.addBackend(be);
+        ModifyBackendClause clause = new ModifyBackendClause("originalHost-test", "sandbox");
+        // throw not support exception
+        service.modifyBackendHost(clause);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

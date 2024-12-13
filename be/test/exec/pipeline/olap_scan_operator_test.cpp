@@ -18,7 +18,10 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptors.h"
+<<<<<<< HEAD
 #include "testutil/sync_point.h"
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks::pipeline {
 
@@ -49,7 +52,10 @@ void OlapScanOperatorTest::SetUp() {
     _thrift_tbl.tupleDescriptors.emplace_back(t_tuple_desc);
 
     _tnode.row_tuples.emplace_back(1);
+<<<<<<< HEAD
     _tnode.nullable_tuples.emplace_back(false);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status st = DescriptorTbl::create(&_runtime_state, &_object_pool, _thrift_tbl, &_tbl, _chunk_size);
     ASSERT_TRUE(st.ok());

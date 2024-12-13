@@ -14,6 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -25,20 +30,37 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.kudu.KuduMetadata;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropCatalogStmt;
+<<<<<<< HEAD
 import io.delta.standalone.DeltaLog;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
+=======
+import io.delta.kernel.types.BasePrimitiveType;
+import io.delta.kernel.types.StructField;
+import io.delta.kernel.types.StructType;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
+import org.apache.commons.lang3.StringUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -62,8 +84,16 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 
 public class ConnectorPlanTestBase extends PlanTestBase {
+=======
+import java.util.Optional;
+
+public class ConnectorPlanTestBase extends PlanTestBase {
+    public static final String MOCK_PAIMON_CATALOG_NAME = "paimon0";
+    public static final String MOCK_KUDU_CATALOG_NAME = "kudu0";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
@@ -86,9 +116,16 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         gsmMgr.setMetadataMgr(metadataMgr);
         mockHiveCatalogImpl(metadataMgr);
         mockJDBCCatalogImpl(metadataMgr);
+<<<<<<< HEAD
         mockIcebergCatalogImpl(metadataMgr);
         mockPaimonCatalogImpl(metadataMgr, warehouse);
         mockDeltaLakeCatalog(metadataMgr);
+=======
+        mockPaimonCatalogImpl(metadataMgr, warehouse);
+        mockIcebergCatalogImpl(metadataMgr);
+        mockDeltaLakeCatalog(metadataMgr);
+        mockKuduCatalogImpl(metadataMgr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void mockCatalog(ConnectContext ctx, String catalogName) throws Exception {
@@ -106,12 +143,25 @@ public class ConnectorPlanTestBase extends PlanTestBase {
             case MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME:
                 mockJDBCCatalogImpl(metadataMgr);
                 break;
+<<<<<<< HEAD
+=======
+            case MOCK_PAIMON_CATALOG_NAME:
+                Preconditions.checkState(!Strings.isNullOrEmpty(warehouse));
+                mockPaimonCatalogImpl(metadataMgr, warehouse);
+                break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME:
                 mockIcebergCatalogImpl(metadataMgr);
                 break;
             case MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME:
                 mockDeltaLakeCatalog(metadataMgr);
                 break;
+<<<<<<< HEAD
+=======
+            case MOCK_KUDU_CATALOG_NAME:
+                mockKuduCatalogImpl(metadataMgr);
+                break;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             default:
                 throw new SemanticException("Unsupported catalog type:" + catalogName);
         }
@@ -121,6 +171,10 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         try {
             dropCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
             dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+<<<<<<< HEAD
+=======
+            dropCatalog(MOCK_PAIMON_CATALOG_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
             dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
         } catch (Exception e) {
@@ -145,7 +199,12 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
         properties.put("type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("hive", "hive0", "", properties);
+=======
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("hive",
+                MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME, "", properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         MockedHiveMetadata mockedHiveMetadata = new MockedHiveMetadata();
         metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME, mockedHiveMetadata);
@@ -221,8 +280,12 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         Options catalogOptions = new Options();
         catalogOptions.set(CatalogOptions.WAREHOUSE, warehouse);
         CatalogContext catalogContext = CatalogContext.create(catalogOptions);
+<<<<<<< HEAD
         Catalog catalog = CatalogFactory.createCatalog(catalogContext);
         return catalog;
+=======
+        return CatalogFactory.createCatalog(catalogContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static void mockPaimonCatalogImpl(MockedMetadataMgr metadataMgr, String warehouse) throws Exception {
@@ -235,11 +298,36 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         properties.put("type", "paimon");
         properties.put("paimon.catalog.type", "filesystem");
         properties.put("paimon.catalog.warehouse", warehouse);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", "paimon0", "", properties);
         //register paimon catalog
         PaimonMetadata paimonMetadata =
                 new PaimonMetadata("paimon0", new HdfsEnvironment(), paimonNativeCatalog);
         metadataMgr.registerMockedMetadata("paimon0", paimonMetadata);
+=======
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", MOCK_PAIMON_CATALOG_NAME, "", properties);
+        //register paimon catalog
+        PaimonMetadata paimonMetadata =
+                new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog,
+                        new ConnectorProperties(ConnectorType.PAIMON, properties));
+        metadataMgr.registerMockedMetadata(MOCK_PAIMON_CATALOG_NAME, paimonMetadata);
+    }
+
+    private static void mockKuduCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
+        String master = "localhost:7051";
+        String kudu = "kudu";
+        Map<String, String> properties = Maps.newHashMap();
+
+        properties.put("type", kudu);
+        properties.put("kudu.master", master);
+        properties.put("kudu.catalog.type", kudu);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(kudu,
+                MOCK_KUDU_CATALOG_NAME, StringUtils.EMPTY, properties);
+
+        KuduMetadata kuduMetadata = new KuduMetadata(MOCK_KUDU_CATALOG_NAME, new HdfsEnvironment(),
+                master, false, StringUtils.EMPTY, Optional.empty());
+        metadataMgr.registerMockedMetadata(MOCK_KUDU_CATALOG_NAME, kuduMetadata);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static class MockedDeltaLakeMetadata extends DeltaLakeMetadata {
@@ -252,18 +340,34 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 MOCK_TABLE_MAP = new CaseInsensitiveMap<>();
 
         public MockedDeltaLakeMetadata() {
+<<<<<<< HEAD
             super(null, null, null);
+=======
+            super(null, null, null, null, new ConnectorProperties(ConnectorType.DELTALAKE));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             long tableId = GlobalStateMgr.getCurrentState().getNextId();
             List<Column> columns = ImmutableList.<Column>builder()
                     .add(new Column("col1", Type.INT))
                     .add(new Column("col2", Type.STRING))
                     .build();
+<<<<<<< HEAD
             List<String> partitionNames = new ArrayList<>();
             DeltaLog deltaLog = null;
             long createTime = System.currentTimeMillis();
             DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,
                     columns, partitionNames, deltaLog, createTime);
+=======
+
+            StructType structType = new StructType(List.of(new StructField("col1",
+                            BasePrimitiveType.createPrimitive("integer"), false),
+                    new StructField("col2", BasePrimitiveType.createPrimitive("string"), false)));
+
+            List<String> partitionNames = new ArrayList<>();
+            long createTime = System.currentTimeMillis();
+            DeltaLakeTable table = new DeltaLakeTable(tableId, MOCKED_CATALOG_NAME, MOCKED_DB_NAME, MOCKED_TABLE_NAME,
+                    columns, partitionNames, null, null, null, createTime);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             MOCK_TABLE_MAP.put(MOCKED_TABLE_NAME, table);
         }
@@ -281,7 +385,10 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
     private static void mockDeltaLakeCatalog(MockedMetadataMgr metadataMgr) throws Exception {
         final String catalogName = MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME;
+<<<<<<< HEAD
         final String dbName = MockedDeltaLakeMetadata.MOCKED_DB_NAME;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CatalogMgr catalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
 
         // create catalog
@@ -300,8 +407,13 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         Map<String, String> properties = Maps.newHashMap();
 
         properties.put(JDBCResource.TYPE, "jdbc");
+<<<<<<< HEAD
         properties.put(JDBCResource.DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+=======
+        properties.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
@@ -339,4 +451,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         MockIcebergMetadata mockIcebergMetadata = new MockIcebergMetadata();
         metadataMgr.registerMockedMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME, mockIcebergMetadata);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

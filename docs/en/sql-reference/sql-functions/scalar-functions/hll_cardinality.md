@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hll_cardinality
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the cardinality of a single HLL type value.
 

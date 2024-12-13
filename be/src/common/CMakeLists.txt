@@ -14,10 +14,13 @@
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/common")
 
+<<<<<<< HEAD
 if (CLANG_TIDY_PATH)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 add_library(Common STATIC
   daemon.cpp
   greplog.cpp

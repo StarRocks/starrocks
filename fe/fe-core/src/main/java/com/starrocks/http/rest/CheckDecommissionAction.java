@@ -36,23 +36,44 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+=======
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.DecommissionBackendClause;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 
+<<<<<<< HEAD
 import java.util.List;
+=======
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /*
  * calc row count from replica to table
@@ -88,6 +109,7 @@ public class CheckDecommissionAction extends RestBaseAction {
             throw new DdlException("No host:port specified.");
         }
 
+<<<<<<< HEAD
         List<Pair<String, Integer>> hostPortPairs = Lists.newArrayList();
         for (String hostPort : hostPortArr) {
             Pair<String, Integer> pair;
@@ -100,6 +122,19 @@ public class CheckDecommissionAction extends RestBaseAction {
         }
 
         SystemHandler.checkDecommission(hostPortPairs);
+=======
+        try {
+            DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(Lists.newArrayList(hostPortArr));
+            List<Pair<String, Integer>> hostPortPairs = Arrays.stream(hostPortArr)
+                    .map(hostPort -> SystemInfoService.validateHostAndPort(hostPort, false)).collect(Collectors.toList());
+            decommissionBackendClause.setHostPortPairs(hostPortPairs);
+
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler().process(
+                    Lists.newArrayList(decommissionBackendClause), null, null);
+        } catch (StarRocksException e) {
+            throw new DdlException(e.getMessage());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // to json response
         RestBaseResult result = new RestBaseResult();

@@ -13,11 +13,22 @@
 // limitations under the License.
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.google.common.base.Strings;
+=======
+import com.google.api.client.util.Lists;
+import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,9 +41,19 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 
+<<<<<<< HEAD
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+=======
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * QueryLocker is used to obtain the lock corresponding to the metadata used in Query
@@ -44,6 +65,70 @@ import java.util.Set;
  * and obtain the db-read-lock of all dbs involved in the query.
  */
 public class PlannerMetaLocker {
+<<<<<<< HEAD
+=======
+    // Map database id -> database
+    private Map<Long, Database> dbs = Maps.newTreeMap(Long::compareTo);
+
+    /**
+     * Map database id -> table id set, Use db id as sort key to avoid deadlock,
+     * lockTablesWithIntensiveDbLock can internally guarantee the order of locking,
+     * so the table ids do not need to be ordered here.
+     */
+    private Map<Long, Set<Long>> tables = Maps.newTreeMap(Long::compareTo);
+
+    public PlannerMetaLocker(ConnectContext session, StatementBase statementBase) {
+        new TableCollector(session, dbs, tables).visit(statementBase);
+        session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Try to acquire the lock, return false if the lock cannot be obtained.
+     */
+    public boolean tryLock(long timeout, TimeUnit unit) {
+        Locker locker = new Locker();
+
+        boolean isLockSuccess = false;
+        List<Database> lockedDbs = Lists.newArrayList();
+        try {
+            for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+                Database database = dbs.get(entry.getKey());
+                if (!locker.tryLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(entry.getValue()),
+                        LockType.READ, timeout, unit)) {
+                    return false;
+                }
+                lockedDbs.add(database);
+            }
+            isLockSuccess = true;
+        } finally {
+            if (!isLockSuccess) {
+                for (Database database : lockedDbs) {
+                    locker.unLockTablesWithIntensiveDbLock(database.getId(), new ArrayList<>(tables.get(database.getId())),
+                            LockType.READ);
+                }
+            }
+        }
+        return true;
+    }
+
+    public void lock() {
+        Locker locker = new Locker();
+        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+            Database database = dbs.get(entry.getKey());
+            List<Long> tableIds = new ArrayList<>(entry.getValue());
+            locker.lockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
+        }
+    }
+
+    public void unlock() {
+        Locker locker = new Locker();
+        for (Map.Entry<Long, Set<Long>> entry : tables.entrySet()) {
+            Database database = dbs.get(entry.getKey());
+            List<Long> tableIds = new ArrayList<>(entry.getValue());
+            locker.unLockTablesWithIntensiveDbLock(database.getId(), tableIds, LockType.READ);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * Collect tables that need to be protected by the PlannerMetaLock

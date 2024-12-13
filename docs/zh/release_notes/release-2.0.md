@@ -141,7 +141,11 @@ displayed_sidebar: docs
 ### 新功能
 
 - 外表
+<<<<<<< HEAD
   - [实验功能]支持S3上的Hive外表功能 [参考文档](../data_source/External_table.md#deprecated-hive-外部表)
+=======
+  - [实验功能]支持S3上的Hive外表功能 [参考文档](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hive-外部表)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   - DecimalV3支持外表查询 [#425](https://github.com/StarRocks/starrocks/pull/425)
 - 实现存储层复杂表达式下推计算，获得性能提升
 - Broker Load支持华为OBS [#1182](https://github.com/StarRocks/starrocks/pull/1182)

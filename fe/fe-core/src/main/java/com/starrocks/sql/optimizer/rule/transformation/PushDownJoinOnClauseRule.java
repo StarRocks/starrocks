@@ -36,10 +36,20 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
+<<<<<<< HEAD
 
         if (joinOperator.hasPushDownJoinOnClause()) {
             return false;
         }
+=======
+        if (joinOperator.hasPushDownJoinOnClause()) {
+            return false;
+        }
+        JoinPredicatePushdown.JoinPredicatePushDownContext params = context.getJoinPushDownParams();
+        if (!params.enableJoinPredicatePushDown) {
+            return false;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return joinOperator.getOnPredicate() != null;
     }
 
@@ -49,8 +59,12 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         LogicalJoinOperator join = (LogicalJoinOperator) input.getOp();
         ScalarOperator on = join.getOnPredicate();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
+<<<<<<< HEAD
                 input, true, false, context.getColumnRefFactory(),
                 context.isEnableLeftRightJoinEquivalenceDerive(), context);
+=======
+                input, true, false, context.getColumnRefFactory(), context);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         OptExpression root = joinPredicatePushdown.pushdown(join.getOnPredicate());
         ((LogicalJoinOperator) root.getOp()).setHasPushDownJoinOnClause(true);
         if (root.getOp().equals(input.getOp()) && on.equals(join.getOnPredicate()) &&

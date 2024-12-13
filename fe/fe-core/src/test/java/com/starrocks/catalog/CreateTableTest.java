@@ -34,6 +34,11 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.AlterJobException;
+import com.starrocks.analysis.LiteralExpr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -44,7 +49,10 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
+<<<<<<< HEAD
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -58,7 +66,10 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.StatementBase;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -71,6 +82,10 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class CreateTableTest {
     private static ConnectContext connectContext;
@@ -91,9 +106,15 @@ public class CreateTableTest {
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
 
         UtFrameUtils.setUpForPersistTest();
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        UtFrameUtils.setUpForPersistTest();
+        starRocksAssert.useDatabase("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private static void createTable(String sql) throws Exception {
@@ -103,7 +124,11 @@ public class CreateTableTest {
 
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, alterTableStmt);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test(expected = DdlException.class)
@@ -299,13 +324,22 @@ public class CreateTableTest {
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl6 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl6");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(tbl6.getColumn("k1").isKey());
         Assert.assertTrue(tbl6.getColumn("k2").isKey());
         Assert.assertTrue(tbl6.getColumn("k3").isKey());
 
+<<<<<<< HEAD
         OlapTable tbl7 = (OlapTable) db.getTable("tbl7");
+=======
+        OlapTable tbl7 = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl7");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(tbl7.getColumn("k1").isKey());
         Assert.assertFalse(tbl7.getColumn("k2").isKey());
         Assert.assertTrue(tbl7.getColumn("k2").getAggregationType() == AggregateType.NONE);
@@ -333,7 +367,11 @@ public class CreateTableTest {
                         "    \"dynamic_partition.buckets\" = \"32\",\n" +
                         "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
                         ");"));
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Table str2dateTable = db.getTable("partition_str2date");
         Assert.assertTrue(DynamicPartitionUtil.isDynamicPartitionTable(str2dateTable));
 
@@ -434,8 +472,12 @@ public class CreateTableTest {
 
         ExceptionChecker
                 .expectThrowsWithMsg(AnalysisException.class,
+<<<<<<< HEAD
                         "Getting analyzing error from line 1, column 53 to line 1, column 65. Detail message: " +
                                 "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
+=======
+                        "More than one AUTO_INCREMENT column defined in CREATE TABLE Statement.",
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         () -> createTable(
                                 "create table test.atbl11(col1 bigint AUTO_INCREMENT, col2 bigint AUTO_INCREMENT) \n"
                                         + "Primary KEY (col1) distributed by hash(col1) buckets 1 \n"
@@ -457,7 +499,11 @@ public class CreateTableTest {
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
 
+<<<<<<< HEAD
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Generated Column "
+=======
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illegal expression type for Generated Column "
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         + "Column Type: INT, Expression Type: DOUBLE",
                 () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
                         + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
@@ -639,7 +685,11 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
+<<<<<<< HEAD
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+=======
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "Invalid bloom filter column 'k3': unsupported type JSON",
                 () -> alterTableWithNewParser(
                         "ALTER TABLE test.t_json_bloomfilter set (\"bloom_filter_columns\"= \"k3\");"));
@@ -685,12 +735,65 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(
+<<<<<<< HEAD
                 () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float) PROPERTIES(\"replication_num\" = \"1\");\n"));
+=======
+                () -> createTable(
+                        "create table test.tmp2\n" + "(k1 int, k2 float) PROPERTIES(\"replication_num\" = \"1\");\n"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testCreateTableWithReserveColumn() {
+        Config.allow_system_reserved_names = true;
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__op' is reserved for primary key table",
+                () -> createTable(
+                "CREATE TABLE test.test_op (\n" +
+                        "k1 INT,\n" +
+                        "__op INT\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__row' is reserved for primary key table",
+                        () -> createTable(
+                        "CREATE TABLE test.test_row (\n" +
+                                "k1 INT,\n" +
+                                "__row INT\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Column name '__ROW' is reserved for primary key table",
+                        () -> createTable(
+                        "CREATE TABLE test.test_row (\n" +
+                                "k1 INT,\n" +
+                                "__ROW INT\n" +
+                                ") ENGINE=OLAP\n" +
+                                "PRIMARY KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");"));
+
+        Config.allow_system_reserved_names = false;
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testCreateSumAgg() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");
@@ -703,7 +806,11 @@ public class CreateTableTest {
                 "AGGREGATE KEY(id_int)\n" +
                 "DISTRIBUTED BY HASH(id_int) BUCKETS 10\n" +
                 "PROPERTIES(\"replication_num\" = \"1\");");
+<<<<<<< HEAD
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+=======
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
         System.out.println("columns = " + columns);
@@ -751,7 +858,11 @@ public class CreateTableTest {
                 "than_64_chars VARCHAR(100)) DISTRIBUTED BY HASH(oh_my_gosh_this_is_a_long_column_name_look_at_it_it_" +
                 "has_more_than_64_chars) BUCKETS 8 PROPERTIES(\"replication_num\" = \"1\");";
         starRocksAssert.withTable(sql);
+<<<<<<< HEAD
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+=======
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("long_column_table");
         Assert.assertEquals(1, table.getColumns().size());
         Assert.assertNotNull(
@@ -774,7 +885,11 @@ public class CreateTableTest {
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
+<<<<<<< HEAD
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+=======
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("test_create_default_current_timestamp");
         Assert.assertEquals(2, table.getColumns().size());
     }
@@ -795,7 +910,11 @@ public class CreateTableTest {
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
+<<<<<<< HEAD
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+=======
+        final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("test_create_default_uuid");
         Assert.assertEquals(2, table.getColumns().size());
 
@@ -812,7 +931,11 @@ public class CreateTableTest {
                 ");";
         starRocksAssert.withTable(sql2);
 
+<<<<<<< HEAD
         final Table table2 = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
+=======
+        final Table table2 = starRocksAssert.getCtx().getGlobalStateMgr().getLocalMetastore().getDb(connectContext.getDatabase())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 .getTable("test_create_default_uuid_numeric");
         Assert.assertEquals(2, table2.getColumns().size());
     }
@@ -863,7 +986,11 @@ public class CreateTableTest {
 
     @Test
     public void testCreateTableWithLocation() throws Exception {
+<<<<<<< HEAD
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // add label to backend
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
@@ -889,7 +1016,12 @@ public class CreateTableTest {
                 "    \"in_memory\" = \"false\"\n" +
                 ");");
 
+<<<<<<< HEAD
         OlapTable table = (OlapTable) testDb.getTable("test_location_no_prop");
+=======
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_location_no_prop");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table.getLocation());
         System.out.println(table.getLocation());
         Assert.assertTrue(table.getLocation().containsKey("*"));
@@ -898,8 +1030,13 @@ public class CreateTableTest {
         String showSql = "show create table test.`test_location_no_prop`";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
+<<<<<<< HEAD
         ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
         ShowResultSet showResultSet = showExecutor.execute();
+=======
+
+        ShowResultSet showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(showResultSet.getResultRows());
         Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -923,15 +1060,24 @@ public class CreateTableTest {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
                 ");");
+<<<<<<< HEAD
         table = (OlapTable) testDb.getTable("test_location_no_backend_prop");
+=======
+        table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), "test_location_no_backend_prop");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNull(table.getLocation());
 
         // verify the location property in show create table result, shouldn't exist
         showSql = "show create table test.`test_location_no_backend_prop`";
         showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                 connectContext);
+<<<<<<< HEAD
         showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
         showResultSet = showExecutor.execute();
+=======
+        showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         System.out.println(showResultSet.getResultRows());
         Assert.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
@@ -989,7 +1135,12 @@ public class CreateTableTest {
                 }
             } else {
                 createTable(createTableSql);
+<<<<<<< HEAD
                 table = (OlapTable) testDb.getTable("test_location_prop_" + i);
+=======
+                table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(testDb.getFullName(), "test_location_prop_" + i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (tableLocationProp.isEmpty()) {
                     Assert.assertNull(table.getLocation());
                     continue;
@@ -1003,8 +1154,12 @@ public class CreateTableTest {
                 showSql = "show create table test.`test_location_prop_" + i + "`";
                 showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
                         connectContext);
+<<<<<<< HEAD
                 showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
                 showResultSet = showExecutor.execute();
+=======
+                showResultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 System.out.println(showResultSet.getResultRows());
                 Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
                         PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + expectedAnalyzedProp + "\""));
@@ -1034,7 +1189,11 @@ public class CreateTableTest {
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         createTable("CREATE TABLE test.`test_location_persist_t1` (\n" +
                 "    k1 int,\n" +
@@ -1051,11 +1210,19 @@ public class CreateTableTest {
 
         // make final image
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getDataOutputStream());
 
         // ** test replay from edit log
         LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
         localMetastoreFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+=======
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getImageWriter());
+
+        // ** test replay from edit log
+        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreFollower.load(initialImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         CreateTableInfo info = (CreateTableInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
         localMetastoreFollower.replayCreateTable(info);
@@ -1067,7 +1234,11 @@ public class CreateTableTest {
 
         // ** test load from image(simulate restart)
         LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+<<<<<<< HEAD
         localMetastoreLeader.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+=======
+        localMetastoreLeader.load(finalImage.getMetaBlockReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         olapTable = (OlapTable) localMetastoreLeader.getDb("test")
                 .getTable("test_location_persist_t1");
         System.out.println(olapTable.getLocation());
@@ -1230,7 +1401,11 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
+<<<<<<< HEAD
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+=======
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "Invalid bloom filter column 'k3': unsupported type VARBINARY",
                 () -> alterTableWithNewParser(
                         "ALTER TABLE test.t_varbinary_bf set (\"bloom_filter_columns\"= \"k3\");"));
@@ -1288,7 +1463,11 @@ public class CreateTableTest {
                         "\"replication_num\" = \"1\"\n" +
                         ")"
         ));
+<<<<<<< HEAD
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+=======
+        ExceptionChecker.expectThrowsWithMsg(AlterJobException.class,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "Invalid bloom filter column 'k3': unsupported type VARBINARY",
                 () -> alterTableWithNewParser("ALTER TABLE test.t_binary_bf set (\"bloom_filter_columns\"= \"k3\");"));
 
@@ -1344,8 +1523,14 @@ public class CreateTableTest {
                         ");"
         ));
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_table");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "binlog_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table.getCurBinlogConfig());
         Assert.assertTrue(table.isBinlogEnabled());
 
@@ -1380,8 +1565,14 @@ public class CreateTableTest {
                         ");"
         ));
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("not_binlog_table");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "not_binlog_table");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertFalse(table.containsBinlogConfig());
         Assert.assertFalse(table.isBinlogEnabled());
@@ -1395,6 +1586,7 @@ public class CreateTableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testTemporaryTable() throws Exception {
         Config.enable_experimental_temporary_table = true;
         createTable(
@@ -1421,6 +1613,8 @@ public class CreateTableTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testCreateTableWithConstraint() {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table1(\n" +
@@ -1436,15 +1630,27 @@ public class CreateTableTest {
                         ");"
         ));
 
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("parent_table1");
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "parent_table1");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertTrue(table.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint = table.getUniqueConstraints();
         Assert.assertEquals(1, uniqueConstraint.size());
+<<<<<<< HEAD
         Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumns().size());
         Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumns().get(0));
         Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumns().get(1));
+=======
+        Assert.assertEquals(2, uniqueConstraint.get(0).getUniqueColumnNames(table).size());
+        Assert.assertEquals("k1", uniqueConstraint.get(0).getUniqueColumnNames(table).get(0));
+        Assert.assertEquals("k2", uniqueConstraint.get(0).getUniqueColumnNames(table).get(1));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table2(\n" +
@@ -1460,15 +1666,27 @@ public class CreateTableTest {
                         ");"
         ));
 
+<<<<<<< HEAD
         OlapTable table2 = (OlapTable) db.getTable("parent_table2");
+=======
+        OlapTable table2 =
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "parent_table2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         Assert.assertTrue(table2.hasUniqueConstraints());
         List<UniqueConstraint> uniqueConstraint2 = table2.getUniqueConstraints();
         Assert.assertEquals(2, uniqueConstraint2.size());
+<<<<<<< HEAD
         Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumns().size());
         Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumns().get(0));
         Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumns().size());
         Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumns().get(0));
+=======
+        Assert.assertEquals(1, uniqueConstraint2.get(0).getUniqueColumnNames(table2).size());
+        Assert.assertEquals("k1", uniqueConstraint2.get(0).getUniqueColumnNames(table2).get(0));
+        Assert.assertEquals(1, uniqueConstraint2.get(1).getUniqueColumnNames(table2).size());
+        Assert.assertEquals("k2", uniqueConstraint2.get(1).getUniqueColumnNames(table2).get(0));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_primary_key_table1(\n" +
@@ -2080,12 +2298,20 @@ public class CreateTableTest {
         String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
                 " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error." +
+<<<<<<< HEAD
                 " Detail message: Column name [__op] is a system reserved name." +
                 " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
                 () -> starRocksAssert.withTable(sql1));
     }
 
 
+=======
+                        " Detail message: Column name [__op] is a system reserved name." +
+                        " Please choose a different one.",
+                () -> starRocksAssert.withTable(sql1));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testDefaultValueHasEscapeString() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -2107,6 +2333,29 @@ public class CreateTableTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testDefaultValueHasEscapeStringNonPK() throws Exception {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE `news_rt_non_pk` (\n" +
+                "  `id` bigint(20) NOT NULL COMMENT \"pkid\",\n" +
+                "  `title` varchar(65533) NOT NULL DEFAULT \"\\\"\" COMMENT \"title\"\n" +
+                ") ENGINE=OLAP \n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "COMMENT \"news\"\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 1 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+        String createTableSql = starRocksAssert.showCreateTable("show create table news_rt_non_pk;");
+        starRocksAssert.dropTable("news_rt_non_pk");
+        starRocksAssert.withTable(createTableSql);
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testDefaultValueHasChineseChars() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.useDatabase("test");
@@ -2147,4 +2396,63 @@ public class CreateTableTest {
         starRocksAssert.withTable(createTableSql);
         Assert.assertTrue(createTableSql, createTableSql.contains("撒"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCreateTableWithNullableColumns1() throws Exception {
+        String createSQL = "CREATE TABLE list_partition_tbl1 (\n" +
+                "      id BIGINT,\n" +
+                "      age SMALLINT,\n" +
+                "      dt VARCHAR(10),\n" +
+                "      province VARCHAR(64) \n" +
+                ")\n" +
+                "DUPLICATE KEY(id)\n" +
+                "PARTITION BY LIST (province) (\n" +
+                "     PARTITION p1 VALUES IN ((NULL),(\"chongqing\")) ,\n" +
+                "     PARTITION p2 VALUES IN ((\"guangdong\")) \n" +
+                ")\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(createSQL);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                "list_partition_tbl1");
+        PartitionInfo info = table.getPartitionInfo();
+        Assert.assertTrue(info.isListPartition());
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) info;
+        Map<Long, List<List<LiteralExpr>>> long2Literal =  listPartitionInfo.getMultiLiteralExprValues();
+        Assert.assertEquals(2, long2Literal.size());
+    }
+
+    @Test
+    public void testCreateTableWithNullableColumns2() {
+        String createSQL = "\n" +
+                "CREATE TABLE t3 (\n" +
+                "  dt date,\n" +
+                "  city varchar(20),\n" +
+                "  name varchar(20),\n" +
+                "  num int\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(dt, city, name)\n" +
+                "PARTITION BY LIST (dt) (\n" +
+                "    PARTITION p1 VALUES IN ((NULL), (\"2022-04-01\")),\n" +
+                "    PARTITION p2 VALUES IN ((\"2022-04-02\")),\n" +
+                "    PARTITION p3 VALUES IN ((\"2022-04-03\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(dt) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        try {
+            starRocksAssert.withTable(createSQL);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Partition column[dt] could not be null but contains null " +
+                    "value in partition[p1]."));
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

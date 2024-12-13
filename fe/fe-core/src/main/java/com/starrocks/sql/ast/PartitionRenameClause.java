@@ -18,8 +18,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+<<<<<<< HEAD
 import java.util.Map;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // rename table
 public class PartitionRenameClause extends AlterTableClause {
     private final String partitionName;
@@ -33,7 +36,10 @@ public class PartitionRenameClause extends AlterTableClause {
         super(AlterOpType.RENAME, pos);
         this.partitionName = partitionName;
         this.newPartitionName = newPartitionName;
+<<<<<<< HEAD
         this.needTableStable = false;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getPartitionName() {
@@ -45,11 +51,14 @@ public class PartitionRenameClause extends AlterTableClause {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, String> getProperties() {
         return null;
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitPartitionRenameClause(this, context);
     }

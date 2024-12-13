@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # subdivide_bitmap
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Splits a large bitmap into multiple sub-bitmaps.
 

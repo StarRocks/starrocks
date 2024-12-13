@@ -35,7 +35,10 @@ public:
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
     std::set<int64_t> _need_skip_rowids;
+<<<<<<< HEAD
     void update_v2_builder_counter(RuntimeProfile* parent_profile, HdfsScanStats& app_stats);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

@@ -224,6 +224,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
 
     std::unique_ptr<ColumnPredicate> predicate;
     predicate.reset(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, "prefix"));
+<<<<<<< HEAD
     seg_opts.predicates[1].push_back(predicate.get());
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
@@ -231,6 +232,17 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
     std::unordered_set<uint32_t> set;
     set.insert(1);
     chunk_iter->init_output_schema(set);
+=======
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
+    std::unordered_set<uint32_t> set;
+    set.insert(1);
+    ASSERT_OK(chunk_iter->init_output_schema(set));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 
@@ -308,7 +320,11 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
+=======
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(tablet_schema->column(1), nullptr));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
@@ -332,6 +348,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     seg_opts.global_dictmaps = &dict_map;
     std::unique_ptr<ColumnPredicate> predicate;
     predicate.reset(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 1, values[0].c_str()));
+<<<<<<< HEAD
     seg_opts.predicates[1].push_back(predicate.get());
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
@@ -339,6 +356,17 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     std::unordered_set<uint32_t> set;
     set.insert(1);
     chunk_iter->init_output_schema(set);
+=======
+    PredicateAndNode pred_root;
+    pred_root.add_child(PredicateColumnNode{predicate.get()});
+    seg_opts.pred_tree = PredicateTree::create(std::move(pred_root));
+
+    auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
+    std::unordered_set<uint32_t> set;
+    set.insert(1);
+    ASSERT_OK(chunk_iter->init_output_schema(set));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 
@@ -417,8 +445,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_opts.global_dictmaps = &dict_map;
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+<<<<<<< HEAD
     chunk_iter->init_encoded_schema(dict_map);
     chunk_iter->init_output_schema(std::unordered_set<uint32_t>());
+=======
+    ASSERT_OK(chunk_iter->init_encoded_schema(dict_map));
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 
@@ -494,7 +527,11 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     iter_opts.read_file = read_file.get();
     iter_opts.check_dict_encoding = true;
     iter_opts.reader_type = READER_QUERY;
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(1, nullptr));
+=======
+    ASSIGN_OR_ABORT(auto scalar_iter, segment->new_column_iterator(tablet_schema->column(1), nullptr));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_OK(scalar_iter->init(iter_opts));
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
@@ -517,8 +554,13 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     seg_opts.global_dictmaps = &dict_map;
 
     auto chunk_iter = new_segment_iterator(segment, vec_schema, seg_opts);
+<<<<<<< HEAD
     chunk_iter->init_encoded_schema(dict_map);
     chunk_iter->init_output_schema(std::unordered_set<uint32_t>());
+=======
+    ASSERT_TRUE(chunk_iter->init_encoded_schema(dict_map).ok());
+    ASSERT_OK(chunk_iter->init_output_schema(std::unordered_set<uint32_t>()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     auto res_chunk = ChunkHelper::new_chunk(chunk_iter->output_schema(), chunk_size);
 

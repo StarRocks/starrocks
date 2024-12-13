@@ -15,7 +15,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
 import autovalue.shaded.com.google.common.common.collect.Lists;
+=======
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.OptExpression;

@@ -16,10 +16,17 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
+<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
+=======
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -68,8 +75,12 @@ public class ShowCatalogsStmtTest {
     @Test
     public void testShowCatalogsNormal() throws AnalysisException, DdlException {
         ShowCatalogsStmt stmt = new ShowCatalogsStmt();
+<<<<<<< HEAD
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+=======
+        ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ShowResultSetMetaData metaData = resultSet.getMetaData();
         Assert.assertEquals("Catalog", metaData.getColumn(0).getName());
         Assert.assertEquals("Type", metaData.getColumn(1).getName());

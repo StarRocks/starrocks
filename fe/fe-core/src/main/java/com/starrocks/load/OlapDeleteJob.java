@@ -53,11 +53,25 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -110,14 +124,23 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     @java.lang.SuppressWarnings("squid:S2142") // allow catch InterruptedException
     public void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
+<<<<<<< HEAD
             throws DdlException, QueryStateException {
+=======
+                throws DdlException, QueryStateException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
         MarkedCountDownLatch<Long, Long> countDownLatch;
         List<Predicate> conditions = getDeleteConditions();
 
+<<<<<<< HEAD
         db.readLock();
         try {
+=======
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // task sent to be
             AgentBatchTask batchTask = new AgentBatchTask();
             // count total replica num
@@ -125,7 +148,11 @@ public class OlapDeleteJob extends DeleteJob {
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     for (MaterializedIndex index : physicalPartition
+<<<<<<< HEAD
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+=======
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         for (Tablet tablet : index.getTablets()) {
                             totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
                         }
@@ -138,7 +165,11 @@ public class OlapDeleteJob extends DeleteJob {
             for (Partition partition : partitions) {
                 for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                     for (MaterializedIndex index : physicalPartition
+<<<<<<< HEAD
                             .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+=======
+                                .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         long indexId = index.getId();
                         int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
 
@@ -160,6 +191,7 @@ public class OlapDeleteJob extends DeleteJob {
 
                                 // create push task for each replica
                                 PushTask pushTask = new PushTask(null,
+<<<<<<< HEAD
                                         replica.getBackendId(), db.getId(), olapTable.getId(),
                                         physicalPartition.getId(), indexId,
                                         tabletId, replicaId, schemaHash,
@@ -170,6 +202,18 @@ public class OlapDeleteJob extends DeleteJob {
                                         getTransactionId(),
                                         GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
                                                 .getNextTransactionId(), columnsDesc);
+=======
+                                            replica.getBackendId(), db.getId(), olapTable.getId(),
+                                            physicalPartition.getId(), indexId,
+                                            tabletId, replicaId, schemaHash,
+                                            -1, 0,
+                                            -1, type, conditions,
+                                            TPriority.NORMAL,
+                                            TTaskType.REALTIME_PUSH,
+                                            getTransactionId(),
+                                            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                                                        .getNextTransactionId(), columnsDesc);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 pushTask.setIsSchemaChanging(false);
                                 pushTask.setCountDownLatch(countDownLatch);
 
@@ -191,6 +235,7 @@ public class OlapDeleteJob extends DeleteJob {
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
+<<<<<<< HEAD
             if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
@@ -198,6 +243,13 @@ public class OlapDeleteJob extends DeleteJob {
             throw new DdlException(t.getMessage(), t);
         } finally {
             db.readUnlock();
+=======
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(db.getId(), getTransactionId()) != null) {
+                cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
+            }
+            throw new DdlException(t.getMessage(), t);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         LOG.info("countDownLatch count: {}", countDownLatch.getCount());
 
@@ -249,14 +301,22 @@ public class OlapDeleteJob extends DeleteJob {
         switch (state) {
             case DELETING:
                 LOG.warn("delete job failed: transactionId {}, timeout {}, {}", getTransactionId(), timeoutMs,
+<<<<<<< HEAD
                         errMsg);
+=======
+                            errMsg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (countDownLatch.getCount() > 0) {
                     cancel(DeleteMgr.CancelType.TIMEOUT, "delete job timeout");
                 } else {
                     cancel(DeleteMgr.CancelType.UNKNOWN, "delete job failed");
                 }
                 throw new DdlException("failed to execute delete. transaction id " + getTransactionId() +
+<<<<<<< HEAD
                         ", timeout(ms) " + timeoutMs + ", " + errMsg);
+=======
+                            ", timeout(ms) " + timeoutMs + ", " + errMsg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case QUORUM_FINISHED:
             case FINISHED:
                 try {
@@ -264,12 +324,20 @@ public class OlapDeleteJob extends DeleteJob {
                     long endQuorumTimeoutMs = nowQuorumTimeMs + timeoutMs / 2;
                     // if job's state is quorum_finished then wait for a period of time and commit it.
                     while (getState() == DeleteState.QUORUM_FINISHED && endQuorumTimeoutMs > nowQuorumTimeMs
+<<<<<<< HEAD
                             && countDownLatch.getCount() > 0) {
+=======
+                                && countDownLatch.getCount() > 0) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         checkAndUpdateQuorum();
                         Thread.sleep(1000);
                         nowQuorumTimeMs = System.currentTimeMillis();
                         LOG.debug("wait for quorum finished delete job: {}, txn_id: {}", getId(),
+<<<<<<< HEAD
                                 getTransactionId());
+=======
+                                    getTransactionId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                 } catch (MetaNotFoundException e) {
                     cancel(DeleteMgr.CancelType.METADATA_MISSING, e.getMessage());
@@ -294,17 +362,29 @@ public class OlapDeleteJob extends DeleteJob {
      */
     public void checkAndUpdateQuorum() throws MetaNotFoundException {
         long dbId = deleteInfo.getDbId();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("can not find database " + dbId + " when commit delete");
         }
 
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
+<<<<<<< HEAD
             Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPartitionId());
             if (replicaNum == null) {
                 // should not happen
                 throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPartitionId() +
                         " when commit delete job");
+=======
+            Short replicaNum = partitionToReplicateNum.get(tDeleteInfo.getPhysicalPartitionId());
+            if (replicaNum == null) {
+                // should not happen
+                throw new MetaNotFoundException("Unknown partition " + tDeleteInfo.getPhysicalPartitionId() +
+                            " when commit delete job");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             if (tDeleteInfo.getFinishedReplicas().size() == replicaNum) {
                 finishedTablets.add(tDeleteInfo.getTabletId());
@@ -314,7 +394,11 @@ public class OlapDeleteJob extends DeleteJob {
             }
         }
         LOG.info("check delete job quorum, txn_id: {}, total tablets: {}, quorum tablets: {},",
+<<<<<<< HEAD
                 signature, totalTablets.size(), quorumTablets.size());
+=======
+                    signature, totalTablets.size(), quorumTablets.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         if (finishedTablets.containsAll(totalTablets)) {
             setState(DeleteState.FINISHED);
@@ -335,8 +419,13 @@ public class OlapDeleteJob extends DeleteJob {
         return pushTasks;
     }
 
+<<<<<<< HEAD
     public boolean addFinishedReplica(long partitionId, long tabletId, Replica replica) {
         tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(partitionId, tabletId));
+=======
+    public boolean addFinishedReplica(long physicalPartitionId, long tabletId, Replica replica) {
+        tabletDeleteInfoMap.putIfAbsent(tabletId, new TabletDeleteInfo(physicalPartitionId, tabletId));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TabletDeleteInfo tDeleteInfo = tabletDeleteInfoMap.get(tabletId);
         return tDeleteInfo.addFinishedReplica(replica);
     }
@@ -360,8 +449,13 @@ public class OlapDeleteJob extends DeleteJob {
     public void clear() {
         for (PushTask pushTask : getPushTasks()) {
             AgentTaskQueue.removePushTask(pushTask.getBackendId(), pushTask.getSignature(),
+<<<<<<< HEAD
                     pushTask.getVersion(),
                     pushTask.getPushType(), pushTask.getTaskType());
+=======
+                        pushTask.getVersion(),
+                        pushTask.getPushType(), pushTask.getTaskType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -372,6 +466,7 @@ public class OlapDeleteJob extends DeleteJob {
         }
 
         // create cancel delete push task for each backends
+<<<<<<< HEAD
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
         for (Long backendId : backendIds) {
             PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
@@ -379,24 +474,51 @@ public class OlapDeleteJob extends DeleteJob {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
             AgentTaskQueue.removePushTaskByTransactionId(backendId, getTransactionId(),
                     TPushType.DELETE, TTaskType.REALTIME_PUSH);
+=======
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+        for (Long backendId : backendIds) {
+            PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
+                        TTaskType.REALTIME_PUSH, getTransactionId(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                                    .getNextTransactionId());
+            AgentTaskQueue.removePushTaskByTransactionId(backendId, getTransactionId(),
+                        TPushType.DELETE, TTaskType.REALTIME_PUSH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             AgentTaskExecutor.submit(new AgentBatchTask(cancelDeleteTask));
         }
         return true;
     }
 
     @Override
+<<<<<<< HEAD
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
         long transactionId = getTransactionId();
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
                 getTabletFailInfos(), timeoutMs,
                 new InsertTxnCommitAttachment());
+=======
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
+        long transactionId = getTransactionId();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        try {
+            return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
+                        getTabletFailInfos(), timeoutMs,
+                        new InsertTxnCommitAttachment());
+        } catch (LockTimeoutException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
     protected List<TabletCommitInfo> getTabletCommitInfos() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
+<<<<<<< HEAD
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
             for (Replica replica : tDeleteInfo.getFinishedReplicas()) {
                 // the inverted index contains rolling up replica
@@ -415,4 +537,8 @@ public class OlapDeleteJob extends DeleteJob {
     protected List<TabletFailInfo> getTabletFailInfos() {
         return Collections.emptyList();
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

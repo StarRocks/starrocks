@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
@@ -21,11 +24,19 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Partition;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
@@ -45,6 +56,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
@@ -52,19 +67,44 @@ public class MetaScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(MetaScanNode.class);
     private final Map<Integer, String> columnIdToNames;
     private final OlapTable olapTable;
+<<<<<<< HEAD
     private List<Column> tableSchema = Lists.newArrayList();
     private final List<TScanRangeLocations> result = Lists.newArrayList();
 
     public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
                         Map<Integer, String> columnIdToNames) {
+=======
+    private final List<Column> tableSchema;
+    private final List<String> selectPartitionNames;
+    private final List<TScanRangeLocations> result = Lists.newArrayList();
+
+    public MetaScanNode(PlanNodeId id, TupleDescriptor desc, OlapTable olapTable,
+                        Map<Integer, String> columnIdToNames, List<String> selectPartitionNames, long warehouseId) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(id, desc, "MetaScan");
         this.olapTable = olapTable;
         this.tableSchema = olapTable.getBaseSchema();
         this.columnIdToNames = columnIdToNames;
+<<<<<<< HEAD
     }
 
     public void computeRangeLocations() {
         Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
+=======
+        this.selectPartitionNames = selectPartitionNames;
+        this.warehouseId = warehouseId;
+    }
+
+    public void computeRangeLocations() {
+        Collection<PhysicalPartition> partitions;
+        if (selectPartitionNames.isEmpty()) {
+            partitions = olapTable.getPhysicalPartitions();
+        } else {
+            partitions = selectPartitionNames.stream().map(olapTable::getPartition)
+                    .map(Partition::getDefaultPhysicalPartition).collect(Collectors.toList());
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (PhysicalPartition partition : partitions) {
             MaterializedIndex index = partition.getBaseIndex();
             int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
@@ -86,8 +126,19 @@ public class MetaScanNode extends ScanNode {
 
                 // random shuffle List && only collect one copy
                 List<Replica> allQueryableReplicas = Lists.newArrayList();
+<<<<<<< HEAD
                 tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
                         visibleVersion, -1, schemaHash);
+=======
+                if (RunMode.isSharedDataMode()) {
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash, warehouseId);
+                } else {
+                    tablet.getQueryableReplicas(allQueryableReplicas, Collections.emptyList(),
+                            visibleVersion, -1, schemaHash);
+                }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (allQueryableReplicas.isEmpty()) {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
@@ -109,7 +160,13 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
+<<<<<<< HEAD
                     ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+=======
+                    ComputeNode node =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                    .getBackendOrComputeNode(replica.getBackendId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (node == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;
@@ -168,6 +225,12 @@ public class MetaScanNode extends ScanNode {
                     append(kv.getValue()).
                     append("\n");
         }
+<<<<<<< HEAD
+=======
+        if (!selectPartitionNames.isEmpty()) {
+            output.append(prefix).append("Partitions: ").append(selectPartitionNames).append("\n");
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return output.toString();
     }
 

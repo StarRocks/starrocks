@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 package com.starrocks.planner;
 
 import com.starrocks.analysis.DescriptorTable;
@@ -23,7 +26,12 @@ import java.util.List;
 public interface RuntimeFilterBuildNode {
     List<RuntimeFilterDescription> getBuildRuntimeFilters();
 
+<<<<<<< HEAD
     void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl);
+=======
+    void buildRuntimeFilters(IdGenerator<RuntimeFilterId> runtimeFilterIdIdGenerator, DescriptorTable descTbl,
+                             ExecGroupSets execGroupSets);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void clearBuildRuntimeFilters();
 }

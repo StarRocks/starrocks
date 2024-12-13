@@ -46,6 +46,10 @@ public class PruneScanColumnRule extends TransformationRule {
     public static final PruneScanColumnRule ES_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_ES_SCAN);
     public static final PruneScanColumnRule JDBC_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_JDBC_SCAN);
     public static final PruneScanColumnRule BINLOG_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_BINLOG_SCAN);
+<<<<<<< HEAD
+=======
+    public static final PruneScanColumnRule KUDU_SCAN = new PruneScanColumnRule(OperatorType.LOGICAL_KUDU_SCAN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public PruneScanColumnRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_OLAP_SCAN_COLUMNS, Pattern.create(logicalOperatorType));

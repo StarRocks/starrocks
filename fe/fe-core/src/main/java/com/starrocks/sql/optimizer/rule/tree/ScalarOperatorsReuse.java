@@ -15,6 +15,10 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -32,6 +36,10 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -40,10 +48,18 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 
 import java.util.Collections;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -251,6 +267,30 @@ public class ScalarOperatorsReuse {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public ScalarOperator visitSubfield(SubfieldOperator predicate, Void context) {
+            // only rewrite subfield operator if and only if child is DictionaryGetOperator
+            if (predicate.getChild(0) instanceof DictionaryGetOperator) {
+                ScalarOperator operator = new SubfieldOperator(predicate.getChild(0).accept(this, null),
+                                predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
+                return tryRewrite(operator);
+            }
+            return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitDictionaryGetOperator(DictionaryGetOperator predicate, Void context) {
+            ScalarOperator operator = new DictionaryGetOperator(
+                    predicate.getChildren().stream().map(
+                        argument -> argument.accept(this, null)).collect(Collectors.toList()),
+                            predicate.getType(), predicate.getDictionaryId(),
+                                predicate.getDictionaryTxnId(), predicate.getKeySize(), predicate.getNullIfNotExist());
+            return tryRewrite(operator);
+        }
+
+        @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         public ScalarOperator visitDictMappingOperator(DictMappingOperator operator, Void context) {
             return tryRewrite(operator.clone());
         }
@@ -449,7 +489,12 @@ public class ScalarOperatorsReuse {
             // Apply to normalize rule to eliminate invalid ColumnRef usage for in-predicate
             com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter rewriter =
                     new com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter();
+<<<<<<< HEAD
             List<ScalarOperatorRewriteRule> rules = Collections.singletonList(new NormalizePredicateRule());
+=======
+            List<ScalarOperatorRewriteRule> rules =
+                    ImmutableList.of(new NormalizePredicateRule(), new ReduceCastRule());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : columnRefMap.entrySet()) {
                 ScalarOperator rewriteOperator =
                         ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(kv.getValue(), commonSubOperators);

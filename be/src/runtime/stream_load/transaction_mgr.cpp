@@ -184,7 +184,11 @@ Status TransactionMgr::begin_transaction(const HttpRequest* req, std::string* re
         if (!st.ok()) {
             ctx->status = st;
             if (ctx->need_rollback) {
+<<<<<<< HEAD
                 _rollback_transaction(ctx);
+=======
+                (void)_rollback_transaction(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         LOG(INFO) << "new transaction manage request. " << ctx->brief() << ", tbl=" << ctx->table << " op=begin";
@@ -262,7 +266,11 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
             LOG(ERROR) << "Fail to commit txn: " << st << " " << ctx->brief();
             ctx->status = st;
             if (ctx->need_rollback) {
+<<<<<<< HEAD
                 _rollback_transaction(ctx);
+=======
+                (void)_rollback_transaction(ctx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         *resp = _build_reply(TXN_COMMIT, ctx);
@@ -331,7 +339,11 @@ Status TransactionMgr::_commit_transaction(StreamLoadContext* ctx, bool prepare)
         // 1. finish stream pipe & wait it done
         if (ctx->buffer != nullptr && ctx->buffer->pos > 0) {
             ctx->buffer->flip();
+<<<<<<< HEAD
             ctx->body_sink->append(std::move(ctx->buffer));
+=======
+            RETURN_IF_ERROR(ctx->body_sink->append(std::move(ctx->buffer)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ctx->buffer = nullptr;
         }
         RETURN_IF_ERROR(ctx->body_sink->finish());

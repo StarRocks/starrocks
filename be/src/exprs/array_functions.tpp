@@ -11,6 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -18,10 +22,19 @@
 #include "column/column_viewer.h"
 #include "column/json_column.h"
 #include "column/type_traits.h"
+<<<<<<< HEAD
+=======
+#include "column/vectorized_fwd.h"
+#include "exec/sorting/sorting.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exprs/arithmetic_operation.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 #include "runtime/current_thread.h"
+<<<<<<< HEAD
+=======
+#include "runtime/runtime_state.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "types/logical_type.h"
 #include "util/bit_mask.h"
 #include "util/orlp/pdqsort.h"
@@ -97,6 +110,7 @@ private:
         Datum v = column.get(index);
         const auto& items = v.get<DatumArray>();
 
+<<<<<<< HEAD
         for (const auto& item : items) {
             if (item.is_null()) {
                 has_null = true;
@@ -117,6 +131,27 @@ private:
             dest_data_column->append_datum(*iter);
             ++iter;
         }
+=======
+        auto& dest_data_column = dest_column->elements_column();
+        auto& dest_offsets = dest_column->offsets_column()->get_data();
+
+        for (const auto& item : items) {
+            if (item.is_null()) {
+                if (!has_null) {
+                    dest_data_column->append_nulls(1);
+                    has_null = true;
+                }
+                continue;
+            }
+
+            const auto& tt = item.get<CppType>();
+            if (hash_set->count(tt) == 0) {
+                hash_set->emplace(tt);
+                dest_data_column->append_datum(tt);
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         dest_offsets.emplace_back(dest_offsets.back() + hash_set->size() + has_null);
     }
 };
@@ -741,7 +776,11 @@ protected:
             return;
         }
 
+<<<<<<< HEAD
         auto null_first_fn = [src_null_column](size_t i) -> bool { return src_null_column.get_data()[i] == 1; };
+=======
+        auto null_first_fn = [&src_null_column](size_t i) -> bool { return src_null_column.get_data()[i] == 1; };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         auto begin_of_not_null =
                 std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);
@@ -910,7 +949,11 @@ private:
 class ArrayJoin {
 public:
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+<<<<<<< HEAD
         // TODO: optimize the performace of const sep or const null replace str
+=======
+        // TODO: optimize the performance of const sep or const null replace str
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         DCHECK_GE(columns.size(), 2);
         size_t chunk_size = columns[0]->size();
 
@@ -928,7 +971,11 @@ private:
     static ColumnPtr _join_column_replace_null(const ColumnPtr& src_column, const ColumnPtr& sep_column,
                                                const ColumnPtr& null_replace_column, size_t chunk_size) {
         NullableBinaryColumnBuilder res;
+<<<<<<< HEAD
         // byte_size may be smaller or larger then actual used size
+=======
+        // byte_size may be smaller or larger than actual used size
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // byte_size is only one reserve size
         size_t byte_size = ColumnHelper::get_data_column(src_column.get())->byte_size() +
                            ColumnHelper::get_data_column(sep_column.get())->byte_size(0) * src_column->size() +
@@ -1015,12 +1062,24 @@ private:
     static ColumnPtr _array_match(const Columns& columns) {
         DCHECK(columns.size() == 1);
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
+<<<<<<< HEAD
         size_t chunk_size = columns[0]->size();
         ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
 
         auto dest_null_column = NullColumn::create(chunk_size, 0);
         auto dest_data_column = BooleanColumn::create(chunk_size);
         dest_null_column->get_data().resize(chunk_size, 0);
+=======
+        bool is_const = columns[0]->is_constant();
+
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr bool_column = is_const ? FunctionHelper::get_data_column_of_const(columns[0]) : columns[0];
+
+        size_t dest_num_rows = is_const ? 1 : chunk_size;
+        auto dest_null_column = NullColumn::create(dest_num_rows, 0);
+        auto dest_data_column = BooleanColumn::create(dest_num_rows);
+        dest_null_column->get_data().resize(dest_num_rows, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ArrayColumn* bool_array;
         NullColumn* array_null_map = nullptr;
@@ -1036,7 +1095,11 @@ private:
 
         ColumnViewer<TYPE_BOOLEAN> bool_elements(bool_array->elements_column());
 
+<<<<<<< HEAD
         for (size_t i = 0; i < chunk_size; ++i) {
+=======
+        for (size_t i = 0; i < dest_num_rows; ++i) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (array_null_map == nullptr || !array_null_map->get_data()[i]) { // array_null_map[i] is not null
                 bool has_null = false;
                 bool res = !isAny;
@@ -1058,7 +1121,15 @@ private:
             }
         }
 
+<<<<<<< HEAD
         return NullableColumn::create(dest_data_column, dest_null_column);
+=======
+        ColumnPtr dest_column = NullableColumn::create(dest_data_column, dest_null_column);
+        if (is_const) {
+            dest_column = ConstColumn::create(std::move(dest_column), chunk_size);
+        }
+        return dest_column;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 };
 
@@ -1230,6 +1301,10 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 2);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (columns[0]->only_null() || columns[1]->only_null()) {
             return columns[0];
         }
@@ -1620,7 +1695,11 @@ private:
     }
 };
 
+<<<<<<< HEAD
 // Todo:support datatime/data
+=======
+// Todo:support datetime/date
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 template <LogicalType Type>
 class ArrayGenerate {
 public:

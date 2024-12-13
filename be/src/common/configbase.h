@@ -142,6 +142,11 @@ public:
 
     bool set_value(std::string value);
 
+<<<<<<< HEAD
+=======
+    bool rollback();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     virtual std::string value() const = 0;
 
     static void clear_fields() { _s_field_map.clear(); }
@@ -160,6 +165,11 @@ protected:
     void* _storage;
     const char* _defval;
     bool _valmutable;
+<<<<<<< HEAD
+=======
+    std::string _last_set_val;
+    std::string _current_set_val;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 template <typename T, typename = void>
@@ -325,6 +335,11 @@ bool init(std::istream& input);
 
 Status set_config(const std::string& field, const std::string& value);
 
+<<<<<<< HEAD
+=======
+Status rollback_config(const std::string& field);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 std::vector<ConfigInfo> list_configs();
 
 void TEST_clear_configs();

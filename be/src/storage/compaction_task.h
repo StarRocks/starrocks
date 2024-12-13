@@ -14,10 +14,18 @@
 
 #pragma once
 
+<<<<<<< HEAD
+=======
+#include <memory>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <mutex>
 #include <sstream>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "column/column_access_path.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/background_task.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
@@ -52,6 +60,10 @@ struct CompactionTaskInfo {
     CompactionTaskState state{COMPACTION_INIT};
     uint64_t task_id{0};
     Version output_version;
+<<<<<<< HEAD
+=======
+    int64_t gtid{0};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     uint64_t elapsed_time{0};
     int64_t tablet_id{0};
     double compaction_score{0};
@@ -103,6 +115,10 @@ struct CompactionTaskInfo {
         ss << ", state:" << compaction_state_to_string(state);
         ss << ", compaction_type:" << starrocks::to_string(compaction_type);
         ss << ", output_version:" << output_version;
+<<<<<<< HEAD
+=======
+        ss << ", gtid:" << gtid;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ss << ", start_time:" << ToStringFromUnixMillis(start_time);
         ss << ", end_time:" << ToStringFromUnixMillis(end_time);
         ss << ", elapsed_time:" << elapsed_time << " us";
@@ -240,7 +256,11 @@ protected:
     Status _validate_compaction(const Statistics& stats) {
         // check row number
         DCHECK(_output_rowset) << "_output_rowset is null";
+<<<<<<< HEAD
         VLOG(1) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
+=======
+        VLOG(2) << "validate compaction, _input_rows_num:" << _task_info.input_rows_num
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 << ", output rowset rows:" << _output_rowset->num_rows() << ", merged_rows:" << stats.merged_rows
                 << ", filtered_rows:" << stats.filtered_rows;
         if (_task_info.input_rows_num != _output_rowset->num_rows() + stats.merged_rows + stats.filtered_rows) {
@@ -280,14 +300,22 @@ protected:
                 input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
             }
             std::vector<RowsetSharedPtr> to_replace;
+<<<<<<< HEAD
             _tablet->modify_rowsets({_output_rowset}, _input_rowsets, &to_replace);
+=======
+            _tablet->modify_rowsets_without_lock({_output_rowset}, _input_rowsets, &to_replace);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _tablet->save_meta(config::skip_schema_in_rowset_meta);
             Rowset::close_rowsets(_input_rowsets);
             for (auto& rs : to_replace) {
                 StorageEngine::instance()->add_unused_rowset(rs);
             }
         }
+<<<<<<< HEAD
         VLOG(1) << "commit compaction. output version:" << _task_info.output_version
+=======
+        VLOG(2) << "commit compaction. output version:" << _task_info.output_version
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 << ", output rowset version:" << _output_rowset->version()
                 << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
                 << ", max_version:" << _tablet->max_continuous_version();
@@ -311,6 +339,11 @@ protected:
     std::shared_lock<std::shared_mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker{nullptr};
+<<<<<<< HEAD
+=======
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

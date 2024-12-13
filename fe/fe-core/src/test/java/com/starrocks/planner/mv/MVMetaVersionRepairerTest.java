@@ -55,7 +55,11 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
     private MVRepairHandler.PartitionRepairInfo toPartitionInfo(Partition partition, long version,
                                                                 long versionTime) {
         return new MVRepairHandler.PartitionRepairInfo(partition.getId(), partition.getName(),
+<<<<<<< HEAD
                 partition.getVisibleVersion(), version, versionTime);
+=======
+                partition.getDefaultPhysicalPartition().getVisibleVersion(), version, versionTime);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -67,7 +71,11 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
+<<<<<<< HEAD
                             " 'replication_num' = '1'" +
+=======
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             " ) " +
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
@@ -102,7 +110,11 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(curPartition, 100L, currentTs);
 
+<<<<<<< HEAD
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 
@@ -131,7 +143,11 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
                             " PROPERTIES (\n" +
+<<<<<<< HEAD
                             " 'replication_num' = '1'" +
+=======
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             " ) " +
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
@@ -156,7 +172,11 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(curPartition, 100L, currentTs);
 
+<<<<<<< HEAD
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 
@@ -175,6 +195,12 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " PARTITION BY (k1) " +
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
+<<<<<<< HEAD
+=======
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
                         String mvName = (String) obj;
@@ -202,8 +228,14 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         String baseTablePartitionName = value.keySet().iterator().next();
                         MaterializedView.BasePartitionInfo basePartitionInfo = value.get(baseTablePartitionName);
                         Partition p1 = m1.getPartition("p1");
+<<<<<<< HEAD
                         Assert.assertEquals(basePartitionInfo.getVersion(), p1.getVisibleVersion());
                         Assert.assertEquals(basePartitionInfo.getLastRefreshTime(), p1.getVisibleVersionTime());
+=======
+                        Assert.assertEquals(basePartitionInfo.getVersion(), p1.getDefaultPhysicalPartition().getVisibleVersion());
+                        Assert.assertEquals(basePartitionInfo.getLastRefreshTime(),
+                                p1.getDefaultPhysicalPartition().getVisibleVersionTime());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                         Partition p2 = m1.getPartition("p2");
                         long currentTs = System.currentTimeMillis();
@@ -212,7 +244,11 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(p2, 100L, currentTs);
 
+<<<<<<< HEAD
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 
@@ -236,6 +272,12 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                             " PARTITION BY (k1) " +
                             " DISTRIBUTED BY HASH(k1) " +
                             " REFRESH DEFERRED MANUAL " +
+<<<<<<< HEAD
+=======
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                             " AS SELECT k1, k2, v1, v2 from m1;",
                     (obj) -> {
                         String mvName = (String) obj;
@@ -263,8 +305,13 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         String baseTablePartitionName = value.keySet().iterator().next();
                         MaterializedView.BasePartitionInfo basePartitionInfo = value.get(baseTablePartitionName);
                         Partition p1 = m1.getPartition("p1");
+<<<<<<< HEAD
                         long lastRefreshVersion = p1.getVisibleVersion();
                         long lastRefreshVersionTime = p1.getVisibleVersionTime();
+=======
+                        long lastRefreshVersion = p1.getDefaultPhysicalPartition().getVisibleVersion();
+                        long lastRefreshVersionTime = p1.getDefaultPhysicalPartition().getVisibleVersionTime();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Assert.assertEquals(basePartitionInfo.getVersion(), lastRefreshVersion);
                         Assert.assertEquals(basePartitionInfo.getLastRefreshTime(), lastRefreshVersionTime);
 
@@ -272,11 +319,20 @@ public class MVMetaVersionRepairerTest extends MvRewriteTestBase {
                         // p1 has been refreshed, but p2 has been compaction or fast schema changed, use curPartition as its
                         // partition
                         // p1 has been updated, so the version of p1 should be updated
+<<<<<<< HEAD
                         p1.setVisibleVersion(lastRefreshVersion + 1, lastRefreshVersionTime + 1);
                         MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
                                 toPartitionInfo(p1, 100L, currentTs);
 
                         Database db = GlobalStateMgr.getCurrentState().getDb("test");
+=======
+                        p1.getDefaultPhysicalPartition()
+                                .setVisibleVersion(lastRefreshVersion + 1, lastRefreshVersionTime + 1);
+                        MVRepairHandler.PartitionRepairInfo partitionRepairInfo =
+                                toPartitionInfo(p1, 100L, currentTs);
+
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         Table baseTable = getTable("test", "m1");
                         MVMetaVersionRepairer.repairBaseTableVersionChanges(db, baseTable, ImmutableList.of(partitionRepairInfo));
 

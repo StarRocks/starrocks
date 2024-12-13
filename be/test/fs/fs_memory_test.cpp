@@ -94,9 +94,14 @@ TEST_F(MemoryFileSystemTest, test_canonicalize) {
 
     for (const auto& t : cases) {
         std::string result;
+<<<<<<< HEAD
         Status st = _fs->canonicalize(t.input, &result);
         if (t.success) {
             st.permit_unchecked_error();
+=======
+        auto st = _fs->canonicalize(t.input, &result);
+        if (t.success) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             EXPECT_EQ(t.output, result) << st.to_string();
         } else {
             EXPECT_FALSE(st.ok());

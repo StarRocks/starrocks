@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # covar_pop
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the population covariance of two expressions. This function is supported from v2.5.10. It can also be used as a window function.
 

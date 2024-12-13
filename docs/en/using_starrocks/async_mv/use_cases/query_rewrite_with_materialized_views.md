@@ -555,6 +555,92 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+<<<<<<< HEAD
+=======
+### Aggregation pushdown
+
+From v3.3.0, StarRocks supports aggregation pushdown for materialized view query rewrite. When this feature is enabled, aggregate functions will be pushed down to the Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed. This will relieve the data expansion caused by Join and thereby improve the query performance.
+
+This feature is disabled by default, To enable this feature, you must set the system variable `enable_materialized_view_agg_pushdown_rewrite` to `true`.
+
+Suppose you want to accelerate the following SSB-based query `SQL1`:
+
+```sql
+-- SQL1
+SELECT 
+    LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE)
+FROM lineorder l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL1` consists of aggregations on the table `lineorder` and a Join of `lineorder` and `dates`. Because aggregations happen within `lineorder` and the Join with `dates` is only used for data filtering, `SQL1` is logically equivalent to the following `SQL2`:
+
+```sql
+-- SQL2
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT
+  LO_ORDERDATE,  sum(LO_REVENUE) AS sum1, max(LO_REVENUE) AS max1, bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+  FROM lineorder 
+  GROUP BY LO_ORDERDATE) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL2` brings aggregations forward, thus shrinking the data size of Join. You can create a materialized view based on the sub-query of `SQL2`, and enable aggregation pushdown to rewrite and accelerate the aggregations:
+
+```sql
+-- Create the materialized view mv0
+CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
+SELECT
+  LO_ORDERDATE, 
+  sum(LO_REVENUE) AS sum1, 
+  max(LO_REVENUE) AS max1, 
+  bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+FROM lineorder 
+GROUP BY LO_ORDERDATE;
+
+-- Enable aggregation pushdown for materialized view query rewrite
+SET enable_materialized_view_agg_pushdown_rewrite=true;
+```
+
+Then, `SQL1` will be rewritten and accelerated by the materialized view. It is rewritten to the following query:
+
+```sql
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT LO_ORDERDATE, sum1, max1, bitmap1 FROM mv0) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE
+ORDER BY LO_ORDERDATE;
+```
+
+Please note that only certain aggregate functions that support Aggregate Rollup rewrite are eligible for pushdown. They are:
+
+- MIN
+- MAX
+- COUNT
+- COUNT DISTINCT
+- SUM
+- BITMAP_UNION
+- HLL_UNION
+- PERCENTILE_UNION
+- BITMAP_AGG
+- ARRAY_AGG_DISTINCT
+
+:::note
+- After pushdown, the aggregate functions need to be rolled up to align with the original semantics. For more instructions on Aggregation Rollup, Please refer to [Aggregation Rollup Rewrite](#aggregation-rollup-rewrite).
+- Aggregation pushdown supports Rollup rewrite of Count Distinct based on Bitmap or HLL functions.
+- Aggregation pushdown only supports pushing aggregate functions down to the Scan Operator before Join, Filter, or Where operators.
+- Aggregation pushdown only supports query rewrite and acceleration based on materialized view built on a single table.
+:::
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### COUNT DISTINCT rewrite
 
 StarRocks supports rewriting COUNT DISTINCT calculations into bitmap-based calculations, enabling high-performance, precise deduplication using materialized views. For example, create a materialized view as follows:
@@ -713,7 +799,11 @@ As shown above, `agg_mv5` contains the data from partitions `p1` to `p7`, and th
 
 From v3.1.0 onwards, StarRocks supports creating materialized views based on views. Subsequent queries against the views can be rewritten if they are of the SPJG pattern. By default, queries against views are automatically transcribed into queries against the base tables of the views and then transparently matched and rewritten.
 
+<<<<<<< HEAD
 However, in real-world scenarios, data analysts may perform data modeling upon complex, nested views, which cannot be directly transcribed. As a result, materialized views created based on such views cannot rewrite queries. To improve its capability in the preceding scenario, StarRocks optimizes the view-based materialized view query rewrite logic from v3.2.7 onwards.
+=======
+However, in real-world scenarios, data analysts may perform data modeling upon complex, nested views, which cannot be directly transcribed. As a result, materialized views created based on such views cannot rewrite queries. To improve its capability in the preceding scenario, StarRocks optimizes the view-based materialized view query rewrite logic from v3.3.0 onwards.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### Fundamentals
 
@@ -990,6 +1080,118 @@ You can build views upon tables in external catalogs and then materialized views
 
 StarRocks supports building asynchronous materialized views on Hive catalogs, Hudi catalogs, Iceberg catalogs, and Paimon catalogs, and transparently rewriting queries with them.
 
+<<<<<<< HEAD
+=======
+## Text-based materialized view rewrite
+
+From v3.3.0 onwards, StarRocks supports text-based materialized view rewrite, which significantly extends its query rewrite capability.
+
+### Fundamentals
+
+To achieve text-based materialized view rewrite, StarRocks compares the abstract syntax tree of the query (or its sub-queries) with that of the materialized view's definition. When they match each other, StarRocks will rewrite the query based on the materialized view. Text-based materialized view rewrite is simple, efficient, and has fewer limitations than regular SPJG-type materialized view query rewrite. When used correctly, this feature can significantly accelerate query performance.
+
+Text-based materialized view rewrite is not limited to the SPJG-type operators. It also supports operators such as Union, Window, Order, Limit, and CTE.
+
+### Usage
+
+Text-based materialized view rewrite is enabled by default. You can manually disable this feature by setting the variable `enable_materialized_view_text_match_rewrite` to `false`.
+
+The FE configuration item `enable_materialized_view_text_based_rewrite` controls whether to build the abstract syntax tree while creating an asynchronous materialized view. This feature is also enabled by default. Setting this item to `false` will disable text-based materialized view rewrite on the system level.
+
+The variable `materialized_view_subuqery_text_match_max_count` controls the maximum number of times to compare the abstract syntax trees of the materialized view and the sub-queries. The default value is `4`. Increasing this value will also increase the time consumption of the optimizer.
+
+Please note that, only when the materialized view meets the timeliness (data consistency) requirement can it be used for text-based query rewrite. You can manually set the consistency check rule using the property `query_rewrite_consistency` when creating the materialized view. For more information, see [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md).
+
+### Use cases
+
+Queries are eligible for text-based materialized view rewrite in the following scenarios:
+
+- The original query matches the definition of the materialized view.
+- The original query's sub-query matches the definition of the materialized view.
+
+Compared to the regular SPJG-type materialized view query rewrite, text-based materialized view rewrite supports more complex queries, for example, multi-layer aggregations.
+
+:::info
+
+- It is recommended to encapsulate the query to match in the sub-query of the original query.
+- Please do not encapsulate ORDER BY clauses in the definition of the materialized view or the sub-query of the original query. Otherwise, the query cannot be rewritten because the ORDER BY clauses in the sub-query are eliminated by default.
+
+:::
+
+For example, you can create the following materialized view:
+
+```SQL
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id;
+```
+
+The materialized view can rewrite both the following queries:
+
+```SQL
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id;
+SELECT count(1)
+FROM
+（
+    SELECT 
+      user_id, 
+      count(1) 
+    FROM (
+      SELECT 
+        user_id, 
+        time, 
+        bitmap_union(to_bitmap(tag_id)) AS a
+      FROM user_tags 
+      GROUP BY 
+        user_id, 
+        time) t
+    GROUP BY user_id
+）m;
+```
+
+However, the materialized view cannot rewrite the following query because the original query contains an ORDER BY clause:
+
+```SQL
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id
+ORDER BY user_id;
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## Configure query rewrite
 
 You can configure the asynchronous materialized view query rewrite through the following session variables:

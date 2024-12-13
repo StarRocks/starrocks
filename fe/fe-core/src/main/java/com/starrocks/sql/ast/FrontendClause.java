@@ -18,9 +18,12 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
 import org.apache.commons.lang.NotImplementedException;
 
 import java.util.Map;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class FrontendClause extends AlterClause {
     protected String hostPort;
@@ -55,11 +58,14 @@ public class FrontendClause extends AlterClause {
     }
 
     @Override
+<<<<<<< HEAD
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitFrontendClause(this, context);
     }

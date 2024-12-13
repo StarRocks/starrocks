@@ -62,8 +62,12 @@ public class TablePlus {
         printer.add("CREATE TABLE IF NOT EXISTS").spaces(1).add(table.getName()).add("(").newLine();
         List<Column> columns = table.getFullSchema();
         List<String> columnDefinitions = columns.stream()
+<<<<<<< HEAD
                 .map(column -> column.toSqlWithoutAggregateTypeName())
                 .collect(Collectors.toList());
+=======
+                .map(col -> col.toSqlWithoutAggregateTypeName(table.getIdToColumn())).collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         printer.indentEnclose(() -> {
             printer.addItemsWithDelNl(",", columnDefinitions);
         });
@@ -73,7 +77,11 @@ public class TablePlus {
         printer.add(table.getKeysType().toSql()).add("(").addItems(", ", key).add(")").newLine();
 
         int numBuckets = table.getDefaultDistributionInfo().getBucketNum();
+<<<<<<< HEAD
         String bucketKey = table.getDefaultDistributionInfo().getDistributionKey();
+=======
+        String bucketKey = table.getDefaultDistributionInfo().getDistributionKey(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         printer.add("DISTRIBUTED BY HASH(").add(bucketKey).add(")").spaces(1)
                 .add("BUCKETS").spaces(1).add(numBuckets).newLine();
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
         sum(l_extendedprice) / 7.0 as avg_yearly
@@ -16,12 +17,18 @@ where
     where
             l_partkey = p_partkey
 ) ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F05)
   DOP: 16
   INSTANCES
     INSTANCE(0-F05#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10003
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F04)
   DOP: 16
@@ -31,10 +38,17 @@ PLAN FRAGMENT 1(F04)
       BE: 10003
     INSTANCE(2-F04#1)
       DESTINATIONS: 0-F05#0
+<<<<<<< HEAD
       BE: 10002
     INSTANCE(3-F04#2)
       DESTINATIONS: 0-F05#0
       BE: 10001
+=======
+      BE: 10001
+    INSTANCE(3-F04#2)
+      DESTINATIONS: 0-F05#0
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2(F02)
   DOP: 16
@@ -152,6 +166,10 @@ PLAN FRAGMENT 1
   |  
   7:SORT
   |  order by: <slot 18> 18: p_partkey ASC
+<<<<<<< HEAD
+=======
+  |  analytic partition by: 18: p_partkey
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
   |  offset: 0
   |  
   6:Project
@@ -207,5 +225,9 @@ PLAN FRAGMENT 3
      tabletList=1004,1006,1008,1010,1012,1014,1016,1018,1020,1022 ...
      cardinality=1
      avgRowSize=24.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

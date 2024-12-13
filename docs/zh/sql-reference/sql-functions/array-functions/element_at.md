@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # element_at
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取 Array 数组中指定位置的元素。如果输入值为 NULL 或指定的位置不存在，则返回 NULL。
 

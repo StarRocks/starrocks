@@ -82,6 +82,10 @@ Status LakeSnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnecti
         LOG(INFO) << "finished to split files. valid file num: " << files->size();
 
     } catch (apache::thrift::TException& e) {
+<<<<<<< HEAD
+=======
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::stringstream ss;
         ss << "failed to list files in remote path: " << remote_path << ", msg: " << e.what();
         LOG(WARNING) << ss.str();
@@ -116,6 +120,10 @@ Status LakeSnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, 
             return Status::InternalError(ss.str());
         }
     } catch (apache::thrift::TException& e) {
+<<<<<<< HEAD
+=======
+        (void)client.reopen(config::thrift_rpc_timeout_ms);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         std::stringstream ss;
         ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << e.what();
         LOG(WARNING) << ss.str();
@@ -161,7 +169,11 @@ Status LakeSnapshotLoader::upload(const ::starrocks::UploadSnapshotsRequest* req
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
+<<<<<<< HEAD
            << "broker addr: " << request->broker() << ". msg: " << status.get_error_msg();
+=======
+           << "broker addr: " << request->broker() << ". msg: " << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -257,7 +269,11 @@ Status LakeSnapshotLoader::restore(const ::starrocks::RestoreSnapshotsRequest* r
     if (!status.ok()) {
         std::stringstream ss;
         ss << "failed to get broker client. "
+<<<<<<< HEAD
            << "broker addr: " << request->broker() << ". msg: " << status.get_error_msg();
+=======
+           << "broker addr: " << request->broker() << ". msg: " << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }

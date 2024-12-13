@@ -296,7 +296,11 @@ The data is successfully loaded when the above result is returned.
 ### bufferflush.intervalms
 
 **Required**: NO<br/>
+<<<<<<< HEAD
 **Default value**: 300000<br/>
+=======
+**Default value**: 1000<br/>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 **Description**: Interval for sending a batch of data which controls the load latency. Range: [1000, 3600000].
 
 ### connect.timeoutms

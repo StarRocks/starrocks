@@ -44,12 +44,19 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+<<<<<<< HEAD
+=======
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TUserIdentity;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -220,6 +227,7 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return sb.toString();
     }
 
+<<<<<<< HEAD
     // change user to default_cluster:user for write
     // and change default_cluster:user to user after read
     @Override
@@ -239,6 +247,11 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         user = ClusterNamespace.getNameFromFullName(Text.readString(in));
         host = Text.readString(in);
         isDomain = in.readBoolean();
+=======
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

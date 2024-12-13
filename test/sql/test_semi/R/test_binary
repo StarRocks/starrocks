@@ -14,7 +14,10 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
+<<<<<<< HEAD
 "in_memory" = "false",
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
 "compression" = "LZ4"
@@ -1172,4 +1175,8 @@ select map{1:1,null:2} = map{null:3,1:null};
 select map{1:1,null:2} != map{null:3,1:null};
 -- result:
 1
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

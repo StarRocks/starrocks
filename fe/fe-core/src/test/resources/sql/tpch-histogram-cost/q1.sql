@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_returnflag,
@@ -20,6 +21,8 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment statistics]
 PLAN FRAGMENT 0(F02)
 Output Exprs:9: L_RETURNFLAG | 10: L_LINESTATUS | 20: sum | 21: sum | 22: sum | 23: sum | 24: avg | 25: avg | 26: avg | 27: count

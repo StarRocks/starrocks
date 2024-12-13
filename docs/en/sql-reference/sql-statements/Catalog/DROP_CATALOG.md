@@ -11,7 +11,11 @@ Deletes an external catalog. The internal catalog cannot be deleted. A StarRocks
 ## Syntax
 
 ```SQL
+<<<<<<< HEAD
 DROP CATALOG <catalog_name>
+=======
+DROP CATALOG [IF EXISTS] <catalog_name>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 ## Parameters

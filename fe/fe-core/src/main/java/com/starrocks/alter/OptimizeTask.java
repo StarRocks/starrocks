@@ -24,6 +24,10 @@ import com.starrocks.scheduler.Task;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.util.List;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class OptimizeTask extends Task {
 
@@ -39,10 +43,38 @@ public class OptimizeTask extends Task {
     @SerializedName("lastVersion")
     private long lastVersion;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("partitionNames")
+    private List<String> partitionNames;
+
+    @SerializedName("tempPartitionNames")
+    private List<String> tempPartitionNames;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public OptimizeTask(String name) {
         super(name);
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getTempPartitionNames() {
+        return tempPartitionNames;
+    }
+
+    public void setTempPartitionNames(List<String> tempPartitionNames) {
+        this.tempPartitionNames = tempPartitionNames;
+    }
+
+    public List<String> getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionNames(List<String> partitionNames) {
+        this.partitionNames = partitionNames;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getPartitionName() {
         return partitionName;
     }

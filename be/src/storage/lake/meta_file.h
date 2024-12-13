@@ -36,6 +36,7 @@ enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
 class MetaFileBuilder {
 public:
+<<<<<<< HEAD
     explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
@@ -43,6 +44,21 @@ public:
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<std::string>& orphan_files);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id);
+=======
+    explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
+    // append delvec to builder's buffer
+    void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
+    // append delta column group to builder
+    void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
+                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
+    // handle txn log
+    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+                       const std::vector<std::string>& orphan_files);
+    void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
+    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
+                            int64_t output_rowset_schema_id);
+    void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
@@ -57,11 +73,26 @@ public:
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
 
+<<<<<<< HEAD
+=======
+    void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
+
+    void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
     // fill delvec cache, for better reading latency
     void _fill_delvec_cache();
+<<<<<<< HEAD
+=======
+    // collect del files which are above cloud native index's rebuild point
+    void _collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
+                                                std::vector<DelfileWithRowsetId>* collect_del_files);
+    // clean sstable meta after alter type
+    void _sstable_meta_clean_after_alter_type();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     Tablet _tablet;
@@ -78,7 +109,11 @@ private:
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, bool fill_cache,
+<<<<<<< HEAD
                    DelVector* delvec);
+=======
+                   const LakeIOOptions& lake_io_opts, DelVector* delvec);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 

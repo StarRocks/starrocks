@@ -149,15 +149,21 @@ public:
         params.partition_versions[1] = version;
     }
 
+<<<<<<< HEAD
 protected:
     void SetUp() override { StoragePageCache::create_global_cache(&_tracker, 1000000000); }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void TearDown() override {
         for (TabletSharedPtr& tablet : _tablets) {
             StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
             tablet.reset();
         }
+<<<<<<< HEAD
         StoragePageCache::release_global_cache();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     void run_multi_get() {}
@@ -172,7 +178,10 @@ protected:
     ObjectPool _object_pool;
     Schema _key_schema;
     Schema _value_schema;
+<<<<<<< HEAD
     MemTracker _tracker;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 TEST_F(TableReaderRemoteTest, test_multi_get_1_tablet) {

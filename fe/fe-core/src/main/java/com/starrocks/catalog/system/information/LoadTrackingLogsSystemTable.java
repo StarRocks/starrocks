@@ -32,6 +32,10 @@ public class LoadTrackingLogsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
+<<<<<<< HEAD
+=======
+                        .column("ID", ScalarType.createType(PrimitiveType.BIGINT))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))

@@ -22,7 +22,14 @@
 #####################################################
 
 # starcache
+<<<<<<< HEAD
 STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.2.7/starcache-ubuntu22_arm64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="35c97150bf081e532a0022f7362b6875"
+=======
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v3.4.0-rc01/starcache-ubuntu22_arm64.tar.gz"
+STARCACHE_NAME="starcache.tar.gz"
+STARCACHE_SOURCE="starcache"
+STARCACHE_MD5SUM="494ae85999217ec6982f45d71c53a59b"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

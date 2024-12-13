@@ -18,7 +18,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.analysis.FunctionName;
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -31,6 +39,10 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Vector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.stream.Collectors;
 
 /**
@@ -55,9 +67,31 @@ public class TableFunction extends Function {
     protected TableFunction() {
     }
 
+<<<<<<< HEAD
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
         this(fnName, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+=======
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr) {
+        this(fnName, argNames, defaultColumnNames, argTypes, tableFnReturnTypes, defaultArgExpr, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes) {
+        this(fnName, null, defaultColumnNames, argTypes, tableFnReturnTypes, null, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> argNames, List<String> defaultColumnNames,
+                         List<Type> argTypes, List<Type> tableFnReturnTypes, Vector<Pair<String, Expr>> defaultArgExpr,
+                         boolean varArgs) {
+        super(fnName, argTypes, Type.INVALID, varArgs);
+        this.tableFnReturnTypes = tableFnReturnTypes;
+        this.defaultColumnNames = defaultColumnNames;
+        setArgNames(argNames);
+        setDefaultNamedArgs(defaultArgExpr);
+        setBinaryType(TFunctionBinaryType.BUILTIN);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
@@ -65,7 +99,10 @@ public class TableFunction extends Function {
         super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setBinaryType(TFunctionBinaryType.BUILTIN);
     }
 
@@ -96,6 +133,7 @@ public class TableFunction extends Function {
         functionSet.addBuiltin(funcUnnestBitmap);
 
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+<<<<<<< HEAD
             // generate_series with default step size: 1
             TableFunction func = new TableFunction(new FunctionName("generate_series"),
                     Lists.newArrayList("generate_series"),
@@ -108,6 +146,20 @@ public class TableFunction extends Function {
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
                     Lists.newArrayList(type));
+=======
+            // set default arguments' const expressions in order
+            Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
+            try {
+                defaultArgs.add(new Pair("step", LiteralExpr.create("1", type)));
+            } catch (AnalysisException ex) { //ignored
+            }
+            // for both named arguments and positional arguments
+            TableFunction func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("start", "end", "step"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(type, type, type),
+                    Lists.newArrayList(type), defaultArgs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             functionSet.addBuiltin(func);
         }
 

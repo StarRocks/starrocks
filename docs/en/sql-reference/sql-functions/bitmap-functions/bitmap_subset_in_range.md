@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_subset_in_range
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Intercepts elements from a Bitmap value within the range of `start_range` and `end_range` (exclusive). The output elements are a subset of the Bitmap value.
 

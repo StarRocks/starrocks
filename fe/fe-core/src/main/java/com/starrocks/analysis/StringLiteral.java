@@ -283,7 +283,11 @@ public class StringLiteral extends LiteralExpr {
         }
         byte[] bytes = new byte[strLen];
         data.get(bytes);
+<<<<<<< HEAD
         value = new String(bytes);
+=======
+        value = new String(bytes, StandardCharsets.UTF_8);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static StringLiteral create(String value) {

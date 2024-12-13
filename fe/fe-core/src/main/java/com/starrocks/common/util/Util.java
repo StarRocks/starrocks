@@ -42,6 +42,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.http.WebUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,7 +56,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+<<<<<<< HEAD
 import java.lang.management.ThreadInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
@@ -313,6 +321,7 @@ public class Util {
         return Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
     }
 
+<<<<<<< HEAD
     public static String dumpThread(Thread t, int lineNum) {
         return dumpThread(t.getName(), t.getId(), t.getStackTrace(), lineNum);
     }
@@ -335,6 +344,8 @@ public class Util {
         return sb.toString();
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // get response body as a string from the given url.
     // "encodedAuthInfo", the base64 encoded auth info. like:
     //      Base64.encodeBase64String("user:passwd".getBytes());
@@ -477,4 +488,16 @@ public class Util {
         }
         return outputStream.toByteArray();
     }
+<<<<<<< HEAD
+=======
+
+    public static ConnectContext getOrCreateConnectContext() {
+        if (ConnectContext.get() != null) {
+            return ConnectContext.get();
+        }
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        return ctx;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

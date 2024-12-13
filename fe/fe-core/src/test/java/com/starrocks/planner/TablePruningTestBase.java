@@ -137,6 +137,10 @@ public class TablePruningTestBase {
         try {
             svSetter.accept(ctx.getSessionVariable());
             ctx.getSessionVariable().setOptimizerExecuteTimeout(30000);
+<<<<<<< HEAD
+=======
+            ctx.getSessionVariable().setEnablePredicateMoveAround(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
             int realNumOfHashJoin =
                     (int) Arrays.stream(plan.split("\n")).filter(ln -> HashJoinPattern.matcher(ln).find()).count();

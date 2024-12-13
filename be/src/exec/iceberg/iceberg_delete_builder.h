@@ -14,6 +14,7 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <utility>
 
 #include "common/status.h"
@@ -22,11 +23,16 @@
 #include "exec/parquet_scanner.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+=======
+#include "common/status.h"
+#include "exec/hdfs_scanner.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/descriptors.h"
 
 namespace starrocks {
 struct IcebergColumnMeta;
 
+<<<<<<< HEAD
 class PositionDeleteBuilder {
 public:
     PositionDeleteBuilder() = default;
@@ -171,6 +177,35 @@ private:
     std::vector<ExprContext*> _conjunct_ctxs;
     std::vector<SlotDescriptor*> _materialize_slots;
     std::set<int64_t>* _need_skip_rowids;
+=======
+class IcebergDeleteBuilder {
+public:
+    IcebergDeleteBuilder(std::set<int64_t>* need_skip_rowids, RuntimeState* state,
+                         const HdfsScannerParams& scanner_params)
+            : _need_skip_rowids(need_skip_rowids), _params(scanner_params), _runtime_state(state) {}
+
+    ~IcebergDeleteBuilder() = default;
+
+    Status build_orc(const TIcebergDeleteFile& delete_file) const;
+
+    Status build_parquet(const TIcebergDeleteFile& delete_file) const;
+
+private:
+    StatusOr<std::unique_ptr<RandomAccessFile>> open_random_access_file(
+            const TIcebergDeleteFile& delete_file, HdfsScanStats& fs_scan_stats, HdfsScanStats& app_scan_stats,
+            std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream,
+            std::shared_ptr<io::CacheInputStream>& cache_input_stream) const;
+
+    static void update_delete_file_io_counter(
+            RuntimeProfile* parent_profile, const HdfsScanStats& app_stats, const HdfsScanStats& fs_stats,
+            const std::shared_ptr<io::CacheInputStream>& cache_input_stream,
+            const std::shared_ptr<io::SharedBufferedInputStream>& shared_buffered_input_stream);
+    Status fill_skip_rowids(const ChunkPtr& chunk) const;
+
+    std::set<int64_t>* _need_skip_rowids;
+    const HdfsScannerParams& _params;
+    RuntimeState* _runtime_state;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class IcebergDeleteFileMeta {

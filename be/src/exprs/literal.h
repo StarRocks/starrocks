@@ -30,6 +30,18 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+    bool is_compilable(RuntimeState* state) const override;
+
+    JitScore compute_jit_score(RuntimeState* state) const override;
+
+    std::string jit_func_name_impl(RuntimeState* state) const override;
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool is_literal() const override { return true; }
     std::string debug_string() const override;
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
         sum(l_extendedprice) / 7.0 as avg_yearly
@@ -16,6 +17,8 @@ where
     where
             l_partkey = p_partkey
 ) ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:49: expr
@@ -56,6 +59,10 @@ UNPARTITIONED
       |
       7:SORT
       |  order by: <slot 18> 18: P_PARTKEY ASC
+<<<<<<< HEAD
+=======
+      |  analytic partition by: 18: P_PARTKEY
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
       |  offset: 0
       |
       6:EXCHANGE

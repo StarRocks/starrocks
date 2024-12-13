@@ -343,10 +343,22 @@ Status to_status(const absl::Status& absl_status) {
     }
 }
 
+<<<<<<< HEAD
 void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
         return;
     }
+=======
+void init_staros_worker(const std::shared_ptr<starcache::StarCache>& star_cache) {
+    if (g_starlet.get() != nullptr) {
+        return;
+    }
+
+    if (star_cache) {
+        (void)fslib::set_star_cache(star_cache);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // skip staros reinit aws sdk
     staros::starlet::fslib::skip_aws_init_api = true;
 
@@ -372,11 +384,18 @@ void init_staros_worker() {
     FLAGS_fslib_s3client_max_connections = config::object_storage_max_connection;
     FLAGS_fslib_s3client_max_items = config::starlet_s3_client_max_cache_capacity;
     FLAGS_fslib_s3client_max_instance_per_item = config::starlet_s3_client_num_instances_per_cache;
+<<<<<<< HEAD
     fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     FLAGS_fslib_s3client_nonread_max_retries = config::starlet_fslib_s3client_nonread_max_retries;
     FLAGS_fslib_s3client_nonread_retry_scale_factor = config::starlet_fslib_s3client_nonread_retry_scale_factor;
     FLAGS_fslib_s3client_connect_timeout_ms = config::starlet_fslib_s3client_connect_timeout_ms;
     FLAGS_fslib_s3client_use_list_objects_v1 = config::s3_use_list_objects_v1;
+<<<<<<< HEAD
+=======
+    fslib::FLAGS_delete_files_max_key_in_batch = config::starlet_delete_files_max_key_in_batch;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_async_init = config::starlet_star_cache_async_init;

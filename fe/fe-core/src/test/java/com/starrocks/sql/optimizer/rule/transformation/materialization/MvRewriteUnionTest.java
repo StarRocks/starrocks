@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
 import com.google.common.collect.ImmutableList;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -173,7 +176,11 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     public void testUnionRewrite3() throws Exception {
         // multi tables query
         createAndRefreshMv("create materialized view join_union_mv_1" +
+<<<<<<< HEAD
                 " distributed by hash(empid)" +
+=======
+                " distributed by hash(empid) buckets 3 " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 " as" +
                 " select emps2.empid, emps2.salary, d1.deptno, d1.name name1, d2.name name2" +
                 " from emps2 join depts2 d1 on emps2.deptno = d1.deptno" +
@@ -185,6 +192,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 120";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "join_union_mv_1");
+<<<<<<< HEAD
         PlanTestBase.assertContains(plan2, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -197,6 +205,26 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "  |       TABLE: depts2\n" +
                 "  |       PREAGGREGATION: ON\n" +
                 "  |       PREDICATES: 18: deptno >= 100, 18: deptno < 120");
+=======
+        PlanTestBase.assertContains(plan2, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 18: deptno = 15: deptno\n" +
+                "  |  other predicates: 15: deptno >= 100");
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "2:OlapScanNode\n" +
+                "     TABLE: emps2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 15: deptno >= 100, 15: deptno < 120\n" +
+                "     partitions=1/1");
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "1:OlapScanNode\n" +
+                "     TABLE: depts2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 18: deptno < 120, 18: deptno >= 100");
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "  |----5:OlapScanNode\n" +
+                "  |       TABLE: depts2\n" +
+                "  |       PREAGGREGATION: ON\n" +
+                "  |       PREDICATES: 20: deptno >= 100, 20: deptno < 120");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -248,6 +276,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         String plan8 = getFragmentPlan(query8);
 
         PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
+<<<<<<< HEAD
         PlanTestBase.assertContains(plan8, "5:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -259,6 +288,17 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
         PlanTestBase.assertContains(plan8, "3:OlapScanNode\n" +
+=======
+        PlanTestBase.assertContainsIgnoreColRefs(plan8, "5:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 24: t1d = 20: v1");
+        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+                "     TABLE: test_all_type2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
+        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "     TABLE: t02\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
@@ -351,14 +391,22 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     public void testUnionAllRewriteWithExtraPredicates() {
         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(1);
         starRocksAssert.withTable(new MTable("mt1", "k1",
+<<<<<<< HEAD
                         ImmutableList.of(
+=======
+                        List.of(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 "k1 INT",
                                 "k2 string",
                                 "v1 INT",
                                 "v2 INT"
                         ),
                         "k1",
+<<<<<<< HEAD
                         ImmutableList.of(
+=======
+                        List.of(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 "PARTITION `p1` VALUES LESS THAN ('3')",
                                 "PARTITION `p2` VALUES LESS THAN ('6')",
                                 "PARTITION `p3` VALUES LESS THAN ('9')"
@@ -397,6 +445,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     }
 
                     {
+<<<<<<< HEAD
                         List<Pair<String, String>> sqls = ImmutableList.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
@@ -408,6 +457,22 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                                 "     PREAGGREGATION: ON\n" +
                                                 "     PREDICATES: 9: k1 > 3, 10: k2 LIKE 'a%'\n" +
                                                 "     partitions=2/3")
+=======
+                        List<Pair<String, String>> sqls = List.of(
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
+                                        "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=1/3\n" +
+                                                "     rollup: mt1"),
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
+                                        "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 13: k1 != 3, 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3\n" +
+                                                "     rollup: mt1\n" +
+                                                "     tabletRatio=6/6")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;
@@ -420,6 +485,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     {
                         String query = "SELECT k1,k2, v1,v2 from mt1 where k1 > 0 and k2 like 'a%'";
                         String plan = getFragmentPlan(query);
+<<<<<<< HEAD
                         PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
                     }
                     {
@@ -435,6 +501,28 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                                 "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
                                                 "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)")
+=======
+                        PlanTestBase.assertContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, "     TABLE: mt1\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'\n" +
+                                "     partitions=2/3\n" +
+                                "     rollup: mt1\n" +
+                                "     tabletRatio=6/6");
+                    }
+                    {
+                        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
+                        List<Pair<String, String>> sqls = List.of(
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
+                                        "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 13: k1 > 1, 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3"),
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
+                                        "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'")
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;

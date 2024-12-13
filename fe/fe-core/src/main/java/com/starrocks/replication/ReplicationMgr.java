@@ -19,8 +19,14 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -34,7 +40,10 @@ import com.starrocks.thrift.TTableReplicationRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
@@ -63,7 +72,11 @@ public class ReplicationMgr extends FrontendDaemon {
         clearExpiredJobs();
     }
 
+<<<<<<< HEAD
     public void addReplicationJob(TTableReplicationRequest request) throws UserException {
+=======
+    public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ReplicationJob job = new ReplicationJob(request);
         addReplicationJob(job);
     }
@@ -234,8 +247,13 @@ public class ReplicationMgr extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.REPLICATION_MGR, 1);
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.REPLICATION_MGR, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer.writeJson(this);
         writer.close();
     }

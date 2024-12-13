@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # seconds_sub
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Subtracts a time interval from a date value. The time interval is in seconds.
 

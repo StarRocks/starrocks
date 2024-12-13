@@ -57,7 +57,11 @@ public class CachingMvPlanContextBuilder {
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-%d").build());
 
     private static final AsyncCacheLoader<MaterializedView, List<MvPlanContext>> MV_PLAN_CACHE_LOADER =
+<<<<<<< HEAD
             new AsyncCacheLoader<MaterializedView, List<MvPlanContext>>() {
+=======
+            new AsyncCacheLoader<>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 @Override
                 public @NonNull CompletableFuture<List<MvPlanContext>> asyncLoad(@NonNull MaterializedView mv,
                                                                                  @NonNull Executor executor) {
@@ -280,7 +284,11 @@ public class CachingMvPlanContextBuilder {
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
     public void putAstIfAbsent(MaterializedView mv) {
+<<<<<<< HEAD
         if (mv == null || !Config.enable_materialized_view_text_based_rewrite) {
+=======
+        if (!Config.enable_materialized_view_text_based_rewrite || mv == null || !mv.isEnableRewrite()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return;
         }
         try {

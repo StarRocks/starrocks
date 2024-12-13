@@ -22,6 +22,10 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+<<<<<<< HEAD
+=======
+#include "common/statusor.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "fs/fs_memory.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -180,6 +184,7 @@ protected:
         }
 
         {
+<<<<<<< HEAD
             auto child_path = std::make_unique<ColumnAccessPath>();
             child_path->init(TAccessPathType::type::OFFSET, "offsets", 1);
 
@@ -188,6 +193,13 @@ protected:
             path.children().emplace_back(std::move(child_path));
 
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+=======
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::OFFSET, "offsets", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -221,6 +233,7 @@ protected:
         }
 
         {
+<<<<<<< HEAD
             auto child_path = std::make_unique<ColumnAccessPath>();
             child_path->init(TAccessPathType::type::KEY, "key", 1);
 
@@ -229,6 +242,13 @@ protected:
             path.children().emplace_back(std::move(child_path));
 
             ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+=======
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::KEY, "key", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
+
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;

@@ -45,3 +45,14 @@ The bitmap index is suitable for queries on high cardinality columns or combinat
 ### [Bloom filter indexes](./Bloomfilter_index.md)
 
 The bloom filter index is suitable for columns with relatively high cardinality, such as ID columns, but it may incur a certain rate of misjudgment.
+<<<<<<< HEAD
+=======
+
+### [N-Gram bloom filter indexes](./Ngram_Bloom_Filter_Index.md)
+
+The n-gram bloom filter index is a special type of Bloom filter index, typically used to speed up `LIKE` queries or the operations of the `ngram_search` and `ngram_search_case_insensitive` functions.
+
+### [Full-Text inverted indexes](./inverted_index.md)
+
+A full-text inverted index can quickly locate data rows that match keywords, thereby speeding up full-text searches.
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

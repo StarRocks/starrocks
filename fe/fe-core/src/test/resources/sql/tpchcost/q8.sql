@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     o_year,
@@ -36,6 +37,8 @@ group by
     o_year
 order by
     o_year ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [fragment]
 PLAN FRAGMENT 0
 OUTPUT EXPRS:69: year | 74: expr

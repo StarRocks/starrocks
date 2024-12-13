@@ -91,6 +91,13 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(predicate, context);
     }
 
+<<<<<<< HEAD
+=======
+    public R visitMatchExprOperator(MatchExprOperator predicate, C context) {
+        return visit(predicate, context);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public R visitCastOperator(CastOperator operator, C context) {
         return visit(operator, context);
     }
@@ -118,4 +125,11 @@ public abstract class ScalarOperatorVisitor<R, C> {
     public R visitDictQueryOperator(DictQueryOperator operator, C context) {
         return visit(operator, context);
     }
+<<<<<<< HEAD
+=======
+
+    public R visitDictionaryGetOperator(DictionaryGetOperator operator, C context) {
+        return visit(operator, context);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

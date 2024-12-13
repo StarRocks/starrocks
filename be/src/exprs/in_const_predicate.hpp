@@ -547,7 +547,11 @@ public:
             : _state(state), _pool(pool), _expr(expr) {}
 
     Status create();
+<<<<<<< HEAD
     Status add_values(const ColumnPtr& column, size_t column_offset);
+=======
+    void add_values(const ColumnPtr& column, size_t column_offset);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }
     void set_eq_null(bool v) { _eq_null = v; }

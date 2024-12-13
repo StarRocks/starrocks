@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "column/column_builder.h"
+<<<<<<< HEAD
 #include "common/compiler_util.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
@@ -54,6 +55,18 @@ struct JsonTypeTraits<TYPE_VARCHAR> {
     static JsonFunctionType JsonType;
 };
 
+=======
+#include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
+#include "common/status.h"
+#include "exprs/function_context.h"
+#include "exprs/function_helper.h"
+#include "exprs/jsonpath.h"
+#include "types/logical_type.h"
+
+namespace starrocks {
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 extern const re2::RE2 SIMPLE_JSONPATH_PATTERN;
 
 struct SimpleJsonPath {
@@ -94,6 +107,7 @@ public:
     /**
      * @param: [json_string, tagged_value]
      * @paramType: [BinaryColumn, BinaryColumn]
+<<<<<<< HEAD
      * @return: Int32Column
      */
     DEFINE_VECTORIZED_FN(get_json_int);
@@ -132,6 +146,26 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(get_native_json_string);
+=======
+     * @return: type column
+     */
+    DEFINE_VECTORIZED_FN(get_json_int);
+    DEFINE_VECTORIZED_FN(get_json_bigint);
+    DEFINE_VECTORIZED_FN(get_json_double);
+    DEFINE_VECTORIZED_FN(get_json_string);
+
+    /**
+     * @param: [json, tagged_value]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: type column
+     */
+    DEFINE_VECTORIZED_FN(get_native_json_bool);
+    DEFINE_VECTORIZED_FN(get_native_json_int);
+    DEFINE_VECTORIZED_FN(get_native_json_bigint);
+    DEFINE_VECTORIZED_FN(get_native_json_double);
+    DEFINE_VECTORIZED_FN(get_native_json_string);
+    DEFINE_VECTORIZED_FN(json_query);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * @param: [json_string]
@@ -147,8 +181,11 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_string);
 
+<<<<<<< HEAD
     DEFINE_VECTORIZED_FN(json_query);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * @param: [json_object, json_path]
      * @paramType: [JsonColumn, BinaryColumn]
@@ -214,7 +251,11 @@ public:
     static Status extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                       simdjson::ondemand::value* value) noexcept;
 
+<<<<<<< HEAD
     static void parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
+=======
+    static Status parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // jsonpaths_to_string serializes json patsh to std::string. Setting sub_index to serializes paritially json paths.
     static std::string jsonpaths_to_string(const std::vector<SimpleJsonPath>& jsonpaths, size_t sub_index = -1);
@@ -232,6 +273,7 @@ private:
     template <LogicalType ResultType>
     static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
 
+<<<<<<< HEAD
     /**
      * Parse string column as json column
      * @param: 
@@ -263,6 +305,39 @@ private:
      * @return: DoubleColumn
      */
     DEFINE_VECTORIZED_FN(_json_double);
+=======
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_flat_json_query_impl);
+
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_full_json_query_impl);
+
+    /**
+     * @param: [json_object, json_path]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: BooleanColumn
+     */
+    DEFINE_VECTORIZED_FN(_flat_json_exists);
+    DEFINE_VECTORIZED_FN(_full_json_exists);
+
+    /**
+     * Return number of elements in a JSON object/array
+     * @param JSON, JSONPath
+     * @return number of elements if it's object or array, otherwise return 1
+     */
+    DEFINE_VECTORIZED_FN(_flat_json_length);
+    DEFINE_VECTORIZED_FN(_full_json_length);
+
+    /**
+     * Returns the keys from the top-level value of a JSON object as a JSON array
+     */
+    DEFINE_VECTORIZED_FN(_json_keys_without_path);
+    DEFINE_VECTORIZED_FN(_flat_json_keys_with_path);
+    DEFINE_VECTORIZED_FN(_full_json_keys_with_path);
+
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_get_json_value);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     /**
      * @param: [json_object, json_path]

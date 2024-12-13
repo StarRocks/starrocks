@@ -87,8 +87,16 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
 import com.starrocks.lake.delete.LakeDeleteJob;
 import com.starrocks.memory.MemoryTrackable;
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.delete.LakeDeleteJob;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -97,6 +105,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.RangePartitionPruner;
+<<<<<<< HEAD
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
@@ -104,6 +113,17 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.transaction.BeginTransactionException;
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
+import com.starrocks.qe.QueryStateException;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.DeleteAnalyzer;
+import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.transaction.RunningTxnExceedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -111,9 +131,13 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+=======
+import java.io.DataOutput;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -172,11 +196,18 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     public void process(DeleteStmt stmt) throws DdlException, QueryStateException {
         String dbName = stmt.getTableName().getDb();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+=======
+        String tableName = stmt.getTableName().getTbl();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Db does not exist. name: " + dbName);
         }
 
+<<<<<<< HEAD
         DeleteJob deleteJob = null;
         Table table = null;
         try {
@@ -190,6 +221,19 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                     throw new DdlException("Table does not exist. name: " + tableName);
                 }
 
+=======
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        if (table == null) {
+            throw new DdlException("Table does not exist. name: " + tableName);
+        }
+
+        DeleteJob deleteJob = null;
+        try {
+            List<Partition> partitions = Lists.newArrayList();
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (!table.isOlapOrCloudNativeTable()) {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
                 }
@@ -200,17 +244,30 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                     return;
                 }
 
+<<<<<<< HEAD
                 transactionId = deleteJob.getTransactionId();
             } catch (Throwable t) {
                 LOG.warn("error occurred during delete process", t);
                 // if transaction has been begun, need to abort it
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) !=
                         null) {
+=======
+            } catch (Throwable t) {
+                LOG.warn("error occurred during delete process", t);
+                // if transaction has been begun, need to abort it
+                long transactionId = deleteJob == null ? -1 : deleteJob.getTransactionId();
+                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getTransactionState(db.getId(), transactionId) != null) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     cancelJob(deleteJob, CancelType.UNKNOWN, t.getMessage());
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             deleteJob.run(stmt, db, table, partitions);
@@ -230,7 +287,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
 
     private DeleteJob createJob(DeleteStmt stmt, List<Predicate> conditions, Database db, OlapTable olapTable,
                                 List<Partition> partitions)
+<<<<<<< HEAD
             throws DdlException, AnalysisException, BeginTransactionException {
+=======
+            throws DdlException, AnalysisException, RunningTxnExceedException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // check table state
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw new DdlException("Table's state is not normal: " + olapTable.getName());
@@ -290,19 +351,40 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String label = "delete_" + UUID.randomUUID();
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
+<<<<<<< HEAD
         // begin txn here and generate txn id
         long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(olapTable.getId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second);
+=======
+
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (ConnectContext.get() != null) {
+            warehouseId = ConnectContext.get().getCurrentWarehouseId();
+        }
+
+        // begin txn here and generate txn id
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
+                Lists.newArrayList(olapTable.getId()), label, null,
+                new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
+                TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second,
+                warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         MultiDeleteInfo deleteInfo =
                 new MultiDeleteInfo(db.getId(), olapTable.getId(), olapTable.getName(), deleteConditions);
         deleteInfo.setPartitions(noPartitionSpecified,
                 partitions.stream().map(Partition::getId).collect(Collectors.toList()), partitionNames);
         DeleteJob deleteJob = null;
+<<<<<<< HEAD
         if (olapTable.isCloudNativeTable()) {
             deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo);
+=======
+
+        if (olapTable.isCloudNativeTable()) {
+            deleteJob = new LakeDeleteJob(jobId, transactionId, label, deleteInfo, warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }
@@ -310,7 +392,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         idToDeleteJob.put(deleteJob.getTransactionId(), deleteJob);
 
         // add transaction callback
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
+=======
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return deleteJob;
     }
@@ -333,7 +419,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             partitionNames.addAll(olapTable.getPartitionNames());
         } else {
             RangePartitionPruner pruner = new RangePartitionPruner(keyRangeById,
+<<<<<<< HEAD
                     rangePartitionInfo.getPartitionColumns(), columnFilters);
+=======
+                    rangePartitionInfo.getPartitionColumns(olapTable.getIdToColumn()), columnFilters);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Collection<Long> selectedPartitionIds = pruner.prune();
 
             if (selectedPartitionIds == null) {
@@ -352,7 +442,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                                                                    List<Predicate> conditions)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
+<<<<<<< HEAD
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+=======
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<Predicate> deleteConditions = conditions;
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {
@@ -378,7 +472,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                 if (table.isExprPartitionTable() && !rangePartitionInfo.isAutomaticPartition()) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 =
                             (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+<<<<<<< HEAD
                     Expr partitionExpr = expressionRangePartitionInfoV2.getPartitionExprs().get(0);
+=======
+                    Expr partitionExpr = expressionRangePartitionInfoV2.getPartitionExprs(table.getIdToColumn()).get(0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     List<FunctionCallExpr> functionCallExprs = new ArrayList<>();
                     partitionExpr.collect((com.google.common.base.Predicate<Expr>) arg -> arg instanceof FunctionCallExpr,
                             functionCallExprs);
@@ -610,12 +708,20 @@ public class DeleteMgr implements Writable, MemoryTrackable {
             }
 
             // set schema column name
+<<<<<<< HEAD
             slotRef.setCol(column.getName());
+=======
+            slotRef.setColumnName(column.getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         // check materialized index.
         // only need check the first partition because each partition has same materialized view
         Map<Long, List<Column>> indexIdToSchema = table.getIndexIdToSchema();
+<<<<<<< HEAD
         Partition partition = partitions.get(0);
+=======
+        PhysicalPartition partition = partitions.get(0).getDefaultPhysicalPartition();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             if (table.getBaseIndexId() == index.getId()) {
                 continue;
@@ -712,7 +818,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     // show delete stmt
     public List<List<Comparable>> getDeleteInfosByDb(long dbId) {
         LinkedList<List<Comparable>> infos = new LinkedList<List<Comparable>>();
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             return infos;
         }
@@ -806,11 +916,19 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     public void updateTableDeleteInfo(GlobalStateMgr globalStateMgr, long dbId, long tableId) {
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
             return;
         }
         Table table = db.getTable(tableId);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (table == null) {
             return;
         }
@@ -824,6 +942,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
+<<<<<<< HEAD
     public static DeleteMgr read(DataInput in) throws IOException {
         String json;
         try {
@@ -847,6 +966,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean isDeleteInfoExpired(DeleteInfo deleteInfo, long currentTimeMs) {
         return (currentTimeMs - deleteInfo.getCreateTimeMs()) / 1000 > Config.label_keep_max_second;
     }
@@ -891,6 +1012,7 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         int numJson = 1 + dbToDeleteInfos.size() * 2;
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.DELETE_MGR, numJson);
@@ -898,12 +1020,22 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         writer.writeJson(dbToDeleteInfos.size());
         for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
             writer.writeJson(deleteInfoEntry.getKey());
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        int numJson = 1 + dbToDeleteInfos.size() * 2;
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.DELETE_MGR, numJson);
+
+        writer.writeInt(dbToDeleteInfos.size());
+        for (Map.Entry<Long, List<MultiDeleteInfo>> deleteInfoEntry : dbToDeleteInfos.entrySet()) {
+            writer.writeLong(deleteInfoEntry.getKey());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             writer.writeJson(deleteInfoEntry.getValue());
         }
         writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
+<<<<<<< HEAD
         int analyzeJobSize = reader.readInt();
         for (int i = 0; i < analyzeJobSize; ++i) {
             long dbId = reader.readJson(long.class);
@@ -912,6 +1044,10 @@ public class DeleteMgr implements Writable, MemoryTrackable {
                     }.getType());
             dbToDeleteInfos.put(dbId, multiDeleteInfos);
         }
+=======
+        reader.readMap(Long.class, new TypeToken<List<MultiDeleteInfo>>() {}.getType(),
+                dbToDeleteInfos::put);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -920,7 +1056,12 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         for (List<MultiDeleteInfo> value : dbToDeleteInfos.values()) {
             count += value.size();
         }
+<<<<<<< HEAD
         return ImmutableMap.of("DeleteInfo", count);
+=======
+        return ImmutableMap.of("DeleteInfo", getDeleteInfoCount(),
+                "DeleteJob", (long) idToDeleteJob.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

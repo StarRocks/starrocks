@@ -83,4 +83,26 @@ public class Parameter extends Expr {
     protected String toSqlImpl() {
         return "?";
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public int hashCode() {
+        return slotId;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj == null) {
+            return false;
+        }
+
+        if (obj.getClass() != this.getClass()) {
+            return false;
+        }
+
+        Parameter parameter = (Parameter) obj;
+        return this.slotId == parameter.slotId;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

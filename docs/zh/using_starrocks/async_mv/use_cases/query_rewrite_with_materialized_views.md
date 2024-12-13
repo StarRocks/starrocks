@@ -553,6 +553,92 @@ SELECT
 FROM order_list WHERE order_date='2023-07-03';
 ```
 
+<<<<<<< HEAD
+=======
+### 聚合下推
+
+从 v3.3.0 版本开始，StarRocks 支持物化视图查询改写的聚合下推功能。启用此功能后，聚合函数将在查询执行期间下推至 Scan Operator，并在执行 Join Operator 之前被物化视图改写。此举可以缓解 Join 操作导致的数据膨胀，从而提高查询性能。
+
+系统默认禁用该功能。要启用此功能，必须将系统变量 `enable_materialized_view_agg_pushdown_rewrite` 设置为 `true`。
+
+假设需要加速以下基于 SSB 的查询 `SQL1`：
+
+```sql
+-- SQL1
+SELECT 
+    LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE)
+FROM lineorder l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL1` 包含 `lineorder` 表内的聚合以及 `lineorder` 和 `dates` 表之间的 Join。聚合发生在 `lineorder` 内部，与 `dates` 的 Join 仅用于数据过滤。所以 `SQL1` 在逻辑上等同于以下 `SQL2`：
+
+```sql
+-- SQL2
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT
+  LO_ORDERDATE,  sum(LO_REVENUE) AS sum1, max(LO_REVENUE) AS max1, bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+  FROM lineorder 
+  GROUP BY LO_ORDERDATE) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE 
+ORDER BY LO_ORDERDATE;
+```
+
+`SQL2` 将聚合提前，大量减少 Join 的数据量。您可以基于 `SQL2` 的子查询创建物化视图，并启用聚合下推以改写和加速聚合：
+
+```sql
+-- 创建物化视图 mv0
+CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
+SELECT
+  LO_ORDERDATE, 
+  sum(LO_REVENUE) AS sum1, 
+  max(LO_REVENUE) AS max1, 
+  bitmap_union(to_bitmap(LO_REVENUE)) AS bitmap1
+FROM lineorder 
+GROUP BY LO_ORDERDATE;
+
+-- 启用聚合下推
+SET enable_materialized_view_agg_pushdown_rewrite=true;
+```
+
+此时，`SQL1` 将通过物化视图进行改写和加速。改写后的查询如下：
+
+```sql
+SELECT 
+    LO_ORDERDATE, sum(sum1), max(max1), bitmap_union_count(bitmap1)
+FROM 
+ (SELECT LO_ORDERDATE, sum1, max1, bitmap1 FROM mv0) l JOIN dates d 
+ON l.LO_ORDERDATE = d.d_date 
+GROUP BY LO_ORDERDATE
+ORDER BY LO_ORDERDATE;
+```
+
+请注意，只有部分支持聚合上卷改写的聚合函数可以下推。目前支持下推的聚合函数有：
+
+- MIN
+- MAX
+- COUNT
+- COUNT DISTINCT
+- SUM
+- BITMAP_UNION
+- HLL_UNION
+- PERCENTILE_UNION
+- BITMAP_AGG
+- ARRAY_AGG_DISTINCT
+
+:::note
+- 下推后的聚合函数需要进行上卷才能对齐原始语义。有关聚合上卷的更多说明，请参阅 [聚合上卷改写](#聚合上卷改写)。
+- 聚合下推支持基于 Bitmap 或 HLL 函数的 Count Distinct 上卷改写。
+- 聚合下推仅支持将查询中的聚合函数下推至 Join/Filter/Where Operator 之下的 Scan Operator 之上。
+- 聚合下推仅支持基于单张表构建的物化视图进行查询改写和加速。
+:::
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ### COUNT DISTINCT 改写
 
 StarRocks 支持将 COUNT DISTINCT 计算改写为 BITMAP 类型的计算，从而使用物化视图实现高性能、精确的去重。例如，创建以下物化视图：
@@ -711,7 +797,11 @@ GROUP BY lo_orderkey;
 
 自 v3.1.0 起，StarRocks 支持基于视图创建物化视图。如果基于视图的查询为 SPJG 类型，StarRocks 将会内联展开查询，然后进行改写。默认情况下，对视图的查询会自动展开为对视图的基表的查询，然后进行透明匹配和改写。
 
+<<<<<<< HEAD
 然而，在实际场景中，数据分析师可能会基于复杂的嵌套视图进行数据建模，这些视图无法直接展开。因此，基于这些视图创建的物化视图无法改写查询。为了改进在上述情况下的能力，从 v3.2.7 开始，StarRock 优化了基于视图的物化视图查询改写逻辑。
+=======
+然而，在实际场景中，数据分析师可能会基于复杂的嵌套视图进行数据建模，这些视图无法直接展开。因此，基于这些视图创建的物化视图无法改写查询。为了改进在上述情况下的能力，从 v3.3.0 开始，StarRock 优化了基于视图的物化视图查询改写逻辑。
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 ### 基本原理
 
@@ -988,6 +1078,118 @@ mysql> EXPLAIN LOGICAL
 
 StarRocks 支持基于 Hive Catalog、Hudi Catalog、Iceberg Catalog 和 Paimon Catalog 的外部数据源上构建异步物化视图，并支持透明地改写查询。
 
+<<<<<<< HEAD
+=======
+## 基于文本的物化视图改写
+
+自 v3.3.0 起，StarRocks 支持基于文本的物化视图改写，极大地拓展了自身的查询改写能力。
+
+### 基本原理
+
+为实现基于文本的物化视图改写，StarRocks 将对查询（或其子查询）的抽象语法树与物化视图定义的抽象语法树进行比较。当双方匹配时，StarRocks 就可以基于物化视图改写该查询。基于文本的物化视图改写简单高效，与常规的 SPJG 类型物化视图查询改写相比限制更少。正确使用此功能可显著增强查询性能。
+
+基于文本的物化视图改写不仅支持 SPJG 类型算子，还支持 Union、Window、Order、Limit 和 CTE 等算子。
+
+### 使用
+
+StarRocks 默认启用基于文本的物化视图改写。您可以通过将变量 `enable_materialized_view_text_match_rewrite` 设置为 `false` 来手动禁用此功能。
+
+FE 配置项 `enable_materialized_view_text_based_rewrite` 用于控制是否在创建异步物化视图时构建抽象语法树。此功能默认启用。将此项设置为 `false` 将在系统级别禁用基于文本的物化视图改写。
+
+变量 `materialized_view_subuqery_text_match_max_count` 用于控制系统比对子查询是否与物化视图定义匹配的最大次数。默认值为 `4`。增加此值同时也会增加优化器的耗时。
+
+请注意，只有当物化视图满足时效性（数据一致性）要求时，才能用于基于文本的查询改写。您可以在创建物化视图时通过属性 `query_rewrite_consistency`手动设置一致性检查规则。更多信息，请参考 [CREATE MATERIALIZED VIEW](../../../sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md)。
+
+### **使用场景**
+
+符合以下情况的查询可以被改写：
+
+- 原始查询与物化视图的定义一致。
+- 原始查询的子查询与物化视图的定义一致。
+
+与常规的 SPJG 类型物化视图查询改写相比，基于文本的物化视图改写支持更复杂的查询，例如多层聚合。
+
+:::info
+
+- 建议您将需要匹配的查询封装至原始查询的子查询中。
+- 请不要在物化视图的定义或原始查询的子查询中封装 ORDER BY 子句，否则查询将无法被改写。这是由于子查询中的 ORDER BY 子句会默认被消除。
+
+:::
+
+例如，您可以构建以下物化视图：
+
+```SQL
+CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id;
+```
+
+该物化视图可以改写以下两个查询：
+
+```SQL
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id;
+SELECT count(1)
+FROM
+（
+    SELECT 
+      user_id, 
+      count(1) 
+    FROM (
+      SELECT 
+        user_id, 
+        time, 
+        bitmap_union(to_bitmap(tag_id)) AS a
+      FROM user_tags 
+      GROUP BY 
+        user_id, 
+        time) t
+    GROUP BY user_id
+）m;
+```
+
+但是该物化视图无法改写以下包含 ORDER BY 子句的查询：
+
+```SQL
+SELECT 
+  user_id, 
+  count(1) 
+FROM (
+  SELECT 
+    user_id, 
+    time, 
+    bitmap_union(to_bitmap(tag_id)) AS a
+  FROM user_tags 
+  GROUP BY 
+    user_id, 
+    time) t
+GROUP BY user_id
+ORDER BY user_id;
+```
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ## 设置物化视图查询改写
 
 您可以通过以下 Session 变量设置异步物化视图查询改写。

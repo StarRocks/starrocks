@@ -38,6 +38,11 @@
 #include <utility>
 #include <vector>
 
+<<<<<<< HEAD
+=======
+#include "fs/fs.h"
+#include "storage/lake/location_provider.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/olap_define.h"
 #include "util/uid_util.h"
 
@@ -77,6 +82,13 @@ struct LakeIOOptions {
     bool fill_data_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+<<<<<<< HEAD
+=======
+    bool fill_metadata_cache = false;
+    bool use_page_cache = false;
+    std::shared_ptr<FileSystem> fs;
+    std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

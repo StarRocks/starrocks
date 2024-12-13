@@ -18,7 +18,10 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterOpType;
+<<<<<<< HEAD
 import com.starrocks.analysis.KeysDesc;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.io.DataInput;

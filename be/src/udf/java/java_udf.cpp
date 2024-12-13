@@ -190,12 +190,21 @@ JVMClass& JVMFunctionHelper::function_state_clazz() {
     return *_function_states_clazz;
 }
 
+<<<<<<< HEAD
 #define CHECK_FUNCTION_EXCEPTION(_env, name)                  \
     if (auto e = _env->ExceptionOccurred()) {                 \
         LOCAL_REF_GUARD(e);                                   \
         _env->ExceptionClear();                               \
         LOG(WARNING) << "Exception happend when call " #name; \
         return "";                                            \
+=======
+#define CHECK_FUNCTION_EXCEPTION(_env, name)                   \
+    if (auto e = _env->ExceptionOccurred()) {                  \
+        LOCAL_REF_GUARD(e);                                    \
+        _env->ExceptionClear();                                \
+        LOG(WARNING) << "Exception happened when call " #name; \
+        return "";                                             \
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 #define RETURN_ERROR_IF_EXCEPTION(env, errmsg)                                   \
@@ -451,7 +460,11 @@ DirectByteBuffer::~DirectByteBuffer() {
             _handle = nullptr;
             return Status::OK();
         });
+<<<<<<< HEAD
         ret->get_future().get();
+=======
+        (void)ret->get_future().get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 
@@ -466,7 +479,11 @@ void JavaGlobalRef::clear() {
             _handle = nullptr;
             return Status::OK();
         });
+<<<<<<< HEAD
         ret->get_future().get();
+=======
+        (void)ret->get_future().get();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }
 

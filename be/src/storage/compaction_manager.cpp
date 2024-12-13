@@ -178,7 +178,11 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
                 continue;
             }
             if (candidate.tablet->enable_compaction()) {
+<<<<<<< HEAD
                 VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
+=======
+                VLOG(2) << "update candidate " << candidate.tablet->tablet_id() << " type "
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         << starrocks::to_string(candidate.type) << " score " << candidate.score;
                 if (candidate.type == CompactionType::BASE_COMPACTION) {
                     StarRocksMetrics::instance()->wait_base_compaction_task_num.increment(1);
@@ -289,7 +293,11 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
     int64_t now_ms = UnixMillis();
     if (candidate.type == CompactionType::CUMULATIVE_COMPACTION) {
         if (now_ms - last_failure_ts <= config::min_cumulative_compaction_failure_interval_sec * 1000) {
+<<<<<<< HEAD
             VLOG(1) << "Too often to schedule failure compaction, skip it."
+=======
+            VLOG(2) << "Too often to schedule failure compaction, skip it."
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     << "compaction_type=" << starrocks::to_string(candidate.type)
                     << ", min_cumulative_compaction_failure_interval_sec="
                     << config::min_cumulative_compaction_failure_interval_sec
@@ -298,7 +306,11 @@ bool CompactionManager::_check_precondition(const CompactionCandidate& candidate
         }
     } else if (candidate.type == CompactionType::BASE_COMPACTION) {
         if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+<<<<<<< HEAD
             VLOG(1) << "Too often to schedule failure compaction, skip it."
+=======
+            VLOG(2) << "Too often to schedule failure compaction, skip it."
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     << "compaction_type=" << starrocks::to_string(candidate.type)
                     << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
                     << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
@@ -384,7 +396,11 @@ void CompactionManager::update_tablet(const TabletSharedPtr& tablet) {
     if (_disable_update_tablet) {
         return;
     }
+<<<<<<< HEAD
     VLOG(1) << "update tablet " << tablet->tablet_id();
+=======
+    VLOG(2) << "update tablet " << tablet->tablet_id();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (tablet->need_compaction()) {
         CompactionCandidate candidate;
         candidate.tablet = tablet;

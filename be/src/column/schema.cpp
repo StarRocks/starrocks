@@ -42,9 +42,23 @@ Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key
 Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
         : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     _fields.resize(cids.size());
+<<<<<<< HEAD
     for (int i = 0; i < cids.size(); i++) {
         DCHECK_LT(cids[i], schema->_fields.size());
         _fields[i] = schema->_fields[cids[i]];
+=======
+    auto ori_sort_idxes = schema->sort_key_idxes();
+    std::unordered_set<ColumnId> scids(ori_sort_idxes.begin(), ori_sort_idxes.end());
+    for (int i = 0; i < cids.size(); i++) {
+        if (cids[i] >= schema->_fields.size()) {
+            _fields.resize(_fields.size() - 1);
+            continue;
+        }
+        _fields[i] = schema->_fields[cids[i]];
+        if (scids.find(cids[i]) != scids.end()) {
+            _sort_key_idxes.emplace_back(i);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
@@ -241,6 +255,17 @@ FieldPtr Schema::get_field_by_name(const std::string& name) const {
     return idx == -1 ? nullptr : _fields[idx];
 }
 
+<<<<<<< HEAD
+=======
+void Schema::set_field_by_name(FieldPtr field, const std::string& name) {
+    size_t idx = get_field_index_by_name(name);
+    if (idx == -1) {
+        return;
+    }
+    _fields[idx] = std::move(field);
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void Schema::_build_index_map(const Fields& fields) {
     _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
     for (size_t i = 0; i < fields.size(); i++) {

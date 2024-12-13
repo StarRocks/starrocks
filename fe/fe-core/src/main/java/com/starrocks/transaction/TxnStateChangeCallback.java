@@ -34,7 +34,11 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public interface TxnStateChangeCallback {
 
@@ -63,7 +67,11 @@ public interface TxnStateChangeCallback {
      *
      * @param txnState
      */
+<<<<<<< HEAD
     void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException;
+=======
+    void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void replayOnCommitted(TransactionState txnState);
 
@@ -75,7 +83,11 @@ public interface TxnStateChangeCallback {
      * @return
      */
     void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException;
+=======
+            throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void replayOnAborted(TransactionState txnState);
 
@@ -83,10 +95,16 @@ public interface TxnStateChangeCallback {
 
     void replayOnVisible(TransactionState txnState);
 
+<<<<<<< HEAD
 
     void beforePrepared(TransactionState txnState) throws TransactionException;
 
     void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException;
+=======
+    void beforePrepared(TransactionState txnState) throws TransactionException;
+
+    void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void replayOnPrepared(TransactionState txnState);
 }

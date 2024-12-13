@@ -17,6 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
+<<<<<<< HEAD
 if (CLANG_TIDY_PATH)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
@@ -24,6 +25,11 @@ endif()
 add_subdirectory(rowset)
 
 add_library(Storage STATIC
+=======
+add_subdirectory(rowset)
+
+set(STORAGE_FILES
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     aggregate_type.cpp
     base_tablet.cpp
     decimal12.cpp
@@ -64,6 +70,10 @@ add_library(Storage STATIC
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
+<<<<<<< HEAD
+=======
+    tablet_index.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp
@@ -80,6 +90,13 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+<<<<<<< HEAD
+=======
+    rowset/json_column_compactor.cpp
+    rowset/json_column_iterator.cpp
+    rowset/json_column_writer.cpp
+    rowset/cast_column_iterator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rowset/column_reader.cpp
     rowset/column_writer.cpp
     rowset/column_decoder.cpp
@@ -98,8 +115,14 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+<<<<<<< HEAD
     rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
+=======
+    rowset/binary_prefix_page.cpp
+    rowset/data_sample.cpp
+    rowset/dict_page.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rowset/segment.cpp
     rowset/segment_writer.cpp
     rowset/segment_rewriter.cpp
@@ -116,6 +139,10 @@ add_library(Storage STATIC
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
     rowset/horizontal_update_rowset_writer.cpp
+<<<<<<< HEAD
+=======
+    rowset/bitmap_index_evaluator.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     rowset/metadata_cache.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
@@ -133,8 +160,15 @@ add_library(Storage STATIC
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+<<<<<<< HEAD
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
+=======
+    column_and_predicate.cpp
+    column_expr_predicate.cpp
+    conjunctive_predicates.cpp
+    predicate_tree/predicate_tree.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     convert_helper.cpp
     delete_predicates.cpp
     disjunctive_predicates.cpp
@@ -207,8 +241,28 @@ add_library(Storage STATIC
     lake/lake_primary_index.cpp
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
+<<<<<<< HEAD
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+=======
+    lake/cloud_native_index_compaction_task.cpp
+    lake/metacache.cpp
+    lake/lake_primary_key_recover.cpp
+    sstable/block_builder.cpp
+    sstable/block.cpp
+    sstable/coding.cpp
+    sstable/comparator.cpp
+    sstable/filter_block.cpp
+    sstable/format.cpp
+    sstable/table_builder.cpp
+    sstable/table.cpp
+    sstable/two_level_iterator.cpp
+    sstable/filter_policy.cpp
+    sstable/iterator.cpp
+    sstable/options.cpp
+    sstable/merger.cpp
+    lake/lake_delvec_loader.cpp
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -222,8 +276,46 @@ add_library(Storage STATIC
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
+<<<<<<< HEAD
     lake/lake_primary_key_compaction_conflict_resolver.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp
     primary_key_dump.cpp)
+=======
+    lake/lake_persistent_index.cpp
+    lake/persistent_index_memtable.cpp
+    lake/local_pk_index_manager.cpp
+    lake/persistent_index_sstable.cpp
+    lake/lake_primary_key_compaction_conflict_resolver.cpp
+    lake/column_mode_partial_update_handler.cpp
+    primary_key_dump.cpp
+    dictionary_cache_manager.cpp
+    rows_mapper.cpp
+    primary_key_compaction_conflict_resolver.cpp
+    local_primary_key_compaction_conflict_resolver.cpp
+    index/inverted/inverted_index_iterator.cpp
+    index/inverted/inverted_index_option.cpp
+    index/inverted/inverted_plugin_factory.cpp
+    index/inverted/clucene/clucene_plugin.cpp
+    index/inverted/clucene/clucene_inverted_writer.cpp
+    index/inverted/clucene/clucene_inverted_reader.cpp
+    index/inverted/clucene/match_operator.cpp
+    index/vector/empty_index_reader.cpp
+    index/vector/vector_index_builder_factory.cpp
+    index/vector/vector_index_writer.cpp
+    index/vector/vector_index_builder.cpp
+    index/vector/vector_index_reader_factory.cpp
+    index/vector/tenann_index_reader.cpp
+    index/vector/tenann/del_id_filter.cpp
+    index/vector/tenann/tenann_index_builder.cpp
+    index/vector/tenann/tenann_index_utils.cpp)
+
+if (NOT BUILD_FORMAT_LIB)
+    list(APPEND STORAGE_FILES  lake/starlet_location_provider.cpp)
+endif()
+
+add_library(Storage STATIC
+    ${STORAGE_FILES}
+)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

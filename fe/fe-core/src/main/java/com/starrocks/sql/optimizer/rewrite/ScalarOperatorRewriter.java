@@ -32,6 +32,10 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceScalarOperatorRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedDateColumnPredicateRule;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
@@ -51,6 +55,10 @@ public class ScalarOperatorRewriter {
             new NormalizePredicateRule(),
             new FoldConstantsRule(),
             new SimplifiedPredicateRule(),
+<<<<<<< HEAD
+=======
+            new SimplifiedDateColumnPredicateRule(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule(),
             ConsolidateLikesRule.INSTANCE
@@ -73,6 +81,10 @@ public class ScalarOperatorRewriter {
             new FoldConstantsRule(),
             new SimplifiedScanColumnRule(),
             new SimplifiedPredicateRule(),
+<<<<<<< HEAD
+=======
+            new SimplifiedDateColumnPredicateRule(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule(),
             ConsolidateLikesRule.INSTANCE

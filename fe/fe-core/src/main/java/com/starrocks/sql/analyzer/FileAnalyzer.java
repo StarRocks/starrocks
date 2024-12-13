@@ -30,7 +30,11 @@ public class FileAnalyzer {
         new FileAnalyzer.FileAnalyzerVisitor().visit(statement, context);
     }
 
+<<<<<<< HEAD
     static class FileAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+=======
+    static class FileAnalyzerVisitor implements AstVisitor<Void, ConnectContext> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {

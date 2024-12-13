@@ -72,10 +72,13 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
     }
 
     public void analyze(List<ColumnDef> columnDefList, Map<String, String> tableProperties) throws AnalysisException {
+<<<<<<< HEAD
         if (isAnalyzed) {
             return;
         }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         FeNameFormat.checkPartitionName(this.getPartitionName());
         analyzeProperties(tableProperties, null);
 
@@ -83,8 +86,11 @@ public class SingleItemListPartitionDesc extends SinglePartitionDesc {
             throw new AnalysisException("Partition column size should be one when use single list partition ");
         }
         this.columnDefList = columnDefList;
+<<<<<<< HEAD
 
         isAnalyzed = true;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**

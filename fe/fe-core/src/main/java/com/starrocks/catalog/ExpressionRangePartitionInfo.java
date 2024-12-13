@@ -14,26 +14,42 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.reflect.TypeToken;
+=======
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+<<<<<<< HEAD
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SqlModeHelper;
+=======
+import com.starrocks.persist.ColumnIdExpr;
+import com.starrocks.persist.ExpressionSerializedObject;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -50,6 +66,19 @@ import java.util.function.Function;
 
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toMap;
+=======
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static java.util.stream.Collectors.toList;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * ExpressionRangePartitionInfo replace columns with expressions
@@ -65,10 +94,17 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     public static final String AUTOMATIC_SHADOW_PARTITION_NAME = "$shadow_automatic_partition";
     public static final String SHADOW_PARTITION_PREFIX = "$";
 
+<<<<<<< HEAD
     private List<Expr> partitionExprs;
 
     @SerializedName(value = "partitionExprs")
     private List<GsonUtils.ExpressionSerializedObject> serializedPartitionExprs;
+=======
+    private List<ColumnIdExpr> partitionExprs;
+
+    @SerializedName(value = "partitionExprs")
+    private List<ExpressionSerializedObject> serializedPartitionExprs;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public ExpressionRangePartitionInfo() {
         this.type = PartitionType.EXPR_RANGE;
@@ -77,10 +113,17 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     @Override
     public void gsonPreProcess() throws IOException {
         super.gsonPreProcess();
+<<<<<<< HEAD
         List<GsonUtils.ExpressionSerializedObject> serializedPartitionExprs = Lists.newArrayList();
         for (Expr partitionExpr : partitionExprs) {
             if (partitionExpr != null) {
                 serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+=======
+        List<ExpressionSerializedObject> serializedPartitionExprs = Lists.newArrayList();
+        for (ColumnIdExpr partitionExpr : partitionExprs) {
+            if (partitionExpr != null) {
+                serializedPartitionExprs.add(ExpressionSerializedObject.create(partitionExpr));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         this.serializedPartitionExprs = serializedPartitionExprs;
@@ -89,6 +132,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
     @Override
     public void gsonPostProcess() throws IOException {
         super.gsonPostProcess();
+<<<<<<< HEAD
         List<Expr> partitionExprs = Lists.newArrayList();
         for (GsonUtils.ExpressionSerializedObject expressionSql : serializedPartitionExprs) {
             if (expressionSql.expressionSql != null) {
@@ -100,6 +144,18 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         Map<String, Column> partitionNameColumnMap = partitionColumns.stream()
                 .collect(toMap(x -> x.getName(), Function.identity(), (e1, e2) -> e1, CaseInsensitiveMap::new));
         for (Expr expr : partitionExprs) {
+=======
+        List<ColumnIdExpr> partitionExprs = Lists.newArrayList();
+        for (ExpressionSerializedObject expressionSql : serializedPartitionExprs) {
+            partitionExprs.add(expressionSql.deserialize());
+        }
+        this.partitionExprs = partitionExprs;
+    }
+
+    public void updateSlotRef(Map<String, Column> nameToColumn) {
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            Expr expr = columnIdExpr.getExpr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             SlotRef slotRef = getPartitionExprSlotRef(expr);
             if (slotRef == null) {
                 LOG.warn("Unknown expr type: {}", expr.toSql());
@@ -108,6 +164,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             // FIXME: use the slot ref's column name to find the partition column which maybe not the same as the slot ref's
             //  column name.
             String slotRefName = slotRef.getColumnName();
+<<<<<<< HEAD
             if (!partitionNameColumnMap.containsKey(slotRefName)) {
                 continue;
             }
@@ -116,6 +173,15 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             analyzePartitionExpressionExpr(slotRef, partitionColumn, expr);
         }
         this.partitionExprs = partitionExprs;
+=======
+            if (!nameToColumn.containsKey(slotRefName)) {
+                continue;
+            }
+            Column partitionColumn = nameToColumn.get(slotRefName);
+            // analyze partition expression
+            analyzePartitionExpressionExpr(slotRef, partitionColumn, expr);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     /**
@@ -168,7 +234,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         }
     }
 
+<<<<<<< HEAD
     public ExpressionRangePartitionInfo(List<Expr> partitionExprs, List<Column> columns, PartitionType type) {
+=======
+    public ExpressionRangePartitionInfo(List<ColumnIdExpr> partitionExprs, List<Column> columns, PartitionType type) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(columns);
         Preconditions.checkState(partitionExprs != null);
         Preconditions.checkState(partitionExprs.size() > 0);
@@ -178,12 +248,59 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         this.type = type;
     }
 
+<<<<<<< HEAD
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
     }
 
     public void setPartitionExprs(List<Expr> partitionExprs) {
         this.partitionExprs = partitionExprs;
+=======
+    @VisibleForTesting
+    public List<ColumnIdExpr> getPartitionExprs() {
+        return partitionExprs;
+    }
+
+    public List<Expr> getPartitionExprs(Map<ColumnId, Column> idToColumn) {
+        List<Expr> result = new ArrayList<>(partitionExprs.size());
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            result.add(columnIdExpr.convertToColumnNameExpr(idToColumn));
+        }
+        return result;
+    }
+
+    @Override
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
+        List<Column> columns = MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);
+        for (int i = 0; i < columns.size(); i++) {
+            Expr expr = partitionExprs.get(i).convertToColumnNameExpr(idToColumn);
+            Column column = columns.get(i);
+            if (expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE
+                    && expr.getType().getPrimitiveType() != column.getType().getPrimitiveType()) {
+                Column newColumn = new Column(column);
+                newColumn.setType(expr.getType());
+                columns.set(i, newColumn);
+            }
+        }
+        return columns;
+    }
+
+    @Override
+    public int getPartitionColumnsSize() {
+        return partitionColumnIds.size();
+    }
+
+    public List<Expr> getPartitionExprs(List<Column> schema) {
+        List<Expr> result = new ArrayList<>(partitionExprs.size());
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            result.add(columnIdExpr.convertToColumnNameExpr(schema));
+        }
+        return result;
+    }
+
+    public int getPartitionExprsSize() {
+        return partitionExprs.size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -192,7 +309,12 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         sb.append("PARTITION BY ");
         if (table instanceof MaterializedView) {
             sb.append("(");
+<<<<<<< HEAD
             for (Expr expr : partitionExprs) {
+=======
+            for (ColumnIdExpr columnIdExpr : partitionExprs) {
+                Expr expr = columnIdExpr.convertToColumnNameExpr(table.getIdToColumn());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (expr instanceof SlotRef) {
                     SlotRef slotRef = (SlotRef) expr.clone();
                     sb.append("`").append(slotRef.getColumnName()).append("`").append(",");
@@ -213,6 +335,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             sb.append(")");
             return sb.toString();
         }
+<<<<<<< HEAD
         sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
         return sb.toString();
     }
@@ -269,6 +392,15 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         Text.writeString(out, GsonUtils.GSON.toJson(serializedPartitionExprs));
     }
 
+=======
+        sb.append(Joiner.on(", ").join(partitionExprs
+                .stream()
+                .map(columnIdExpr -> columnIdExpr.convertToColumnNameExpr(table.getIdToColumn()).toSql())
+                .collect(toList())));
+        return sb.toString();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * Do actions when rename referred table's db or table name.
      * @param dbName        : new db name which can be null or empty and will be not updated then.
@@ -297,8 +429,13 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 return null;
             }
         };
+<<<<<<< HEAD
         for (Expr expr : partitionExprs) {
             expr.accept(renameVisitor, null);
+=======
+        for (ColumnIdExpr expr : partitionExprs) {
+            expr.getExpr().accept(renameVisitor, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

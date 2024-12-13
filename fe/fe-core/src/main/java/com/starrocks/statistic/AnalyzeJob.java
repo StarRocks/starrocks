@@ -61,5 +61,17 @@ public interface AnalyzeJob {
 
     boolean isAnalyzeAllTable();
 
+<<<<<<< HEAD
     void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor);
+=======
+    List<StatisticsCollectJob> instantiateJobs();
+
+    default void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
+        run(statsConnectContext, statisticExecutor, instantiateJobs());
+    }
+
+    void run(ConnectContext statsConnectContext,
+             StatisticExecutor statisticExecutor,
+             List<StatisticsCollectJob> jobs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

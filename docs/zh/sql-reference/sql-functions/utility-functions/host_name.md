@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # host_name
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获取计算所在节点的主机名。该函数从 2.5 版本开始支持。
 

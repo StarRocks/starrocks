@@ -117,6 +117,11 @@ struct IndexValue {
     explicit IndexValue(const uint64_t val) { UNALIGNED_STORE64(v, val); }
 
     uint64_t get_value() const { return UNALIGNED_LOAD64(v); }
+<<<<<<< HEAD
+=======
+    uint32_t get_rssid() const { return (uint32_t)(get_value() >> 32); }
+    uint32_t get_rowid() const { return (uint32_t)(get_value() & 0xFFFFFFFF); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     bool operator==(const IndexValue& rhs) const { return memcmp(v, rhs.v, 8) == 0; }
     void operator=(uint64_t rhs) { return UNALIGNED_STORE64(v, rhs); }
 };
@@ -294,7 +299,11 @@ public:
 
     ~ShardByLengthMutableIndex() {
         if (_index_file) {
+<<<<<<< HEAD
             _index_file->close();
+=======
+            WARN_IF_ERROR(_index_file->close(), "Failed to close index file:" + _index_file->filename());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -445,7 +454,11 @@ public:
     uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
+<<<<<<< HEAD
             CHECK(res.ok()) << res.status(); // FIXME: no abort
+=======
+            DCHECK(res.ok()) << res.status(); // FIXME: no abort
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return *res;
         } else {
             return 0;
@@ -460,7 +473,12 @@ public:
 
     void destroy() {
         if (_file != nullptr) {
+<<<<<<< HEAD
             FileSystem::Default()->delete_file(_file->filename());
+=======
+            WARN_IF_ERROR(FileSystem::Default()->delete_file(_file->filename()),
+                          "Failed to delete file" + _file->filename());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _file.reset();
         }
     }
@@ -670,7 +688,11 @@ public:
 
     size_t size() const { return _size; }
     size_t usage() const { return _usage; }
+<<<<<<< HEAD
     size_t memory_usage() const { return _memory_usage.load(); }
+=======
+    virtual size_t memory_usage() const { return _memory_usage.load(); }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     EditVersion version() const { return _version; }
 
@@ -703,7 +725,11 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
+<<<<<<< HEAD
     Status get(size_t n, const Slice* keys, IndexValue* values);
+=======
+    virtual Status get(size_t n, const Slice* keys, IndexValue* values);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys, IndexValue* values,
                                         std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info);
@@ -714,8 +740,13 @@ public:
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
+<<<<<<< HEAD
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   IOStat* stat = nullptr);
+=======
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+                          IOStat* stat = nullptr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // batch replace without return old values
     // |n|: size of key/value array
@@ -736,7 +767,11 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
+<<<<<<< HEAD
     Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+=======
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -754,8 +789,13 @@ public:
     // |values|: value array
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
+<<<<<<< HEAD
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
+=======
+    virtual Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
+                               std::vector<uint32_t>* failed);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status flush_advance();
 
@@ -787,9 +827,12 @@ public:
         return res;
     }
 
+<<<<<<< HEAD
     static Status modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
                                      const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // not thread safe, just for unit test
     std::pair<int64_t, int64_t> kv_stat_in_estimate_stats() {
         std::pair<int64_t, int64_t> res;
@@ -806,6 +849,12 @@ public:
 
     void reset_cancel_major_compaction();
 
+<<<<<<< HEAD
+=======
+    static Status modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                     const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
     void test_calc_memory_usage() { return _calc_memory_usage(); }

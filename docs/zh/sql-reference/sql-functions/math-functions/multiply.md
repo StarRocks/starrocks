@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # multiply
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算参数 `arg1` 与 `arg2` 的乘积。
 

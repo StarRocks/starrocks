@@ -116,7 +116,12 @@ struct MergeEntry {
             if (encode_schema != nullptr) {
                 // need to encode
                 chunk_pk_column->reset_column();
+<<<<<<< HEAD
                 PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
+=======
+                RETURN_IF_ERROR(PrimaryKeyEncoder::encode_sort_key(*encode_schema, *chunk, 0, chunk->num_rows(),
+                                                                   chunk_pk_column.get()));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 // just use chunk's first column
                 chunk_pk_column = chunk->get_column_by_index(chunk->schema()->sort_key_idxes()[0]);
@@ -297,7 +302,10 @@ public:
                                         &total_rows, &total_chunk, &stats);
         }
         timer.stop();
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // update compaction metric
         float divided = 1000 * 1000 * 1000;
         StarRocksMetrics::instance()->update_compaction_task_cost_time_ns.set_value(timer.elapsed_time());
@@ -514,7 +522,11 @@ private:
         auto source_masks = std::make_unique<vector<RowSourceMask>>();
         for (size_t i = 1; i < column_groups.size(); ++i) {
             // read mask buffer from the beginning
+<<<<<<< HEAD
             mask_buffer->flip_to_read();
+=======
+            RETURN_IF_ERROR(mask_buffer->flip_to_read());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             _entries.clear();
             _entries.reserve(rowsets.size());
@@ -530,7 +542,11 @@ private:
             _max_chunk_size = std::max(_max_chunk_size, _chunk_size);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
+<<<<<<< HEAD
                 rowsets_mask_buffer[j]->flip_to_read();
+=======
+                RETURN_IF_ERROR(rowsets_mask_buffer[j]->flip_to_read());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
@@ -561,7 +577,11 @@ private:
             // And in the following function `get_next`, the `source_masks` does not work actually because we only need
             // to fetch data in order of segment.
             std::shared_ptr<ChunkIterator> iter = new_mask_merge_iterator(iterators, mask_buffer.get());
+<<<<<<< HEAD
             iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
+=======
+            RETURN_IF_ERROR(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
             auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
@@ -629,7 +649,11 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg,
                                 const starrocks::TabletSchemaCSPtr& cur_tablet_schema) {
     auto final_tablet_schema = cur_tablet_schema == nullptr ? tablet.tablet_schema() : cur_tablet_schema;
+<<<<<<< HEAD
     Schema schema = [&final_tablet_schema, &tablet]() {
+=======
+    Schema schema = [&final_tablet_schema]() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (final_tablet_schema->sort_key_idxes().empty()) {
             return ChunkHelper::get_sort_key_schema_by_primary_key(final_tablet_schema);
         } else {

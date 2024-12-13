@@ -17,8 +17,11 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
+<<<<<<< HEAD
 #include <chrono>
 #include <cstdint>
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <unordered_map>
 #include <vector>
 
@@ -37,11 +40,19 @@
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/delta_writer_finish_mode.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
 #include "util/bthreads/bthread_shared_mutex.h"
 #include "util/compression/block_compression.h"
 #include "util/countdown_latch.h"
+<<<<<<< HEAD
+=======
+#include "util/runtime_profile.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/stack_trace_mutex.h"
 
 namespace starrocks {
@@ -52,10 +63,18 @@ class TabletManager;
 
 class LakeTabletsChannel : public TabletsChannel {
     using AsyncDeltaWriter = lake::AsyncDeltaWriter;
+<<<<<<< HEAD
 
 public:
     LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
                        MemTracker* mem_tracker);
+=======
+    using TxnLogPtr = AsyncDeltaWriter::TxnLogPtr;
+
+public:
+    LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager, const TabletsChannelKey& key,
+                       MemTracker* mem_tracker, RuntimeProfile* parent_profile);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     ~LakeTabletsChannel() override;
 
@@ -66,8 +85,13 @@ public:
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
+<<<<<<< HEAD
     void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
+=======
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   bool* close_channel_ptr) override;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
@@ -78,6 +102,13 @@ public:
 
     void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) override { return abort(); }
 
+<<<<<<< HEAD
+=======
+    void update_profile() override {
+        // TODO add profile for lake
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     MemTracker* mem_tracker() { return _mem_tracker; }
 
 private:
@@ -102,7 +133,11 @@ private:
             if (status.ok()) {
                 return;
             }
+<<<<<<< HEAD
             std::string msg = strings::Substitute("$0: $1", BackendOptions::get_localhost(), status.get_error_msg());
+=======
+            std::string msg = strings::Substitute("$0: $1", BackendOptions::get_localhost(), status.message());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
                 _response->mutable_status()->set_status_code(status.code());
@@ -117,6 +152,17 @@ private:
             info->set_schema_hash(0); // required field
         }
 
+<<<<<<< HEAD
+=======
+        // NOT thread-safe
+        void add_txn_logs(const std::vector<TxnLogPtr>& logs) {
+            _response->mutable_lake_tablet_data()->mutable_txn_logs()->Reserve(logs.size());
+            for (auto& log : logs) {
+                _response->mutable_lake_tablet_data()->add_txn_logs()->CopyFrom(*log);
+            }
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private:
         friend class LakeTabletsChannel;
 
@@ -128,19 +174,77 @@ private:
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
 
+<<<<<<< HEAD
     // called by open() or incremental_open to build AsyncDeltaWriter for tablets
     Status _create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental);
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
+=======
+    class TxnLogCollector {
+    public:
+        void add(TxnLogPtr log) {
+            std::lock_guard l(_mtx);
+            _logs.emplace_back(std::move(log));
+        }
+
+        void update_status(const Status& st) {
+            std::lock_guard l(_mtx);
+            _st.update(st);
+        }
+
+        Status status() const {
+            std::lock_guard l(_mtx);
+            return _st;
+        }
+
+        std::vector<TxnLogPtr> logs() {
+            std::lock_guard l(_mtx);
+            return _logs;
+        }
+
+        // Returns true on notified, false on timeout
+        bool wait(int64_t timeout_ms) {
+            std::unique_lock l(_mtx);
+            while (!_notified) {
+                if (_cond.wait_for(l, timeout_ms * 1000L) == ETIMEDOUT) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        void notify() {
+            {
+                std::lock_guard l(_mtx);
+                _notified = true;
+            }
+            _cond.notify_all();
+        }
+
+    private:
+        mutable bthread::Mutex _mtx;
+        bthread::ConditionVariable _cond;
+        std::vector<TxnLogPtr> _logs;
+        Status _st;
+        bool _notified{false};
+    };
+
+    // called by open() or incremental_open to build AsyncDeltaWriter for tablets
+    Status _create_delta_writers(const PTabletWriterOpenRequest& params, bool is_incremental);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     StatusOr<std::unique_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
+<<<<<<< HEAD
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void _flush_stale_memtables();
 
     LoadChannel* _load_channel;
@@ -150,6 +254,11 @@ private:
 
     MemTracker* _mem_tracker;
 
+<<<<<<< HEAD
+=======
+    RuntimeProfile* _profile;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // initialized in open function
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
@@ -174,6 +283,7 @@ private:
     GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
     bool _is_incremental_channel{false};
+<<<<<<< HEAD
 
     std::set<int64_t> _immutable_partition_ids;
     std::map<string, string> _column_to_expr_value;
@@ -181,12 +291,55 @@ private:
 
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
                                        const TabletsChannelKey& key, MemTracker* mem_tracker)
+=======
+    lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
+    TxnLogCollector _txn_log_collector;
+    std::set<int64_t> _immutable_partition_ids;
+    std::map<string, string> _column_to_expr_value;
+
+    // Profile counters
+    // Number of tablets
+    RuntimeProfile::Counter* _tablets_num = nullptr;
+    // Number of times that open() is called
+    RuntimeProfile::Counter* _open_counter = nullptr;
+    // Accumulated time of open()
+    RuntimeProfile::Counter* _open_timer = nullptr;
+    // Number of times that add_chunk() is called
+    RuntimeProfile::Counter* _add_chunk_counter = nullptr;
+    // Accumulated time of add_chunk()
+    RuntimeProfile::Counter* _add_chunk_timer = nullptr;
+    // Number of rows added to this channel
+    RuntimeProfile::Counter* _add_row_num = nullptr;
+    // Accumulated time to wait for memtable flush in add_chunk()
+    RuntimeProfile::Counter* _wait_flush_timer = nullptr;
+    // Accumulated time to wait for async delta writers in add_chunk()
+    RuntimeProfile::Counter* _wait_writer_timer = nullptr;
+};
+
+LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+                                       const TabletsChannelKey& key, MemTracker* mem_tracker,
+                                       RuntimeProfile* parent_profile)
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         : TabletsChannel(),
           _load_channel(load_channel),
           _tablet_manager(tablet_manager),
           _key(key),
           _mem_tracker(mem_tracker),
+<<<<<<< HEAD
           _mem_pool(std::make_unique<MemPool>()) {}
+=======
+          _mem_pool(std::make_unique<MemPool>()) {
+    _profile = parent_profile->create_child(fmt::format("Index (id={})", key.index_id));
+    _tablets_num = ADD_COUNTER(_profile, "TabletsNum", TUnit::UNIT);
+    _open_counter = ADD_COUNTER(_profile, "OpenCount", TUnit::UNIT);
+    _open_timer = ADD_TIMER(_profile, "OpenTime");
+    _add_chunk_counter = ADD_COUNTER(_profile, "AddChunkCount", TUnit::UNIT);
+    _add_chunk_timer = ADD_TIMER(_profile, "AddChunkTime");
+    _add_row_num = ADD_COUNTER(_profile, "AddRowNum", TUnit::UNIT);
+    _wait_flush_timer = ADD_CHILD_TIMER(_profile, "WaitFlushTime", "AddChunkTime");
+    _wait_writer_timer = ADD_CHILD_TIMER(_profile, "WaitWriterTime", "AddChunkTime");
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
@@ -194,11 +347,24 @@ LakeTabletsChannel::~LakeTabletsChannel() {
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
+<<<<<<< HEAD
+=======
+    DCHECK_EQ(-1, _txn_id);
+    SCOPED_TIMER(_open_timer);
+    COUNTER_UPDATE(_open_counter, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::unique_lock<bthreads::BThreadSharedMutex> l(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
     _is_incremental_channel = is_incremental;
+<<<<<<< HEAD
+=======
+    if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
+        _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
+                                                                   : lake::DeltaWriterFinishMode::kDontWriteTxnLog;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     _senders = std::vector<Sender>(params.num_senders());
     if (_is_incremental_channel) {
@@ -229,18 +395,34 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
             result->add_immutable_tablet_ids(id);
             result->add_immutable_partition_ids(writer->partition_id());
         }
+<<<<<<< HEAD
         VLOG(1) << "check tablet writer for tablet " << id << ", partition " << writer->partition_id() << ", txn "
                 << _txn_id << ", is_immutable  " << writer->is_immutable();
     }
+=======
+        VLOG(2) << "check tablet writer for tablet " << id << ", partition " << writer->partition_id() << ", txn "
+                << _txn_id << ", is_immutable  " << writer->is_immutable();
+    }
+    COUNTER_SET(_tablets_num, (int64_t)_delta_writers.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     return Status::OK();
 }
 
 void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+<<<<<<< HEAD
                                    PTabletWriterAddBatchResult* response) {
     std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
     auto t0 = std::chrono::steady_clock::now();
     int64_t wait_memtable_flush_time_us = 0;
+=======
+                                   PTabletWriterAddBatchResult* response, bool* close_channel_ptr) {
+    bool& close_channel = *close_channel_ptr;
+    close_channel = false;
+    MonotonicStopWatch watch;
+    watch.start();
+    std::shared_lock<bthreads::BThreadSharedMutex> rolk(_rw_mtx);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (UNLIKELY(!request.has_sender_id())) {
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
@@ -308,6 +490,11 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // |_delta_writers.size()| is the max number of tasks invoking `AsyncDeltaWriter::finish()`
     auto count_down_latch = BThreadCountDownLatch(channel_size + (request.eos() ? _delta_writers.size() : 0));
 
+<<<<<<< HEAD
+=======
+    int64_t wait_memtable_flush_time_ns = 0;
+    int32_t total_row_num = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Open and write AsyncDeltaWriter
     for (int i = 0; i < channel_size; ++i) {
         size_t from = channel_row_idx_start_points[i];
@@ -316,6 +503,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             count_down_latch.count_down();
             continue;
         }
+<<<<<<< HEAD
+=======
+        total_row_num += size;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int64_t tablet_id = tablet_ids[row_indexes[from]];
         auto& dw = _delta_writers[tablet_id];
         if (dw == nullptr) {
@@ -330,17 +521,25 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
         // back pressure OlapTableSink since there are too many memtables need to flush
         while (dw->queueing_memtable_num() >= config::max_queueing_memtable_per_tablet) {
+<<<<<<< HEAD
             auto t1 = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count() > request.timeout_ms()) {
+=======
+            if (watch.elapsed_time() / 1000000 > request.timeout_ms()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 LOG(INFO) << "LakeTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
                           << " wait tablet " << tablet_id << " flush memtable " << request.timeout_ms()
                           << "ms still has queueing num " << dw->queueing_memtable_num();
                 break;
             }
             bthread_usleep(10000); // 10ms
+<<<<<<< HEAD
             wait_memtable_flush_time_us +=
                     std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t1)
                             .count();
+=======
+            wait_memtable_flush_time_ns += 10000000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         if (auto st = dw->open(); !st.ok()) { // Fail to `open()` AsyncDeltaWriter
@@ -358,8 +557,11 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // _channel_row_idx_start_points no longer used, free its memory.
     context->_channel_row_idx_start_points.reset();
 
+<<<<<<< HEAD
     bool close_channel = false;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Submit `AsyncDeltaWriter::finish()` tasks if needed
     if (request.eos()) {
         int unfinished_senders = _close_sender(request.partition_ids().data(), request.partition_ids().size());
@@ -382,6 +584,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     count_down_latch.count_down();
                     continue;
                 }
+<<<<<<< HEAD
                 dw->finish([&, id = tablet_id](const Status& st) {
                     if (st.ok()) {
                         context->add_finished_tablet(id);
@@ -389,6 +592,22 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                     } else {
                         context->update_status(st);
                         LOG(ERROR) << "Fail to finish tablet " << id << ": " << st;
+=======
+                dw->finish(_finish_mode, [&, id = tablet_id](StatusOr<TxnLogPtr> res) {
+                    if (!res.ok()) {
+                        context->update_status(res.status());
+                        LOG(ERROR) << "Fail to finish tablet " << id << ": " << res.status();
+                    } else {
+                        context->add_finished_tablet(id);
+                        VLOG(5) << "Finished tablet " << id;
+                    }
+                    if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+                        if (!res.ok()) {
+                            _txn_log_collector.update_status(res.status());
+                        } else {
+                            _txn_log_collector.add(std::move(res).value());
+                        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     }
                     count_down_latch.count_down();
                 });
@@ -399,8 +618,15 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
     }
 
+<<<<<<< HEAD
     // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
     count_down_latch.wait();
+=======
+    auto start_wait_writer_ts = watch.elapsed_time();
+    // Block the current bthread(not pthread) until all `write()` and `finish()` tasks finished.
+    count_down_latch.wait();
+    auto finish_wait_writer_ts = watch.elapsed_time();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     if (request.eos() || context->_response->status().status_code() == TStatusCode::OK) {
         // ^^^^^^^^^^ Reject new requests once eos request received.
@@ -424,6 +650,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     // we need to proactively perform a flush when memory resources are insufficient.
     _flush_stale_memtables();
 
+<<<<<<< HEAD
     auto t1 = std::chrono::steady_clock::now();
     response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
@@ -432,17 +659,59 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
     } else if (request.wait_all_sender_close()) {
+=======
+    response->set_execution_time_us(watch.elapsed_time() / 1000);
+    response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
+    response->set_wait_memtable_flush_time_us(wait_memtable_flush_time_ns / 1000);
+
+    if (!close_channel && request.wait_all_sender_close()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         _num_initial_senders.fetch_sub(1);
         std::string msg = fmt::format("LakeTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
         // wait for senders to be closed, may be timed out
         auto remain = request.timeout_ms();
+<<<<<<< HEAD
         remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+=======
+        remain -= watch.elapsed_time() / 1000000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         LOG(INFO) << msg << ", wait for all senders closed ...";
 
         // unlock write lock so that incremental open can aquire read lock
         rolk.unlock();
         drain_senders(remain * 1000, msg);
     }
+<<<<<<< HEAD
+=======
+
+    auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+    COUNTER_UPDATE(_add_chunk_counter, 1);
+    COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
+    COUNTER_UPDATE(_add_row_num, total_row_num);
+    COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_ns);
+    COUNTER_UPDATE(_wait_writer_timer, wait_writer_ns);
+
+    if (close_channel) {
+        _load_channel->remove_tablets_channel(_key);
+        if (_finish_mode == lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+            _txn_log_collector.notify();
+        }
+    }
+
+    // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
+    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
+        response->status().status_code() == TStatusCode::OK) {
+        rolk.unlock();
+        auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+        auto ok = _txn_log_collector.wait(t);
+        auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
+        if (st.ok()) {
+            context->add_txn_logs(_txn_log_collector.logs());
+        } else {
+            context->update_status(st);
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
@@ -490,7 +759,11 @@ void LakeTabletsChannel::_flush_stale_memtables() {
                 }
             }
             if (log_flushed) {
+<<<<<<< HEAD
                 VLOG(1) << "Flush stale memtable tablet_id: " << tablet_id << " txn_id: " << _txn_id
+=======
+                VLOG(2) << "Flush stale memtable tablet_id: " << tablet_id << " txn_id: " << _txn_id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         << " partition_id: " << writer->partition_id() << " is_immutable: " << writer->is_immutable()
                         << " last_write_ts: " << now - last_write_ts
                         << " job_mem_usage: " << _mem_tracker->consumption()
@@ -555,6 +828,10 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_immutable_tablet_size(params.immutable_tablet_size())
                                               .set_mem_tracker(_mem_tracker)
                                               .set_schema_id(schema_id)
+<<<<<<< HEAD
+=======
+                                              .set_partial_update_mode(params.partial_update_mode())
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                               .set_column_to_expr_value(&_column_to_expr_value)
                                               .build());
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
@@ -648,8 +925,14 @@ Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& para
 }
 
 std::shared_ptr<TabletsChannel> new_lake_tablets_channel(LoadChannel* load_channel, lake::TabletManager* tablet_manager,
+<<<<<<< HEAD
                                                          const TabletsChannelKey& key, MemTracker* mem_tracker) {
     return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker);
+=======
+                                                         const TabletsChannelKey& key, MemTracker* mem_tracker,
+                                                         RuntimeProfile* parent_profile) {
+    return std::make_shared<LakeTabletsChannel>(load_channel, tablet_manager, key, mem_tracker, parent_profile);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

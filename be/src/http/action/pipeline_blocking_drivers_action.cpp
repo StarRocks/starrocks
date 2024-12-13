@@ -22,6 +22,10 @@
 
 #include "common/logging.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+<<<<<<< HEAD
+=======
+#include "exec/workgroup/work_group.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -160,7 +164,13 @@ void PipelineBlockingDriversAction::_handle_stat(HttpRequest* req) {
         };
 
         QueryMap query_map_in_wg;
+<<<<<<< HEAD
         _exec_env->wg_driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_in_wg));
+=======
+        _exec_env->workgroup_manager()->for_each_executors([&](const workgroup::PipelineExecutorSet& executor) {
+            executor.driver_executor()->iterate_immutable_blocking_driver(iterate_func_generator(query_map_in_wg));
+        });
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         rapidjson::Document queries_in_wg_obj = query_map_to_doc_func(query_map_in_wg);
 
         root.AddMember("queries_in_workgroup", queries_in_wg_obj, allocator);

@@ -44,4 +44,12 @@ public class ShowRepositoriesStmt extends ShowStmt {
         }
         return builder.build();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRepositoriesStatement(this, context);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

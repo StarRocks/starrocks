@@ -38,7 +38,11 @@ public class HiveScannerFactory implements ScannerFactory {
     }
 
     @Override
+<<<<<<< HEAD
     public Class getScannerClass() throws ClassNotFoundException {
+=======
+    public Class getScannerClass(String scannerType) throws ClassNotFoundException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             return classLoader.loadClass("com.starrocks.hive.reader.HiveScanner");
         } catch (ClassNotFoundException e) {

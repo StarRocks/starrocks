@@ -14,6 +14,10 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
+=======
+import com.google.common.annotations.VisibleForTesting;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -25,15 +29,24 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.LakeTablet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -42,6 +55,19 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
+=======
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.VisibleStateWaiter;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.collections4.queue.CircularFifoQueue;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -97,7 +123,11 @@ public class CompactionScheduler extends Daemon {
 
     @Override
     protected void runOneCycle() {
+<<<<<<< HEAD
         cleanPartition();
+=======
+        cleanPhysicalPartition();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
         // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
@@ -194,25 +224,44 @@ public class CompactionScheduler extends Daemon {
         }
 
         // Create new compaction tasks.
+<<<<<<< HEAD
         int index = 0;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         int compactionLimit = compactionTaskLimit();
         int numRunningTasks = runningCompactions.values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
         if (numRunningTasks >= compactionLimit) {
             return;
         }
 
+<<<<<<< HEAD
         List<PartitionIdentifier> partitions = compactionManager.choosePartitionsToCompact(runningCompactions.keySet(),
                 disabledTables);
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
             PartitionIdentifier partition = partitions.get(index++);
             CompactionJob job = startCompaction(partition);
+=======
+        List<PartitionStatisticsSnapshot> partitions = compactionManager.choosePartitionsToCompact(
+                runningCompactions.keySet(), disabledTables);
+        int index = 0;
+        while (numRunningTasks < compactionLimit && index < partitions.size()) {
+            PartitionStatisticsSnapshot partitionStatisticsSnapshot = partitions.get(index++);
+            CompactionJob job = startCompaction(partitionStatisticsSnapshot);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (job == null) {
                 continue;
             }
             numRunningTasks += job.getNumTabletCompactionTasks();
+<<<<<<< HEAD
             runningCompactions.put(partition, job);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Created new compaction job. partition={} txnId={}", partition, job.getTxnId());
+=======
+            runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Created new compaction job. {}, txnId={}",
+                        partitionStatisticsSnapshot.toString(), job.getTxnId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
     }
@@ -222,11 +271,16 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
+<<<<<<< HEAD
         } catch (UserException ex) {
+=======
+        } catch (StarRocksException ex) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error("Fail to abort txn " + job.getTxnId(), ex);
         }
     }
 
+<<<<<<< HEAD
     private int compactionTaskLimit() {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
@@ -236,19 +290,43 @@ public class CompactionScheduler extends Daemon {
     }
 
     private void cleanPartition() {
+=======
+    @VisibleForTesting
+    protected int compactionTaskLimit() {
+        if (Config.lake_compaction_max_tasks >= 0) {
+            return Config.lake_compaction_max_tasks;
+        }
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getCompactionWarehouse();
+        List<ComputeNode> aliveComputeNodes = manager.getAliveComputeNodes(warehouse.getId());
+        return aliveComputeNodes.size() * 16;
+    }
+
+    private void cleanPhysicalPartition() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long now = System.currentTimeMillis();
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
             compactionManager.getAllPartitions()
                     .stream()
+<<<<<<< HEAD
                     .filter(p -> !compactionManager.isPartitionExist(p))
+=======
+                    .filter(p -> !MetaUtils.isPhysicalPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
                     .forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;
         }
     }
 
+<<<<<<< HEAD
     private CompactionJob startCompaction(PartitionIdentifier partitionIdentifier) {
         Database db = stateMgr.getDb(partitionIdentifier.getDbId());
+=======
+    private CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
+        PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
+        Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
             return null;
@@ -260,11 +338,21 @@ public class CompactionScheduler extends Daemon {
         PhysicalPartition partition;
         Map<Long, List<Long>> beToTablets;
 
+<<<<<<< HEAD
         db.readLock();
 
         try {
             // lake table or lake materialized view
             table = (OlapTable) db.getTable(partitionIdentifier.getTableId());
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+
+        try {
+            // lake table or lake materialized view
+            table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .getTable(db.getId(), partitionIdentifier.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
             // will not be used after the schema change job finished.
             if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
@@ -291,28 +379,44 @@ public class CompactionScheduler extends Daemon {
 
             partition.setMinRetainVersion(currentVersion);
 
+<<<<<<< HEAD
         } catch (BeginTransactionException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
+=======
+        } catch (RunningTxnExceedException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error("Fail to create transaction for compaction job. {}", e.getMessage());
             return null;
         } catch (Throwable e) {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success);
         try {
             List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
+<<<<<<< HEAD
                     job.getAllowPartialSuccess());
+=======
+                    job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             for (CompactionTask task : tasks) {
                 task.sendRequest();
             }
             job.setTasks(tasks);
             return job;
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.error(e);
+=======
+            LOG.error(e.getMessage(), e);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
             abortTransactionIgnoreError(job, e.getMessage());
@@ -326,12 +430,21 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     private List<CompactionTask> createCompactionTasks(long currentVersion, Map<Long, List<Long>> beToTablets, long txnId,
+<<<<<<< HEAD
             boolean allowPartialSuccess) throws UserException, RpcException {
+=======
+            boolean allowPartialSuccess, PartitionStatistics.CompactionPriority priority)
+            throws StarRocksException, RpcException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         List<CompactionTask> tasks = new ArrayList<>();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
+<<<<<<< HEAD
                 throw new UserException("Node " + entry.getKey() + " has been dropped");
+=======
+                throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             LakeService service = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
@@ -342,6 +455,11 @@ public class CompactionScheduler extends Daemon {
             request.version = currentVersion;
             request.timeoutMs = LakeService.TIMEOUT_COMPACT;
             request.allowPartialSuccess = allowPartialSuccess;
+<<<<<<< HEAD
+=======
+            request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
+            request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             CompactionTask task = new CompactionTask(node.getId(), service, request);
             tasks.add(task);
@@ -355,12 +473,24 @@ public class CompactionScheduler extends Daemon {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
             for (Tablet tablet : index.getTablets()) {
+<<<<<<< HEAD
                 Long beId = Utils.chooseBackend((LakeTablet) tablet);
                 if (beId == null) {
                     beToTablets.clear();
                     return beToTablets;
                 }
                 beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+=======
+                WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                Warehouse warehouse = manager.getCompactionWarehouse();
+                ComputeNode computeNode = manager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+                if (computeNode == null) {
+                    beToTablets.clear();
+                    return beToTablets;
+                }
+
+                beToTablets.computeIfAbsent(computeNode.getId(), k -> Lists.newArrayList()).add(tablet.getId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         return beToTablets;
@@ -368,7 +498,11 @@ public class CompactionScheduler extends Daemon {
 
     // REQUIRE: has acquired the exclusive lock of Database.
     protected long beginTransaction(PartitionIdentifier partition)
+<<<<<<< HEAD
             throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+=======
+            throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
         long partitionId = partition.getPartitionId();
@@ -377,6 +511,7 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnSourceType txnSourceType = TransactionState.TxnSourceType.FE;
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
+<<<<<<< HEAD
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
                 loadJobSourceType, Config.lake_compaction_default_timeout_second);
     }
@@ -386,6 +521,20 @@ public class CompactionScheduler extends Daemon {
         List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
 
         Database db = stateMgr.getDb(partition.getDbId());
+=======
+
+        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = manager.getCompactionWarehouse();
+        return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
+                loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
+    }
+
+    private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)
+            throws StarRocksException {
+        List<TabletCommitInfo> commitInfoList = job.buildTabletCommitInfo();
+
+        Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }
@@ -394,7 +543,16 @@ public class CompactionScheduler extends Daemon {
         }
 
         VisibleStateWaiter waiter;
+<<<<<<< HEAD
         db.writeLock();
+=======
+
+        TransactionState transactionState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), job.getTxnId());
+        List<Long> tableIdList = transactionState.getTableIdList();
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             CompactionTxnCommitAttachment attachment = null;
             if (forceCommit) { // do not write extra info if no need to force commit
@@ -403,7 +561,11 @@ public class CompactionScheduler extends Daemon {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);
         } finally {
+<<<<<<< HEAD
             db.writeUnlock();
+=======
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());
@@ -414,7 +576,11 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
+<<<<<<< HEAD
         } catch (UserException ex) {
+=======
+        } catch (StarRocksException ex) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.error(ex);
         }
     }
@@ -508,7 +674,11 @@ public class CompactionScheduler extends Daemon {
                     newDisabledTables.add(l);
                 } catch (NumberFormatException e) {
                     LOG.warn("Bad format of disable tables string: {}, now is {}, should be like \"tableId1;tableId2\"",
+<<<<<<< HEAD
                               e, disableTablesStr);
+=======
+                            e, disableTablesStr);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     return;
                 }
             }

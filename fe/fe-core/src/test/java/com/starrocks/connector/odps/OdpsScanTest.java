@@ -56,7 +56,11 @@ public class OdpsScanTest extends MockedBase {
     static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
     static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
 
+<<<<<<< HEAD
     static Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<ColumnRefOperator, Column>() {
+=======
+    static Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<>() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         {
             put(intColumnOperator, new Column("id", Type.INT));
             put(strColumnOperator, new Column("name", Type.STRING));

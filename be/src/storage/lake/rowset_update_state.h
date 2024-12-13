@@ -17,6 +17,10 @@
 #include <string>
 #include <unordered_map>
 
+<<<<<<< HEAD
+=======
+#include "gutil/macros.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -46,7 +50,13 @@ struct PartialUpdateState {
 
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
+<<<<<<< HEAD
     std::unique_ptr<Column> write_column;
+=======
+    // Container used to store the values of auto increment columns
+    std::unique_ptr<Column> write_column;
+    // Schema of modified columns
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
@@ -57,8 +67,13 @@ struct AutoIncrementPartialUpdateState {
 
     AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
 
+<<<<<<< HEAD
     void init(std::shared_ptr<TabletSchema>& schema, uint32_t id, uint32_t segment_id) {
         this->schema = schema;
+=======
+    void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
+        this->schema = std::move(modified_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this->id = id;
         this->segment_id = segment_id;
     }
@@ -74,7 +89,11 @@ struct AutoIncrementPartialUpdateState {
 struct RowsetUpdateStateParams {
     const TxnLogPB_OpWrite& op_write;
     const TabletSchemaPtr& tablet_schema;
+<<<<<<< HEAD
     const TabletMetadata& metadata;
+=======
+    const TabletMetadataPtr& metadata;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const Tablet* tablet;
     const RssidFileInfoContainer& container;
 };
@@ -161,6 +180,11 @@ private:
                                             const std::vector<uint64_t>& new_rss_rowids, uint32_t segment_id,
                                             size_t& total_conflicts);
 
+<<<<<<< HEAD
+=======
+    void _reset();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // one for each segment file
     std::vector<ColumnUniquePtr> _upserts;
     // one for each delete file
@@ -169,6 +193,10 @@ private:
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
     std::vector<int64_t> _base_versions;
+<<<<<<< HEAD
+=======
+    int64_t _schema_version = 0;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;
@@ -184,7 +212,11 @@ private:
     // to be destructed after segment iters
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;
+<<<<<<< HEAD
     std::map<std::string, std::string> _column_to_expr_value;
+=======
+    std::map<string, string> _column_to_expr_value;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

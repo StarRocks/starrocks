@@ -16,10 +16,20 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+=======
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.scheduler.persist.TaskSchedule;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import org.apache.commons.collections.MapUtils;
 
@@ -28,6 +38,14 @@ import java.util.Map;
 public class TaskAnalyzer {
 
     public static void analyzeSubmitTaskStmt(SubmitTaskStmt submitTaskStmt, ConnectContext session) {
+<<<<<<< HEAD
+=======
+        String catalogName = submitTaskStmt.getCatalogName();
+        if (Strings.isNullOrEmpty(catalogName)) {
+            catalogName = session.getCurrentCatalog();
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String dbName = submitTaskStmt.getDbName();
         if (Strings.isNullOrEmpty(dbName)) {
             dbName = session.getDatabase();
@@ -35,17 +53,45 @@ public class TaskAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
         }
+<<<<<<< HEAD
         submitTaskStmt.setDbName(dbName);
         analyzeTaskProperties(submitTaskStmt.getProperties());
+=======
+        submitTaskStmt.setCatalogName(catalogName);
+        submitTaskStmt.setDbName(dbName);
+        analyzeTaskProperties(submitTaskStmt.getProperties());
+        analyzeTaskSchedule(submitTaskStmt.getSchedule());
+    }
+
+    private static void analyzeTaskSchedule(TaskSchedule schedule) {
+        if (schedule == null) {
+            return;
+        }
+        long seconds = schedule.getTimeUnit().toSeconds(schedule.getPeriod());
+        if (seconds < Config.task_min_schedule_interval_s) {
+            ErrorReport.reportSemanticException("schedule interval is too small, the minimum value is %d SECONDS",
+                    ErrorCode.ERR_INVALID_PARAMETER,
+                    Config.task_min_schedule_interval_s);
+        }
+        if (schedule.getStartTime() == 0) {
+            schedule.setStartTime(TimeUtils.getEpochSeconds());
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public static void analyzeTaskProperties(Map<String, String> properties) {
         if (MapUtils.isEmpty(properties)) {
             return;
         }
+<<<<<<< HEAD
         String value = properties.get(SessionVariable.WAREHOUSE);
         if (value != null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, SessionVariable.WAREHOUSE);
+=======
+        String value = properties.get(SessionVariable.WAREHOUSE_NAME);
+        if (value != null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, SessionVariable.WAREHOUSE_NAME);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

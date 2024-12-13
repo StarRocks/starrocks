@@ -17,6 +17,10 @@
 #include <cstdint>
 
 #include "column/column_hash.h"
+<<<<<<< HEAD
+=======
+#include "runtime/memory/counting_allocator.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"

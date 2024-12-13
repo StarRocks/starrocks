@@ -17,6 +17,10 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.rpc.ThriftConnectionPool;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAgentPublishRequest;
@@ -65,7 +69,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GenericPoolTest {
+<<<<<<< HEAD
     static GenericPool<BackendService.Client> backendService;
+=======
+    static ThriftConnectionPool<BackendService.Client> backendService;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     static ThriftServer service;
     static String ip = "127.0.0.1";
     static int port;
@@ -91,7 +99,11 @@ public class GenericPoolTest {
             config.setMaxTotal(3); // (default -1)
             config.setMaxWaitMillis(500);
             // new ClientPool
+<<<<<<< HEAD
             backendService = new GenericPool("BackendService", config, 0);
+=======
+            backendService = new ThriftConnectionPool("BackendService", config, 0);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             // new ThriftService
             TProcessor tprocessor = new BackendService.Processor<BackendService.Iface>(
                     new InternalProcessor());

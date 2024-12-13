@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # get_json_string,get_json_object
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 解析并获取 `json_str` 内 `json_path` 指定的字符串。如果 `json_str` 或 `json_path` 格式不正确，或者无法找到匹配项，则返回 NULL。
 

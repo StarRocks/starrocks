@@ -88,7 +88,11 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
 Status MergeTwoCursor::consume_all(const ChunkConsumer& output) {
     for (auto chunk = next(); chunk.ok() && !is_eos(); chunk = next()) {
         if (chunk.value()) {
+<<<<<<< HEAD
             output(std::move(chunk.value()));
+=======
+            RETURN_IF_ERROR(output(std::move(chunk.value())));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -267,7 +271,11 @@ Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
     while (!is_eos()) {
         ChunkUniquePtr chunk = try_get_next();
         if (!!chunk) {
+<<<<<<< HEAD
             consumer(std::move(chunk));
+=======
+            RETURN_IF_ERROR(consumer(std::move(chunk)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     return Status::OK();
@@ -285,8 +293,12 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());
+<<<<<<< HEAD
     merger.consume_all(std::move(consumer));
     return Status::OK();
+=======
+    return merger.consume_all(std::move(consumer));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

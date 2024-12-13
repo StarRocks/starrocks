@@ -22,6 +22,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.SchemaConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -56,7 +60,11 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                     columnSet.getInt("DECIMAL_DIGITS"));
             String columnName = columnSet.getString("COLUMN_NAME");
             fullSchema.add(new Column(columnName, type,
+<<<<<<< HEAD
                     columnSet.getString("IS_NULLABLE").equals("YES")));
+=======
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return fullSchema;
     }
@@ -108,13 +116,21 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return ScalarType.createVarcharType(columnSize);
                 } else {
+<<<<<<< HEAD
                     return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                    return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             case Types.CLOB:
             case Types.NCLOB:
             // LONG
             case Types.LONGVARCHAR:
+<<<<<<< HEAD
                 return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             case Types.BLOB:
             case Types.BINARY:
             case Types.VARBINARY:
@@ -123,7 +139,11 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
                 if (columnSize > 0) {
                     return ScalarType.createVarbinary(columnSize);
                 } else {
+<<<<<<< HEAD
                     return ScalarType.createVarbinary(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                    return ScalarType.createVarbinary(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
@@ -134,7 +154,11 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             case -102:
             // TIMESTAMP WITH TIME ZONE
             case -101:
+<<<<<<< HEAD
                 return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -147,7 +171,11 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             // if user not specify numeric precision and scale, the default value is 0,
             // we can't defer the precision and scale, can only deal it as string.
             if (precision == 0) {
+<<<<<<< HEAD
                 return ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+                return ScalarType.createVarcharType(ScalarType.CATALOG_MAX_VARCHAR_LENGTH);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             return ScalarType.createUnifiedDecimalType(precision, max(digits, 0));
         }

@@ -58,6 +58,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
@@ -166,8 +171,13 @@ public class TabletChecker extends FrontendDaemon {
      * When setting a tablet to `bad` status manually, call this method to put the corresponding partition into
      * the `urgentTable` so that the bad tablet can be repaired ASAP.
      *
+<<<<<<< HEAD
      * @param dbId database id
      * @param tableId table id
+=======
+     * @param dbId        database id
+     * @param tableId     table id
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param partitionId partition to which the tablet belongs
      */
     public void setTabletForUrgentRepair(long dbId, long tableId, long partitionId) {
@@ -265,10 +275,17 @@ public class TabletChecker extends FrontendDaemon {
         long lockTotalTime = 0;
         long waitTotalTime = 0;
         long lockStart;
+<<<<<<< HEAD
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         DATABASE:
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
+=======
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
+        DATABASE:
+        for (Long dbId : dbIds) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 continue;
             }
@@ -280,12 +297,23 @@ public class TabletChecker extends FrontendDaemon {
             // set the config to a local variable to avoid config params changed.
             int partitionBatchNum = Config.tablet_checker_partition_batch_num;
             int partitionChecked = 0;
+<<<<<<< HEAD
             db.readLock();
             lockStart = System.nanoTime();
             try {
                 List<Long> aliveBeIdsInCluster = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
                 TABLE:
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            lockStart = System.nanoTime();
+            try {
+                List<Long> aliveBeIdsInCluster =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
+                TABLE:
+                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (!table.needSchedule(false)) {
                         continue;
                     }
@@ -299,8 +327,13 @@ public class TabletChecker extends FrontendDaemon {
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
+<<<<<<< HEAD
                     for (PhysicalPartition physicalPartition : GlobalStateMgr.getCurrentState()
                             .getLocalMetastore().getAllPhysicalPartitionsIncludeRecycleBin(olapTbl)) {
+=======
+                    for (PhysicalPartition physicalPartition : GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getAllPhysicalPartitionsIncludeRecycleBin(olapTbl)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         partitionChecked++;
 
                         boolean isPartitionUrgent = isPartitionUrgent(dbId, table.getId(), physicalPartition.getId());
@@ -313,6 +346,7 @@ public class TabletChecker extends FrontendDaemon {
                             LOG.debug("partition checked reached batch value, release lock");
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
+<<<<<<< HEAD
                             db.readUnlock();
                             db.readLock();
                             LOG.debug("checker get lock again");
@@ -324,6 +358,20 @@ public class TabletChecker extends FrontendDaemon {
                                 continue TABLE;
                             }
                             if (GlobalStateMgr.getCurrentState()
+=======
+                            locker.unLockDatabase(db.getId(), LockType.READ);
+                            locker.lockDatabase(db.getId(), LockType.READ);
+                            LOG.debug("checker get lock again");
+                            lockStart = System.nanoTime();
+                            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
+                                continue DATABASE;
+                            }
+                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                    .getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
+                                continue TABLE;
+                            }
+                            if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                     .getPhysicalPartitionIncludeRecycleBin(olapTbl, physicalPartition.getId()) == null) {
                                 continue;
                             }
@@ -341,6 +389,10 @@ public class TabletChecker extends FrontendDaemon {
                         }
 
                         short replicaNum = GlobalStateMgr.getCurrentState()
+<<<<<<< HEAD
+=======
+                                .getLocalMetastore()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                 .getReplicationNumIncludeRecycleBin(
                                         olapTbl.getPartitionInfo(), physicalPartition.getParentId());
                         if (replicaNum == (short) -1) {
@@ -350,6 +402,10 @@ public class TabletChecker extends FrontendDaemon {
                         TabletCheckerStat partitionTabletCheckerStat = doCheckOnePartition(db, olapTbl, physicalPartition,
                                 replicaNum, aliveBeIdsInCluster, isPartitionUrgent);
                         totStat.accumulateStat(partitionTabletCheckerStat);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         if (totStat.isUrgentPartitionHealthy && isPartitionUrgent) {
                             // if all replicas in this partition are healthy, remove this partition from
                             // priorities.
@@ -362,7 +418,11 @@ public class TabletChecker extends FrontendDaemon {
                 } // tables
             } finally {
                 lockTotalTime += System.nanoTime() - lockStart;
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         } // end for dbs
 
@@ -506,17 +566,30 @@ public class TabletChecker extends FrontendDaemon {
         while (iter.hasNext()) {
             Map.Entry<Long, Map<Long, Set<PrioPart>>> dbEntry = iter.next();
             long dbId = dbEntry.getKey();
+<<<<<<< HEAD
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+=======
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (db == null) {
                 iter.remove();
                 continue;
             }
 
+<<<<<<< HEAD
             db.readLock();
             try {
                 for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
                     long tblId = tblEntry.getKey();
                     OlapTable tbl = (OlapTable) db.getTable(tblId);
+=======
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.READ);
+            try {
+                for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
+                    long tblId = tblEntry.getKey();
+                    OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tblId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     if (tbl == null) {
                         deletedUrgentTable.add(Pair.create(dbId, tblId));
                         continue;
@@ -534,7 +607,11 @@ public class TabletChecker extends FrontendDaemon {
                     iter.remove();
                 }
             } finally {
+<<<<<<< HEAD
                 db.readUnlock();
+=======
+                locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         for (Pair<Long, Long> prio : deletedUrgentTable) {
@@ -607,7 +684,11 @@ public class TabletChecker extends FrontendDaemon {
     public static RepairTabletInfo getRepairTabletInfo(String dbName, String tblName, List<String> partitions)
             throws DdlException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(dbName);
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
         }
@@ -615,9 +696,16 @@ public class TabletChecker extends FrontendDaemon {
         long dbId = db.getId();
         long tblId;
         List<Long> partIds = Lists.newArrayList();
+<<<<<<< HEAD
         db.readLock();
         try {
             Table tbl = db.getTable(tblName);
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (tbl == null || tbl.getType() != TableType.OLAP) {
                 throw new DdlException("Table does not exist or is not OLAP table: " + tblName);
             }
@@ -638,7 +726,11 @@ public class TabletChecker extends FrontendDaemon {
                 }
             }
         } finally {
+<<<<<<< HEAD
             db.readUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.READ);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         Preconditions.checkState(tblId != -1);

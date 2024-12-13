@@ -23,5 +23,10 @@ namespace starrocks {
 using TxnLog = TxnLogPB;
 using TxnLogPtr = std::shared_ptr<const TxnLog>;
 using MutableTxnLogPtr = std::shared_ptr<TxnLog>;
+<<<<<<< HEAD
+=======
+using CombinedTxnLog = CombinedTxnLogPB;
+using CombinedTxnLogPtr = std::shared_ptr<const CombinedTxnLog>;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 } // namespace starrocks

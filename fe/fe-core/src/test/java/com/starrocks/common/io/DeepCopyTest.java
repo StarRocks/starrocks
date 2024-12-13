@@ -17,7 +17,10 @@
 
 package com.starrocks.common.io;
 
+<<<<<<< HEAD
 import com.starrocks.persist.TableInfo;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.gson.GsonSerializationTest;
 import org.junit.Assert;
 import org.junit.Test;
@@ -25,6 +28,7 @@ import org.junit.Test;
 public class DeepCopyTest {
 
     @Test
+<<<<<<< HEAD
     public void test() {
         TableInfo info = TableInfo.createForTableRename(1, 2, "newTbl");
         TableInfo copied = new TableInfo();
@@ -36,6 +40,8 @@ public class DeepCopyTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testCopyWithJson() {
         GsonSerializationTest.OrigClassA classA = new GsonSerializationTest.OrigClassA(1);
         GsonSerializationTest.OrigClassA copied = DeepCopy.copyWithGson(classA, GsonSerializationTest.OrigClassA.class);

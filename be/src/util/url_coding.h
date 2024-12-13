@@ -29,6 +29,10 @@ void base64_encode(const std::string& in, std::string* out);
 // Returns true unless the string could not be correctly decoded.
 bool base64_decode(const std::string& in, std::string* out);
 
+<<<<<<< HEAD
+=======
+// refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 std::string url_encode(const std::string& decoded);
 
 } // namespace starrocks

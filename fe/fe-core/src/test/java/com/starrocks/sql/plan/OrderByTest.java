@@ -74,7 +74,11 @@ class OrderByTest extends PlanTestBase {
                 "sort_tuple_slot_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), num_children:0, slot_ref:TSlotRef"
                         + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, "
+<<<<<<< HEAD
                         + "has_nullable_child:false, is_nullable:true, is_monotonic:true)])]"));
+=======
+                        + "has_nullable_child:false, is_nullable:true, is_monotonic:true"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -451,6 +455,10 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 8: expr\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +
@@ -477,6 +485,10 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 8: expr\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +
@@ -499,6 +511,10 @@ class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:SORT\n" +
                 "  |  order by: <slot 8> 8: expr ASC\n" +
+<<<<<<< HEAD
+=======
+                "  |  analytic partition by: 8: expr\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  offset: 0\n" +
                 "  |  \n" +
                 "  2:Project\n" +

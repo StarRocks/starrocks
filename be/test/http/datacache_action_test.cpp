@@ -20,13 +20,18 @@
 #include <rapidjson/document.h>
 
 #include "block_cache/block_cache.h"
+<<<<<<< HEAD
 #include "gen_cpp/FrontendService_types.h"
+=======
+#include "block_cache/block_cache_hit_rate_counter.hpp"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
 #include "runtime/exec_env.h"
 #include "util/brpc_stub_cache.h"
 
+<<<<<<< HEAD
 namespace starrocks {
 
 extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string&);
@@ -34,6 +39,17 @@ extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string
 namespace {
 static std::string k_response_str;
 static void inject_send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+=======
+class mg_connection;
+
+namespace starrocks {
+
+extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
+
+namespace {
+static std::string k_response_str;
+static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     k_response_str = content;
 }
 } // namespace
@@ -98,6 +114,55 @@ TEST_F(DataCacheActionTest, stat_success) {
     _env._block_cache = nullptr;
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(DataCacheActionTest, app_stat_success) {
+    BlockCacheHitRateCounter* counter = BlockCacheHitRateCounter::instance();
+    counter->reset();
+    auto cache = BlockCache::instance();
+    ASSERT_TRUE(init_datacache_instance("starcache", cache).ok());
+    _env._block_cache = cache;
+
+    DataCacheAction action(&_env);
+
+    {
+        HttpRequest request(_evhttp_req);
+        request._method = HttpMethod::GET;
+        request._params.emplace("action", "app_stat");
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        EXPECT_EQ(0, doc["hit_bytes"].GetInt64());
+        EXPECT_EQ(0, doc["miss_bytes"].GetInt64());
+        EXPECT_EQ(0, doc["hit_rate"].GetDouble());
+        EXPECT_EQ(0, doc["hit_bytes_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["miss_bytes_last_minute"].GetInt64());
+        EXPECT_EQ(0, doc["hit_rate_last_minute"].GetDouble());
+    }
+
+    counter->update(3, 10);
+
+    {
+        HttpRequest request(_evhttp_req);
+        request._method = HttpMethod::GET;
+        request._params.emplace("action", "app_stat");
+        request.set_handler(&action);
+        action.on_header(&request);
+        action.handle(&request);
+
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        EXPECT_EQ(3, doc["hit_bytes"].GetInt64());
+        EXPECT_EQ(10, doc["miss_bytes"].GetInt64());
+        EXPECT_EQ(0.23, doc["hit_rate"].GetDouble());
+    }
+    _env._block_cache = nullptr;
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 TEST_F(DataCacheActionTest, stat_with_uninitialized_cache) {
     DataCacheAction action(&_env);
 

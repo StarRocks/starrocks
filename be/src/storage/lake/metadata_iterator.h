@@ -28,8 +28,13 @@ class TabletManager;
 template <typename T>
 class MetadataIterator {
 public:
+<<<<<<< HEAD
     explicit MetadataIterator(TabletManager* manager, std::vector<std::string> files)
             : _manager(manager), _files(std::move(files)), _iter(_files.begin()){};
+=======
+    explicit MetadataIterator(TabletManager* manager, int64_t tablet_id, std::vector<std::string> files)
+            : _manager(manager), _tablet_id(tablet_id), _files(std::move(files)), _iter(_files.begin()){};
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     bool has_next() const { return _iter != _files.end(); }
 
@@ -45,6 +50,10 @@ private:
     StatusOr<T> get_metadata_from_tablet_manager(const std::string& path);
 
     TabletManager* _manager;
+<<<<<<< HEAD
+=======
+    int64_t _tablet_id;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<std::string> _files;
     std::vector<std::string>::iterator _iter;
 };

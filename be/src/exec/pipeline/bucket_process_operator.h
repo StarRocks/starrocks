@@ -120,9 +120,14 @@ using BucketProcessContextFactoryPtr = std::shared_ptr<BucketProcessContextFacto
 
 class BucketProcessSinkOperatorFactory final : public OperatorFactory {
 public:
+<<<<<<< HEAD
     BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                      const BucketProcessContextFactoryPtr& context_factory,
                                      const OperatorFactoryPtr& factory);
+=======
+    BucketProcessSinkOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
+                                     OperatorFactoryPtr factory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -134,9 +139,14 @@ private:
 
 class BucketProcessSourceOperatorFactory final : public SourceOperatorFactory {
 public:
+<<<<<<< HEAD
     BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id,
                                        const BucketProcessContextFactoryPtr& context_factory,
                                        const OperatorFactoryPtr& factory);
+=======
+    BucketProcessSourceOperatorFactory(int32_t id, int32_t plan_node_id, BucketProcessContextFactoryPtr context_factory,
+                                       OperatorFactoryPtr factory);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

@@ -42,7 +42,11 @@ import com.starrocks.StarRocksFE;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -178,7 +182,11 @@ public class SparkRepository {
                 result = HdfsUtil.checkPathExist(remotePath, brokerDesc);
             }
             LOG.info("check archive exists in repository, {}", result);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             LOG.warn("Failed to check remote archive exist, path={}, version={}", remotePath, currentDppVersion);
         }
         return result;
@@ -231,7 +239,11 @@ public class SparkRepository {
             }
             LOG.info("finished to upload archive to repository, currentDppVersion={}, path={}",
                     currentDppVersion, remoteArchivePath);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new LoadException(e.getMessage());
         }
     }
@@ -244,7 +256,11 @@ public class SparkRepository {
             } else {
                 HdfsUtil.parseFile(remoteArchivePath + "/*", brokerDesc, fileStatuses);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new LoadException(e.getMessage());
         }
 
@@ -313,7 +329,11 @@ public class SparkRepository {
                 HdfsUtil.writeFile(srcFilePath, destFilePath, brokerDesc);
             }
             LOG.info("finished to upload file, localPath={}, remotePath={}", srcFilePath, destFilePath);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new LoadException("failed to upload lib to repository, srcPath=" + srcFilePath +
                     " destPath=" + destFilePath + " message=" + e.getMessage());
         }
@@ -327,7 +347,11 @@ public class SparkRepository {
                 HdfsUtil.rename(origFilePath, destFilePath, brokerDesc);
             }
             LOG.info("finished to rename file, originPath={}, destPath={}", origFilePath, destFilePath);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             throw new LoadException("failed to rename file from " + origFilePath + " to " + destFilePath +
                     ", message=" + e.getMessage());
         }

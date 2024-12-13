@@ -72,7 +72,11 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
         if (limit_with_no_agg) {
             if (size >= _aggregator->limit() || (_aggregator->params()->enable_pipeline_share_limit &&
                                                  _shared_limit_countdown.load(std::memory_order_relaxed) <= 0)) {
+<<<<<<< HEAD
                 set_finishing(state);
+=======
+                (void)set_finishing(state);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return Status::OK();
             }
         }

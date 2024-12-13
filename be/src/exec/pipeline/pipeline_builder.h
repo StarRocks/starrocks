@@ -14,13 +14,25 @@
 
 #pragma once
 
+<<<<<<< HEAD
 #include <exec/pipeline/scan/olap_scan_operator.h>
+=======
+#include <unordered_map>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
+<<<<<<< HEAD
 #include "exec/pipeline/pipeline.h"
+=======
+#include "exec/pipeline/group_execution/execution_group.h"
+#include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/group_execution/execution_group_fwd.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_fwd.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/pipeline/spill_process_channel.h"
 
 namespace starrocks {
@@ -29,6 +41,7 @@ namespace pipeline {
 
 class PipelineBuilderContext {
 public:
+<<<<<<< HEAD
     PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism, bool is_stream_pipeline)
             : _fragment_context(fragment_context),
               _degree_of_parallelism(degree_of_parallelism),
@@ -38,6 +51,39 @@ public:
         _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators));
     }
 
+=======
+    PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism, size_t sink_dop,
+                           bool is_stream_pipeline)
+            : _fragment_context(fragment_context),
+              _degree_of_parallelism(degree_of_parallelism),
+              _data_sink_dop(sink_dop),
+              _is_stream_pipeline(is_stream_pipeline),
+              _enable_group_execution(fragment_context->enable_group_execution()) {
+        // init the default execution group
+        _execution_groups.emplace_back(ExecutionGroupBuilder::create_normal_exec_group());
+        _normal_exec_group = _execution_groups.back().get();
+        _current_execution_group = _execution_groups.back().get();
+    }
+
+    void init_colocate_groups(std::unordered_map<int32_t, ExecutionGroupPtr>&& colocate_groups);
+    ExecutionGroupRawPtr find_exec_group_by_plan_node_id(int32_t plan_node_id);
+    void set_current_execution_group(ExecutionGroupRawPtr exec_group) { _current_execution_group = exec_group; }
+    ExecutionGroupRawPtr current_execution_group() { return _current_execution_group; }
+
+    void add_pipeline(const OpFactories& operators, ExecutionGroupRawPtr execution_group) {
+        // TODO: refactor Pipelines to PipelineRawPtrs
+        _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators, execution_group));
+        execution_group->add_pipeline(_pipelines.back().get());
+        _subscribe_pipeline_event(_pipelines.back().get());
+    }
+
+    void add_pipeline(const OpFactories& operators) { add_pipeline(operators, _current_execution_group); }
+
+    void add_independent_pipeline(const OpFactories& operators) { add_pipeline(operators, _normal_exec_group); }
+
+    bool is_colocate_group() const { return _current_execution_group->type() == ExecutionGroupType::COLOCATE; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     OpFactories maybe_interpolate_local_broadcast_exchange(RuntimeState* state, int32_t plan_node_id,
                                                            OpFactories& pred_operators, int num_receivers);
 
@@ -47,12 +93,19 @@ public:
     OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                              OpFactories& pred_operators, int num_receivers,
                                                              bool force = false);
+<<<<<<< HEAD
+=======
+    OpFactories maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
+                                                             OpFactories& pred_operators, int num_receivers,
+                                                             LocalExchanger::PassThroughType pass_through_type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     OpFactories maybe_interpolate_local_random_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                                     OpFactories& pred_operators, int num_receivers,
                                                                     bool force = false);
     OpFactories maybe_interpolate_local_adpative_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                                       OpFactories& pred_operators, int num_receivers,
                                                                       bool force = false);
+<<<<<<< HEAD
 
     void maybe_interpolate_local_passthrough_exchange_for_sink(RuntimeState* state, int32_t plan_node_id,
                                                                OpFactoryPtr table_sink_operator,
@@ -63,6 +116,14 @@ public:
                                                                  const std::vector<ExprContext*>& partition_expr_ctxs,
                                                                  int32_t source_operator_dop, int32_t desired_sink_dop);
 
+=======
+    // using KeyPartitionExchanger
+    // interpolate local shuffle exchange with partition_exprs
+    OpFactories interpolate_local_key_partition_exchange(RuntimeState* state, int32_t plan_node_id,
+                                                         OpFactories& pred_operators,
+                                                         const std::vector<ExprContext*>& partition_expr_ctxs,
+                                                         int num_receivers);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /// Local shuffle the output chunks from multiple drivers of pred operators into DOP partitions of the post operators.
     /// The partition is generated by evaluated each row via partition_expr_ctxs.
     /// When interpolating a local shuffle?
@@ -87,6 +148,12 @@ public:
     void interpolate_spill_process(size_t plan_node_id, const SpillProcessChannelFactoryPtr& channel_factory,
                                    size_t dop);
 
+<<<<<<< HEAD
+=======
+    OpFactories interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
+    OpFactories maybe_interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.
     // Append a LocalExchangeSinkOperator to the tail of each pipeline.
@@ -102,10 +169,17 @@ public:
     uint32_t next_operator_id() { return _next_operator_id++; }
 
     size_t degree_of_parallelism() const { return _degree_of_parallelism; }
+<<<<<<< HEAD
 
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
 
     const Pipelines& get_pipelines() const { return _pipelines; }
+=======
+    size_t data_sink_dop() const { return _data_sink_dop; }
+
+    bool is_stream_pipeline() const { return _is_stream_pipeline; }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     const Pipeline* last_pipeline() const {
         DCHECK(!_pipelines.empty());
         return _pipelines[_pipelines.size() - 1].get();
@@ -113,6 +187,10 @@ public:
 
     RuntimeState* runtime_state() { return _fragment_context->runtime_state(); }
     FragmentContext* fragment_context() { return _fragment_context; }
+<<<<<<< HEAD
+=======
+    bool enable_group_execution() const { return _enable_group_execution; }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     size_t dop_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(int source_node_id);
@@ -138,10 +216,24 @@ public:
     void push_dependent_pipeline(const Pipeline* pipeline);
     void pop_dependent_pipeline();
 
+<<<<<<< HEAD
     bool force_disable_adaptive_dop() const { return _force_disable_adaptive_dop; }
     void set_force_disable_adaptive_dop(bool val) { _force_disable_adaptive_dop = val; }
 
 private:
+=======
+    ExecutionGroups execution_groups() { return std::move(_execution_groups); }
+    Pipelines pipelines() { return std::move(_pipelines); }
+
+private:
+    // op1->limit->op2 (except accumulate) => return -1
+    // op1->limit->op2 (accumulate) => return limit
+    int64_t _prev_limit_size(const OpFactories& pred_operators);
+    void _try_interpolate_limit_operator(int32_t plan_node_id, OpFactories& pred_operators, int64_t limit_size);
+
+    void _subscribe_pipeline_event(Pipeline* pipeline);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     OpFactories _maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                               OpFactories& pred_operators, int num_receivers,
                                                               bool force,
@@ -156,6 +248,13 @@ private:
 
     FragmentContext* _fragment_context;
     Pipelines _pipelines;
+<<<<<<< HEAD
+=======
+    ExecutionGroups _execution_groups;
+    std::unordered_map<int32_t, ExecutionGroupPtr> _group_id_to_colocate_groups;
+    ExecutionGroupRawPtr _normal_exec_group = nullptr;
+    ExecutionGroupRawPtr _current_execution_group = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     std::list<const Pipeline*> _dependent_pipelines;
 
@@ -163,18 +262,34 @@ private:
     uint32_t _next_operator_id = 0;
 
     const size_t _degree_of_parallelism;
+<<<<<<< HEAD
 
     const bool _is_stream_pipeline;
 
     bool _force_disable_adaptive_dop = false;
+=======
+    const size_t _data_sink_dop;
+
+    const bool _is_stream_pipeline;
+    const bool _enable_group_execution;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 class PipelineBuilder {
 public:
+<<<<<<< HEAD
     PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
 
     // Build pipeline from exec node tree
     Pipelines build(const FragmentContext& fragment, ExecNode* exec_node);
+=======
+    explicit PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
+
+    // Build pipeline from exec node tree
+    OpFactories decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node);
+
+    std::pair<ExecutionGroups, Pipelines> build();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 private:
     PipelineBuilderContext& _context;

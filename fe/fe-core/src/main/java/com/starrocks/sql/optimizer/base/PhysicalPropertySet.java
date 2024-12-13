@@ -28,6 +28,7 @@ public class PhysicalPropertySet {
     public static final PhysicalPropertySet EMPTY = new PhysicalPropertySet();
 
     public PhysicalPropertySet() {
+<<<<<<< HEAD
         this(DistributionProperty.EMPTY, SortProperty.EMPTY, CTEProperty.EMPTY);
     }
 
@@ -41,6 +42,21 @@ public class PhysicalPropertySet {
 
     public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty) {
         this(distributionProperty, sortProperty, CTEProperty.EMPTY);
+=======
+        this(EmptyDistributionProperty.INSTANCE, EmptySortProperty.INSTANCE, EmptyCTEProperty.INSTANCE);
+    }
+
+    public PhysicalPropertySet(DistributionProperty distributionProperty) {
+        this(distributionProperty, EmptySortProperty.INSTANCE, EmptyCTEProperty.INSTANCE);
+    }
+
+    public PhysicalPropertySet(SortProperty sortProperty) {
+        this(EmptyDistributionProperty.INSTANCE, sortProperty, EmptyCTEProperty.INSTANCE);
+    }
+
+    public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty) {
+        this(distributionProperty, sortProperty, EmptyCTEProperty.INSTANCE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public PhysicalPropertySet(DistributionProperty distributionProperty, SortProperty sortProperty,
@@ -106,7 +122,12 @@ public class PhysicalPropertySet {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         return sortProperty.getSpec().getOrderDescs().toString() +
                 ", " + distributionProperty.getSpec() + ", " + cteProperty.toString();
+=======
+        return sortProperty.toString() +
+                ", " + distributionProperty.toString() + ", " + cteProperty.toString();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

@@ -18,11 +18,21 @@ package com.starrocks.connector;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.HudiTable;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveStorageFormat;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.hudi.HudiConnector;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
@@ -35,6 +45,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 
@@ -44,6 +58,10 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.apache.hudi.common.model.HoodieTableType.COPY_ON_WRITE;
 
 public class HiveMetastoreApiConverterTest {
@@ -101,7 +119,12 @@ public class HiveMetastoreApiConverterTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testToHudiProperties(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient) {
+=======
+    public void testToHudiProperties(@Mocked Table table, @Mocked HoodieTableMetaClient metaClient,
+                                     @Mocked ConnectorMgr connectorMgr) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StorageDescriptor sd = new StorageDescriptor();
         String tableLocation = "hdfs://127.0.0.1/db/table/hudi_table";
         String serLib = "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe";
@@ -147,6 +170,23 @@ public class HiveMetastoreApiConverterTest {
         Assert.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
                 "_hoodie_partition_path,_hoodie_file_name,col1,col2", params.get(HUDI_TABLE_COLUMN_NAMES));
         Assert.assertEquals("string#string#string#string#string#bigint#int", params.get(HUDI_TABLE_COLUMN_TYPES));
+<<<<<<< HEAD
+=======
+
+        final String catalogName = "hudi_catalog";
+        new Expectations() {
+            {
+                connectorMgr.getConnector(catalogName);
+                Map<String, String> properties = new HashMap<>();
+                properties.put(HIVE_METASTORE_URIS, "thrift://127.0.0.1:9083");
+                Connector connector = new HudiConnector(new ConnectorContext(catalogName, "hive", properties));
+                result = new CatalogConnector(connector, new InformationSchemaConnector(catalogName),
+                        new TableMetaConnector(catalogName, "hive"));
+            }
+        };
+        HudiTable hudiTable = HiveMetastoreApiConverter.toHudiTable(table, "hudi_catalog");
+        Assert.assertEquals(catalogName, hudiTable.getCatalogName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -200,4 +240,25 @@ public class HiveMetastoreApiConverterTest {
         Assert.assertEquals("my_comment", table.getParameters().get("comment"));
         Assert.assertEquals("0", table.getParameters().get("numRows"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testToApiTableProperties() {
+        HiveTable hiveTable = HiveTable.builder()
+                .setCatalogName("hive_catalog")
+                .setHiveDbName("hive_db")
+                .setHiveTableName("hive_table")
+                .setPartitionColumnNames(Lists.newArrayList("p1"))
+                .setFullSchema(Lists.newArrayList(new Column("c1", Type.INT), new Column("p1", Type.INT)))
+                .setDataColumnNames(Lists.newArrayList("c1"))
+                .setTableLocation("table_location")
+                .setStorageFormat(HiveStorageFormat.PARQUET)
+                .setHiveTableType(HiveTable.HiveTableType.EXTERNAL_TABLE)
+                .build();
+        Map<String, String> properties = HiveMetastoreApiConverter.toApiTableProperties(hiveTable);
+        Assert.assertTrue(properties.containsKey("EXTERNAL"));
+        Assert.assertEquals("TRUE", properties.get("EXTERNAL"));
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

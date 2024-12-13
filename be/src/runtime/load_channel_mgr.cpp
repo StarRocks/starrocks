@@ -37,10 +37,18 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+<<<<<<< HEAD
+=======
+#include "runtime/tablets_channel.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "storage/lake/tablet_manager.h"
 #include "storage/utils.h"
 #include "util/starrocks_metrics.h"
@@ -100,6 +108,18 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
+<<<<<<< HEAD
+=======
+    if (!request.encryption_meta().empty()) {
+        Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
+        if (!st.ok()) {
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(fmt::format(
+                    "refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}", st.detailed_message()));
+            return;
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     UniqueId load_id(request.id());
     int64_t txn_id = request.txn_id();
     std::shared_ptr<LoadChannel> channel;
@@ -120,6 +140,12 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
 
             channel.reset(new LoadChannel(this, ExecEnv::GetInstance()->lake_tablet_manager(), load_id, txn_id,
                                           request.txn_trace_parent(), job_timeout_s, std::move(job_mem_tracker)));
+<<<<<<< HEAD
+=======
+            if (request.has_load_channel_profile_config()) {
+                channel->set_profile_config(request.load_channel_profile_config());
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             _load_channels.insert({load_id, channel});
         } else {
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
@@ -177,7 +203,12 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
+<<<<<<< HEAD
             channel->abort(request.index_id(), {request.tablet_id()}, request.reason());
+=======
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()),
+                           {request.tablet_id()}, request.reason());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     } else if (request.tablet_ids_size() > 0) {
         auto channel = _find_load_channel(load_id);
@@ -186,7 +217,12 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
             for (auto& tablet_id : request.tablet_ids()) {
                 tablet_ids.emplace_back(tablet_id);
             }
+<<<<<<< HEAD
             channel->abort(request.index_id(), tablet_ids, request.reason());
+=======
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()), tablet_ids,
+                           request.reason());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
@@ -251,11 +287,14 @@ void LoadChannelMgr::_start_load_channels_clean() {
     if (auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager(); lake_tablet_manager != nullptr) {
         lake_tablet_manager->clean_in_writing_data_size();
     }
+<<<<<<< HEAD
 
     // this log print every 1 min, so that we could observe the mem consumption of load process
     // on this Backend
     LOG(INFO) << "Memory consumption(bytes) limit=" << _mem_tracker->limit()
               << " current=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {

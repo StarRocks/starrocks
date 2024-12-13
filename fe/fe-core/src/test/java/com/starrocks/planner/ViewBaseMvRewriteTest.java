@@ -450,6 +450,25 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testViewWithInvalidPlan() {
+        String view = "create view invalid_view0 as select count(distinct cnt) as ndv from " +
+                "(select count(*) cnt from lineitem group by l_returnflag) t";
+        try {
+            starRocksAssert.withView(view);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        String sql = "create materialized view invalid_plan_mv distributed by random as select * from invalid_view0";
+        starRocksAssert.withMaterializedView(sql, () -> {
+            sql("select * from invalid_view0").contains("invalid_plan_mv");
+            sql("select * from invalid_view0 where ndv > 10").contains("invalid_plan_mv");
+        });
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testSingleCte() throws Exception {
         String createViewSql = "CREATE VIEW `v_q15` (`s_suppkey`, `s_name`, `s_address`, `s_phone`, `total_revenue`) AS " +
                 "WITH `revenue0` (`supplier_no`, `total_revenue`)" +
@@ -488,6 +507,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testViewWithInvalidPlan() {
         String view = "create view invalid_view0 as select count(distinct cnt) as ndv from " +
                 "(select count(*) cnt from lineitem group by l_returnflag) t";
@@ -504,6 +524,8 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testViewRewriteWithNestedMVs() throws Exception {
         String tbl1 = "CREATE TABLE test_t1 (\n" +
                 " k1 INT,\n" +

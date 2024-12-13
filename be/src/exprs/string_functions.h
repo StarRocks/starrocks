@@ -29,6 +29,10 @@
 #include "util/url_parser.h"
 
 namespace starrocks {
+<<<<<<< HEAD
+=======
+class RegexpSplit;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 struct PadState {
     bool is_const;
@@ -275,6 +279,16 @@ public:
     DEFINE_VECTORIZED_FN(get_char);
 
     /**
+<<<<<<< HEAD
+=======
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(inet_aton);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Return the index of the first occurrence of substring
      *
      * @param: [string_value, sub_string_value]
@@ -404,6 +418,16 @@ public:
     static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
 
     /**
+<<<<<<< HEAD
+=======
+     * @param: [string_value, pattern, max_split]
+     * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
+     * @return: Array<BinaryColumn>
+     */
+    DEFINE_VECTORIZED_FN(regexp_split);
+
+    /**
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
      * @return: BinaryColumn
@@ -491,6 +515,11 @@ public:
 
     DEFINE_VECTORIZED_FN(url_extract_parameter);
 
+<<<<<<< HEAD
+=======
+    DEFINE_VECTORIZED_FN(url_extract_host);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     /**
      * @param: [BigIntColumn]
      * @return: StringColumn
@@ -550,6 +579,19 @@ public:
 
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
+<<<<<<< HEAD
+=======
+    DEFINE_VECTORIZED_FN(crc32);
+
+    DEFINE_VECTORIZED_FN(ngram_search);
+
+    DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
+    static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
+                                                        FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
@@ -589,8 +631,13 @@ private:
     };
 
     static StatusOr<ColumnPtr> parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
+<<<<<<< HEAD
     static StatusOr<ColumnPtr> parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
                                                const starrocks::Columns& columns);
+=======
+    static StatusOr<ColumnPtr> parse_const_urlpart(UrlParser::UrlPart* url_part, FunctionContext* context,
+                                                   const starrocks::Columns& columns);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     template <LogicalType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,

@@ -67,6 +67,11 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.planner.MaterializedViewTestBase.getRefBaseTablePartitionColumn;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class MvRewritePreprocessorTest extends MvRewriteTestBase {
     @BeforeClass
     public static void before() throws Exception {
@@ -219,7 +224,11 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             Assert.assertEquals("mv_4", materializationContext.getMv().getName());
 
             MaterializedView mv = getMv("test", "mv_4");
+<<<<<<< HEAD
             Pair<Table, Column> partitionTableAndColumn = mv.getBaseTableAndPartitionColumn();
+=======
+            Pair<Table, Column> partitionTableAndColumn = getRefBaseTablePartitionColumn(mv);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
             ScalarOperator scalarOperator = materializationContext.getMvPartialPartitionPredicate();
@@ -338,6 +347,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+<<<<<<< HEAD
                 Assert.assertTrue(relatedMVs.size() == 4);
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
@@ -345,12 +355,30 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertTrue(validMVs.size() == 2);
                 Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
+=======
+                Assert.assertEquals(4, relatedMVs.size());
+                // mv2 contains extra mvs.
+                Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
+
+                // disable plan cache will make the test more stable
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() >= 1);
+                if (validMVs.size() == 2) {
+                    Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
+                }
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // if mv_3 is in the plan cache
                 MaterializedView mv3 = getMv("test", "mv_3");
                 CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv3);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+<<<<<<< HEAD
                 Assert.assertTrue(validMVs.size() == 1);
+=======
+                Assert.assertEquals(1, validMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(containsMV(validMVs, "mv_1"));
             }
 
@@ -363,7 +391,11 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+<<<<<<< HEAD
                 Assert.assertTrue(relatedMVs.size() == 4);
+=======
+                Assert.assertEquals(4, relatedMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
@@ -392,6 +424,10 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
         int oldVal = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         starRocksAssert.withMaterializedViews(mvs, (obj) -> {
 
             long currentTime = System.currentTimeMillis();
@@ -410,6 +446,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+<<<<<<< HEAD
                 Assert.assertTrue(relatedMVs.size() == 4);
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
@@ -422,13 +459,34 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertTrue(validMVs.size() == 1);
                 Assert.assertTrue(containsMV(validMVs, "mv_3"));
+=======
+                Assert.assertEquals(4, relatedMVs.size());
+                // mv2 contains extra mvs.
+                Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
+
+                // disable plan cache will make the test more stable
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(false);
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() >= 1);
+                if (validMVs.size() == 2) {
+                    Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
+                }
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertEquals(1, validMVs.size());
+                connectContext.getSessionVariable().setEnableMaterializedViewPlanCache(true);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
                 // if mv_3 is in the plan cache
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
                 MaterializedView mv3 = getMv("test", "mv_3");
                 CachingMvPlanContextBuilder.getInstance().getPlanContext(connectContext.getSessionVariable(), mv3);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+<<<<<<< HEAD
                 Assert.assertTrue(validMVs.size() == 1);
+=======
+                Assert.assertEquals(1, validMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(containsMV(validMVs, "mv_1"));
             }
 
@@ -441,19 +499,31 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+<<<<<<< HEAD
                 Assert.assertTrue(relatedMVs.size() == 4);
+=======
+                Assert.assertEquals(4, relatedMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
                 Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+<<<<<<< HEAD
                 Assert.assertTrue(validMVs.size() == 2);
+=======
+                Assert.assertEquals(2, validMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_2"));
 
                 // set it to 1
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+<<<<<<< HEAD
                 Assert.assertTrue(validMVs.size() == 1);
+=======
+                Assert.assertEquals(1, validMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(containsMV(validMVs, "mv_2"));
             }
         });
@@ -486,7 +556,11 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 for (int i = 0; i < 5; i++) {
                     MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", i + 1);
+<<<<<<< HEAD
                     Assert.assertTrue(mvCorrelation.getMv().getName().equals(mvName));
+=======
+                    Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -504,7 +578,11 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 for (int i = 0; i < 5; i++) {
                     MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", 5 - i);
+<<<<<<< HEAD
                     Assert.assertTrue(mvCorrelation.getMv().getName().equals(mvName));
+=======
+                    Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
 
@@ -522,7 +600,11 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 for (int i = 0; i < 5; i++) {
                     MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
                     String mvName = String.format("mv_%s", i + 1);
+<<<<<<< HEAD
                     Assert.assertTrue(mvCorrelation.getMv().getName().equals(mvName));
+=======
+                    Assert.assertEquals(mvCorrelation.getMv().getName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
             }
         });
@@ -556,18 +638,30 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+<<<<<<< HEAD
                 Assert.assertTrue(relatedMVs.size() == 5);
+=======
+                Assert.assertEquals(5, relatedMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 // mv2 contains extra mvs.
                 Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4", "mv_5"));
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
                 Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+<<<<<<< HEAD
                 Assert.assertTrue(validMVs.size() == 2);
+=======
+                Assert.assertEquals(2, validMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(containsMV(validMVs, "mv_4", "mv_5"));
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
                 validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+<<<<<<< HEAD
                 Assert.assertTrue(validMVs.size() == 1);
+=======
+                Assert.assertEquals(1, validMVs.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Assert.assertTrue(containsMV(validMVs, "mv_5"));
             }
         });
@@ -608,9 +702,15 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
                 Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
                 Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+<<<<<<< HEAD
                 Assert.assertTrue(relatedMVs.size() == mvNum);
                 Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
                 Assert.assertTrue(validMVs.size() == oldVal);
+=======
+                Assert.assertEquals(relatedMVs.size(), mvNum);
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertEquals(validMVs.size(), oldVal);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 Set<String> expectMvs = Sets.newHashSet();
                 for (int i = 0; i < oldVal; i++) {
                     String mvName = String.format("mv_%s", mvNum - i - 1);
@@ -621,6 +721,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 }
                 Set<MvRewritePreprocessor.MvWithPlanContext> mvWithPlanContexts =
                         preprocessor.getMvWithPlanContext(validMVs);
+<<<<<<< HEAD
                 Assert.assertTrue(mvWithPlanContexts.size() == oldVal * 2);
 
                 connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
@@ -637,6 +738,24 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
                 mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
                 Assert.assertTrue(mvWithPlanContexts.size() == 1 * 2);
+=======
+                Assert.assertEquals(mvWithPlanContexts.size(), oldVal * 2);
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertEquals(2, validMVs.size());
+                Assert.assertTrue(containsMV(validMVs, "mv_98", "mv_99"));
+                mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
+                Assert.assertEquals(4, mvWithPlanContexts.size());
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertEquals(1, validMVs.size());
+                Assert.assertTrue(containsMV(validMVs, "mv_99"));
+
+                mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
+                Assert.assertEquals(2, mvWithPlanContexts.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         });
         connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
@@ -693,6 +812,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
             Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
             Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+<<<<<<< HEAD
             Assert.assertTrue(relatedMVs.size() == 1);
             Assert.assertTrue(containsMV(relatedMVs, "invalid_plan_mv"));
 
@@ -702,6 +822,17 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             Set<MvRewritePreprocessor.MvWithPlanContext> mvWithPlanContexts =
                     preprocessor.getMvWithPlanContext(validMVs);
             Assert.assertTrue(mvWithPlanContexts.size() == 1);
+=======
+            Assert.assertEquals(1, relatedMVs.size());
+            Assert.assertTrue(containsMV(relatedMVs, "invalid_plan_mv"));
+
+            Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+            Assert.assertEquals(1, validMVs.size());
+            Assert.assertTrue(containsMV(validMVs, "invalid_plan_mv"));
+            Set<MvRewritePreprocessor.MvWithPlanContext> mvWithPlanContexts =
+                    preprocessor.getMvWithPlanContext(validMVs);
+            Assert.assertEquals(1, mvWithPlanContexts.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         });
     }
 }

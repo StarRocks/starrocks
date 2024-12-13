@@ -14,10 +14,18 @@
 
 package com.starrocks.statistic;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Maps;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.MapUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -25,6 +33,10 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.stream.Collectors;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 public class ExternalBasicStatsMeta implements Writable {
     @SerializedName("catalogName")
@@ -35,6 +47,11 @@ public class ExternalBasicStatsMeta implements Writable {
     @SerializedName("tableName")
     private String tableName;
 
+<<<<<<< HEAD
+=======
+    // Deprecated by columnStatsMetaMap
+    @Deprecated
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName("columns")
     private List<String> columns;
 
@@ -47,6 +64,12 @@ public class ExternalBasicStatsMeta implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("columnStats")
+    private Map<String, ColumnStatsMeta> columnStatsMetaMap = Maps.newConcurrentMap();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public ExternalBasicStatsMeta() {}
 
     public ExternalBasicStatsMeta(String catalogName, String dbName, String tableName, List<String> columns,
@@ -100,4 +123,48 @@ public class ExternalBasicStatsMeta implements Writable {
         String s = Text.readString(in);
         return GsonUtils.GSON.fromJson(s, ExternalBasicStatsMeta.class);
     }
+<<<<<<< HEAD
+=======
+
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+    public void setUpdateTime(LocalDateTime updateTime) {
+        this.updateTime = updateTime;
+    }
+
+    public void setAnalyzeType(StatsConstants.AnalyzeType analyzeType) {
+        this.type = analyzeType;
+    }
+
+    public void setColumns(List<String> columns) {
+        this.columns = columns;
+    }
+
+    public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
+        this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
+    }
+
+    public ColumnStatsMeta getColumnStatsMeta(String columnName) {
+        return columnStatsMetaMap.get(columnName);
+    }
+
+    public Map<String, ColumnStatsMeta> getColumnStatsMetaMap() {
+        return columnStatsMetaMap;
+    }
+
+    public String getColumnStatsString() {
+        if (MapUtils.isEmpty(columnStatsMetaMap)) {
+            return "";
+        }
+        return columnStatsMetaMap.values().stream()
+                .map(ColumnStatsMeta::simpleString).collect(Collectors.joining(","));
+    }
+
+    public ExternalBasicStatsMeta clone() {
+        String json = GsonUtils.GSON.toJson(this);
+        return GsonUtils.GSON.fromJson(json, ExternalBasicStatsMeta.class);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

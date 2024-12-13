@@ -18,7 +18,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -26,6 +29,15 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
     private long loadedRows;
 
+<<<<<<< HEAD
+=======
+    @SerializedName("isVersionOverwrite")
+    private boolean isVersionOverwrite = false;
+
+    @SerializedName("partitionVersion")
+    private long partitionVersion;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
     }
@@ -35,16 +47,37 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         this.loadedRows = loadedRows;
     }
 
+<<<<<<< HEAD
+=======
+    public InsertTxnCommitAttachment(long loadedRows, long partitionVersion) {
+        this(loadedRows);
+        this.isVersionOverwrite = true;
+        this.partitionVersion = partitionVersion;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public long getLoadedRows() {
         return loadedRows;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean getIsVersionOverwrite() {
+        return isVersionOverwrite;
+    }
+
+    public long getPartitionVersion() {
+        return partitionVersion;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -53,4 +86,6 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
                 GsonUtils.GSON.fromJson(s, InsertTxnCommitAttachment.class);
         this.loadedRows = insertTxnCommitAttachment.getLoadedRows();
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

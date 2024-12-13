@@ -21,13 +21,27 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.connector.PartitionUtil;
+=======
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+<<<<<<< HEAD
 import org.junit.Test;
+=======
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.ExpectedException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -42,6 +56,14 @@ import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
 public class MysqlSchemaResolverTest {
 
+<<<<<<< HEAD
+=======
+    private static ConnectContext connectContext;
+
+    @Rule
+    public ExpectedException expectedEx = ExpectedException.none();
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Mocked
     HikariDataSource dataSource;
 
@@ -57,6 +79,17 @@ public class MysqlSchemaResolverTest {
     private MockResultSet partitionsResult;
     private Map<JDBCTableName, Integer> tableIdCache;
 
+<<<<<<< HEAD
+=======
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Before
     public void setUp() throws SQLException {
         partitionsResult = new MockResultSet("partitions");
@@ -65,8 +98,13 @@ public class MysqlSchemaResolverTest {
         partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01 00:00:00"));
 
         properties = new HashMap<>();
+<<<<<<< HEAD
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+=======
+        properties.put(DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
@@ -93,8 +131,12 @@ public class MysqlSchemaResolverTest {
             JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
             Assert.assertFalse(schemaResolver.checkAndSetSupportPartitionInformation(connection));
         } catch (Exception e) {
+<<<<<<< HEAD
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -122,8 +164,12 @@ public class MysqlSchemaResolverTest {
             JDBCSchemaResolver schemaResolver = new MysqlSchemaResolver();
             Assert.assertTrue(schemaResolver.checkAndSetSupportPartitionInformation(connection));
         } catch (Exception e) {
+<<<<<<< HEAD
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -131,11 +177,40 @@ public class MysqlSchemaResolverTest {
     public void testListPartitionNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+<<<<<<< HEAD
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
             Assert.assertTrue(partitionNames.size() > 0);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+            Assert.assertFalse(partitionNames.isEmpty());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testListPartitionNamesWithCache() {
+        try {
+            JDBCCacheTestUtil.openCacheEnable(connectContext);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            Assert.assertFalse(partitionNames.isEmpty());
+            List<String> partitionNamesWithCache =
+                    jdbcMetadata.listPartitionNames("test", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+            Assert.assertFalse(partitionNamesWithCache.isEmpty());
+            JDBCCacheTestUtil.closeCacheEnable(connectContext);
+            Map<String, String> properties = new HashMap<>();
+            jdbcMetadata.refreshCache(properties);
+            List<String> partitionNamesWithOutCache =
+                    jdbcMetadata.listPartitionNames("test", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+            Assert.assertTrue(partitionNamesWithOutCache.isEmpty());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -150,11 +225,18 @@ public class MysqlSchemaResolverTest {
                 }
             };
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+<<<<<<< HEAD
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
             Assert.assertTrue(partitionNames.size() == 0);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
+            Assert.assertTrue(partitionNames.size() == 0);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -166,8 +248,12 @@ public class MysqlSchemaResolverTest {
                     Arrays.asList(new Column("d", Type.VARCHAR))).size();
             Assert.assertTrue(size > 0);
         } catch (Exception e) {
+<<<<<<< HEAD
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -186,8 +272,12 @@ public class MysqlSchemaResolverTest {
                     Arrays.asList(new Column("d", Type.VARCHAR))).size();
             Assert.assertTrue(size == 0);
         } catch (Exception e) {
+<<<<<<< HEAD
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -200,8 +290,33 @@ public class MysqlSchemaResolverTest {
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertTrue(size > 0);
         } catch (Exception e) {
+<<<<<<< HEAD
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testGetPartitionsWithCache() {
+        try {
+            JDBCCacheTestUtil.openCacheEnable(connectContext);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
+                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.assertTrue(size > 0);
+            int sizeWithCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.assertTrue(sizeWithCache > 0);
+            JDBCCacheTestUtil.closeCacheEnable(connectContext);
+            Map<String, String> properties = new HashMap<>();
+            jdbcMetadata.refreshCache(properties);
+            int sizeWithOutCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.assertEquals(0, sizeWithOutCache);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -233,8 +348,12 @@ public class MysqlSchemaResolverTest {
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertTrue(size == 0);
         } catch (Exception e) {
+<<<<<<< HEAD
             System.out.println(e.getMessage());
             Assert.fail();
+=======
+            Assert.fail(e.getMessage());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 

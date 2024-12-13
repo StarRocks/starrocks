@@ -1,0 +1,43 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+syntax = "proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+enum EncryptionKeyTypePB {
+    NORMAL_KEY = 0; // store just algorithm and raw key bytes, mainly used internally for low level KEK and DEK
+}
+
+enum EncryptionAlgorithmPB {
+    NO_ENCRYPTION = 0;
+    AES_128 = 1;
+}
+
+// NOTE: if add field to EncryptionKeyPB, EncryptionKeyPBAdapter must be modified accordingly
+message EncryptionKeyPB {
+    optional int64 id = 1; // not required, e.g. DEK may not have an id
+    optional int64 parent_id = 2; // not required, e.g. root key may not have parent
+    optional int64 create_time = 3; // create timestamp
+    optional EncryptionKeyTypePB type = 4;
+    optional EncryptionAlgorithmPB algorithm = 5;
+    optional bytes encrypted_key = 6; // encrypted key raw bytes
+    optional bytes plain_key = 7; // only used for plain master key
+    optional string key_desc = 8; // generic description of where the key is stored or its id
+}
+
+// EncryptionMeta stores all key hierarchy info used to encrypt this file, e.g.
+message EncryptionMetaPB {
+    repeated EncryptionKeyPB key_hierarchy = 1;
+}

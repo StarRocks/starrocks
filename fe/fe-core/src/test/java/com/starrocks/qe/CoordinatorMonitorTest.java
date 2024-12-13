@@ -17,6 +17,11 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;
@@ -41,6 +46,10 @@ public class CoordinatorMonitorTest {
             List<DefaultCoordinator> coordinators = ImmutableList.of(coord1, coord2, coord3);
 
             final QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
+<<<<<<< HEAD
+=======
+            Pair<PPlanFragmentCancelReason, String> coord1Cancel = new Pair<>(null, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             CountDownLatch cancelInvocationLatch = new CountDownLatch(2);
             new Expectations(qeProcessor, coord1, coord2, coord3) {
@@ -51,19 +60,31 @@ public class CoordinatorMonitorTest {
 
                 {
                     coord1.getQueryId();
+<<<<<<< HEAD
                     result = new TUniqueId();
+=======
+                    result = new TUniqueId(0xaabbccddL, 0xaabbccddL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     minTimes = 0;
                 }
 
                 {
                     coord2.getQueryId();
+<<<<<<< HEAD
                     result = new TUniqueId();
+=======
+                    result = new TUniqueId(0xddccbbaaL, 0xddccbbaaL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     minTimes = 0;
                 }
 
                 {
                     coord3.getQueryId();
+<<<<<<< HEAD
                     result = new TUniqueId();
+=======
+                    result = new TUniqueId(0xccbbddaaL, 0xccddbbaaL);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     minTimes = 0;
                 }
 
@@ -99,6 +120,11 @@ public class CoordinatorMonitorTest {
                     result = new mockit.Delegate<Boolean>() {
                         void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
                             cancelInvocationLatch.countDown();
+<<<<<<< HEAD
+=======
+                            coord1Cancel.first = cancelReason;
+                            coord1Cancel.second = cancelledMessage;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         }
                     };
                     times = 1;
@@ -130,6 +156,12 @@ public class CoordinatorMonitorTest {
 
             // Wait until invoking coord1.cancel and coord3.cancel once or timeout.
             Assert.assertTrue(cancelInvocationLatch.await(5, TimeUnit.SECONDS));
+<<<<<<< HEAD
+=======
+
+            Assert.assertEquals(PPlanFragmentCancelReason.INTERNAL_ERROR, coord1Cancel.first);
+            Assert.assertEquals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR, coord1Cancel.second);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } finally {
             Config.heartbeat_timeout_second = prevHeartbeatTimeout;
         }

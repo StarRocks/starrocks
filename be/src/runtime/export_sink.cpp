@@ -174,7 +174,11 @@ Status ExportSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     Status status = _file_builder->add_chunk(chunk);
     if (!status.ok()) {
         Status status;
+<<<<<<< HEAD
         close(state, status);
+=======
+        (void)close(state, status);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return status;
 }

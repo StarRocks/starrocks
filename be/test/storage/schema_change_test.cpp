@@ -713,11 +713,19 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
 
     Status st =
             Expr::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx, chunk_changer.get_runtime_state());
+<<<<<<< HEAD
     DCHECK(st.ok()) << st.get_error_msg();
     st = ctx->prepare(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();
     st = ctx->open(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();
+=======
+    DCHECK(st.ok()) << st.message();
+    st = ctx->prepare(chunk_changer.get_runtime_state());
+    DCHECK(st.ok()) << st.message();
+    st = ctx->open(chunk_changer.get_runtime_state());
+    DCHECK(st.ok()) << st.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     chunk_changer.get_gc_exprs()->insert({3, ctx});
 

@@ -102,6 +102,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             DeletePredicatePB del_pred;
             DeleteConditionHandler del_cond_handler;
             tablet_var.tablet->obtain_header_rdlock();
+<<<<<<< HEAD
             auto tablet_schema = TabletSchema::copy(tablet_var.tablet->tablet_schema());
             if (request.__isset.columns_desc && !request.columns_desc.empty() &&
                 request.columns_desc[0].col_unique_id >= 0) {
@@ -110,6 +111,14 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                     tablet_schema->append_column(TabletColumn(column_desc));
                 }
                 tablet_schema->generate_sort_key_idxes();
+=======
+            TabletSchemaCSPtr tablet_schema;
+            if (request.__isset.columns_desc && !request.columns_desc.empty() &&
+                request.columns_desc[0].col_unique_id >= 0) {
+                tablet_schema = TabletSchema::copy(*tablet_var.tablet->tablet_schema(), request.columns_desc);
+            } else {
+                tablet_schema = tablet_var.tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
             res = del_cond_handler.generate_delete_predicate(*tablet_schema, request.delete_conditions, &del_pred);
             del_preds.push(del_pred);
@@ -122,6 +131,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         }
     }
 
+<<<<<<< HEAD
     auto tablet_schema = std::shared_ptr<TabletSchema>(TabletSchema::copy(tablet_vars->at(0).tablet->tablet_schema()));
     if (request.__isset.columns_desc && !request.columns_desc.empty() && request.columns_desc[0].col_unique_id >= 0) {
         tablet_schema->clear_columns();
@@ -129,6 +139,13 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
             tablet_schema->append_column(TabletColumn(column_desc));
         }
         tablet_schema->generate_sort_key_idxes();
+=======
+    TabletSchemaCSPtr tablet_schema;
+    if (request.__isset.columns_desc && !request.columns_desc.empty() && request.columns_desc[0].col_unique_id >= 0) {
+        tablet_schema = TabletSchema::copy(*tablet_vars->at(0).tablet->tablet_schema(), request.columns_desc);
+    } else {
+        tablet_schema = tablet_vars->at(0).tablet->tablet_schema();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     Status st = Status::OK();

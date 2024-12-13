@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
+<<<<<<< HEAD
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -32,6 +33,18 @@ import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 public class BaseTableInfo {
     private static final Logger LOG = LogManager.getLogger(BaseTableInfo.class);
 
+=======
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.server.CatalogMgr;
+
+/**
+ * BaseTableInfo is used for MaterializedView persisted as a base table's meta info which can be an olap
+ * table or an external table.
+ */
+public class BaseTableInfo {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @SerializedName(value = "catalogName")
     private final String catalogName;
 
@@ -47,6 +60,7 @@ public class BaseTableInfo {
     @SerializedName(value = "tableIdentifier")
     private String tableIdentifier;
 
+<<<<<<< HEAD
     // table name must be set to be used in backup/restore
     @SerializedName(value = "tableName")
     private String tableName;
@@ -78,6 +92,24 @@ public class BaseTableInfo {
         }
     }
 
+=======
+    @SerializedName(value = "tableName")
+    private String tableName;
+
+    // used for olap table
+    public BaseTableInfo(long dbId, String dbName, String tableName, long tableId) {
+        this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+        this.dbId = dbId;
+        this.tableId = tableId;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(dbName),
+                String.format("BaseTableInfo's dbName %s should not null", dbName));
+        this.dbName = dbName;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(tableName),
+                String.format("BaseTableInfo's tableName %s should not null", tableName));
+        this.tableName = tableName;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // used for external table
     public BaseTableInfo(String catalogName, String dbName, String tableName, String tableIdentifier) {
         this.catalogName = catalogName;
@@ -86,6 +118,7 @@ public class BaseTableInfo {
         this.tableIdentifier = tableIdentifier;
     }
 
+<<<<<<< HEAD
     public static BaseTableInfo fromTableName(TableName name, Table table) {
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
         if (isInternalCatalog(name.getCatalog())) {
@@ -97,6 +130,10 @@ public class BaseTableInfo {
 
     public String getTableInfoStr() {
         if (isInternalCatalog(catalogName)) {
+=======
+    public String getTableInfoStr() {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Joiner.on(".").join(dbId, tableId);
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableName);
@@ -104,18 +141,30 @@ public class BaseTableInfo {
     }
 
     public String getDbInfoStr() {
+<<<<<<< HEAD
         if (isInternalCatalog(catalogName)) {
+=======
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return String.valueOf(dbId);
         } else {
             return Joiner.on(".").join(catalogName, dbName);
         }
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isInternalCatalog() {
+        return CatalogMgr.isInternalCatalog(catalogName);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getCatalogName() {
         return this.catalogName;
     }
 
     public String getDbName() {
+<<<<<<< HEAD
         return this.dbName != null ? this.dbName : getDb().getFullName();
     }
 
@@ -126,6 +175,13 @@ public class BaseTableInfo {
             Table table = getTable();
             return table == null ? null : table.getName();
         }
+=======
+        return this.dbName;
+    }
+
+    public String getTableName() {
+        return this.tableName;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String getTableIdentifier() {
@@ -141,6 +197,7 @@ public class BaseTableInfo {
     }
 
     /**
+<<<<<<< HEAD
      * A checked version of getTable, which enforce checking existence of table
      *
      * @return the table if exists
@@ -215,6 +272,8 @@ public class BaseTableInfo {
     }
 
     /*
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
      * Called when a table is renamed.
      * @param newTable the new table with the new table name
      */
@@ -233,7 +292,11 @@ public class BaseTableInfo {
     }
 
     public String toString() {
+<<<<<<< HEAD
         if (isInternalCatalog(catalogName)) {
+=======
+        if (isInternalCatalog()) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbId, tableId);
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableIdentifier);
@@ -268,4 +331,8 @@ public class BaseTableInfo {
     public int hashCode() {
         return Objects.hashCode(catalogName, dbId, tableId, dbName, tableIdentifier, tableName);
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

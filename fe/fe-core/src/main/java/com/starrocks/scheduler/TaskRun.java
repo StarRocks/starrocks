@@ -15,6 +15,10 @@
 package com.starrocks.scheduler;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.ImmutableSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.StringLiteral;
@@ -33,6 +37,10 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
+<<<<<<< HEAD
+=======
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,6 +48,10 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
 import java.util.Objects;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -47,9 +59,25 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
+<<<<<<< HEAD
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+=======
+    public static final String MV_ID = "mvId";
+    public static final String PARTITION_START = "PARTITION_START";
+    public static final String PARTITION_END = "PARTITION_END";
+    // list partition values to be refreshed
+    public static final String PARTITION_VALUES = "PARTITION_VALUES";
+    public static final String FORCE = "FORCE";
+    public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    // All properties that can be set in TaskRun
+    public static final Set<String> TASK_RUN_PROPERTIES = ImmutableSet.of(
+            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES);
+
+    // Only used in FE's UT
+    public static final String IS_TEST = "__IS_TEST__";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean isKilled = false;
 
     @SerializedName("taskId")
@@ -157,14 +185,23 @@ public class TaskRun implements Comparable<TaskRun> {
 
         try {
             // NOTE: mvId is set in Task's properties when creating
+<<<<<<< HEAD
             long mvId = Long.parseLong(properties.get(PartitionBasedMvRefreshProcessor.MV_ID));
             Database database = GlobalStateMgr.getCurrentState().getDb(ctx.getDatabase());
+=======
+            long mvId = Long.parseLong(properties.get(MV_ID));
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(ctx.getDatabase());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (database == null) {
                 LOG.warn("database {} do not exist when refreshing materialized view:{}", ctx.getDatabase(), mvId);
                 return newProperties;
             }
 
+<<<<<<< HEAD
             Table table = database.getTable(mvId);
+=======
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), mvId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (table == null) {
                 LOG.warn("materialized view:{} in database:{} do not exist when refreshing", mvId,
                         ctx.getDatabase());
@@ -172,7 +209,18 @@ public class TaskRun implements Comparable<TaskRun> {
             }
             MaterializedView materializedView = (MaterializedView) table;
             Preconditions.checkState(materializedView != null);
+<<<<<<< HEAD
             newProperties = materializedView.getProperties();
+=======
+            // Don't copy all table's properties to task's properties:
+            // 1. It will cause task run's meta-data to be too large
+            // 2. It may pollute the properties of task run.
+            newProperties.putAll(materializedView.getSessionProperties());
+
+            Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
+                    materializedView.getWarehouseId());
+            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, w.getName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }
@@ -188,14 +236,29 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
+<<<<<<< HEAD
         Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");
         taskRunContext.setDefinition(status.getDefinition());
         taskRunContext.setPostRun(status.getPostRun());
+=======
+
+        // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
+        // ignore it here, and we can get the `definition` from the materialized view's definition too.
+        // Use task's definition rather than status's to avoid costing too much metadata memory.
+        Preconditions.checkNotNull(task.getDefinition(), "The definition of task run should not null");
+        taskRunContext.setDefinition(task.getDefinition());
+        taskRunContext.setPostRun(status.getPostRun());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         runCtx = new ConnectContext(null);
         if (parentRunCtx != null) {
             runCtx.setParentConnectContext(parentRunCtx);
         }
         runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+<<<<<<< HEAD
+=======
+        runCtx.setCurrentCatalog(task.getCatalogName());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         runCtx.setDatabase(task.getDbName());
         runCtx.setQualifiedUser(status.getUser());
         if (status.getUserIdentity() != null) {
@@ -211,12 +274,18 @@ public class TaskRun implements Comparable<TaskRun> {
         // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
         // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
         runCtx.setThreadLocalInfo();
+<<<<<<< HEAD
         LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}",
                 runCtx.getQueryId(), ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId);
 
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
 
+=======
+
+        Map<String, String> newProperties = refreshTaskProperties(runCtx);
+        properties.putAll(newProperties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
         runCtx.resetSessionVariable();
         if (properties != null) {
@@ -230,6 +299,14 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
+<<<<<<< HEAD
+=======
+        LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}, " +
+                        "taskRunContextProperties:{}", runCtx.getQueryId(),
+                ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId, taskRunContextProperties);
+        // If this is the first task run of the job, use its uuid as the job id.
+        taskRunContext.setTaskRunId(taskRunId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
@@ -240,6 +317,10 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setTaskRun(this);
 
         processor.processTaskRun(taskRunContext);
+<<<<<<< HEAD
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         QueryState queryState = runCtx.getState();
         LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
                 runCtx.getQueryId(), taskId, queryState);
@@ -307,10 +388,22 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setCreateTime(created);
         status.setUser(task.getCreateUser());
         status.setUserIdentity(task.getUserIdentity());
+<<<<<<< HEAD
         status.setDbName(task.getDbName());
         status.setDefinition(task.getDefinition());
         status.setPostRun(task.getPostRun());
         status.setExpireTime(created + Config.task_runs_ttl_second * 1000L);
+=======
+        status.setCatalogName(task.getCatalogName());
+        status.setDbName(task.getDbName());
+        status.setPostRun(task.getPostRun());
+        status.setExpireTime(created + Config.task_runs_ttl_second * 1000L);
+        // NOTE: definition will cause a lot of repeats and cost a lot of metadata memory resources,
+        // since history task runs has been stored in sr's internal table, we can save it in the
+        // task run status.
+        status.setDefinition(task.getDefinition());
+        status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
         this.status = status;
@@ -374,7 +467,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     @Override
     public int hashCode() {
+<<<<<<< HEAD
         return Objects.hash(status);
+=======
+        return Objects.hash(task);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -382,7 +479,11 @@ public class TaskRun implements Comparable<TaskRun> {
         return "TaskRun{" +
                 "taskId=" + taskId +
                 ", type=" + type +
+<<<<<<< HEAD
                 ", taskRunId=" + taskRunId +
+=======
+                ", uuid=" + taskRunId +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 ", task_state=" + (status != null ? status.getState() : "") +
                 ", properties=" + properties +
                 ", extra_message =" + (status != null ? status.getExtraMessage() : "") +

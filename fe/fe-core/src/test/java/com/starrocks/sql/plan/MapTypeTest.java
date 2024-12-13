@@ -60,6 +60,16 @@ public class MapTypeTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testMapEquals() throws Exception {
+        String sql = "select c1 != NULL from test_map;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : NULL");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testInsertErrorType() throws Exception {
         String sql = "insert into test_map values (1, map{1: map{1:2}}, map{1:1});";
         try {

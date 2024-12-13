@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     l_shipmode,
@@ -27,6 +28,8 @@ group by
     l_shipmode
 order by
     l_shipmode ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])
     TOP-N (order by [[25: L_SHIPMODE ASC NULLS FIRST]])

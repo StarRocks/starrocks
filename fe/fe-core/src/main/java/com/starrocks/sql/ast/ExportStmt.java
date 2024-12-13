@@ -17,6 +17,10 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
@@ -32,6 +36,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -77,6 +87,10 @@ public class ExportStmt extends StatementBase {
     // may catalog.db.table
     private TableRef tableRef;
     private long exportStartTime;
+<<<<<<< HEAD
+=======
+    private boolean sync;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc) {
@@ -85,6 +99,14 @@ public class ExportStmt extends StatementBase {
 
     public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
                       Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos) {
+<<<<<<< HEAD
+=======
+        this(tableRef, columnNames, path, properties, brokerDesc, pos, false);
+    }
+
+    public ExportStmt(TableRef tableRef, List<String> columnNames, String path,
+                      Map<String, String> properties, BrokerDesc brokerDesc, NodePosition pos, boolean sync) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         super(pos);
         this.tableRef = tableRef;
         this.columnNames = columnNames;
@@ -96,6 +118,18 @@ public class ExportStmt extends StatementBase {
         this.columnSeparator = DEFAULT_COLUMN_SEPARATOR;
         this.rowDelimiter = DEFAULT_LINE_DELIMITER;
         this.includeQueryId = true;
+<<<<<<< HEAD
+=======
+        this.sync = sync;
+    }
+
+    public boolean getSync() {
+        return sync;
+    }
+
+    public void setSync(boolean sync) {
+        this.sync = sync;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public long getExportStartTime() {
@@ -159,6 +193,7 @@ public class ExportStmt extends StatementBase {
     }
 
     public void checkTable(GlobalStateMgr globalStateMgr) {
+<<<<<<< HEAD
         Database db = globalStateMgr.getDb(tblName.getDb());
         if (db == null) {
             throw new SemanticException("Db does not exist. name: " + tblName.getDb());
@@ -170,6 +205,19 @@ public class ExportStmt extends StatementBase {
                 throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
             }
 
+=======
+        Database db = globalStateMgr.getLocalMetastore().getDb(tblName.getDb());
+        if (db == null) {
+            throw new SemanticException("Db does not exist. name: " + tblName.getDb());
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName.getTbl());
+        if (table == null) {
+            throw new SemanticException("Table[" + tblName.getTbl() + "] does not exist");
+        }
+
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.READ)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Table.TableType tblType = table.getType();
             switch (tblType) {
                 case MYSQL:
@@ -182,7 +230,11 @@ public class ExportStmt extends StatementBase {
                 case VIEW:
                 default:
                     throw new SemanticException("Table[" + tblName.getTbl() + "] is " + tblType +
+<<<<<<< HEAD
                             " type, do not support EXPORT.");
+=======
+                                " type, do not support EXPORT.");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
 
             if (partitions != null) {
@@ -214,8 +266,11 @@ public class ExportStmt extends StatementBase {
                     }
                 }
             }
+<<<<<<< HEAD
         } finally {
             db.readUnlock();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -334,4 +389,8 @@ public class ExportStmt extends StatementBase {
     public String toString() {
         return toSql();
     }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

@@ -14,16 +14,35 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
+=======
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Database;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTable;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+=======
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.DatabaseTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.DefaultWarehouse;
+import com.starrocks.warehouse.Warehouse;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -32,6 +51,10 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.Arrays;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,9 +62,12 @@ import static org.junit.Assert.assertEquals;
 
 public class CompactionSchedulerTest {
 
+<<<<<<< HEAD
     private final long dbId = 9000L;
     private final long transactionId = 12345L;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
 
@@ -51,13 +77,23 @@ public class CompactionSchedulerTest {
 
     @Test
     public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
+<<<<<<< HEAD
         GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+=======
+        long dbId = 9000L;
+        long transactionId = 12345L;
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         new Expectations() {
             {
                 try {
                     dbTransactionMgr.beginTransaction(
                             (List<Long>) any, anyString, (TUniqueId) any, (TransactionState.TxnCoordinator) any,
+<<<<<<< HEAD
                             (TransactionState.LoadJobSourceType) any, anyLong, anyLong
+=======
+                            (TransactionState.LoadJobSourceType) any, anyLong, anyLong, anyLong
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     );
                 } catch (Exception e) {
                     // skip
@@ -66,6 +102,53 @@ public class CompactionSchedulerTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public Warehouse getWarehouse(String warehouseName) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public Warehouse getWarehouse(long warehouseId) {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+
+            @Mock
+            public List<Long> getAllComputeNodeIds(long warehouseId) {
+                return Lists.newArrayList(1L);
+            }
+
+            @Mock
+            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
+                return 1L;
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+                return new ComputeNode(1L, "127.0.0.1", 9030);
+            }
+
+            @Mock
+            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
+                return null;
+            }
+
+            @Mock
+            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
+                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
+            }
+        };
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // default value
         Config.lake_compaction_default_timeout_second = 86400;
         // value smaller than `lake_compaction_default_timeout_second`
@@ -73,8 +156,13 @@ public class CompactionSchedulerTest {
         Config.max_stream_load_timeout_second = 64800;
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
+<<<<<<< HEAD
                 new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentSystemInfo(),
                         GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
+=======
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
         try {
             assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));
@@ -117,8 +205,13 @@ public class CompactionSchedulerTest {
                 Table table = new LakeTable();
                 PartitionIdentifier partitionIdentifier1 = new PartitionIdentifier(1, 2, 3);
                 PartitionIdentifier partitionIdentifier2 = new PartitionIdentifier(1, 2, 4);
+<<<<<<< HEAD
                 PhysicalPartition partition1 = new Partition(123, "aaa", null, null);
                 PhysicalPartition partition2 = new Partition(124, "bbb", null, null);
+=======
+                PhysicalPartition partition1 = new PhysicalPartition(123, "aaa", 123, null);
+                PhysicalPartition partition2 = new PhysicalPartition(124, "bbb", 124, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 CompactionJob job1 = new CompactionJob(db, table, partition1, 100, false);
                 try {
                     Thread.sleep(10);
@@ -135,4 +228,39 @@ public class CompactionSchedulerTest {
         Assert.assertEquals(2, list.size());
         Assert.assertTrue(list.get(0).getStartTs() >= list.get(1).getStartTs());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCompactionTaskLimit() {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(null, null, null, null, "");
+
+        int defaultValue = Config.lake_compaction_max_tasks;
+        // explicitly set config to a value bigger than default -1
+        Config.lake_compaction_max_tasks = 10;
+        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit());
+
+        // reset config to default value
+        Config.lake_compaction_max_tasks = defaultValue;
+
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10001L, "192.168.0.3", 9050);
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+                return Arrays.asList(b1, c1, c2);
+            }
+
+            @Mock
+            public Warehouse getCompactionWarehouse() {
+                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            }
+        };
+
+        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

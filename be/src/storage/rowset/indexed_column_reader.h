@@ -86,7 +86,11 @@ public:
     Status next_batch(size_t* n, Column* column);
 
 private:
+<<<<<<< HEAD
     IndexedColumnIterator(const IndexedColumnReader* reader, const IndexReadOptions& opts);
+=======
+    IndexedColumnIterator(const IndexedColumnReader* reader, IndexReadOptions opts);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     Status _read_data_page(const PagePointer& pp);
 

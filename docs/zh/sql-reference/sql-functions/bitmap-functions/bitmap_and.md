@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_and
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算两个 bitmap 的交集，返回新的 bitmap。
 

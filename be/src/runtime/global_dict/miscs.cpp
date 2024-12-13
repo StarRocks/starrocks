@@ -40,7 +40,11 @@ std::pair<std::shared_ptr<NullableColumn>, std::vector<int32_t>> extract_column_
         slices.emplace_back(slice);
         codes.emplace_back(code);
     }
+<<<<<<< HEAD
     res->append_strings(slices);
+=======
+    res->append_strings(slices.data(), slices.size());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     res->set_null(0);
     return std::make_pair(std::move(res), std::move(codes));
 }

@@ -38,12 +38,22 @@ import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 
+<<<<<<< HEAD
+=======
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // Set executor
 public class SetExecutor {
     private final ConnectContext ctx;
@@ -59,11 +69,20 @@ public class SetExecutor {
             ctx.modifySystemVariable((SystemVariable) var, false);
         } else if (var instanceof UserVariable) {
             UserVariable userVariable = (UserVariable) var;
+<<<<<<< HEAD
+=======
+            SetStmtAnalyzer.calcuteUserVariable(userVariable);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (userVariable.getEvaluatedExpression() == null) {
                 userVariable.deriveUserVariableExpressionResult(ctx);
             }
 
+<<<<<<< HEAD
             ctx.modifyUserVariable(userVariable);
+=======
+            ctx.modifyUserVariableCopyInWrite(userVariable);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } else if (var instanceof SetPassVar) {
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
@@ -79,7 +98,11 @@ public class SetExecutor {
             }
             userAuthenticationInfo.setPassword(setPassVar.getPassword());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+<<<<<<< HEAD
                     .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo);
+=======
+                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo, null);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -89,8 +112,36 @@ public class SetExecutor {
      * @throws DdlException
      */
     public void execute() throws DdlException {
+<<<<<<< HEAD
         for (SetListItem var : stmt.getSetListItems()) {
             setVariablesOfAllType(var);
+=======
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
+        boolean hasUserVar = stmt.getSetListItems().stream().anyMatch(var -> var instanceof UserVariable);
+        boolean executeSuccess = true;
+        if (hasUserVar) {
+            clonedUserVars.putAll(ctx.getUserVariables());
+            ctx.modifyUserVariablesCopyInWrite(clonedUserVars);
+        }
+        try {
+            for (SetListItem var : stmt.getSetListItems()) {
+                setVariablesOfAllType(var);
+            }
+        } catch (Throwable e) {
+            if (hasUserVar) {
+                executeSuccess = false;
+            }
+            throw e;
+        } finally {
+            //If the set sql contains more than one user variable,
+            //the atomicity of the modification of this set of variables must be ensured.
+            if (hasUserVar) {
+                ctx.resetUserVariableCopyInWrite();
+                if (executeSuccess) {
+                    ctx.modifyUserVariables(clonedUserVars);
+                }
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 }

@@ -14,6 +14,10 @@
 
 package com.starrocks.connector.iceberg.cost;
 
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.Table;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ExpressionUtil;
 import org.apache.iceberg.metrics.MetricsReport;
@@ -41,12 +45,20 @@ public class IcebergMetricsReporter implements MetricsReporter {
     }
 
     public Optional<ScanReport> getReporter(String catalogName, String dbName, String tableName,
+<<<<<<< HEAD
                                                               long snapshotId, Expression icebergPredicate) {
+=======
+                                                              long snapshotId, Expression icebergPredicate, Table table) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (reports.isEmpty()) {
             return Optional.empty();
         }
 
+<<<<<<< HEAD
         ScanMetricsFilter filter = ScanMetricsFilter.from(catalogName, dbName, tableName, snapshotId, icebergPredicate);
+=======
+        ScanMetricsFilter filter = ScanMetricsFilter.from(catalogName, dbName, tableName, snapshotId, icebergPredicate, table);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         ScanReport report = reports.get(filter);
         return Optional.ofNullable(report);
@@ -62,9 +74,15 @@ public class IcebergMetricsReporter implements MetricsReporter {
         long snapshotId;
 
         static ScanMetricsFilter from(String catalogName, String dbName, String tableName,
+<<<<<<< HEAD
                                       long snapshotId, Expression icebergPredicate) {
             String icebergTableName = catalogName + '.' + dbName + "." + tableName;
             Expression sanitizeExpr = ExpressionUtil.sanitize(icebergPredicate);
+=======
+                                      long snapshotId, Expression icebergPredicate, Table table) {
+            String icebergTableName = catalogName + '.' + dbName + "." + tableName;
+            Expression sanitizeExpr = ExpressionUtil.sanitize(table.schema().asStruct(), icebergPredicate, false);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return new ScanMetricsFilter(icebergTableName, sanitizeExpr, snapshotId);
         }
 

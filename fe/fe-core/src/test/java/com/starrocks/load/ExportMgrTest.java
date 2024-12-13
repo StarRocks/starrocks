@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -36,6 +37,16 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+=======
+import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
+import org.junit.Test;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -43,6 +54,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class ExportMgrTest {
+<<<<<<< HEAD
     @Mocked
     GlobalStateMgr globalStateMgr;
     @Mocked
@@ -57,6 +69,11 @@ public class ExportMgrTest {
                 result = globalStateMgr;
             }
         };
+=======
+
+    @Test
+    public void testExpiredJob() throws Exception {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.history_job_keep_max_second = 10;
         ExportMgr mgr = new ExportMgr();
 
@@ -88,6 +105,7 @@ public class ExportMgrTest {
         mgr.replayUpdateJobState(job3.getId(), ExportJob.JobState.FINISHED);
         Assert.assertEquals(2, mgr.getIdToJob().size());
 
+<<<<<<< HEAD
         // 5. save image
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
@@ -110,6 +128,16 @@ public class ExportMgrTest {
         Assert.assertEquals(saveChecksum, loadChecksum);
 
         tempFile.delete();
+=======
+        // 6. get job by queryId
+        ExportJob jobResult = mgr.getExportByQueryId(job3.getQueryId());
+        Assert.assertNotNull(jobResult);
+        Assert.assertEquals(3, jobResult.getId());
+        ExportJob jobResultNull = mgr.getExportByQueryId(null);
+        Assert.assertNull(jobResultNull);
+        ExportJob jobResultNotExist = mgr.getExportByQueryId(new UUID(4, 4));
+        Assert.assertNull(jobResultNotExist);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -121,10 +149,17 @@ public class ExportMgrTest {
         leaderMgr.replayCreateExportJob(job);
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+<<<<<<< HEAD
         leaderMgr.saveExportJobV2(image.getDataOutputStream());
 
         ExportMgr followerMgr = new ExportMgr();
         SRMetaBlockReader reader = new SRMetaBlockReader(image.getDataInputStream());
+=======
+        leaderMgr.saveExportJobV2(image.getImageWriter());
+
+        ExportMgr followerMgr = new ExportMgr();
+        SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         followerMgr.loadExportJobV2(reader);
         reader.close();
 

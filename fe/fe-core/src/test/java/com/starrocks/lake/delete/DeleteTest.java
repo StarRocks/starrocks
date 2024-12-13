@@ -16,7 +16,10 @@
 package com.starrocks.lake.delete;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.AccessTestUtil;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.IntLiteral;
@@ -37,22 +40,37 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
+<<<<<<< HEAD
 import com.starrocks.mysql.privilege.Auth;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.VariableMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.Analyzer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
@@ -84,6 +102,10 @@ public class DeleteTest {
     private final long tableId = 2L;
     private final long partitionId = 3L;
     private final long indexId = 4L;
+<<<<<<< HEAD
+=======
+    private final long physicalPartitionId = 6L;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final long tablet1Id = 10L;
     private final long tablet2Id = 11L;
     private final long backendId = 20L;
@@ -103,9 +125,15 @@ public class DeleteTest {
     private LakeService lakeService;
 
     private Database db;
+<<<<<<< HEAD
     private Auth auth;
     private ConnectContext connectContext = new ConnectContext();
     private DeleteMgr deleteHandler;
+=======
+    private ConnectContext connectContext = new ConnectContext();
+    private DeleteMgr deleteHandler;
+    private VariableMgr variableMgr = new VariableMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     private Database createDb() {
         // Schema
@@ -130,7 +158,11 @@ public class DeleteTest {
         DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
         PartitionInfo partitionInfo = new SinglePartitionInfo();
         partitionInfo.setReplicationNum(partitionId, (short) 3);
+<<<<<<< HEAD
         Partition partition = new Partition(partitionId, partitionName, index, distributionInfo);
+=======
+        Partition partition = new Partition(partitionId, physicalPartitionId, partitionName, index, distributionInfo);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // Lake table
         LakeTable table = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
@@ -151,6 +183,7 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
                 result = db;
 
@@ -158,6 +191,18 @@ public class DeleteTest {
                 result = globalTransactionMgr;
 
                 GlobalStateMgr.getCurrentSystemInfo();
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
+
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 result = systemInfoService;
 
                 systemInfoService.getBackendOrComputeNode(anyLong);
@@ -169,13 +214,22 @@ public class DeleteTest {
     @Before
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
+<<<<<<< HEAD
         deleteHandler = new DeleteMgr();
         auth = AccessTestUtil.fetchAdminAccess();
+=======
+        connectContext.setSessionVariable(variableMgr.newSessionVariable());
+        deleteHandler = new DeleteMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         db = createDb();
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException, RpcException {
+=======
+    public void testNormal() throws StarRocksException, RpcException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
@@ -232,6 +286,16 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
+<<<<<<< HEAD
+=======
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
             Assert.fail();
@@ -248,7 +312,11 @@ public class DeleteTest {
     }
 
     @Test(expected = DdlException.class)
+<<<<<<< HEAD
     public void testBeDeleteFail() throws UserException {
+=======
+    public void testBeDeleteFail() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectation();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -298,6 +366,16 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
+<<<<<<< HEAD
+=======
+            Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+            new Expectations() {
+                {
+                    globalStateMgr.getAnalyzer();
+                    result = analyzer;
+                }
+            };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         } catch (Exception e) {
             Assert.fail();
@@ -313,18 +391,33 @@ public class DeleteTest {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
+<<<<<<< HEAD
                 globalStateMgr.getDb(anyString);
                 result = db;
 
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 result = globalTransactionMgr;
 
+=======
+                globalStateMgr.getLocalMetastore().getDb(anyString);
+                result = db;
+
+                globalStateMgr.getLocalMetastore().getTable(anyString, anyString);
+                result = db.getTable(tableId);
+
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
     }
 
     @Test
+<<<<<<< HEAD
     public void testBeDeleteArrayType() throws UserException {
+=======
+    public void testBeDeleteArrayType() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         setUpExpectationWithoutExec();
         new MockUp<BrpcProxy>() {
             @Mock
@@ -339,6 +432,16 @@ public class DeleteTest {
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
+<<<<<<< HEAD
+=======
+        Analyzer analyzer = new Analyzer(Analyzer.AnalyzerVisitor.getInstance());
+        new Expectations() {
+            {
+                globalStateMgr.getAnalyzer();
+                result = analyzer;
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         try {
             deleteHandler.process(deleteStmt);

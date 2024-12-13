@@ -37,14 +37,27 @@ import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TPlanFragmentDestination;
 import com.starrocks.thrift.TRuntimeFilterParams;
 import com.starrocks.thrift.TScanRangeParams;
+<<<<<<< HEAD
 import org.apache.commons.collections4.CollectionUtils;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+<<<<<<< HEAD
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+=======
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.stream.Collectors;
+
+import static com.starrocks.qe.scheduler.dag.FragmentInstance.ABSENT_DRIVER_SEQUENCE;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * An {@code ExecutionFragment} is a part of the {@link ExecutionDAG}, and it corresponds one-to-one with a {@link PlanFragment}.
@@ -68,7 +81,16 @@ public class ExecutionFragment {
     private final FragmentScanRangeAssignment scanRangeAssignment;
     private ColocatedBackendSelector.Assignment colocatedAssignment = null;
 
+<<<<<<< HEAD
     private List<Integer> cachedBucketSeqToInstance = null;
+=======
+    public static class BucketSeqAssignment {
+        public List<Integer> bucketSeqToInstance;
+        public List<Integer> bucketSeqToDriverSeq;
+        public List<Integer> bucketSeqToPartition;
+    }
+    private BucketSeqAssignment cachedBucketSeqAssignment = null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private boolean bucketSeqToInstanceForFilterIsSet = false;
 
     private final TRuntimeFilterParams runtimeFilterParams = new TRuntimeFilterParams();
@@ -78,6 +100,12 @@ public class ExecutionFragment {
     private Boolean cachedIsLocalBucketShuffleJoin = null;
 
     private boolean isRightOrFullBucketShuffle = false;
+<<<<<<< HEAD
+=======
+    // used for phased schedule
+    private boolean isScheduled = false;
+    private boolean needReportFragmentFinish = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     public ExecutionFragment(ExecutionDAG executionDAG, PlanFragment planFragment, int fragmentIndex) {
         this.executionDAG = executionDAG;
@@ -125,12 +153,17 @@ public class ExecutionFragment {
         return executionDAG;
     }
 
+<<<<<<< HEAD
     public void setBucketSeqToInstanceForRuntimeFilters() {
+=======
+    public void setLayoutInfosForRuntimeFilters() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (bucketSeqToInstanceForFilterIsSet) {
             return;
         }
         bucketSeqToInstanceForFilterIsSet = true;
 
+<<<<<<< HEAD
         List<Integer> seqToInstance = getBucketSeqToInstance();
         if (CollectionUtils.isEmpty(seqToInstance)) {
             return;
@@ -141,6 +174,19 @@ public class ExecutionFragment {
                 continue;
             }
             rf.setBucketSeqToInstance(seqToInstance);
+=======
+        BucketSeqAssignment bucketSeqAssignment = getBucketSeqAssignment();
+        for (RuntimeFilterDescription rf : planFragment.getBuildRuntimeFilters().values()) {
+            rf.setNumInstances(instances.size());
+            rf.setNumDriversPerInstance(planFragment.getPipelineDop());
+
+            if (bucketSeqAssignment == null) {
+                return;
+            }
+            rf.setBucketSeqToInstance(bucketSeqAssignment.bucketSeqToInstance);
+            rf.setBucketSeqToDriverSeq(bucketSeqAssignment.bucketSeqToDriverSeq);
+            rf.setBucketSeqToPartition(bucketSeqAssignment.bucketSeqToPartition);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -167,6 +213,7 @@ public class ExecutionFragment {
         return colocatedAssignment.getBucketNum();
     }
 
+<<<<<<< HEAD
     public List<Integer> getBucketSeqToInstance() {
         if (cachedBucketSeqToInstance != null) {
             return cachedBucketSeqToInstance;
@@ -175,10 +222,20 @@ public class ExecutionFragment {
         if (colocatedAssignment == null) {
             cachedBucketSeqToInstance = Collections.emptyList();
             return cachedBucketSeqToInstance;
+=======
+    public BucketSeqAssignment getBucketSeqAssignment() {
+        if (cachedBucketSeqAssignment != null) {
+            return cachedBucketSeqAssignment;
+        }
+
+        if (colocatedAssignment == null) {
+            return null;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
 
         int numBuckets = getBucketNum();
         Integer[] bucketSeqToInstance = new Integer[numBuckets];
+<<<<<<< HEAD
         // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
         // absence of buckets.
         Arrays.fill(bucketSeqToInstance, CoordinatorPreprocessor.BUCKET_ABSENT);
@@ -192,6 +249,50 @@ public class ExecutionFragment {
 
         cachedBucketSeqToInstance = Arrays.asList(bucketSeqToInstance);
         return cachedBucketSeqToInstance;
+=======
+        Integer[] bucketSeqToDriverSeq = new Integer[numBuckets];
+        Integer[] bucketSeqToPartition = new Integer[numBuckets];
+        // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
+        // absence of buckets.
+        Arrays.fill(bucketSeqToInstance, CoordinatorPreprocessor.BUCKET_ABSENT);
+        Arrays.fill(bucketSeqToDriverSeq, CoordinatorPreprocessor.BUCKET_ABSENT);
+        Arrays.fill(bucketSeqToPartition, CoordinatorPreprocessor.BUCKET_ABSENT);
+        boolean assignBucketsAmongDrivers =
+                instances.stream().flatMap(instance -> instance.getBucketSeqToDriverSeq().values().stream())
+                        .noneMatch(driverSeq -> driverSeq.equals(ABSENT_DRIVER_SEQUENCE));
+
+        int nextPartition = 0;
+        for (FragmentInstance instance : instances) {
+            if (assignBucketsAmongDrivers) {
+                List<Map.Entry<Integer, Integer>> sortedBucketSeqToDriverSeq =
+                        instance.getBucketSeqToDriverSeq().entrySet().stream()
+                                .sorted(Comparator.comparingInt(Map.Entry::getValue)).collect(Collectors.toList());
+                for (Map.Entry<Integer, Integer> entry : sortedBucketSeqToDriverSeq) {
+                    Integer bucketSeq = entry.getKey();
+                    Integer driverSeq = entry.getValue();
+                    Preconditions.checkState(bucketSeq < numBuckets,
+                            "bucketSeq exceeds bucketNum in colocate Fragment");
+                    bucketSeqToInstance[bucketSeq] = instance.getIndexInFragment();
+                    bucketSeqToDriverSeq[bucketSeq] = driverSeq;
+                    bucketSeqToPartition[bucketSeq] = nextPartition++;
+                }
+            } else {
+                for (Integer bucketSeq : instance.getBucketSeqs()) {
+                    Preconditions.checkState(bucketSeq < numBuckets,
+                            "bucketSeq exceeds bucketNum in colocate Fragment");
+                    bucketSeqToInstance[bucketSeq] = instance.getIndexInFragment();
+                }
+            }
+        }
+
+        cachedBucketSeqAssignment = new BucketSeqAssignment();
+        cachedBucketSeqAssignment.bucketSeqToInstance = Arrays.asList(bucketSeqToInstance);
+        if (assignBucketsAmongDrivers) {
+            cachedBucketSeqAssignment.bucketSeqToDriverSeq = Arrays.asList(bucketSeqToDriverSeq);
+            cachedBucketSeqAssignment.bucketSeqToPartition = Arrays.asList(bucketSeqToPartition);
+        }
+        return cachedBucketSeqAssignment;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void addDestination(TPlanFragmentDestination destination) {
@@ -403,4 +504,22 @@ public class ExecutionFragment {
 
         return hasBucketShuffle;
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isScheduled() {
+        return isScheduled;
+    }
+
+    public void setIsScheduled(boolean isScheduled) {
+        this.isScheduled = isScheduled;
+    }
+
+    public boolean isNeedReportFragmentFinish() {
+        return needReportFragmentFinish;
+    }
+    public void setNeedReportFragmentFinish(boolean needReportFragmentFinish) {
+        this.needReportFragmentFinish = needReportFragmentFinish;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

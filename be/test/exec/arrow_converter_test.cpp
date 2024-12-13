@@ -14,8 +14,15 @@
 
 #include <arrow/builder.h>
 #include <arrow/memory_pool.h>
+<<<<<<< HEAD
 #include <arrow/testing/gtest_util.h>
 #include <arrow/testing/util.h>
+=======
+#include <arrow/testing/builder.h>
+#include <arrow/testing/gtest_util.h>
+#include <arrow/testing/util.h>
+#include <arrow/util/bit_util.h>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include <gtest/gtest.h>
 #include <testutil/parallel_test.h>
 #include <util/guard.h>
@@ -229,9 +236,15 @@ static inline std::shared_ptr<arrow::Array> create_constant_binary_array(int64_t
     auto data_off = 0;
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && i % 2 == 0) {
+<<<<<<< HEAD
             arrow::BitUtil::ClearBit(nulls, i);
         } else {
             arrow::BitUtil::SetBit(nulls, i);
+=======
+            arrow::bit_util::ClearBit(nulls, i);
+        } else {
+            arrow::bit_util::SetBit(nulls, i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             memcpy(data + data_off, value.data(), value_size);
             data_off += value_size;
         }
@@ -490,9 +503,15 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
 
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && i % 2 == 0) {
+<<<<<<< HEAD
             arrow::BitUtil::ClearBit(nulls, i);
         } else {
             arrow::BitUtil::SetBit(nulls, i);
+=======
+            arrow::bit_util::ClearBit(nulls, i);
+        } else {
+            arrow::bit_util::SetBit(nulls, i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         memcpy(p, value.c_str(), std::min(value.size() + 1, (std::string::size_type)bytes_width));
         p += bytes_width;
@@ -683,9 +702,15 @@ std::shared_ptr<arrow::Array> create_constant_datetime_array(size_t num_elements
 
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && (i % 2 == 0)) {
+<<<<<<< HEAD
             arrow::BitUtil::ClearBit(nulls, i);
         } else {
             arrow::BitUtil::SetBit(nulls, i);
+=======
+            arrow::bit_util::ClearBit(nulls, i);
+        } else {
+            arrow::bit_util::SetBit(nulls, i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         data[i] = value;
     }
@@ -963,9 +988,15 @@ std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
     auto* data = buffers[1]->mutable_data();
     for (auto i = 0; i < num_elements; ++i) {
         if (is_nullable && (i % 2 == 0)) {
+<<<<<<< HEAD
             arrow::BitUtil::ClearBit(nulls, i);
         } else {
             arrow::BitUtil::SetBit(nulls, i);
+=======
+            arrow::bit_util::ClearBit(nulls, i);
+        } else {
+            arrow::bit_util::SetBit(nulls, i);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             memcpy(data + i * byte_width, &decimal, sizeof(decimal));
         }
     }
@@ -1255,6 +1286,7 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
     arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
 
     for (int i = 0; i < num_elements; i++) {
+<<<<<<< HEAD
         builder.Append();
         for (auto& [key, value] : value) {
             key_builder->Append(key);
@@ -1262,11 +1294,24 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
             if (null_dup) {
                 key_builder->Append(key);
                 item_builder->Append(value);
+=======
+        ARROW_EXPECT_OK(builder.Append());
+        for (auto& [key, value] : value) {
+            ARROW_EXPECT_OK(key_builder->Append(key));
+            ARROW_EXPECT_OK(item_builder->Append(value));
+            if (null_dup) {
+                ARROW_EXPECT_OK(key_builder->Append(key));
+                ARROW_EXPECT_OK(item_builder->Append(value));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         }
         counter += 1;
         if (null_dup) {
+<<<<<<< HEAD
             builder.AppendNull();
+=======
+            ARROW_EXPECT_OK(builder.AppendNull());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             counter++;
         }
     }
@@ -1290,12 +1335,21 @@ static std::shared_ptr<arrow::Array> create_struct_array(int elemnts_num, bool i
 
     for (int i = 0; i < elemnts_num; i++) {
         if (is_null && i % 2 == 0) {
+<<<<<<< HEAD
             builder.AppendNull();
         } else {
             builder.Append();
             int1_builder->Append(i);
             str_builder->Append(fmt::format("char-{}", i));
             int2_builder->Append(i * 10);
+=======
+            ARROW_EXPECT_OK(builder.AppendNull());
+        } else {
+            ARROW_EXPECT_OK(builder.Append());
+            ARROW_EXPECT_OK(int1_builder->Append(i));
+            ARROW_EXPECT_OK(str_builder->Append(fmt::format("char-{}", i)));
+            ARROW_EXPECT_OK(int2_builder->Append(i * 10));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     return builder.Finish().ValueOrDie();
@@ -1356,6 +1410,7 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
     arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder(arrow::default_memory_pool(), value_builder,
                                                                      fix_size);
     for (auto num = 0; num < num_elements; num = num + fix_size) {
+<<<<<<< HEAD
         builder.Append();
         for (int i = 0; i < fix_size; i++) {
             value_builder->Append(counter);
@@ -1363,6 +1418,15 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
         }
         if (add_null) {
             builder.AppendNull();
+=======
+        ARROW_EXPECT_OK(builder.Append());
+        for (int i = 0; i < fix_size; i++) {
+            ARROW_EXPECT_OK(value_builder->Append(counter));
+            counter += 1;
+        }
+        if (add_null) {
+            ARROW_EXPECT_OK(builder.AppendNull());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
     return builder.Finish().ValueOrDie();
@@ -1425,11 +1489,19 @@ static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents,
                                                                       num_children);
 
     for (auto num1 = 0; num1 < num_parents; ++num1) {
+<<<<<<< HEAD
         builder1.Append();
         for (auto num = 0; num < num_children; ++num) {
             builder->Append();
             for (int i = 0; i < num_child_values; ++i) {
                 value_builder->Append(counter);
+=======
+        ARROW_EXPECT_OK(builder1.Append());
+        for (auto num = 0; num < num_children; ++num) {
+            ARROW_EXPECT_OK(builder->Append());
+            for (int i = 0; i < num_child_values; ++i) {
+                ARROW_EXPECT_OK(value_builder->Append(counter));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 counter += 1;
             }
         }

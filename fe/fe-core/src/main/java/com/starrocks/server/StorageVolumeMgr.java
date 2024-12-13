@@ -24,8 +24,14 @@ import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.persist.DropStorageVolumeLog;
+=======
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
+import com.starrocks.persist.DropStorageVolumeLog;
+import com.starrocks.persist.ImageWriter;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -42,7 +48,10 @@ import com.starrocks.storagevolume.StorageVolume;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+<<<<<<< HEAD
 import java.io.DataOutputStream;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URI;
@@ -359,8 +368,13 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
+<<<<<<< HEAD
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.STORAGE_VOLUME_MGR, 1);
+=======
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.STORAGE_VOLUME_MGR, 1);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         writer.writeJson(this);
         writer.close();
     }
@@ -394,11 +408,14 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
         }
     }
 
+<<<<<<< HEAD
     public long saveStorageVolumes(DataOutputStream dos, long checksum) throws IOException {
         write(dos);
         return checksum;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void load(DataInput in) throws IOException {
         String json = Text.readString(in);
         StorageVolumeMgr data = GsonUtils.GSON.fromJson(json, StorageVolumeMgr.class);

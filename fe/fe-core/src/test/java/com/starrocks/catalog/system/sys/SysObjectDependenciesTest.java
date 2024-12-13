@@ -14,7 +14,11 @@
 
 package com.starrocks.catalog.system.sys;
 
+<<<<<<< HEAD
 import com.starrocks.common.FeConstants;
+=======
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -25,6 +29,7 @@ import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+<<<<<<< HEAD
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -35,10 +40,27 @@ public class SysObjectDependenciesTest {
     private StarRocksAssert starRocksAssert;
 
     private ConnectContext connectContext;
+=======
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.FixMethodOrder;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+import org.junit.runners.MethodSorters;
+
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+public class SysObjectDependenciesTest {
+
+
+    private static StarRocksAssert starRocksAssert;
+
+    private static ConnectContext connectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
 
+<<<<<<< HEAD
 
     @Before
     public void setUp() throws Exception {
@@ -47,15 +69,34 @@ public class SysObjectDependenciesTest {
 
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+=======
+    @BeforeClass
+    public static void setUp() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+
+        starRocksAssert.withDatabase("test")
+                .useDatabase("test");
+        // with user
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         String createUserSql = "create user if not exists test_mv";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, connectContext), connectContext);
     }
 
     @Test
     public void testObjectDependencies() throws Exception {
+<<<<<<< HEAD
         starRocksAssert.withDatabase("test")
                 .useDatabase("test")
                 .withTable("CREATE TABLE test.test_mv_base_table\n" +
+=======
+        starRocksAssert.withTable("CREATE TABLE test.test_mv_base_table\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "(\n" + "    k1 date,\n" + "    k2 int,\n" + "    v1 int sum\n" + ")\n"
                         + "PARTITION BY RANGE(k1)\n" +
                         "(\n" + "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n"
@@ -87,6 +128,7 @@ public class SysObjectDependenciesTest {
         Assert.assertEquals("OLAP", objectDependencyRes.getItems().get(0).getRef_object_type());
     }
 
+<<<<<<< HEAD
 
     @Test
     public void testUnknownCatalogObjectDependencies() throws Exception {
@@ -99,6 +141,12 @@ public class SysObjectDependenciesTest {
         starRocksAssert.withDatabase("test")
                 .useDatabase("test")
                 .withMaterializedView("create materialized view " + mvName + " " +
+=======
+    @Test
+    public void testUnknownCatalogObjectDependencies() throws Exception {
+        String mvName = "test.iceberg_mv";
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                         "partition by str2date(d,'%Y-%m-%d') " +
                         "distributed by hash(a) " +
                         "REFRESH DEFERRED MANUAL " +
@@ -111,6 +159,7 @@ public class SysObjectDependenciesTest {
 
         String grantSql1 = "GRANT ALL ON MATERIALIZED VIEW test.iceberg_mv TO USER `test_mv`@`%`;";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql1, connectContext), connectContext);
+<<<<<<< HEAD
 
 
         TObjectDependencyReq dependencyReq = buildRequest();
@@ -122,6 +171,13 @@ public class SysObjectDependenciesTest {
     }
 
 
+=======
+        TObjectDependencyReq dependencyReq = buildRequest();
+        TObjectDependencyRes objectDependencyRes = SysObjectDependencies.listObjectDependencies(dependencyReq);
+        Assert.assertTrue(objectDependencyRes.getItems().stream().anyMatch(x -> x.getRef_object_type().equals("ICEBERG")));
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static TObjectDependencyReq buildRequest() {
         TObjectDependencyReq dependencyReq = new TObjectDependencyReq();
         TAuthInfo tAuthInfo = new TAuthInfo();
@@ -136,6 +192,10 @@ public class SysObjectDependenciesTest {
         dependencyReq.setAuth_info(tAuthInfo);
         return dependencyReq;
     }
+<<<<<<< HEAD
 
 
 }
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

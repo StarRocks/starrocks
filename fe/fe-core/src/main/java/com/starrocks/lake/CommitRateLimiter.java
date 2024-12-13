@@ -16,6 +16,10 @@ package com.starrocks.lake;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
@@ -27,6 +31,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.Set;
 import javax.validation.constraints.NotNull;
 
@@ -109,11 +117,30 @@ public class CommitRateLimiter {
             LOG.info("delay commit of txn {} for {}ms, write took {}ms", transactionState.getTransactionId(),
                     transactionState.getAllowCommitTimeMs() - currentTimeMs,
                     transactionState.getWriteDurationMs());
+<<<<<<< HEAD
             throw new CommitRateExceededException(txnId, transactionState.getAllowCommitTimeMs());
         }
         long upperBound = compactionScoreUpperBound();
         if (upperBound > 0 && anyCompactionScoreExceedsUpperBound(partitionIds, upperBound)) {
             throw new CommitRateExceededException(txnId, currentTimeMs + 1000/* delay 1s */);
+=======
+            // it will show in `show proc '/transactions/xxx/running'`
+            transactionState.setReason("Partition's compaction score is larger than " + slowdownThreshold() +
+                    ", delay commit for " + (transactionState.getAllowCommitTimeMs() - currentTimeMs) + "ms." +
+                    " You can try to increase compaction concurrency.");
+            throw new CommitRateExceededException(txnId, transactionState.getAllowCommitTimeMs());
+        }
+        long upperBound = compactionScoreUpperBound();
+        if (upperBound > 0) {
+            Optional<Pair<Long, Double>> partitionAndScore = anyCompactionScoreExceedsUpperBound(partitionIds, upperBound);
+            if (partitionAndScore.isPresent()) {
+                Pair<Long, Double> pair = partitionAndScore.get();
+                throw new CommitFailedException("Failed to load data into partition " + pair.first
+                        + ", because of too large compaction score, current/limit: " + pair.second
+                        + "/" + upperBound + ". You can reduce the loading job concurrency, " 
+                        + "or increase compaction concurrency", txnId);
+            }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -143,6 +170,7 @@ public class CommitRateLimiter {
         return compactionScore != null ? compactionScore.getMax() : 0;
     }
 
+<<<<<<< HEAD
     private boolean anyCompactionScoreExceedsUpperBound(@NotNull Set<Long> partitionIds, long upperBound) {
         for (Long partitionId : partitionIds) {
             double compactionScore = getPartitionCompactionScore(partitionId);
@@ -151,5 +179,16 @@ public class CommitRateLimiter {
             }
         }
         return false;
+=======
+    // Returns the first partition id and its compaction score that exceeds the upper bound
+    private Optional<Pair<Long, Double>> anyCompactionScoreExceedsUpperBound(@NotNull Set<Long> partitionIds, long upperBound) {
+        for (Long partitionId : partitionIds) {
+            double compactionScore = getPartitionCompactionScore(partitionId);
+            if (compactionScore > upperBound) {
+                return Optional.of(new Pair<>(partitionId, compactionScore));
+            }
+        }
+        return Optional.empty();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

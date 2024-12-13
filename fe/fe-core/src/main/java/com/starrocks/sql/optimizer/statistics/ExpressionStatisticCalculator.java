@@ -36,6 +36,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.IsoFields;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
@@ -148,12 +152,29 @@ public class ExpressionStatisticCalculator {
                     min = ConstantOperator.createDatetime(
                             Utils.getDatetimeFromLong((long) childStatistic.getMinValue()));
                 } else {
+<<<<<<< HEAD
                     max = max.castTo(cast.getType());
                     min = min.castTo(cast.getType());
                 }
             } catch (Exception e) {
                 LOG.debug("expression statistic compute cast failed: " + max.toString() + ", " + min +
                         ", to type: " + cast.getType());
+=======
+                    Optional<ConstantOperator> maxRes;
+                    Optional<ConstantOperator> minRes;
+                    maxRes = max.castTo(cast.getType());
+                    minRes = max.castTo(cast.getType());
+                    if (maxRes.isPresent() && minRes.isPresent()) {
+                        max = maxRes.get();
+                        min = minRes.get();
+                    } else {
+                        throw new IllegalArgumentException();
+                    }
+                }
+            } catch (Exception e) {
+                LOG.debug("expression statistic compute cast failed: max value: {}, min value: {}, to type {}",
+                        max, min, cast.getType());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 return childStatistic;
             }
 

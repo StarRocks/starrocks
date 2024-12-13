@@ -163,7 +163,10 @@ public:
     }
 
     void SetUp() override {
+<<<<<<< HEAD
         StoragePageCache::create_global_cache(&_tracker, 1000000000);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         srand(GetCurrentTimeMicros());
         db_id = 1;
         table_name = "table_reader_test";
@@ -182,7 +185,10 @@ public:
             StorageEngine::instance()->tablet_manager()->drop_tablet(tablet->tablet_id());
             tablet.reset();
         }
+<<<<<<< HEAD
         StoragePageCache::release_global_cache();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
 protected:
@@ -194,7 +200,10 @@ protected:
     ObjectPool _object_pool;
     Schema _key_schema;
     Schema _value_schema;
+<<<<<<< HEAD
     MemTracker _tracker;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 void collect_chunk_iterator_result(StatusOr<ChunkIteratorPtr>& status_or, Chunk& result) {

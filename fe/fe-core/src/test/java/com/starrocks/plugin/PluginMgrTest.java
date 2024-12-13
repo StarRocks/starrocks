@@ -35,8 +35,11 @@
 package com.starrocks.plugin;
 
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DataOutputBuffer;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,6 +49,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -53,6 +57,11 @@ import java.io.IOException;
 import java.nio.file.Files;
 
 import static org.junit.Assert.assertEquals;
+=======
+import java.io.IOException;
+import java.nio.file.Files;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -76,7 +85,11 @@ public class PluginMgrTest {
     public void testLoadPluginFail() {
         try {
 
+<<<<<<< HEAD
             PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
+=======
+            PluginMgr pluginMgr = GlobalStateMgr.getCurrentState().getPluginMgr();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             PluginInfo info = new PluginInfo();
             info.name = "plugin-name";
             info.type = PluginType.AUDIT;
@@ -89,11 +102,16 @@ public class PluginMgrTest {
             info.properties.put("md5sum", "cf0c536b8f2a0a0690b44d783d019e90");
             pluginMgr.replayLoadDynamicPlugin(info);
 
+<<<<<<< HEAD
         } catch (IOException | UserException e) {
+=======
+        } catch (IOException e) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             e.printStackTrace();
             assert false;
         }
     }
+<<<<<<< HEAD
 
     private void testSerializeBuiltinPlugin(PluginMgr mgr) {
         try {
@@ -110,4 +128,6 @@ public class PluginMgrTest {
             e.printStackTrace();
         }
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

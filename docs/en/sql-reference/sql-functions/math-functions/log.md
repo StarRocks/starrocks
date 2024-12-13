@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # log
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Calculates the logarithm of a number to a specified base (or radix). If the base is not specified, this function is equivalent to [ln](../math-functions/ln.md).
 

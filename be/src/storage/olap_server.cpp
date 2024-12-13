@@ -136,7 +136,11 @@ Status StorageEngine::start_bg_threads() {
             max_compaction_concurrency > base_compaction_num_threads + cumulative_compaction_num_threads) {
             max_compaction_concurrency = base_compaction_num_threads + cumulative_compaction_num_threads;
         }
+<<<<<<< HEAD
         Compaction::init(max_compaction_concurrency);
+=======
+        (void)Compaction::init(max_compaction_concurrency);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         _base_compaction_threads.reserve(base_compaction_num_threads);
         // The config::tablet_map_shard_size is preferably a multiple of `base_compaction_num_threads_per_disk`,
@@ -183,7 +187,11 @@ Status StorageEngine::start_bg_threads() {
         _compaction_manager->set_max_compaction_concurrency(config::max_compaction_concurrency);
         int32_t max_task_num = _compaction_manager->compute_max_compaction_task_num();
 
+<<<<<<< HEAD
         Compaction::init(max_task_num);
+=======
+        (void)Compaction::init(max_task_num);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);

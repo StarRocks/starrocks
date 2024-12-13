@@ -22,6 +22,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTriggersScanner::_s_cols_triggers[] = {
         //   name,       type,          size,                     is_null
+<<<<<<< HEAD
         {"TRIGGER_CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TRIGGER_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TRIGGER_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -44,6 +45,34 @@ SchemaScanner::ColumnDesc SchemaTriggersScanner::_s_cols_triggers[] = {
         {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(StringValue), false},
         {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE_COLLATION", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+        {"TRIGGER_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRIGGER_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TRIGGER_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_MANIPULATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_OBJECT_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_OBJECT_TABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ACTION_ORDER", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"ACTION_CONDITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"ACTION_STATEMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ACTION_ORIENTATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ACTION_TIMING", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ACTION_REFERENCE_OLD_TABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         true},
+        {"ACTION_REFERENCE_NEW_TABLE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         true},
+        {"ACTION_REFERENCE_OLD_ROW", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"ACTION_REFERENCE_NEW_ROW", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"CREATED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"SQL_MODE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_SET_CLIENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLLATION_CONNECTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE_COLLATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaTriggersScanner::SchemaTriggersScanner()

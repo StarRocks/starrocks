@@ -135,6 +135,10 @@ public class ConnectorColumnStatsCacheLoader implements
 
         ColumnStatistic columnStatistic = ColumnBasicStatsCacheLoader.buildColumnStatistics(statisticData, splits[0],
                 splits[1], splits[3], statisticData.columnName, columnType);
+<<<<<<< HEAD
         return new ConnectorTableColumnStats(columnStatistic, statisticData.rowCount);
+=======
+        return new ConnectorTableColumnStats(columnStatistic, statisticData.rowCount, statisticData.updateTime);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

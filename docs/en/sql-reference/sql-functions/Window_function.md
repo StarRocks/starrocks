@@ -48,7 +48,11 @@ The window function is a special class of built-in functions. Similar to the agg
 ### Syntax
 
 ```SQL
+<<<<<<< HEAD
 function(args) OVER(partition_by_clause order_by_clause [window_clause])
+=======
+function(args) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 partition_by_clause ::= PARTITION BY expr [, expr ...]
 order_by_clause ::= ORDER BY expr [ASC | DESC] [, expr [ASC | DESC] ...]
 ```
@@ -1122,7 +1126,11 @@ Returns the population variance of an expression. VAR_POP and VARIANCE_POP are a
 **Syntax:**
 
 ```SQL
+<<<<<<< HEAD
 VARIANCE(expr) [OVER (partition_by_clause)]
+=======
+VARIANCE(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1137,6 +1145,10 @@ If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT,
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
+<<<<<<< HEAD
+=======
+```plaintext
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 select *,
     variance(score)
         over (
@@ -1163,7 +1175,11 @@ Returns the sample variance of an expression. These functions can be used as win
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 VAR_SAMP(expr) [OVER (partition_by_clause)]
+=======
+VAR_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1203,7 +1219,11 @@ Returns the standard deviation of an expression. These functions can be used as 
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 STD(expr) [OVER (partition_by_clause)]
+=======
+STD(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1243,7 +1263,11 @@ Returns the sample standard deviation of an expression. This function can be use
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 STDDEV_SAMP(expr) [OVER (partition_by_clause)]
+=======
+STDDEV_SAMP(expr) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1301,7 +1325,11 @@ Returns the sample covariance of two expressions. This function is supported fro
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 COVAR_SAMP(expr1,expr2) [OVER (partition_by_clause)]
+=======
+COVAR_SAMP(expr1,expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1357,7 +1385,11 @@ Returns the population covariance of two expressions. This function is supported
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 COVAR_POP(expr1, expr2) [OVER (partition_by_clause)]
+=======
+COVAR_POP(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip
@@ -1397,7 +1429,11 @@ Returns the Pearson correlation coefficient between two expressions. This functi
 **Syntax:**
 
 ```sql
+<<<<<<< HEAD
 CORR(expr1, expr2) [OVER (partition_by_clause)]
+=======
+CORR(expr1, expr2) OVER([partition_by_clause] [order_by_clause] [order_by_clause window_clause])
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 ```
 
 :::tip

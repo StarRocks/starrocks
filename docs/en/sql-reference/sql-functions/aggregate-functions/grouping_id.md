@@ -5,7 +5,11 @@ displayed_sidebar: docs
 
 # grouping_id
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 grouping_id is used to distinguish the grouping statistics results of the same grouping standard.
 

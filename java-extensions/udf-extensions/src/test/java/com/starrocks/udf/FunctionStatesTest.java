@@ -14,8 +14,13 @@
 
 package com.starrocks.udf;
 
+<<<<<<< HEAD
 import org.junit.Assert;
 import org.junit.Test;
+=======
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -42,6 +47,10 @@ public class FunctionStatesTest {
             }
         }
 
+<<<<<<< HEAD
         Assert.assertEquals(states.size(), 8191);
+=======
+        Assertions.assertEquals(states.size(), 8191);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

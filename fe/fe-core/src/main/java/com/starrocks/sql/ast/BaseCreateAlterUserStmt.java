@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.ast;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.sql.parser.NodePosition;
@@ -53,12 +54,37 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
 
         this.setRoleType = setRoleType;
         this.defaultRoles = defaultRoles;
+=======
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
+
+// CreateUserStmt and AlterUserStmt share the same parameter and check logic
+public abstract class BaseCreateAlterUserStmt extends DdlStmt {
+    protected UserIdentity userIdentity;
+    protected UserAuthOption authOption;
+
+    // used in new RBAC privilege framework
+    private UserAuthenticationInfo authenticationInfo = null;
+
+    private final Map<String, String> properties;
+
+    public BaseCreateAlterUserStmt(UserIdentity userIdentity, UserAuthOption authOption,
+                                   Map<String, String> properties, NodePosition pos) {
+        super(pos);
+
+        this.userIdentity = userIdentity;
+        this.authOption = authOption;
+        this.properties = properties;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public UserIdentity getUserIdentity() {
         return userIdentity;
     }
 
+<<<<<<< HEAD
     public String getOriginalPassword() {
         return password;
     }
@@ -77,6 +103,10 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
 
     public List<String> getDefaultRoles() {
         return defaultRoles;
+=======
+    public UserAuthOption getAuthOption() {
+        return authOption;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public UserAuthenticationInfo getAuthenticationInfo() {
@@ -87,10 +117,18 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
         this.authenticationInfo = authenticationInfo;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitBaseCreateAlterUserStmt(this, context);
     }
+<<<<<<< HEAD
 
     @Deprecated
     public void setScramblePassword(byte[] scramblePassword) {
@@ -111,4 +149,6 @@ public class BaseCreateAlterUserStmt extends DdlStmt {
     public void setUserForAuthPlugin(String userForAuthPlugin) {
         this.userForAuthPlugin = userForAuthPlugin;
     }
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

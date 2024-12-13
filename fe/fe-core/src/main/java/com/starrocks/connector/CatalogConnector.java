@@ -14,7 +14,16 @@
 
 package com.starrocks.connector;
 
+<<<<<<< HEAD
 import com.starrocks.connector.informationschema.InformationSchemaConnector;
+=======
+import com.starrocks.common.Pair;
+import com.starrocks.connector.informationschema.InformationSchemaConnector;
+import com.starrocks.connector.metadata.TableMetaConnector;
+
+import java.util.List;
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.Objects.requireNonNull;
@@ -22,6 +31,7 @@ import static java.util.Objects.requireNonNull;
 public class CatalogConnector implements Connector {
     private final Connector normalConnector;
     private final Connector informationSchemaConnector;
+<<<<<<< HEAD
 
     public CatalogConnector(Connector normalConnector, InformationSchemaConnector informationSchemaConnector) {
         requireNonNull(normalConnector, "normalConnector is null");
@@ -29,16 +39,60 @@ public class CatalogConnector implements Connector {
         checkArgument(!(normalConnector instanceof InformationSchemaConnector), "normalConnector is InformationSchemaConnector");
         this.normalConnector = normalConnector;
         this.informationSchemaConnector = informationSchemaConnector;
+=======
+    private final Connector tableMetaConnector;
+
+    public CatalogConnector(Connector normalConnector, InformationSchemaConnector informationSchemaConnector,
+                            TableMetaConnector tableMetaConnector) {
+        requireNonNull(normalConnector, "normalConnector is null");
+        requireNonNull(informationSchemaConnector, "informationSchemaConnector is null");
+        checkArgument(!(normalConnector instanceof InformationSchemaConnector), "normalConnector is InformationSchemaConnector");
+        checkArgument(!(normalConnector instanceof TableMetaConnector), "tableMetaConnector is InformationSchemaConnector");
+        this.normalConnector = normalConnector;
+        this.informationSchemaConnector = informationSchemaConnector;
+        this.tableMetaConnector = tableMetaConnector;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public ConnectorMetadata getMetadata() {
         return new CatalogConnectorMetadata(
                 normalConnector.getMetadata(),
+<<<<<<< HEAD
                 informationSchemaConnector.getMetadata()
+=======
+                informationSchemaConnector.getMetadata(),
+                tableMetaConnector.getMetadata()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         );
     }
 
     public void shutdown() {
         normalConnector.shutdown();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public boolean supportMemoryTrack() {
+        return normalConnector.supportMemoryTrack();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return normalConnector.estimateCount();
+    }
+
+    @Override
+    public List<Pair<List<Object>, Long>> getSamples() {
+        return normalConnector.getSamples();
+    }
+
+    public String normalConnectorClassName() {
+        if (normalConnector instanceof LazyConnector) {
+            return ((LazyConnector) normalConnector).getRealConnectorClassName();
+        } else {
+            return normalConnector.getClass().getSimpleName();
+        }
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

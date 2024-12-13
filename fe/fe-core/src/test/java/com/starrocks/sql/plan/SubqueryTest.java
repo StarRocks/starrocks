@@ -234,10 +234,17 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
             assertContains(plan, "18:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
                     "  17:NESTLOOP JOIN\n" +
+=======
+            assertContains(plan, "17:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  16:NESTLOOP JOIN\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN");
@@ -253,10 +260,17 @@ public class SubqueryTest extends PlanTestBase {
                     "IS NULL";
 
             String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
             assertContains(plan, "18:Project\n" +
                     "  |  <slot 15> : 1\n" +
                     "  |  \n" +
                     "  17:NESTLOOP JOIN\n" +
+=======
+            assertContains(plan, "17:Project\n" +
+                    "  |  <slot 15> : 1\n" +
+                    "  |  \n" +
+                    "  16:NESTLOOP JOIN\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN ");
@@ -272,10 +286,17 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
             assertContains(plan, "  18:Project\n" +
                     "  |  <slot 4> : 4: t1d\n" +
                     "  |  \n" +
                     "  17:NESTLOOP JOIN\n" +
+=======
+            assertContains(plan, "  17:Project\n" +
+                    "  |  <slot 4> : 4: t1d\n" +
+                    "  |  \n" +
+                    "  16:NESTLOOP JOIN\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  join op: INNER JOIN\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  other join predicates: CASE WHEN ");
@@ -334,13 +355,21 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
+<<<<<<< HEAD
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
+=======
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  \n" +
                 "  |----19:EXCHANGE");
         assertContains(plan, "13:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
+<<<<<<< HEAD
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
+=======
+                "  |  other join predicates: CAST(5: v8 AS VARCHAR(1048576)) = ''");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -1169,7 +1198,11 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 12: v8\n" +
+<<<<<<< HEAD
                     "  |  other join predicates: 2: v2 = 13: v9");
+=======
+                    "  |  other join predicates: 13: v9 = 2: v2");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             assertContains(plan, "3:HASH JOIN\n" +
                     "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
@@ -1573,6 +1606,10 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0");
         }
         {
@@ -1593,6 +1630,10 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  8:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0");
         }
         {
@@ -1615,6 +1656,10 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1, 3: v3\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0");
         }
         {
@@ -1635,6 +1680,10 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  5:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0");
         }
         {
@@ -1657,6 +1706,10 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  8:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0");
         }
         {
@@ -1678,6 +1731,10 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  \n" +
                     "  8:SORT\n" +
                     "  |  order by: <slot 1> 1: v1 ASC\n" +
+<<<<<<< HEAD
+=======
+                    "  |  analytic partition by: 1: v1\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     "  |  offset: 0");
         }
     }
@@ -1851,7 +1908,11 @@ public class SubqueryTest extends PlanTestBase {
                 "case when exists (select 1 from tmp) then (select type1 from tmp) " +
                 "else null end) end from tmp a;";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "13:Project\n" +
+=======
+        assertContains(plan, "9:Project\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  <slot 25> : if(8 = abs(0), 'a', concat(',season', if(17: expr, 23: type1, NULL)))");
     }
 
@@ -1861,7 +1922,11 @@ public class SubqueryTest extends PlanTestBase {
                 "select case when id = abs(0) then 'a' else case when exists (select 1 from tmp) " +
                 "then (select type1 from tmp) > (select pretype from tmp) else null end end from tmp a;";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, " 19:Project\n" +
+=======
+        assertContains(plan, " 15:Project\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "  |  <slot 32> : if(8 = abs(0), 'a', CAST(if(17: expr, 24: type1 > 30: pretype, NULL) AS VARCHAR))");
     }
 

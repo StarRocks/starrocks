@@ -43,11 +43,18 @@ public:
     virtual Status decode_columns_from_full_row_column(const Schema& schema, const BinaryColumn& full_row_column,
                                                        const std::vector<uint32_t>& read_column_ids,
                                                        std::vector<std::unique_ptr<Column>>* dest) = 0;
+<<<<<<< HEAD
+=======
+    Status is_supported(const Schema& schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 protected:
     // simple encode not support complex type
     bool is_field_supported(const Field& f);
+<<<<<<< HEAD
     Status is_supported(const Schema& schema);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 } // namespace starrocks

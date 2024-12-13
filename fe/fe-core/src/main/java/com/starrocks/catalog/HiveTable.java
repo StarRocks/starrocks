@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -47,6 +48,12 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+=======
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -54,6 +61,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
@@ -62,6 +70,16 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.qe.ConnectContext;
+=======
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.persist.ModifyTableColumnOperationLog;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -73,11 +91,15 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
+=======
+import java.util.HashMap;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -86,7 +108,11 @@ import java.util.stream.Collectors;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
+<<<<<<< HEAD
 public class HiveTable extends Table implements HiveMetaStoreTable {
+=======
+public class HiveTable extends Table {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public enum HiveTableType {
         VIRTUAL_VIEW,
         EXTERNAL_TABLE,
@@ -144,6 +170,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @SerializedName(value = "sp")
     private Map<String, String> serdeProperties = Maps.newHashMap();
 
+<<<<<<< HEAD
     // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
     // 1. `useMetadataCache` is false means that this query need to list all selected partitions files from hdfs/s3.
     // 2. Insert into statement could ignore the additional overhead caused by list partitions.
@@ -151,6 +178,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     // This error will happen when appending files to an existed partition on user side.
     private boolean useMetadataCache = true;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private HiveTableType hiveTableType = HiveTableType.MANAGED_TABLE;
 
     private HiveStorageFormat storageFormat;
@@ -193,12 +222,21 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return catalogName == null ? getResourceMappingCatalogName(resourceName, "hive") : catalogName;
     }
 
+<<<<<<< HEAD
     public String getDbName() {
+=======
+    @Override
+    public String getCatalogDBName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return hiveDbName;
     }
 
     @Override
+<<<<<<< HEAD
     public String getTableName() {
+=======
+    public String getCatalogTableName() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return hiveTableName;
     }
 
@@ -206,6 +244,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return storageFormat;
     }
 
+<<<<<<< HEAD
     public boolean isUseMetadataCache() {
         if (ConnectContext.get() != null &&
                 ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
@@ -221,6 +260,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
@@ -242,6 +283,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }
@@ -251,6 +296,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return partColumnNames.size() == 0;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public String getTableLocation() {
         return this.tableLocation;
     }
@@ -276,13 +325,23 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveProperties == null ? new HashMap<>() : hiveProperties;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<String, String> getSerdeProperties() {
+        return serdeProperties;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean hasBooleanTypePartitionColumn() {
         return getPartitionColumns().stream().anyMatch(column -> column.getType().isBoolean());
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
         ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
+<<<<<<< HEAD
         ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
@@ -293,6 +352,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         });
 
         fullSchemaTemp.addAll(updatedTable.fullSchema);
+<<<<<<< HEAD
         nameToColumnTemp.putAll(updatedTable.nameToColumn);
         dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
 
@@ -302,13 +362,27 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         db.writeLock();
+=======
+        dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        if (db == null) {
+            throw new StarRocksConnectorException("Not found database " + dbName);
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         try {
             this.fullSchema.clear();
             this.nameToColumn.clear();
             this.dataColumnNames.clear();
 
             this.fullSchema.addAll(fullSchemaTemp.build());
+<<<<<<< HEAD
             this.nameToColumn.putAll(nameToColumnTemp.build());
+=======
+            updateSchemaIndex();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.dataColumnNames.addAll(dataColumnNamesTemp.build());
 
             if (GlobalStateMgr.getCurrentState().isLeader()) {
@@ -316,7 +390,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
             }
         } finally {
+<<<<<<< HEAD
             db.writeUnlock();
+=======
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
     }
 
@@ -348,6 +426,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         // partitions
+<<<<<<< HEAD
         List<PartitionKey> partitionKeys = Lists.newArrayList();
         for (ReferencedPartitionInfo partition : partitions) {
             partitionKeys.add(partition.getKey());
@@ -357,6 +436,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             useMetadataCache = true;
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
+=======
+        List<String> partitionNames = Lists.newArrayList();
+        for (ReferencedPartitionInfo partition : partitions) {
+            partitionNames.add(PartitionUtil.toHivePartitionName(getPartitionColumnNames(), partition.getKey()));
+        }
+        List<PartitionInfo> hivePartitions;
+        try {
+            hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getPartitions(this.getCatalogName(), this, partitionNames);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         } catch (StarRocksConnectorException e) {
             LOG.warn("table {} gets partition info failed.", name, e);
             return null;
@@ -368,7 +457,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             long partitionId = info.getId();
 
             THdfsPartition tPartition = new THdfsPartition();
+<<<<<<< HEAD
             tPartition.setFile_format(hivePartitions.get(i).getFormat().toThrift());
+=======
+            tPartition.setFile_format(hivePartitions.get(i).getFileFormat().toThrift());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
             List<LiteralExpr> keys = key.getKeys();
             tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));
@@ -394,6 +487,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
     public void write(DataOutput out) throws IOException {
         super.write(out);
 
@@ -488,6 +582,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void onReload() {
         if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTableFromResource(

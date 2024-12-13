@@ -28,6 +28,10 @@ import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Type;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -493,7 +497,11 @@ public class GsonSerializationTest {
 
     @Test
     public void testMaterializedIndexMetaGsonProcess() throws Exception {
+<<<<<<< HEAD
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(1, Lists.newArrayList(new Column()), 1, 1,
+=======
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(1, Lists.newArrayList(new Column("k1", Type.INT)), 1, 1,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 (short) 1, COLUMN, PRIMARY_KEYS, null);
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
         try (DataOutputStream out = new DataOutputStream(byteArrayOutputStream)) {

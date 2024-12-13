@@ -9,8 +9,14 @@ displayed_sidebar: docs
 `load_tracking_logs` 提供以下字段：
 
 | **字段**      | **描述**                         |
+<<<<<<< HEAD
 | ------------- | -------------------------------- |
 | JOB_ID        | 导入作业的 ID。                  |
+=======
+| ------------- | ------------------------------- |
+| ID            | 导入ID。                  |
+| JOB_ID        | 导入作业的 ID（已废弃）。           |
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 | LABEL         | 导入作业的 Label。               |
 | DATABASE_NAME | 导入作业所属的数据库名称。       |
 | TRACKING_LOG  | 导入作业的错误日志信息（如有）。 |

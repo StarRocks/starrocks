@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     c_count,
@@ -19,18 +20,25 @@ group by
 order by
     custdist desc,
     c_count desc ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [scheduler]
 PLAN FRAGMENT 0(F04)
   DOP: 16
   INSTANCES
     INSTANCE(0-F04#0)
+<<<<<<< HEAD
       BE: 10001
+=======
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 1(F03)
   DOP: 16
   INSTANCES
     INSTANCE(1-F03#0)
       DESTINATIONS: 0-F04#0
+<<<<<<< HEAD
       BE: 10003
     INSTANCE(2-F03#1)
       DESTINATIONS: 0-F04#0
@@ -38,6 +46,15 @@ PLAN FRAGMENT 1(F03)
     INSTANCE(3-F03#2)
       DESTINATIONS: 0-F04#0
       BE: 10001
+=======
+      BE: 10001
+    INSTANCE(2-F03#1)
+      DESTINATIONS: 0-F04#0
+      BE: 10003
+    INSTANCE(3-F03#2)
+      DESTINATIONS: 0-F04#0
+      BE: 10002
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 PLAN FRAGMENT 2(F00)
   DOP: 16
@@ -212,5 +229,9 @@ PLAN FRAGMENT 3
      tabletList=1365,1367,1369,1371,1373,1375,1377,1379,1381,1383 ...
      cardinality=1
      avgRowSize=95.0
+<<<<<<< HEAD
 [end]
 
+=======
+[end]
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

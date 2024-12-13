@@ -31,6 +31,10 @@ import com.starrocks.thrift.TRowFormat;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TCompactProtocol;
+<<<<<<< HEAD
+=======
+import org.apache.thrift.transport.TTransportException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -54,6 +58,7 @@ public class CustomizedQueryExecutor {
     }
 
     private Function<ByteBuffer, TRowFormat> getDeserializer() {
+<<<<<<< HEAD
         TDeserializer deserializer = new TDeserializer(TCompactProtocol::new);
         return byteRow -> {
             TRowFormat row = new TRowFormat();
@@ -64,6 +69,22 @@ public class CustomizedQueryExecutor {
                 throw new RuntimeException(e);
             }
         };
+=======
+        try {
+            TDeserializer deserializer = new TDeserializer(TCompactProtocol::new);
+            return byteRow -> {
+                TRowFormat row = new TRowFormat();
+                try {
+                    deserializer.deserialize(row, byteRow.array(), byteRow.position(), byteRow.remaining());
+                    return row;
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            };
+        } catch (TTransportException e) {
+            throw new RuntimeException(e);
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     private List<TRowFormat> deserialize(List<TResultBatch> sqlResult) {

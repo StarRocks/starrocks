@@ -47,6 +47,12 @@
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -58,6 +64,13 @@
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
 
+<<<<<<< HEAD
+=======
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 namespace starrocks {
 
 // for ut only
@@ -75,6 +88,10 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+<<<<<<< HEAD
+=======
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
@@ -92,12 +109,20 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
+<<<<<<< HEAD
+=======
+    _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _init(fragment_instance_id, query_options, query_globals, exec_env);
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _unreported_error_idx(0), _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+<<<<<<< HEAD
+=======
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
@@ -123,12 +148,21 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
 
 RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
+<<<<<<< HEAD
+=======
+    _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     _timezone = TimezoneUtils::default_time_zone;
     _timestamp_us = 0;
 }
 
 RuntimeState::~RuntimeState() {
+<<<<<<< HEAD
+=======
+    // dict exprs
+    _dict_optimize_parser.close();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -139,13 +173,22 @@ RuntimeState::~RuntimeState() {
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
     }
+<<<<<<< HEAD
     _process_status.permit_unchecked_error();
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                          const TQueryGlobals& query_globals, ExecEnv* exec_env) {
     _fragment_instance_id = fragment_instance_id;
     _query_options = query_options;
+<<<<<<< HEAD
+=======
+    if (_query_options.__isset.spill_options) {
+        _spill_options = _query_options.spill_options;
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
         if (query_globals.__isset.timestamp_us) {
@@ -217,10 +260,16 @@ void RuntimeState::init_mem_trackers(const std::shared_ptr<MemTracker>& query_me
     _instance_mem_pool = std::make_unique<MemPool>();
 }
 
+<<<<<<< HEAD
 Status RuntimeState::init_instance_mem_tracker() {
     _instance_mem_tracker = std::make_unique<MemTracker>(-1);
     _instance_mem_pool = std::make_unique<MemPool>();
     return Status::OK();
+=======
+void RuntimeState::init_instance_mem_tracker() {
+    _instance_mem_tracker = std::make_unique<MemTracker>(-1);
+    _instance_mem_pool = std::make_unique<MemPool>();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 ObjectPool* RuntimeState::global_obj_pool() const {
@@ -230,6 +279,7 @@ ObjectPool* RuntimeState::global_obj_pool() const {
     return _query_ctx->object_pool();
 }
 
+<<<<<<< HEAD
 std::string RuntimeState::error_log() {
     std::lock_guard<std::mutex> l(_error_log_lock);
     return boost::algorithm::join(_error_log, "\n");
@@ -263,6 +313,8 @@ void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
     }
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 bool RuntimeState::use_page_cache() {
     if (config::disable_storage_page_cache) {
         return false;
@@ -273,6 +325,7 @@ bool RuntimeState::use_page_cache() {
     return true;
 }
 
+<<<<<<< HEAD
 bool RuntimeState::use_column_pool() const {
     if (config::disable_column_pool) {
         return false;
@@ -286,12 +339,20 @@ bool RuntimeState::use_column_pool() const {
 
 Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
                                             const std::string* msg) {
+=======
+Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size, std::string_view msg) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK_GE(failed_allocation_size, 0);
     {
         std::lock_guard<std::mutex> l(_process_status_lock);
         if (_process_status.ok()) {
+<<<<<<< HEAD
             if (msg != nullptr) {
                 _process_status = Status::MemoryLimitExceeded(*msg);
+=======
+            if (!msg.empty()) {
+                _process_status = Status::MemoryLimitExceeded(msg);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             } else {
                 _process_status = Status::MemoryLimitExceeded("Memory limit exceeded");
             }
@@ -309,7 +370,10 @@ Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_
            << PrettyPrinter::print(failed_allocation_size, TUnit::BYTES) << " without exceeding limit." << std::endl;
     }
 
+<<<<<<< HEAD
     log_error(ss.str());
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     DCHECK(_process_status.is_mem_limit_exceeded());
     return _process_status;
 }
@@ -333,7 +397,11 @@ Status RuntimeState::check_mem_limit(const std::string& msg) {
 const int64_t MAX_ERROR_NUM = 50;
 
 Status RuntimeState::create_error_log_file() {
+<<<<<<< HEAD
     _exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path);
+=======
+    RETURN_IF_ERROR(_exec_env->load_path_mgr()->get_load_error_file_name(_fragment_instance_id, &_error_log_file_path));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::string error_log_absolute_path =
             _exec_env->load_path_mgr()->get_load_error_absolute_path(_error_log_file_path);
     _error_log_file = new std::ofstream(error_log_absolute_path, std::ifstream::out);
@@ -380,7 +448,11 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     if (_error_log_file == nullptr) {
         Status status = create_error_log_file();
         if (!status.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "Create error file log failed. because: " << status.get_error_msg();
+=======
+            LOG(WARNING) << "Create error file log failed. because: " << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (_error_log_file != nullptr) {
                 _error_log_file->close();
                 delete _error_log_file;
@@ -422,7 +494,11 @@ void RuntimeState::append_rejected_record_to_file(const std::string& record, con
     if (_rejected_record_file == nullptr) {
         Status status = create_rejected_record_file();
         if (!status.ok()) {
+<<<<<<< HEAD
             LOG(WARNING) << "Create rejected record file failed. because: " << status.get_error_msg();
+=======
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (_rejected_record_file != nullptr) {
                 _rejected_record_file->close();
                 _rejected_record_file.reset();
@@ -455,8 +531,23 @@ GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
     return &_query_global_dicts;
 }
 
+<<<<<<< HEAD
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
     return _build_global_dict(global_dict_list, &_query_global_dicts, nullptr);
+=======
+DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
+    return &_dict_optimize_parser;
+}
+
+Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
+    RETURN_IF_ERROR(_build_global_dict(global_dict_list, &_query_global_dicts, nullptr));
+    _dict_optimize_parser.set_mutable_dict_maps(this, &_query_global_dicts);
+    return Status::OK();
+}
+
+Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
+    return _dict_optimize_parser.init_dict_exprs(exprs);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
@@ -502,4 +593,50 @@ Status RuntimeState::reset_epoch() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+bool RuntimeState::is_jit_enabled() const {
+#ifdef STARROCKS_JIT_ENABLE
+    return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
+           _query_options.jit_level != 0;
+#else
+    return false;
+#endif
+}
+
+void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+    if (!_query_options.__isset.catalog) {
+        return;
+    }
+
+    TLoadDataCacheMetrics metrics{};
+    metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
+    metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
+    metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
+
+    if (_query_options.catalog == "default_catalog") {
+#ifdef USE_STAROS
+        if (config::starlet_use_star_cache) {
+            TDataCacheMetrics t_metrics{};
+            starcache::CacheMetrics cache_metrics;
+            staros::starlet::fslib::star_cache_get_metrics(&cache_metrics);
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache_metrics);
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+#endif // USE_STAROS
+    } else {
+        if (config::datacache_enable) {
+            const BlockCache* cache = BlockCache::instance();
+            TDataCacheMetrics t_metrics{};
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+    }
+}
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // end namespace starrocks

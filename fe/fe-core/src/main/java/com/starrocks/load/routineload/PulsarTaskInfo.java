@@ -22,13 +22,20 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TLoadSourceType;
+<<<<<<< HEAD
 import com.starrocks.thrift.TPlanFragment;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TPulsarLoadInfo;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
@@ -66,7 +73,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean readyToExecute() throws UserException {
+=======
+    public boolean readyToExecute() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Got initialPositions, we need to execute even there's no backlogs
         if (!initialPositions.isEmpty()) {
             return true;
@@ -76,7 +87,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         Map<String, Long> backlogNums = PulsarUtil.getBacklogNums(pulsarRoutineLoadJob.getServiceUrl(),
                 pulsarRoutineLoadJob.getTopic(), pulsarRoutineLoadJob.getSubscription(),
                 ImmutableMap.copyOf(pulsarRoutineLoadJob.getConvertedCustomProperties()),
+<<<<<<< HEAD
                 partitions);
+=======
+                partitions, warehouseId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (String partition : partitions) {
             Long backlogNum = backlogNums.get(partition);
             if (backlogNum != null && backlogNum > 0) {
@@ -101,7 +116,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PulsarRoutineLoadJob routineLoadJob = (PulsarRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
@@ -110,12 +129,20 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         tRoutineLoadTask.setId(queryId);
         tRoutineLoadTask.setJob_id(routineLoadJob.getId());
         tRoutineLoadTask.setTxn_id(txnId);
+<<<<<<< HEAD
         Database database = GlobalStateMgr.getCurrentState().getDb(routineLoadJob.getDbId());
+=======
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(routineLoadJob.getDbId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (database == null) {
             throw new MetaNotFoundException("database " + routineLoadJob.getDbId() + " does not exist");
         }
         tRoutineLoadTask.setDb(database.getFullName());
+<<<<<<< HEAD
         Table tbl = database.getTable(routineLoadJob.getTableId());
+=======
+        Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), routineLoadJob.getTableId());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (tbl == null) {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
@@ -171,12 +198,19 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         return "Task id: " + getId() + ", partitions: " + partitions + ", initial positions: " + initialPositions;
     }
 
+<<<<<<< HEAD
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
         TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
         tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
+=======
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
+        TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
+        // plan for each task, in case table has change(rollup or schema change)
+        TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return tExecPlanFragmentParams;
     }
 }

@@ -22,6 +22,10 @@
 #include "column/datum_tuple.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
+<<<<<<< HEAD
+=======
+#include "fs/key_cache.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "gen_cpp/olap_file.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -68,8 +72,16 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     SegmentWriterOptions opts;
     opts.num_rows_per_block = 10;
 
+<<<<<<< HEAD
     std::string file_name = kSegmentDir + "/partial_rowset";
     ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+=======
+    auto encryption_pair = KeyCache::instance().create_plain_random_encryption_meta_pair().value();
+    std::string file_name = kSegmentDir + "/partial_rowset";
+    WritableFileOptions wopts{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE,
+                              .encryption_info = encryption_pair.info};
+    ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(wopts, file_name));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     SegmentWriter writer(std::move(wfile), 0, partial_tablet_schema, opts);
     ASSERT_OK(writer.init());
@@ -99,7 +111,12 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     partial_rowset_footer.set_position(footer_position);
     partial_rowset_footer.set_size(file_size - footer_position);
 
+<<<<<<< HEAD
     auto partial_segment = *Segment::open(_fs, FileInfo{file_name}, 0, partial_tablet_schema);
+=======
+    FileInfo src_file_info{.path = file_name, .encryption_meta = encryption_pair.encryption_meta};
+    auto partial_segment = *Segment::open(_fs, src_file_info, 0, partial_tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(partial_segment->num_rows(), num_rows);
 
     std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
@@ -119,10 +136,18 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     }
 
     FileInfo file_info{.path = dst_file_name};
+<<<<<<< HEAD
     ASSERT_OK(SegmentRewriter::rewrite(file_name, &file_info, tablet_schema, read_column_ids, write_columns,
                                        partial_segment->id(), partial_rowset_footer));
 
     auto segment = *Segment::open(_fs, FileInfo{dst_file_name}, 0, tablet_schema);
+=======
+    ASSERT_OK(SegmentRewriter::rewrite_partial_update(src_file_info, &file_info, tablet_schema, read_column_ids,
+                                                      write_columns, partial_segment->id(), partial_rowset_footer));
+
+    auto segment = *Segment::open(_fs, FileInfo{.path = dst_file_name, .encryption_meta = file_info.encryption_meta}, 0,
+                                  tablet_schema);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -153,6 +178,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
     EXPECT_EQ(count, num_rows);
+<<<<<<< HEAD
 
     // add useless string to partial segment
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::MUST_EXIST};
@@ -199,6 +225,8 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
         }
     }
     EXPECT_EQ(count, num_rows);
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 } // namespace starrocks

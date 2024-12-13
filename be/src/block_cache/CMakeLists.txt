@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD
 if (CLANG_TIDY_PATH)
     set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 
@@ -25,6 +28,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 set(CACHE_FILES
   block_cache.cpp
   io_buffer.cpp
+<<<<<<< HEAD
   cache_options.cpp
 )
 
@@ -32,6 +36,14 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     list(APPEND CACHE_FILES cachelib_wrapper.cpp)
 endif()
 
+=======
+  cache_options.h
+  datacache_utils.cpp
+  disk_space_monitor.cpp
+  block_cache_hit_rate_counter.hpp
+)
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 if (${WITH_STARCACHE} STREQUAL "ON")
     list(APPEND CACHE_FILES starcache_wrapper.cpp)
 endif()
@@ -39,6 +51,7 @@ endif()
 add_library(BlockCache STATIC
     ${CACHE_FILES}
 )
+<<<<<<< HEAD
 
 if (${WITH_CACHELIB} STREQUAL "ON")
     set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
@@ -48,3 +61,5 @@ if (${WITH_CACHELIB} STREQUAL "ON")
     include_directories(AFTER ${CACHELIB_DIR}/deps/include)
 endif()
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

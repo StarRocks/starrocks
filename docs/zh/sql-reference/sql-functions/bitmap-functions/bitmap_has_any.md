@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # bitmap_has_any
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 计算两个 Bitmap 列是否存在相交元素，返回值是 Boolean 值。
 

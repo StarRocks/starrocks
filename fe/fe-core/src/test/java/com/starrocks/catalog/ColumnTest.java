@@ -34,15 +34,26 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.IndexDef.IndexType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+<<<<<<< HEAD
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
+=======
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TColumn;
 import org.junit.Assert;
 import org.junit.Before;
@@ -333,6 +344,7 @@ public class ColumnTest {
 
     @Test
     public void testLscColumn() {
+<<<<<<< HEAD
         Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, false,
                 new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
 
@@ -341,6 +353,16 @@ public class ColumnTest {
 
         Set<String> bfColumns = new HashSet<>();
         bfColumns.add("f0");
+=======
+        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, null, false,
+                new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
+
+        Index i0 = new Index("i0",
+                Collections.singletonList(ColumnId.create("f0")), IndexType.BITMAP, "");
+
+        Set<ColumnId> bfColumns = new HashSet<>();
+        bfColumns.add(ColumnId.create("f0"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         TColumn t0 = f0.toThrift();
         f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 
@@ -353,4 +375,14 @@ public class ColumnTest {
         Assert.assertEquals(f0.getUniqueId(), 1);
 
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testColumnDeserialization() {
+        String str = "{\"name\": \"test\"}";
+        Column column = GsonUtils.GSON.fromJson(str, Column.class);
+        Assert.assertEquals("test", column.getColumnId().getId());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

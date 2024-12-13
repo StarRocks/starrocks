@@ -1,0 +1,70 @@
+-- name: test_insert_partial_update
+create table test (pk bigint NOT NULL, v0 string not null default 'defaultv0', v1 int not null default '100001')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into test values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+insert into test values(2, 'v2_2', default);
+-- result:
+-- !result
+select * from test order by pk;
+-- result:
+1	v0	1
+2	v2_2	100001
+-- !result
+insert into test values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+insert into test (pk, v1) values(1, 11);
+-- result:
+-- !result
+select * from test order by pk;
+-- result:
+1	v0	11
+2	v2	2
+-- !result
+create table test2 (pk bigint NOT NULL, v0 string not null, v1 int not null default '100001')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into test2 values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+insert into test2 (pk, v1) values(1, 11), (3, 3);
+-- result:
+-- !result
+select * from test2 order by pk;
+-- result:
+1	v0	11
+2	v2	2
+3		3
+-- !result
+create table test3 (pk bigint NOT NULL, v0 string not null, v1 int not null default '100001', v2 int as cast(v1 + 1 as int))
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into test3 values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+insert into test3 (pk, v1) values(1, 11), (3, 3);
+-- result:
+-- !result
+select * from test3 order by pk;
+-- result:
+1	v0	11	12
+2	v2	2	3
+3		3	4
+-- !result
+create table test4 (pk bigint NOT NULL, v0 string not null, v1 int not null default '0')
+primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 order by (v1) PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+insert into test4 values(1, 'v0', 1), (2, 'v2', 2);
+-- result:
+-- !result
+insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');
+-- result:
+[REGEX].*partial update on table with sort key must provide all sort key columns.*
+-- !result

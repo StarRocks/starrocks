@@ -21,11 +21,29 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.credential.CloudConfiguration;
+=======
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableVersion;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.MetaPreparationItem;
+import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -43,6 +61,10 @@ import static com.starrocks.catalog.Table.TableType.DELTALAKE;
 import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+<<<<<<< HEAD
+=======
+import static com.starrocks.catalog.Table.TableType.KUDU;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import static com.starrocks.catalog.Table.TableType.PAIMON;
 import static java.util.Objects.requireNonNull;
 
@@ -93,6 +115,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
         if (isPaimonTable(table.getProperties())) {
             return PAIMON;
         }
+<<<<<<< HEAD
+=======
+        if (table.isKuduTable()) {
+            return KUDU;
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return HIVE;
     }
 
@@ -119,6 +147,17 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TableVersionRange getTableVersionRange(String dbName, Table table,
+                                                  Optional<ConnectorTableVersion> startVersion,
+                                                  Optional<ConnectorTableVersion> endVersion) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getTableVersionRange(dbName, table, startVersion, endVersion);
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<String> listDbNames() {
         return hiveMetadata.listDbNames();
     }
@@ -129,9 +168,15 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String databaseName, String tableName) {
         ConnectorMetadata metadata = metadataOfTable(databaseName, tableName);
         return metadata.listPartitionNames(databaseName, tableName);
+=======
+    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+        ConnectorMetadata metadata = metadataOfTable(databaseName, tableName);
+        return metadata.listPartitionNames(databaseName, tableName, requestContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -149,6 +194,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(String dbName, String tblName) {
+<<<<<<< HEAD
         ConnectorMetadata metadata = metadataOfTable(dbName, tblName);
         return metadata.tableExists(dbName, tblName);
     }
@@ -158,6 +204,28 @@ public class UnifiedMetadata implements ConnectorMetadata {
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+=======
+        return hiveMetadata.tableExists(dbName, tblName);
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFiles(table, params);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getRemoteFilesAsync(table, params);
+    }
+
+    @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                    long snapshotId, String serializedPredicate, MetadataTableType type) {
+        ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
+        return metadata.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate, type);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -167,6 +235,7 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getPrunedPartitions(table, predicate, limit);
@@ -177,6 +246,19 @@ public class UnifiedMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
+=======
+    public Statistics getTableStatistics(OptimizerContext session, Table table, Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit,
+                                         TableVersionRange version) {
+        ConnectorMetadata metadata = metadataOfTable(table);
+        return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
+    }
+
+    @Override
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
+        ConnectorMetadata metadata = metadataOfTable(item.getTable());
+        return metadata.prepareMetadata(item, tracers, connectContext);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -229,9 +311,15 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         ConnectorMetadata metadata = metadataOfTable(dbName, table);
         metadata.finishSink(dbName, table, commitInfos);
+=======
+    public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos, String branch) {
+        ConnectorMetadata metadata = metadataOfTable(dbName, table);
+        metadata.finishSink(dbName, table, commitInfos, branch);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override

@@ -25,6 +25,11 @@ import com.starrocks.thrift.TRuntimeFilterBuildJoinMode;
 import com.starrocks.thrift.TRuntimeFilterBuildType;
 import com.starrocks.thrift.TRuntimeFilterDescription;
 import com.starrocks.thrift.TRuntimeFilterDestination;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TRuntimeFilterLayout;
+import com.starrocks.thrift.TRuntimeFilterLayoutMode;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TUniqueId;
 
 import java.util.ArrayList;
@@ -34,6 +39,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.planner.JoinNode.DistributionMode.BROADCAST;
+import static com.starrocks.planner.JoinNode.DistributionMode.COLOCATE;
+import static com.starrocks.planner.JoinNode.DistributionMode.LOCAL_HASH_BUCKET;
+import static com.starrocks.planner.JoinNode.DistributionMode.PARTITIONED;
+import static com.starrocks.planner.JoinNode.DistributionMode.REPLICATED;
+import static com.starrocks.planner.JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 // this class is to describe a runtime filter.
 // this class is almost identical to TRuntimeFilterDescription in PlanNodes.thrift
 // but comparing to thrift definition, this class has some handy methods and
@@ -66,9 +81,23 @@ public class RuntimeFilterDescription {
 
     private boolean onlyLocal;
 
+<<<<<<< HEAD
     private RuntimeFilterType type;
 
     private List<Integer> bucketSeqToInstance = Lists.newArrayList();
+=======
+    // ExecGroupInfo. used for check build colocate runtime filter
+    private boolean isBuildFromColocateGroup = false;
+    private int execGroupId = -1;
+
+    private RuntimeFilterType type;
+
+    int numInstances;
+    int numDriversPerInstance;
+    private List<Integer> bucketSeqToInstance = Lists.newArrayList();
+    private List<Integer> bucketSeqToDriverSeq = Lists.newArrayList();
+    private List<Integer> bucketSeqToPartition = Lists.newArrayList();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     // partitionByExprs are used for computing partition ids in probe side when
     // join's equal conjuncts size > 1.
     private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
@@ -132,8 +161,13 @@ public class RuntimeFilterDescription {
         this.sortInfo = sortInfo;
     }
 
+<<<<<<< HEAD
     public boolean canProbeUse(PlanNode node) {
         if (!canAcceptFilter(node)) {
+=======
+    public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+        if (!canAcceptFilter(node, rfPushCtx)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             return false;
         }
 
@@ -171,7 +205,11 @@ public class RuntimeFilterDescription {
     }
 
     // return true if Node could accept the Filter
+<<<<<<< HEAD
     public boolean canAcceptFilter(PlanNode node) {
+=======
+    public boolean canAcceptFilter(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
             if (node instanceof ScanNode) {
                 ScanNode scanNode = (ScanNode) node;
@@ -180,6 +218,16 @@ public class RuntimeFilterDescription {
                 return false;
             }
         }
+<<<<<<< HEAD
+=======
+        // colocate runtime filter couldn't apply to other exec groups
+        if (isBuildFromColocateGroup && joinMode.equals(COLOCATE)) {
+            int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
+            if (execGroupId != probeExecGroupId) {
+                return false;
+            }
+        }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         return true;
     }
@@ -258,8 +306,13 @@ public class RuntimeFilterDescription {
     }
 
     public boolean isColocateOrBucketShuffle() {
+<<<<<<< HEAD
         return joinMode.equals(JoinNode.DistributionMode.COLOCATE) ||
                 joinMode.equals(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
+=======
+        return joinMode.equals(COLOCATE) ||
+                joinMode.equals(LOCAL_HASH_BUCKET);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public int getBuildPlanNodeId() {
@@ -275,6 +328,7 @@ public class RuntimeFilterDescription {
     }
 
     public boolean isLocalApplicable() {
+<<<<<<< HEAD
         return joinMode.equals(HashJoinNode.DistributionMode.BROADCAST) ||
                 joinMode.equals(HashJoinNode.DistributionMode.COLOCATE) ||
                 joinMode.equals(HashJoinNode.DistributionMode.LOCAL_HASH_BUCKET) ||
@@ -284,16 +338,71 @@ public class RuntimeFilterDescription {
 
     public boolean isBroadcastJoin() {
         return joinMode.equals(JoinNode.DistributionMode.BROADCAST);
+=======
+        return joinMode.equals(BROADCAST) ||
+                joinMode.equals(COLOCATE) ||
+                joinMode.equals(LOCAL_HASH_BUCKET) ||
+                joinMode.equals(SHUFFLE_HASH_BUCKET) ||
+                joinMode.equals(REPLICATED);
+    }
+
+    public boolean isBroadcastJoin() {
+        return joinMode.equals(BROADCAST);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public void setBucketSeqToInstance(List<Integer> bucketSeqToInstance) {
         this.bucketSeqToInstance = bucketSeqToInstance;
     }
 
+<<<<<<< HEAD
+=======
+    public void setBucketSeqToDriverSeq(List<Integer> bucketSeqToDriverSeq) {
+        this.bucketSeqToDriverSeq = bucketSeqToDriverSeq;
+    }
+
+    public void setBucketSeqToPartition(List<Integer> bucketSeqToPartition) {
+        this.bucketSeqToPartition = bucketSeqToPartition;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public List<Integer> getBucketSeqToInstance() {
         return this.bucketSeqToInstance;
     }
 
+<<<<<<< HEAD
+=======
+    public List<Integer> getBucketSeqToPartition() {
+        return this.bucketSeqToPartition;
+    }
+
+    public void setNumInstances(int numInstances) {
+        this.numInstances = numInstances;
+    }
+
+    public int getNumInstances() {
+        return numInstances;
+    }
+
+    public void setNumDriversPerInstance(int numDriversPerInstance) {
+        this.numDriversPerInstance = numDriversPerInstance;
+    }
+
+    public int getNumDriversPerInstance() {
+        return numDriversPerInstance;
+    }
+
+    public void setExecGroupInfo(boolean buildFromColocateGroup, int buildExecGroupId) {
+        this.isBuildFromColocateGroup = buildFromColocateGroup;
+        this.execGroupId = buildExecGroupId;
+    }
+
+    public void clearExecGroupInfo() {
+        this.isBuildFromColocateGroup = false;
+        this.execGroupId = -1;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean canPushAcrossExchangeNode() {
         if (onlyLocal) {
             return false;
@@ -335,7 +444,11 @@ public class RuntimeFilterDescription {
 
     // Only use partition_by_exprs when the grf is remote and joinMode is partitioned.
     private boolean isCanUsePartitionByExprs() {
+<<<<<<< HEAD
         return hasRemoteTargets && joinMode != JoinNode.DistributionMode.BROADCAST;
+=======
+        return hasRemoteTargets && joinMode != BROADCAST;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public String toExplainString(int probeNodeId) {
@@ -364,6 +477,77 @@ public class RuntimeFilterDescription {
         return sb.toString();
     }
 
+<<<<<<< HEAD
+=======
+    private TRuntimeFilterLayoutMode computeLocalLayout() {
+        if (sessionVariable.isEnablePipelineLevelMultiPartitionedRf()) {
+            if (joinMode == BROADCAST || joinMode == REPLICATED) {
+                return TRuntimeFilterLayoutMode.SINGLETON;
+            } else if (joinMode == PARTITIONED ||
+                    joinMode == SHUFFLE_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.PIPELINE_SHUFFLE;
+            } else if (joinMode == COLOCATE || joinMode == LOCAL_HASH_BUCKET) {
+                return (bucketSeqToDriverSeq == null || bucketSeqToDriverSeq.isEmpty()) ?
+                        TRuntimeFilterLayoutMode.PIPELINE_BUCKET_LX
+                        : TRuntimeFilterLayoutMode.PIPELINE_BUCKET;
+            } else {
+                return TRuntimeFilterLayoutMode.NONE;
+            }
+        } else {
+            return TRuntimeFilterLayoutMode.SINGLETON;
+        }
+    }
+
+    private TRuntimeFilterLayoutMode computeGlobalLayout() {
+        if (sessionVariable.isEnablePipelineLevelMultiPartitionedRf()) {
+            if (joinMode == BROADCAST || joinMode == REPLICATED) {
+                return TRuntimeFilterLayoutMode.SINGLETON;
+            } else if (joinMode == PARTITIONED || joinMode == SHUFFLE_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_2L;
+            } else if (joinMode == COLOCATE ||
+                    joinMode == LOCAL_HASH_BUCKET) {
+                return (bucketSeqToDriverSeq == null || bucketSeqToDriverSeq.isEmpty()) ?
+                        TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L_LX
+                        : TRuntimeFilterLayoutMode.GLOBAL_BUCKET_2L;
+            } else {
+                return TRuntimeFilterLayoutMode.NONE;
+            }
+        } else {
+            if (joinMode == BROADCAST || joinMode == REPLICATED) {
+                return TRuntimeFilterLayoutMode.SINGLETON;
+            } else if (joinMode == PARTITIONED ||
+                    joinMode == SHUFFLE_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.GLOBAL_SHUFFLE_1L;
+            } else if (joinMode == COLOCATE ||
+                    joinMode == LOCAL_HASH_BUCKET) {
+                return TRuntimeFilterLayoutMode.GLOBAL_BUCKET_1L;
+            } else {
+                return TRuntimeFilterLayoutMode.NONE;
+            }
+        }
+    }
+
+    TRuntimeFilterLayout toLayout() {
+        TRuntimeFilterLayout layout = new TRuntimeFilterLayout();
+        layout.setFilter_id(filterId);
+        layout.setLocal_layout(computeLocalLayout());
+        layout.setGlobal_layout(computeGlobalLayout());
+        layout.setPipeline_level_multi_partitioned(sessionVariable.isEnablePipelineLevelMultiPartitionedRf());
+        layout.setNum_instances(numInstances);
+        layout.setNum_drivers_per_instance(numDriversPerInstance);
+        if (bucketSeqToInstance != null && !bucketSeqToInstance.isEmpty()) {
+            layout.setBucketseq_to_instance(bucketSeqToInstance);
+        }
+        if (bucketSeqToDriverSeq != null && !bucketSeqToDriverSeq.isEmpty()) {
+            layout.setBucketseq_to_driverseq(bucketSeqToDriverSeq);
+        }
+        if (bucketSeqToPartition != null && !bucketSeqToPartition.isEmpty()) {
+            layout.setBucketseq_to_partition(bucketSeqToPartition);
+        }
+        return layout;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TRuntimeFilterDescription toThrift() {
         TRuntimeFilterDescription t = new TRuntimeFilterDescription();
         t.setFilter_id(filterId);
@@ -382,6 +566,7 @@ public class RuntimeFilterDescription {
         if (senderFragmentInstanceId != null) {
             t.setSender_finst_id(senderFragmentInstanceId);
         }
+<<<<<<< HEAD
         if (broadcastGRFSenders != null && !broadcastGRFSenders.isEmpty()) {
             t.setBroadcast_grf_senders(broadcastGRFSenders.stream().collect(Collectors.toList()));
         }
@@ -403,6 +588,31 @@ public class RuntimeFilterDescription {
         } else if (joinMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.SHUFFLE_HASH_BUCKET);
         } else if (joinMode.equals(JoinNode.DistributionMode.REPLICATED)) {
+=======
+
+        if (broadcastGRFSenders != null && !broadcastGRFSenders.isEmpty()) {
+            t.setBroadcast_grf_senders(broadcastGRFSenders.stream().collect(Collectors.toList()));
+        }
+
+        if (broadcastGRFDestinations != null && !broadcastGRFDestinations.isEmpty()) {
+            t.setBroadcast_grf_destinations(broadcastGRFDestinations);
+        }
+
+        t.setLayout(toLayout());
+
+        assert (joinMode != JoinNode.DistributionMode.NONE);
+        if (joinMode.equals(BROADCAST)) {
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.BORADCAST);
+        } else if (joinMode.equals(LOCAL_HASH_BUCKET)) {
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.LOCAL_HASH_BUCKET);
+        } else if (joinMode.equals(PARTITIONED)) {
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.PARTITIONED);
+        } else if (joinMode.equals(COLOCATE)) {
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.COLOCATE);
+        } else if (joinMode.equals(SHUFFLE_HASH_BUCKET)) {
+            t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.SHUFFLE_HASH_BUCKET);
+        } else if (joinMode.equals(REPLICATED)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.REPLICATED);
         }
         if (isCanUsePartitionByExprs()) {
@@ -414,6 +624,11 @@ public class RuntimeFilterDescription {
             }
         }
 
+<<<<<<< HEAD
+=======
+        t.setBuild_from_group_execution(isBuildFromColocateGroup);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType())) {
             t.setFilter_type(TRuntimeFilterBuildType.TOPN_FILTER);
         } else {

@@ -274,7 +274,11 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+<<<<<<< HEAD
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+=======
+                                 AggDataPtr* states, const Filter& filter) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         for (size_t i = 0; i < chunk_size; i++) {
             // TODO: optimize with simd ?
             if (filter[i] == 0) {
@@ -412,7 +416,11 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+<<<<<<< HEAD
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
+=======
+                                  AggDataPtr* states, const Filter& selection) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // Scalar function compute will return non-nullable column
         // for nullable column when the real whole chunk data all not-null.
         if (columns[0]->is_nullable()) {
@@ -738,7 +746,11 @@ public:
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+<<<<<<< HEAD
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+=======
+                                 AggDataPtr* states, const Filter& filter) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto fast_call_path = [&](const Column* data_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 if (filter[i] == 0) {
@@ -836,7 +848,11 @@ public:
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+<<<<<<< HEAD
                                   AggDataPtr* states, const std::vector<uint8_t>& selection) const override {
+=======
+                                  AggDataPtr* states, const Filter& selection) const override {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         auto column_size = ctx->get_num_args();
         for (size_t i = 0; i < column_size; i++) {
             if (columns[i]->only_null()) {

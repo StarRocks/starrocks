@@ -39,7 +39,16 @@ public enum RuleSetType {
     PRUNE_EMPTY_OPERATOR,
     SHORT_CIRCUIT_SET,
     META_SCAN_REWRITE,
+<<<<<<< HEAD
     ELIMINATE_GROUP_BY,
 
     NUM_RULE_SET
+=======
+
+    FINE_GRAINED_RANGE_PREDICATE,
+
+    ELIMINATE_OP_WITH_CONSTANT,
+    NUM_RULE_SET,
+    VECTOR_REWRITE
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

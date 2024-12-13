@@ -34,17 +34,24 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.thrift.TStorageType;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+<<<<<<< HEAD
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -53,6 +60,8 @@ import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 public class TableTest {
     private FakeGlobalStateMgr fakeGlobalStateMgr;
 
@@ -68,6 +77,7 @@ public class TableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSerialization() throws Exception {
         // 1. Write objects to file
         File file = new File("./tableFamilyGroup");
@@ -121,6 +131,8 @@ public class TableTest {
     }
 
     @Test
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testGetMysqlType() {
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP).getMysqlType());
         Assert.assertEquals("BASE TABLE", new Table(TableType.OLAP_EXTERNAL).getMysqlType());

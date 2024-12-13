@@ -15,7 +15,11 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
@@ -100,7 +104,11 @@ public class TransactionStateBatch implements Writable {
     public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
         for (TransactionState transactionState : transactionStates) {
             // after status changed
+<<<<<<< HEAD
             TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+=======
+            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     .getCallbackFactory().getCallback(transactionState.getCallbackId());
             if (callback != null) {
                 if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
@@ -119,7 +127,11 @@ public class TransactionStateBatch implements Writable {
     }
 
     public List<Long> getTxnIds() {
+<<<<<<< HEAD
         return transactionStates.stream().map(state -> state.getTransactionId()).collect(Collectors.toList());
+=======
+        return transactionStates.stream().map(TransactionState::getTransactionId).collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     // all transactionState in batch have the same table and return the tableId
@@ -136,9 +148,15 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.size();
     }
 
+<<<<<<< HEAD
     public TransactionState index(int index) throws UserException {
         if (index < 0 || index >= transactionStates.size()) {
             throw new UserException("index out of bound");
+=======
+    public TransactionState index(int index) throws StarRocksException {
+        if (index < 0 || index >= transactionStates.size()) {
+            throw new StarRocksException("index out of bound");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         }
         return transactionStates.get(index);
     }
@@ -147,6 +165,21 @@ public class TransactionStateBatch implements Writable {
         return transactionStates;
     }
 
+<<<<<<< HEAD
+=======
+    public void writeLock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeLock();
+        }
+    }
+
+    public void writeUnlock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeUnlock();
+        }
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

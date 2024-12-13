@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # minute
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 获得日期中的分钟的信息，返回值范围为 0~59。
 

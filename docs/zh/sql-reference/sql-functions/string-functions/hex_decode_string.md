@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # hex_decode_string
 
+<<<<<<< HEAD
 ## 功能
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 将输入字符串中每一对十六进制数字解析为一个数字，并将解析得到的数字转换为表示该数字的字节，然后返回一个二进制字符串。该函数是 [hex()](../../../sql-reference/sql-functions/string-functions/hex.md) 函数的反向函数。
 

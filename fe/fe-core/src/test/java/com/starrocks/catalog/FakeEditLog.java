@@ -36,6 +36,10 @@ package com.starrocks.catalog;
 
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.backup.BackupJob;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.cluster.Cluster;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
@@ -112,6 +116,13 @@ public class FakeEditLog extends MockUp<EditLog> {
 
     }
 
+<<<<<<< HEAD
+=======
+    @Mock
+    public void logBackupJob(BackupJob job) {
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public TransactionState getTransaction(long transactionId) {
         return allTransactionState.get(transactionId);
     }

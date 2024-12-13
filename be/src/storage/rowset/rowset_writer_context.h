@@ -90,8 +90,19 @@ public:
 
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
+<<<<<<< HEAD
     // Is pk compaction output writer
     bool is_pk_compaction = false;
+=======
+
+    // gtid
+    int64_t gtid = 0;
+    // Is pk compaction output writer
+    bool is_pk_compaction = false;
+    // is compaction job
+    bool is_compaction = false;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::map<string, string>* column_to_expr_value = nullptr;
 };
 

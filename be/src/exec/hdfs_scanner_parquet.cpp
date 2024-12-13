@@ -14,11 +14,19 @@
 
 #include "exec/hdfs_scanner_parquet.h"
 
+<<<<<<< HEAD
+=======
+#include "connector/deletion_vector/deletion_vector.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "exec/hdfs_scanner.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
 #include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/parquet/file_reader.h"
+<<<<<<< HEAD
 #include "runtime/descriptors.h"
+=======
+#include "pipeline/fragment_context.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -27,6 +35,7 @@ static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     if (!scanner_params.deletes.empty()) {
+<<<<<<< HEAD
         HdfsScanStats app_stats;
         {
             SCOPED_RAW_TIMER(&app_stats.iceberg_delete_file_build_ns);
@@ -43,14 +52,37 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
         }
 
         update_v2_builder_counter(scanner_params.profile->runtime_profile, app_stats);
+=======
+        SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
+        auto iceberg_delete_builder =
+                std::make_unique<IcebergDeleteBuilder>(&_need_skip_rowids, runtime_state, scanner_params);
+        for (const auto& delete_file : scanner_params.deletes) {
+            if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+                RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(*delete_file));
+            } else {
+                const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
+                                                   delete_file->file_content);
+                LOG(WARNING) << s;
+                return Status::InternalError(s);
+            }
+        }
+        _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     } else if (scanner_params.paimon_deletion_file != nullptr) {
         std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
                 new PaimonDeleteFileBuilder(scanner_params.fs, &_need_skip_rowids));
         RETURN_IF_ERROR(paimon_delete_file_builder->build(scanner_params.paimon_deletion_file.get()));
+<<<<<<< HEAD
+=======
+    } else if (scanner_params.deletion_vector_descriptor != nullptr) {
+        std::unique_ptr<DeletionVector> dv = std::make_unique<DeletionVector>(scanner_params);
+        RETURN_IF_ERROR(dv->fill_row_indexes(&_need_skip_rowids));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 void HdfsParquetScanner::update_v2_builder_counter(RuntimeProfile* parent_profile, HdfsScanStats& app_stats) {
     const std::string ICEBERG_TIMER = "ICEBERG_V2_MOR";
     ADD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE);
@@ -64,6 +96,8 @@ void HdfsParquetScanner::update_v2_builder_counter(RuntimeProfile* parent_profil
     COUNTER_UPDATE(delete_file_per_scan_counter, app_stats.iceberg_delete_files_per_scan);
 }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     // if we have split tasks, we don't need to update counter
     // and we will update those counters in sub io tasks.
@@ -101,6 +135,15 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* page_skip = nullptr;
     // round-by-round
     RuntimeProfile::Counter* group_min_round_cost = nullptr;
+<<<<<<< HEAD
+=======
+    // page index
+    RuntimeProfile::Counter* rows_before_page_index = nullptr;
+    RuntimeProfile::Counter* page_index_timer = nullptr;
+    // filter stats
+    RuntimeProfile::Counter* total_row_groups = nullptr;
+    RuntimeProfile::Counter* filtered_row_groups = nullptr;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
@@ -139,6 +182,13 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_min_round_cost = root->AddLowWaterMarkCounter(
             "GroupMinRound", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
             kParquetProfileSectionPrefix);
+<<<<<<< HEAD
+=======
+    rows_before_page_index = ADD_CHILD_COUNTER(root, "RowsBeforePageIndex", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_index_timer = ADD_CHILD_TIMER(root, "PageIndexTime", kParquetProfileSectionPrefix);
+    total_row_groups = ADD_CHILD_COUNTER(root, "TotalRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+    filtered_row_groups = ADD_CHILD_COUNTER(root, "FilteredRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
@@ -161,13 +211,29 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(has_page_statistics, page_stats);
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
     group_min_round_cost->set(_app_stats.group_min_round_cost);
+<<<<<<< HEAD
+=======
+    do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+    COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
+    COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
+    COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
+    COUNTER_UPDATE(filtered_row_groups, _app_stats.parquet_filtered_row_groups);
+    if (_scanner_ctx.conjuncts_manager != nullptr &&
+        _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
+        root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
+<<<<<<< HEAD
                                                     _scanner_params.modification_time,
+=======
+                                                    _scanner_params.datacache_options,
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                                                     _shared_buffered_input_stream.get(), &_need_skip_rowids);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));

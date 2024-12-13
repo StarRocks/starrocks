@@ -16,6 +16,10 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.WarehouseManager;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
@@ -25,8 +29,16 @@ import com.starrocks.thrift.TSchemaTableSink;
 public class SchemaTableSink extends DataSink {
     private final String tableName;
 
+<<<<<<< HEAD
     public SchemaTableSink(SystemTable table) {
         tableName = table.getName();
+=======
+    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+
+    public SchemaTableSink(SystemTable table, long warehouseId) {
+        tableName = table.getName();
+        this.warehouseId = warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -41,7 +53,12 @@ public class SchemaTableSink extends DataSink {
     protected TDataSink toThrift() {
         TDataSink tDataSink = new TDataSink(TDataSinkType.SCHEMA_TABLE_SINK);
         TSchemaTableSink sink = new TSchemaTableSink();
+<<<<<<< HEAD
         TNodesInfo info = GlobalStateMgr.getCurrentState().createNodesInfo(GlobalStateMgr.getCurrentState().getClusterId());
+=======
+        TNodesInfo info = GlobalStateMgr.getCurrentState().createNodesInfo(warehouseId,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         sink.setTable(tableName);
         sink.setNodes_info(info);
         tDataSink.setSchema_table_sink(sink);

@@ -119,7 +119,11 @@ public class BackendProcNode implements ProcNodeInterface {
             }
 
             // tablet num
+<<<<<<< HEAD
             info.add(String.valueOf(GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendIdAndPathHash(
+=======
+            info.add(String.valueOf(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletNumByBackendIdAndPathHash(
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                     backend.getId(), diskInfo.getPathHash())));
 
             // data total

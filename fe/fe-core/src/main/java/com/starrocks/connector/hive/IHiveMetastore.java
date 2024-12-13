@@ -16,33 +16,51 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.metastore.IMetastore;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
+<<<<<<< HEAD
 public interface IHiveMetastore {
 
     List<String> getAllDatabaseNames();
+=======
+public interface IHiveMetastore extends IMetastore {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     void createDb(String dbName, Map<String, String> properties);
 
     void dropDb(String dbName, boolean deleteData);
 
+<<<<<<< HEAD
     Database getDb(String dbName);
 
     List<String> getAllTableNames(String dbName);
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     void createTable(String dbName, Table table);
 
     void dropTable(String dbName, String tableName);
 
     Table getTable(String dbName, String tableName);
 
+<<<<<<< HEAD
     boolean tableExists(String dbName, String tableName);
+=======
+    default List<String> getPartitionKeys(String dbName, String tableName) {
+        return getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues);
 

@@ -22,6 +22,7 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaEventsScanner::_s_cols_events[] = {
         //   name,       type,          size,                     is_null
+<<<<<<< HEAD
         {"EVENT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EVENT_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EVENT_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -46,6 +47,32 @@ SchemaScanner::ColumnDesc SchemaEventsScanner::_s_cols_events[] = {
         {"CHARACTER_SET_CLIENT", TYPE_VARCHAR, sizeof(StringValue), false},
         {"COLLATION_CONNECTION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATABASE_COLLATION", TYPE_VARCHAR, sizeof(StringValue), false},
+=======
+        {"EVENT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINER", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TIME_ZONE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_BODY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EVENT_TYPE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(StringValue), false},
+        {"EXECUTE_AT", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"INTERVAL_VALUE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"INTERVAL_FIELD", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"SQL_MODE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STARTS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"ENDS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ON_COMPLETION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
+        {"LAST_ALTERED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), false},
+        {"LAST_EXECUTED", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"EVENT_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ORIGINATOR", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CHARACTER_SET_CLIENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"COLLATION_CONNECTION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE_COLLATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 };
 
 SchemaEventsScanner::SchemaEventsScanner()

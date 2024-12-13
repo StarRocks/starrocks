@@ -15,6 +15,10 @@
 #pragma once
 
 #include <unordered_map>
+<<<<<<< HEAD
+=======
+#include <vector>
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 #include "column/chunk.h"
 #include "common/global_types.h"
@@ -22,6 +26,10 @@
 #include "exec/olap_common.h"
 #include "runtime/global_dict/decoder.h"
 #include "runtime/global_dict/parser.h"
+<<<<<<< HEAD
+=======
+#include "runtime/types.h"
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 namespace starrocks {
 
@@ -56,11 +64,18 @@ private:
     std::shared_ptr<Chunk> _input_chunk;
     std::vector<int32_t> _encode_column_cids;
     std::vector<int32_t> _decode_column_cids;
+<<<<<<< HEAD
+=======
+    std::vector<TypeDescriptor*> _decode_column_types;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     std::vector<GlobalDictDecoderPtr> _decoders;
 
     std::vector<ExprContext*> _expr_ctxs;
     std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>> _string_functions;
+<<<<<<< HEAD
     DictOptimizeParser _dict_optimize_parser;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // profile
     RuntimeProfile::Counter* _decode_timer = nullptr;

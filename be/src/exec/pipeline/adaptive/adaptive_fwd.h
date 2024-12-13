@@ -30,4 +30,10 @@ class RoundRobinState;
 class PassthroughState;
 struct AdaptiveDopParam;
 
+<<<<<<< HEAD
+=======
+class Event;
+using EventPtr = std::shared_ptr<Event>;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 } // namespace starrocks::pipeline

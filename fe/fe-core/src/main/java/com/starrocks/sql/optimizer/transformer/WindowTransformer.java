@@ -26,6 +26,10 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.FunctionSet;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
@@ -400,11 +404,26 @@ public class WindowTransformer {
 
         /*
          * Step 2.
+<<<<<<< HEAD
          * Put the nodes with more partition columns at the top of the query plan
          * to ensure that the Enforce operation can meet the conditions, and only one ExchangeNode will be generated
          */
         sortedGroups.forEach(sortGroup -> sortGroup.getWindowOperators()
                 .sort(Comparator.comparingInt(w -> w.getPartitionExpressions().size())));
+=======
+         * For Each Sort Group, Put the nodes with more partition columns at the top of the query plan
+         * to ensure that the Enforce operation can meet the conditions, and only one ExchangeNode will be generated
+         * If two window ops in the same sort group and same partition size, put rank-related window operator upper
+         * which help PushDownLimitRankingWindowRule and PushDownPredicateRankingWindowRule rule to check plan's shape
+         */
+        sortedGroups.forEach(sortGroup -> sortGroup.getWindowOperators()
+                .sort(Comparator
+                        .<LogicalWindowOperator>comparingInt(w -> w.getPartitionExpressions().size())
+                        .thenComparing(w -> {
+                            String fnName = w.getWindowCall().values().iterator().next().getFnName();
+                            return FunctionSet.RANK_RALATED_FUNCTIONS.contains(fnName) ? 1 : 0;
+                        })));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         /*
          * Step 3.

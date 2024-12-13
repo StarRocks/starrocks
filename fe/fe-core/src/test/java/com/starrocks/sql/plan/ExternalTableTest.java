@@ -50,7 +50,11 @@ public class ExternalTableTest extends PlanTestBase {
     public void testKeyWordWhereCaluse() throws Exception {
         String sql = "select * from test.jdbc_key_words_test where `schema` = \"test\"";
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "`schema` = 'test'");
+=======
+        assertContains(plan, "schema = 'test'");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -185,8 +189,13 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select * from test.jdbc_test where a > 10 and b < 'abc' limit 10";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("0:SCAN JDBC\n" +
+<<<<<<< HEAD
                 "     TABLE: `test_table`\n" +
                 "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10) AND (`b` < 'abc')\n" +
+=======
+                "     TABLE: test_table\n" +
+                "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10) AND (b < 'abc')\n" +
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 "     limit: 10"));
         sql = "select * from test.jdbc_test where a > 10 and length(b) < 20 limit 10";
         plan = getFragmentPlan(sql);
@@ -196,8 +205,13 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  limit: 10\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
+<<<<<<< HEAD
                         "     TABLE: `test_table`\n" +
                         "     QUERY: SELECT `a`, `b`, `c` FROM `test_table` WHERE (`a` > 10)"));
+=======
+                        "     TABLE: test_table\n" +
+                        "     QUERY: SELECT a, b, c FROM test_table WHERE (a > 10)"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     }
 
@@ -211,8 +225,13 @@ public class ExternalTableTest extends PlanTestBase {
                         "  |  group by: b\n" +
                         "  |  \n" +
                         "  0:SCAN JDBC\n" +
+<<<<<<< HEAD
                         "     TABLE: `test_table`\n" +
                         "     QUERY: SELECT `a`, `b` FROM `test_table`"));
+=======
+                        "     TABLE: test_table\n" +
+                        "     QUERY: SELECT a, b FROM test_table"));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -236,11 +255,20 @@ public class ExternalTableTest extends PlanTestBase {
     @Test
     public void testJoinWithMysqlTable() throws Exception {
         // set data size and row count for the olap table
+<<<<<<< HEAD
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("jointest");
         for (Partition partition : tbl.getPartitions()) {
             partition.updateVisibleVersion(2);
             for (MaterializedIndex mIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+=======
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable tbl = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "jointest");
+        for (Partition partition : tbl.getPartitions()) {
+            partition.getDefaultPhysicalPartition().updateVisibleVersion(2);
+            for (MaterializedIndex mIndex : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 mIndex.setRowCount(10000);
                 for (Tablet tablet : mIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {

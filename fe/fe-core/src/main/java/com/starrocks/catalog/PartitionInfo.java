@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
@@ -50,18 +51,40 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+=======
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.io.JsonWriter;
+import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.thrift.TTabletType;
+import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.lang.NotImplementedException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Set;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import javax.validation.constraints.NotNull;
 
 /*
  * Repository of a partition's related infos
  */
+<<<<<<< HEAD
 public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, GsonPostProcessable {
+=======
+public class PartitionInfo extends JsonWriter implements Cloneable, GsonPreProcessable, GsonPostProcessable {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private static final Logger LOG = LogManager.getLogger(PartitionInfo.class);
 
     @SerializedName(value = "type")
@@ -123,6 +146,19 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return type != PartitionType.UNPARTITIONED;
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether it is expr range partitioned which is used in materialized view.
+     * TODO: type may not be compatible with PartitionType.EXPR_RANGE!!!
+     // return type == PartitionType.EXPR_RANGE;
+     * @return ture if it is expr range partitioned
+     */
+    public boolean isExprRangePartitioned() {
+        return this instanceof ExpressionRangePartitionInfo;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isUnPartitioned() {
         return type == PartitionType.UNPARTITIONED;
     }
@@ -221,12 +257,15 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         }
     }
 
+<<<<<<< HEAD
     public static PartitionInfo read(DataInput in) throws IOException {
         PartitionInfo partitionInfo = new PartitionInfo();
         partitionInfo.readFields(in);
         return partitionInfo;
     }
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public boolean isMultiColumnPartition() {
         return isMultiColumnPartition;
     }
@@ -236,6 +275,7 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
     }
 
     @NotNull
+<<<<<<< HEAD
     public List<Column> getPartitionColumns() {
         return Collections.emptyList();
     }
@@ -278,6 +318,32 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
             idToReplicationNum.put(partitionId, replicationNum);
             idToInMemory.put(partitionId, in.readBoolean());
         }
+=======
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
+        return Collections.emptyList();
+    }
+
+    public int getPartitionColumnsSize() {
+        return 0;
+    }
+
+    /**
+     * Return the sorted partitions based on partition value
+     * 1. RANGE: sorted by the range
+     * 2. LIST: sorted by the list value
+     * 3. EXPR: sorted by the expression value
+     */
+    public List<Long> getSortedPartitions(boolean asc) {
+        throw new NotImplementedException("not reachable");
+    }
+
+    /**
+     * Return the partitions that contains NULL partition values
+     * e.g. PARTITION p_null VALUES IN (NULL)
+     */
+    public Set<Long> getNullValuePartitions() {
+        throw new NotImplementedException("not reachable");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -315,7 +381,11 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return buff.toString();
     }
 
+<<<<<<< HEAD
     public void createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+=======
+    public void createAutomaticShadowPartition(List<Column> schema, long partitionId, String replicateNum) throws DdlException {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     public boolean isAutomaticPartition() {

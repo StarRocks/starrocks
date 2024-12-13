@@ -219,6 +219,18 @@ public class MapType extends Type {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    protected String toTypeString(int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            return "map<...>";
+        }
+        return String.format("map<%s,%s>",
+                keyType.toTypeString(depth + 1), valueType.toTypeString(depth + 1));
+    }
+
+    @Override
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public int getMaxUniqueId() {
         return Math.max(keyType.getMaxUniqueId(), valueType.getMaxUniqueId());
     }

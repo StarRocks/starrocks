@@ -24,9 +24,15 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.system.BackendCoreStat;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.system.BackendResourceStat;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -57,6 +63,10 @@ public class ReplayFromDumpTestBase {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
+<<<<<<< HEAD
+=======
+        Config.show_execution_groups = false;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
@@ -80,7 +90,11 @@ public class ReplayFromDumpTestBase {
 
     @Before
     public void before() throws Exception {
+<<<<<<< HEAD
         BackendCoreStat.reset();
+=======
+        BackendResourceStat.getInstance().reset();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
@@ -126,7 +140,11 @@ public class ReplayFromDumpTestBase {
     }
 
     public SessionVariable getTestSessionVariable() {
+<<<<<<< HEAD
         SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+=======
+        SessionVariable sessionVariable = GlobalStateMgr.getCurrentState().getVariableMgr().newSessionVariable();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         sessionVariable.setMaxTransformReorderJoins(8);
         sessionVariable.setEnableGlobalRuntimeFilter(true);
         sessionVariable.setEnableMultiColumnsOnGlobbalRuntimeFilter(true);

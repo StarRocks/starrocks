@@ -75,6 +75,31 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
+<<<<<<< HEAD
+=======
+
+        sql = "select contains_sequence(array[1,2,3], array[1,2])";
+        assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");
+
+        sql = "select concat_ws('_', array['1','2','3'])";
+        assertPlanContains(sql, "concat_ws('_', ['1','2','3'])");
+
+        sql = "select concat_ws('|', array_agg(event_type)) from "
+            + "(select 1 as event_type union all select 1 as event_type union all select 2 as event_type)";
+        assertPlanContains(sql, "concat_ws('|', CAST(8: array_agg AS ARRAY<VARCHAR>))");
+
+        sql = "select concat_ws('.', 5,6,'s',8,9,10)";
+        assertPlanContains(sql, "'5.6.s.8.9.10'");
+
+        sql = "select array_agg(v1) from t0";
+        assertPlanContains(sql, "array_agg(1: v1)");
+
+        sql = "select array_agg(distinct v1) from t0";
+        assertPlanContains(sql, "array_agg_distinct(1: v1)");
+
+        sql = "select array_agg(distinct v1 order by v2) from t0";
+        assertPlanContains(sql, "array_agg(1: v1, 2: v2)");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Test
@@ -97,6 +122,21 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
 
+<<<<<<< HEAD
+=======
+        sql = "select from_unixtime(1724049401);";
+        assertPlanContains(sql, "2024-08-19 14:36:41");
+
+        sql = "select from_unixtime(1724049401, 'America/Bogota');";
+        assertPlanContains(sql, "2024-08-19 01:36:41");
+
+        sql = "select from_unixtime(1724049401, 1, 1);";
+        assertPlanContains(sql, "2024-08-19 15:37:41");
+
+        sql = "select at_timezone(TIMESTAMP '2024-08-19 14:36:41', 'America/Bogota');";
+        assertPlanContains(sql, "2024-08-19 01:36:41");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
         assertPlanContains(sql, "2022-10-20 05:00:00");
 
@@ -253,6 +293,21 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select length('aaa');";
         assertPlanContains(sql, "char_length('aaa')");
 
+<<<<<<< HEAD
+=======
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|', ':');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a');";
+        assertPlanContains(sql, "str_to_map(split('a', ','), ':')");
+
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a:1,b:2,c:null');";
+        assertPlanContains(sql, "str_to_map(split('a:1,b:2,c:null', ','), ':')");
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         sql = "SELECT replace('hello-world', '-');";
         assertPlanContains(sql, "'helloworld'");
 
@@ -264,6 +319,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testURLFnTransform() throws Exception {
+        String sql = "select url_extract_path('https://www.starrocks.io/showcase?query=1')";
+        assertPlanContains(sql, "parse_url('https://www.starrocks.io/showcase?query=1', 'PATH')");
+    }
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testJsonFnTransform() throws Exception {
         String sql = "select json_array_length('[1, 2, 3]')";
         assertPlanContains(sql, "json_length(CAST('[1, 2, 3]' AS JSON))");
@@ -297,6 +361,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testExtractFnTransform() throws Exception {
+        String sql = "SELECT extract(dow FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "dayofweek_iso('2022-10-20 05:10:00')");
+        sql = "SELECT extract(week FROM TIMESTAMP '2022-10-20 05:10:00')";
+        assertPlanContains(sql, "week_iso('2022-10-20 05:10:00')");
+    }
+
+
+    @Test
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     public void testBitFnTransform() throws Exception {
         String sql = "select bitwise_and(19,25)";
         assertPlanContains(sql, "17");
@@ -410,4 +486,20 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select current_schema";
         assertPlanContains(sql, "<slot 2> : 'test'");
     }
+<<<<<<< HEAD
+=======
+
+
+    @Test
+    public void testHllFunction() throws Exception {
+        String sql = "select empty_approx_set()";
+        assertPlanContains(sql, "<slot 2> : HLL_EMPTY()");
+
+        sql = "select approx_set(\"tc\") from tall";
+        assertPlanContains(sql, "<slot 12> : hll_hash(CAST(3: tc AS VARCHAR))");
+
+        sql = "select merge(approx_set(\"tc\")) from tall";
+        assertPlanContains(sql, "hll_raw_agg(hll_hash(CAST(3: tc AS VARCHAR)))");
+    }
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 }

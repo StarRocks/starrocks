@@ -32,6 +32,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
@@ -203,7 +207,13 @@ public class SelectAnalyzer {
             if (item.isStar()) {
                 List<Field> fields = (item.getTblName() == null ? scope.getRelationFields().getAllFields()
                         : scope.getRelationFields().resolveFieldsWithPrefix(item.getTblName()))
+<<<<<<< HEAD
                         .stream().filter(Field::isVisible).collect(Collectors.toList());
+=======
+                        .stream().filter(Field::isVisible)
+                        .filter(field -> !field.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX))
+                        .collect(Collectors.toList());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 List<String> unknownTypeFields = fields.stream()
                         .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
                         .map(Field::getName).collect(Collectors.toList());
@@ -573,7 +583,11 @@ public class SelectAnalyzer {
 
     // If alias is same with table column name, we directly use table name.
     // otherwise, we use output expression according to the alias
+<<<<<<< HEAD
     public static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
+=======
+    public static class RewriteAliasVisitor implements AstVisitor<Expr, Void> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private final Scope sourceScope;
         private final Scope outputScope;
         private final List<Expr> outputExprs;
@@ -621,7 +635,11 @@ public class SelectAnalyzer {
      * it's safe to remove the alias table name to avoid ambiguous semantics in the analyzer stage.
      * Note: This cleaner will change the input expr directly instead of cloning a new expr.
      */
+<<<<<<< HEAD
     public static class SlotRefTableNameCleaner extends AstVisitor<Expr, Void> {
+=======
+    public static class SlotRefTableNameCleaner implements AstVisitor<Expr, Void> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private final Scope sourceScope;
         private final ConnectContext session;
 
@@ -654,7 +672,11 @@ public class SelectAnalyzer {
         }
     }
 
+<<<<<<< HEAD
     private static class NotFullGroupByRewriter extends AstVisitor<Expr, Void> {
+=======
+    private static class NotFullGroupByRewriter implements AstVisitor<Expr, Void> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private final Map<Expr, Expr> columnsNotInGroupBy;
 
         public NotFullGroupByRewriter(Map<Expr, Expr> columnsNotInGroupBy) {

@@ -19,6 +19,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
+<<<<<<< HEAD
+=======
+import com.starrocks.clone.TabletScheduler;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -52,6 +56,10 @@ public class LocationMismatchRepairTest {
         Config.tablet_sched_consecutive_full_clone_delay_sec = 1;
         // Disable balance
         Config.tablet_sched_disable_balance = true;
+<<<<<<< HEAD
+=======
+        TabletScheduler.stateUpdateIntervalMs = 1000;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 10);
     }
@@ -79,7 +87,11 @@ public class LocationMismatchRepairTest {
         int j = 0;
         for (PseudoBackend backend : cluster.getBackends()) {
             String stmtStr = "alter system modify backend '" + backend.getHostHeartbeatPort() + "' set ('" +
+<<<<<<< HEAD
                     AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:r" + i + "')";
+=======
+                        AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:r" + i + "')";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (j % 2 == 1) {
                 i++;
             }
@@ -94,9 +106,15 @@ public class LocationMismatchRepairTest {
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
             Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                     .getClusterInfo().getBackend(pseudoBackend.getId());
             if (backend.getLocation().containsKey(locationKey) &&
                     Objects.equals(backend.getLocation().get(locationKey), locationVal)) {
+=======
+                        .getClusterInfo().getBackend(pseudoBackend.getId());
+            if (backend.getLocation().containsKey(locationKey) &&
+                        Objects.equals(backend.getLocation().get(locationKey), locationVal)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 backendIds.add(backend.getId());
             }
         }
@@ -105,14 +123,24 @@ public class LocationMismatchRepairTest {
 
     private void printTabletReplicaInfo(OlapTable table) {
         table.getPartitions().forEach(partition -> {
+<<<<<<< HEAD
             partition.getBaseIndex().getTablets().forEach(tablet -> {
+=======
+            partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().forEach(tablet -> {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 StringBuffer stringBuffer = new StringBuffer();
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {
                     stringBuffer.append(replica.getBackendId()).append(" ")
+<<<<<<< HEAD
                             .append(GlobalStateMgr.getCurrentState().getNodeMgr()
                                     .getClusterInfo().getBackend(
                             replica.getBackendId()).getLocation()).append(", ");
+=======
+                                .append(GlobalStateMgr.getCurrentState().getNodeMgr()
+                                            .getClusterInfo().getBackend(
+                                                        replica.getBackendId()).getLocation()).append(", ");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 }
                 System.out.println(stringBuffer);
             });
@@ -134,6 +162,7 @@ public class LocationMismatchRepairTest {
 
         PseudoCluster cluster = PseudoCluster.getInstance();
         String sql = "CREATE TABLE test.`test_table_backend_no_loc` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -148,6 +177,23 @@ public class LocationMismatchRepairTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_table_backend_no_loc");
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+        cluster.runSql("test", sql);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_backend_no_loc");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table.getLocation());
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
 
@@ -171,14 +217,21 @@ public class LocationMismatchRepairTest {
         long oldCloneFinishedCnt = stat.counterCloneTaskSucceeded.get();
         long oldLocationMismatchErr = stat.counterReplicaLocMismatchErr.get();
         System.out.println("old clone finished: " + oldCloneFinishedCnt + ", old location mismatch: " +
+<<<<<<< HEAD
                 oldLocationMismatchErr);
         sql = "ALTER TABLE test.`test_table_backend_no_loc` SET ('" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:r1,rack:r2,rack:r3');";
+=======
+                    oldLocationMismatchErr);
+        sql = "ALTER TABLE test.`test_table_backend_no_loc` SET ('" +
+                    PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:r1,rack:r2,rack:r3');";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cluster.runSql("test", sql);
         System.out.println("=========================");
         long start = System.currentTimeMillis();
         while (true) {
             if (stat.counterCloneTaskSucceeded.get() - oldCloneFinishedCnt >= locationMismatchFullCloneNeeded
+<<<<<<< HEAD
                     && stat.counterReplicaLocMismatchErr.get() - oldLocationMismatchErr >=
                     locationMismatchFullCloneNeeded) {
                 break;
@@ -187,6 +240,16 @@ public class LocationMismatchRepairTest {
                     "current clone finished: " + stat.counterCloneTaskSucceeded.get() +
                     ", current location mismatch: " + stat.counterReplicaLocMismatchErr.get() +
                     ", expected clone finished: " + locationMismatchFullCloneNeeded);
+=======
+                        && stat.counterReplicaLocMismatchErr.get() - oldLocationMismatchErr >=
+                        locationMismatchFullCloneNeeded) {
+                break;
+            }
+            System.out.println("wait for enough clone tasks for LOCATION_MISMATCH finished, " +
+                        "current clone finished: " + stat.counterCloneTaskSucceeded.get() +
+                        ", current location mismatch: " + stat.counterReplicaLocMismatchErr.get() +
+                        ", expected clone finished: " + locationMismatchFullCloneNeeded);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Thread.sleep(1000);
             if (System.currentTimeMillis() - start > 180000) {
                 Assert.fail("wait for enough clone tasks for LOCATION_MISMATCH finished timeout");
@@ -194,7 +257,11 @@ public class LocationMismatchRepairTest {
         }
 
         // sleep to wait for redundant replicas cleaned
+<<<<<<< HEAD
         Thread.sleep(10000);
+=======
+        Thread.sleep(5000);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         printTabletReplicaInfo(table);
         Set<Long> stayedBackendIds = getBackendIdsWithLocProp("rack", "r1");
         stayedBackendIds.addAll(getBackendIdsWithLocProp("rack", "r2"));
@@ -206,7 +273,11 @@ public class LocationMismatchRepairTest {
             Set<Pair<String, String>> racks = new HashSet<>();
             for (long backendId : intersection) {
                 Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                         .getClusterInfo().getBackend(backendId);
+=======
+                            .getClusterInfo().getBackend(backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 racks.add(backend.getSingleLevelLocationKV());
             }
             Assert.assertEquals(3, racks.size());
@@ -219,6 +290,7 @@ public class LocationMismatchRepairTest {
 
         PseudoCluster cluster = PseudoCluster.getInstance();
         String sql = "CREATE TABLE test.`test_table_backend_no_loc` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -230,6 +302,19 @@ public class LocationMismatchRepairTest {
                 "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:r0,rack:r1,rack:r2,rack:r4\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:r0,rack:r1,rack:r2,rack:r4\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cluster.runSql("test", sql);
 
         // decommission backends with 'rack:r4' location
@@ -249,7 +334,11 @@ public class LocationMismatchRepairTest {
             while (true) {
                 int curTabletNum = decommissionBE.getTabletManager().getNumTablet();
                 System.out.printf("#tablets: %d/%d: fullClone: %d wait...\n", curTabletNum, pair.second,
+<<<<<<< HEAD
                         Tablet.getTotalFullClone());
+=======
+                            Tablet.getTotalFullClone());
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 if (curTabletNum == 0) {
                     break;
                 }
@@ -258,9 +347,16 @@ public class LocationMismatchRepairTest {
         }
 
         // sleep to wait for redundant replicas cleaned
+<<<<<<< HEAD
         Thread.sleep(10000);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_table_backend_no_loc");
+=======
+        Thread.sleep(5000);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_table_backend_no_loc");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         printTabletReplicaInfo(table);
         Set<Long> stayedBackendIds = getBackendIdsWithLocProp("rack", "r0");
         stayedBackendIds.addAll(getBackendIdsWithLocProp("rack", "r1"));
@@ -275,14 +371,21 @@ public class LocationMismatchRepairTest {
             Set<Pair<String, String>> racks = new HashSet<>();
             for (long backendId : intersection) {
                 Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                         .getClusterInfo().getBackend(backendId);
+=======
+                            .getClusterInfo().getBackend(backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 racks.add(backend.getSingleLevelLocationKV());
             }
             Assert.assertEquals(3, racks.size());
         }
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     @Test
     public void testMVRepairAfterChangeTableLocation() throws Exception {
         setBackendLocationProp();
@@ -290,6 +393,7 @@ public class LocationMismatchRepairTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         // create base table
         String sql = "CREATE TABLE test.`test_base_table` (\n" +
+<<<<<<< HEAD
                 "    k1 int,\n" +
                 "    k2 VARCHAR NOT NULL\n" +
                 ") ENGINE=OLAP\n" +
@@ -301,10 +405,24 @@ public class LocationMismatchRepairTest {
                 "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:*\",\n" +
                 "    \"in_memory\" = \"false\"\n" +
                 ");";
+=======
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 5\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"3\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:*\",\n" +
+                    "    \"in_memory\" = \"false\"\n" +
+                    ");";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cluster.runSql("test", sql);
 
         // create mv
         sql = "CREATE MATERIALIZED VIEW test_mv01\n" +
+<<<<<<< HEAD
                 "DISTRIBUTED BY HASH(`k1`)\n" +
                 "buckets 15\n" +
                 "REFRESH MANUAL\n" +
@@ -316,6 +434,20 @@ public class LocationMismatchRepairTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_mv01");
+=======
+                    "DISTRIBUTED BY HASH(`k1`)\n" +
+                    "buckets 15\n" +
+                    "REFRESH MANUAL\n" +
+                    "properties(\n" +
+                    "    \"replication_num\" = \"3\"" +
+                    ")\n" +
+                    "AS SELECT test_base_table.k1 FROM test_base_table;";
+        cluster.runSql("test", sql);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_mv01");
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertNotNull(table.getLocation());
         Assert.assertTrue(table.getLocation().keySet().contains("*"));
 
@@ -339,14 +471,21 @@ public class LocationMismatchRepairTest {
         long oldCloneFinishedCnt = stat.counterCloneTaskSucceeded.get();
         long oldLocationMismatchErr = stat.counterReplicaLocMismatchErr.get();
         System.out.println("old clone finished: " + oldCloneFinishedCnt + ", old location mismatch: " +
+<<<<<<< HEAD
                 oldLocationMismatchErr);
         sql = "ALTER MATERIALIZED VIEW test.`test_mv01` SET ('" +
                 PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:r1,rack:r2,rack:r3');";
+=======
+                    oldLocationMismatchErr);
+        sql = "ALTER MATERIALIZED VIEW test.`test_mv01` SET ('" +
+                    PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "' = 'rack:r1,rack:r2,rack:r3');";
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         cluster.runSql("test", sql);
         System.out.println("=========================");
         long start = System.currentTimeMillis();
         while (true) {
             if (stat.counterCloneTaskSucceeded.get() - oldCloneFinishedCnt >= locationMismatchFullCloneNeeded
+<<<<<<< HEAD
                     && stat.counterReplicaLocMismatchErr.get() - oldLocationMismatchErr >=
                     locationMismatchFullCloneNeeded) {
                 break;
@@ -355,6 +494,16 @@ public class LocationMismatchRepairTest {
                     "current clone finished: " + stat.counterCloneTaskSucceeded.get() +
                     ", current location mismatch: " + stat.counterReplicaLocMismatchErr.get() +
                     ", expected clone finished: " + locationMismatchFullCloneNeeded);
+=======
+                        && stat.counterReplicaLocMismatchErr.get() - oldLocationMismatchErr >=
+                        locationMismatchFullCloneNeeded) {
+                break;
+            }
+            System.out.println("wait for enough clone tasks for LOCATION_MISMATCH finished, " +
+                        "current clone finished: " + stat.counterCloneTaskSucceeded.get() +
+                        ", current location mismatch: " + stat.counterReplicaLocMismatchErr.get() +
+                        ", expected clone finished: " + locationMismatchFullCloneNeeded);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             Thread.sleep(1000);
             if (System.currentTimeMillis() - start > 180000) {
                 Assert.fail("wait for enough clone tasks for LOCATION_MISMATCH finished timeout");
@@ -374,7 +523,11 @@ public class LocationMismatchRepairTest {
             Set<Pair<String, String>> racks = new HashSet<>();
             for (long backendId : intersection) {
                 Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+<<<<<<< HEAD
                         .getClusterInfo().getBackend(backendId);
+=======
+                            .getClusterInfo().getBackend(backendId);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 racks.add(backend.getSingleLevelLocationKV());
             }
             Assert.assertEquals(3, racks.size());

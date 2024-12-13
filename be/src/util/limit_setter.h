@@ -51,6 +51,20 @@ public:
         return _value.compare_exchange_strong(old_value, new_value);
     }
 
+<<<<<<< HEAD
+=======
+    bool should_expand() {
+        int64_t old_value = _value.load(std::memory_order_relaxed);
+        int32_t expect_num = LIMIT_SETTER_EXPECT_NUM(old_value);
+        int32_t actual_num = LIMIT_SETTER_ACTUAL_NUM(old_value);
+        if (actual_num >= expect_num) {
+            return false;
+        }
+        int64_t new_value = LIMIT_SETTER_MERGE(expect_num, actual_num + 1);
+        return _value.compare_exchange_strong(old_value, new_value);
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 private:
     std::atomic<int64_t> _value;
 };

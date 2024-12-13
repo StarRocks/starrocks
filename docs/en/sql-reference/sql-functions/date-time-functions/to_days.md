@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # to_days
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the number of days between a date and 0000-01-01.
 

@@ -15,6 +15,10 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ColumnId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
@@ -36,12 +40,20 @@ class SchemaChangeData {
     private final Map<Long, List<Column>> newIndexSchema;
     private final List<Index> indexes;
     private final boolean bloomFilterColumnsChanged;
+<<<<<<< HEAD
     private final Set<String> bloomFilterColumns;
+=======
+    private final Set<ColumnId> bloomFilterColumns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private final double bloomFilterFpp;
     private final boolean hasIndexChanged;
     private final Map<Long, Short> newIndexShortKeyCount;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
+<<<<<<< HEAD
+=======
+    private final long warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     static Builder newBuilder() {
         return new Builder();
@@ -76,7 +88,11 @@ class SchemaChangeData {
     }
 
     @Nullable
+<<<<<<< HEAD
     Set<String> getBloomFilterColumns() {
+=======
+    Set<ColumnId> getBloomFilterColumns() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return bloomFilterColumns;
     }
 
@@ -104,6 +120,13 @@ class SchemaChangeData {
         return sortKeyUniqueIds;
     }
 
+<<<<<<< HEAD
+=======
+    long getWarehouseId() {
+        return warehouseId;
+    }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private SchemaChangeData(Builder builder) {
         this.database = Objects.requireNonNull(builder.database, "database is null");
         this.table = Objects.requireNonNull(builder.table, "table is null");
@@ -117,6 +140,10 @@ class SchemaChangeData {
         this.newIndexShortKeyCount = Objects.requireNonNull(builder.newIndexShortKeyCount, "newIndexShortKeyCount is null");
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
+<<<<<<< HEAD
+=======
+        this.warehouseId = builder.warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     static class Builder {
@@ -126,12 +153,20 @@ class SchemaChangeData {
         private Map<Long, List<Column>> newIndexSchema = new HashMap<>();
         private List<Index> indexes;
         private boolean bloomFilterColumnsChanged = false;
+<<<<<<< HEAD
         private Set<String> bloomFilterColumns;
+=======
+        private Set<ColumnId> bloomFilterColumns;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         private double bloomFilterFpp;
         private boolean hasIndexChanged = false;
         private Map<Long, Short> newIndexShortKeyCount = new HashMap<>();
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
+<<<<<<< HEAD
+=======
+        private long warehouseId;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
         private Builder() {
         }
@@ -156,7 +191,11 @@ class SchemaChangeData {
             return this;
         }
 
+<<<<<<< HEAD
         Builder withBloomFilterColumns(@Nullable Set<String> bfColumns, double bfFpp) {
+=======
+        Builder withBloomFilterColumns(@Nullable Set<ColumnId> bfColumns, double bfFpp) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             this.bloomFilterColumns = bfColumns;
             this.bloomFilterFpp = bfFpp;
             return this;
@@ -188,6 +227,14 @@ class SchemaChangeData {
             return this;
         }
 
+<<<<<<< HEAD
+=======
+        Builder withWarehouse(long warehouseId) {
+            this.warehouseId = warehouseId;
+            return this;
+        }
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         @NotNull
         SchemaChangeData build() {
             return new SchemaChangeData(this);

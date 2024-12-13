@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # approx_count_distinct
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col).
 

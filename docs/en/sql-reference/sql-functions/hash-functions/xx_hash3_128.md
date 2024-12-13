@@ -4,7 +4,11 @@ displayed_sidebar: docs
 
 # xx_hash3_128
 
+<<<<<<< HEAD
 ## Description
+=======
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 Returns the 128-bit xxhash3 hash value of the input string. 
 

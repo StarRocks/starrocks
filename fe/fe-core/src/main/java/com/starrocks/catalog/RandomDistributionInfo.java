@@ -40,11 +40,18 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+<<<<<<< HEAD
+=======
+import java.util.Map;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 /**
  * Random partition.
@@ -64,9 +71,14 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public DistributionDesc toDistributionDesc() {
         DistributionDesc distributionDesc = new RandomDistributionDesc(bucketNum);
         return distributionDesc;
+=======
+    public DistributionDesc toDistributionDesc(Map<ColumnId, Column> schema) {
+        return new RandomDistributionDesc(bucketNum);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 
     @Override
@@ -90,7 +102,11 @@ public class RandomDistributionInfo extends DistributionInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public String toSql() {
+=======
+    public String toSql(Map<ColumnId, Column> schema) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         StringBuilder builder = new StringBuilder();
         builder.append("DISTRIBUTED BY RANDOM");
         if (bucketNum > 0) {
@@ -104,6 +120,7 @@ public class RandomDistributionInfo extends DistributionInfo {
         out.writeInt(bucketNum);
     }
 
+<<<<<<< HEAD
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
         bucketNum = in.readInt();
@@ -117,6 +134,10 @@ public class RandomDistributionInfo extends DistributionInfo {
 
     @Override
     public List<Column> getDistributionColumns() {
+=======
+    @Override
+    public List<ColumnId> getDistributionColumns() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         return Collections.emptyList();
     }
 

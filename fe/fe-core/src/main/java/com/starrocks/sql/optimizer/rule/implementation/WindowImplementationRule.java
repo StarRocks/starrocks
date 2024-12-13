@@ -43,6 +43,10 @@ public class WindowImplementationRule extends ImplementationRule {
                 logical.getEnforceSortColumns(),
                 logical.isUseHashBasedPartition(),
                 logical.isSkewed(),
+<<<<<<< HEAD
+=======
+                logical.isInputIsBinary(),
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 logical.getLimit(),
                 logical.getPredicate(),
                 logical.getProjection());

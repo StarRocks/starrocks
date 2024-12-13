@@ -18,6 +18,11 @@ import com.google.common.base.Strings;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+<<<<<<< HEAD
+=======
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
@@ -25,8 +30,13 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
 import com.starrocks.credential.aliyun.AliyunCloudCredential;
+<<<<<<< HEAD
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
+=======
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudCredential;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import org.apache.hadoop.conf.Configuration;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
@@ -50,9 +60,17 @@ public class PaimonConnector implements Connector {
     private Catalog paimonNativeCatalog;
     private final String catalogName;
     private final Options paimonOptions;
+<<<<<<< HEAD
 
     public PaimonConnector(ConnectorContext context) {
         Map<String, String> properties = context.getProperties();
+=======
+    private final ConnectorProperties connectorProperties;
+
+    public PaimonConnector(ConnectorContext context) {
+        Map<String, String> properties = context.getProperties();
+        this.connectorProperties = new ConnectorProperties(ConnectorType.PAIMON, properties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         this.catalogName = context.getCatalogName();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
@@ -97,10 +115,17 @@ public class PaimonConnector implements Connector {
 
     public void initFsOption(CloudConfiguration cloudConfiguration) {
         if (cloudConfiguration.getCloudType() == CloudType.AWS) {
+<<<<<<< HEAD
             AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) cloudConfiguration;
             paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
             paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
             AWSCloudCredential awsCloudCredential = awsCloudConfiguration.getAWSCloudCredential();
+=======
+            AwsCloudConfiguration awsCloudConfiguration = (AwsCloudConfiguration) cloudConfiguration;
+            paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
+            paimonOptions.set("s3.path.style.access", String.valueOf(awsCloudConfiguration.getEnablePathStyleAccess()));
+            AwsCloudCredential awsCloudCredential = awsCloudConfiguration.getAwsCloudCredential();
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             if (!awsCloudCredential.getEndpoint().isEmpty()) {
                 paimonOptions.set("s3.endpoint", awsCloudCredential.getEndpoint());
             }
@@ -141,6 +166,10 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
+<<<<<<< HEAD
         return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog());
+=======
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), connectorProperties);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     }
 }

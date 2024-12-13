@@ -62,7 +62,11 @@ public class MysqlHandshakePacketTest {
         // assert protocol version
         Assert.assertEquals(10, MysqlProto.readInt1(buffer));
         // server version
+<<<<<<< HEAD
         Assert.assertEquals("5.1.0", new String(MysqlProto.readNulTerminateString(buffer)));
+=======
+        Assert.assertEquals("8.0.33", new String(MysqlProto.readNulTerminateString(buffer)));
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // connection id
         Assert.assertEquals(1090, MysqlProto.readInt4(buffer));
         // plugin data 1

@@ -35,16 +35,33 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.DynamicPartitionUtil;
+import com.starrocks.common.util.UnitTestUtil;
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.server.MetadataMgr;
+=======
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.AstBuilder;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
@@ -68,9 +85,18 @@ import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.MethodOrderer;
+<<<<<<< HEAD
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+=======
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 import java.util.Arrays;
 import java.util.List;
@@ -84,7 +110,12 @@ import java.util.stream.IntStream;
 import static com.starrocks.common.util.UnitTestUtil.DB_NAME;
 import static com.starrocks.common.util.UnitTestUtil.MATERIALIZED_VIEW_NAME;
 import static com.starrocks.common.util.UnitTestUtil.TABLE_NAME;
+<<<<<<< HEAD
 
+=======
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class RestoreJobMaterializedViewTest {
@@ -106,6 +137,7 @@ public class RestoreJobMaterializedViewTest {
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
+<<<<<<< HEAD
 
     private MockBackupHandler backupHandler;
 
@@ -113,6 +145,12 @@ public class RestoreJobMaterializedViewTest {
 
     private MvRestoreContext mvRestoreContext;
 
+=======
+    private MockBackupHandler backupHandler;
+    private MockRepositoryMgr repoMgr;
+    private MvRestoreContext mvRestoreContext;
+    static MockedStatic<DynamicPartitionUtil> mockedDynamicPartitionUtil = Mockito.mockStatic(DynamicPartitionUtil.class);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 
     // Thread is not mockable in Jmockit, use subclass instead
     private final class MockBackupHandler extends BackupHandler {
@@ -144,6 +182,7 @@ public class RestoreJobMaterializedViewTest {
     private SystemInfoService systemInfoService;
     @Mocked
     private NodeSelector nodeSelector;
+<<<<<<< HEAD
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
@@ -152,6 +191,15 @@ public class RestoreJobMaterializedViewTest {
     private BackupMeta backupMeta;
 
     private Object[] arrayIds;
+=======
+    @Injectable
+    private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
+                new BlobStorage("broker", Maps.newHashMap()));
+    private BackupMeta backupMeta;
+    private Object[] arrayIds;
+    private SqlParser sqlParser = new SqlParser(AstBuilder.getInstance());
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
     private void setUpMocker() {
         MetricRepo.init();
 
@@ -162,21 +210,60 @@ public class RestoreJobMaterializedViewTest {
         arrayIds = new Object[ID_SIZE];
         IntStream.range(0, ID_SIZE).forEach(i -> arrayIds[i] = id.getAndIncrement());
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = db;
 
+=======
+        // mock DynamicPartitionUtil
+        mockedDynamicPartitionUtil
+                .when(() -> DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(anyLong(), any()))
+                .thenAnswer(new Answer<Void>() {
+                    @Override
+                    public Void answer(InvocationOnMock invocation) throws Throwable {
+                        return null;
+                    }
+                });
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getLocalMetastore().getDb(anyLong);
+                minTimes = 0;
+                result = db;
+
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = sqlParser;
+
+                globalStateMgr.getLocalMetastore().getTable(UnitTestUtil.DB_NAME, MATERIALIZED_VIEW_NAME);
+                minTimes = 0;
+                result = db.getTable(MATERIALIZED_VIEW_NAME);
+
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
 
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
 
                 globalStateMgr.mayGetDb(anyLong);
+=======
+                //GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                //minTimes = 0;
+                //result = systemInfoService;
+
+                globalStateMgr.getLocalMetastore().mayGetDb(anyLong);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 minTimes = 0;
                 result = Optional.of(db);
 
@@ -225,6 +312,7 @@ public class RestoreJobMaterializedViewTest {
             }
         };
         new MockUp<MarkedCountDownLatch>() {
+<<<<<<< HEAD
                 @Mock
                 boolean await(long timeout, TimeUnit unit) {
                     return true;
@@ -247,6 +335,60 @@ public class RestoreJobMaterializedViewTest {
         new MockUp<HdfsUtil>() {
             @Mock
             public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws UserException {
+=======
+            @Mock
+            boolean await(long timeout, TimeUnit unit) {
+                return true;
+            }
+        };
+
+        new MockUp<ConnectContext>() {
+            @Mock
+            GlobalStateMgr getGlobalStateMgr() {
+                return globalStateMgr;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            BackupHandler getBackupHandler() {
+                return backupHandler;
+            }
+        };
+
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws
+                    StarRocksException {
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return db;
+            }
+
+            @Mock
+            public Table getTable(String dbName, String tblName) {
+                return db.getTable(tblName);
+            }
+
+            @Mock
+            public Table getTable(Long dbId, Long tableId) {
+                return db.getTable(tableId);
+            }
+        };
+
+        new MockUp<Analyzer>() {
+            @Mock
+            public void analyze(StatementBase statement, ConnectContext context) {
+            }
+        };
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            public void fixRelationship() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
     }
@@ -275,7 +417,12 @@ public class RestoreJobMaterializedViewTest {
             partInfo.name = partition.getName();
             tblInfo.partitions.put(partInfo.name, partInfo);
 
+<<<<<<< HEAD
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+=======
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getMaterializedIndices(IndexExtState.VISIBLE)) {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
                 BackupIndexInfo idxInfo = new BackupIndexInfo();
                 idxInfo.id = index.getId();
                 idxInfo.name = olapTable.getIndexNameById(index.getId());
@@ -436,6 +583,7 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     @Order(1)
     public void testMVRestore_TestOneTable1() {
         new Expectations() {
@@ -464,6 +612,9 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(3)
     public void testMVRestore_TestMVWithBaseTable1() {
+=======
+    public void testMVRestoreMVWithBaseTable1() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
         // backup & restore
@@ -472,8 +623,12 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     @Order(4)
     public void testMVRestore_TestMVWithBaseTable2() {
+=======
+    public void testMVRestoreMVWithBaseTable2() {
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME, TABLE_NAME));
         // backup & restore
@@ -482,7 +637,17 @@ public class RestoreJobMaterializedViewTest {
     }
 
     @Ignore
+<<<<<<< HEAD
     public void testMVRestore_TestMVWithBaseTable3() {
+=======
+    public void testMVRestoreMVWithBaseTable3() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+            }
+        };
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(TABLE_NAME));
         // backup & restore
@@ -494,6 +659,7 @@ public class RestoreJobMaterializedViewTest {
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
+<<<<<<< HEAD
     @Test
     @Order(6)
     public void testMVRestore_TestMVWithBaseTable4() {
@@ -515,6 +681,14 @@ public class RestoreJobMaterializedViewTest {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
                 return db.getTable(tblName);
+=======
+    @Ignore
+    public void testMVRestoreMVWithBaseTable4() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
             }
         };
         // gen BackupJobInfo
@@ -529,11 +703,19 @@ public class RestoreJobMaterializedViewTest {
     }
 
     private void assertMVActiveEquals(String mvName, boolean expect) {
+<<<<<<< HEAD
         Table mvTable = db.getTable(mvName);
+=======
+        Table mvTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), mvName);
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
         Assert.assertTrue(mvTable != null);
         Assert.assertTrue(mvTable.isMaterializedView());
         MaterializedView mv = (MaterializedView) mvTable;
         Assert.assertEquals(mv.isActive(), expect);
     }
+<<<<<<< HEAD
 }
 
+=======
+}
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))

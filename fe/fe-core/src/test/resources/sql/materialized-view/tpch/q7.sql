@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [sql]
 select
     supp_nation,
@@ -38,6 +39,8 @@ order by
     supp_nation,
     cust_nation,
     l_year ;
+=======
+>>>>>>> b42eff7ae3 ([Doc] Add meaning of 0 for variables (#53714))
 [result]
 TOP-N (order by [[42: n_name ASC NULLS FIRST, 46: n_name ASC NULLS FIRST, 49: year ASC NULLS FIRST]])
     TOP-N (order by [[42: n_name ASC NULLS FIRST, 46: n_name ASC NULLS FIRST, 49: year ASC NULLS FIRST]])
