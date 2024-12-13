@@ -186,6 +186,10 @@ public class Authorizer {
 
     private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
                                                BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
+        if (tbl == null) {
+            return;
+        }
+
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
