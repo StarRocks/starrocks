@@ -551,6 +551,8 @@ public:
             : _state(state), _pool(pool), _expr(expr) {}
 
     Status create();
+    // For string type, this interface will only copy the slice array, not add ColumnPtr,
+    // so be careful to manage the life cycle of source ColumnPtr.
     void add_values(const ColumnPtr& column, size_t column_offset);
     void use_array_set(size_t array_size) { _array_size = array_size; }
     void use_as_join_runtime_filter() { _is_join_runtime_filter = true; }
