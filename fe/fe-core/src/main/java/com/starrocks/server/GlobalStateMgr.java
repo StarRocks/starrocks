@@ -92,8 +92,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
@@ -216,6 +221,10 @@ import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -1309,7 +1318,11 @@ public class GlobalStateMgr {
                                 LiteralExpr.create("true", Type.BOOLEAN)),
                         false);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
@@ -1464,6 +1477,11 @@ public class GlobalStateMgr {
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
+<<<<<<< HEAD
+=======
+
+        PredicateColumnsMgr.getInstance().startDaemon();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {

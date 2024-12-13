@@ -21,7 +21,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.NoAliveBackendException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
@@ -61,7 +65,11 @@ public class Utils {
         try {
             return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .getNodeSelector().seqChooseBackendOrComputeId();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             return null;
         }
     }

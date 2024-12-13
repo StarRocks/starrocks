@@ -57,7 +57,11 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -525,7 +529,11 @@ public class AlterJobMgr {
             view.setInlineViewDefWithSqlMode(inlineViewDef, alterViewInfo.getSqlMode());
             try {
                 view.init();
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new AlterJobException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);

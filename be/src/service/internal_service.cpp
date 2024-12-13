@@ -1283,6 +1283,9 @@ void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* c
 }
 
 template class PInternalServiceImplBase<PInternalService>;
+<<<<<<< HEAD
 template class PInternalServiceImplBase<doris::PBackendService>;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 } // namespace starrocks

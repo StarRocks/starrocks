@@ -22,7 +22,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -65,7 +69,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean readyToExecute() throws UserException {
+=======
+    public boolean readyToExecute() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // Got initialPositions, we need to execute even there's no backlogs
         if (!initialPositions.isEmpty()) {
             return true;
@@ -100,7 +108,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         PulsarRoutineLoadJob routineLoadJob = (PulsarRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
@@ -170,7 +182,11 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
         return "Task id: " + getId() + ", partitions: " + partitions + ", initial positions: " + initialPositions;
     }
 
+<<<<<<< HEAD
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+=======
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);

@@ -65,6 +65,11 @@ public:
 
     ordinal_t num_rows() const override { return _reader->num_rows(); }
 
+<<<<<<< HEAD
+=======
+    bool has_zone_map() const override { return _reader->has_zone_map(); }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicate,
                                       const ColumnPredicate* del_predicate, SparseRange<>* range,
                                       CompoundNodeType pred_relationn) override;

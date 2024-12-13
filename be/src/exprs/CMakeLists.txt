@@ -48,6 +48,10 @@ set(EXPR_FILES
   cast_expr.cpp
   cast_expr_array.cpp
   cast_expr_json.cpp
+<<<<<<< HEAD
+=======
+  cast_expr_struct.cpp
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
   cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
@@ -64,6 +68,10 @@ set(EXPR_FILES
   hyperloglog_functions.cpp
   in_const_predicate.cpp
   info_func.cpp
+<<<<<<< HEAD
+=======
+  inet_aton.cpp
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
   in_predicate.cpp
   is_null_predicate.cpp
   json_functions.cpp

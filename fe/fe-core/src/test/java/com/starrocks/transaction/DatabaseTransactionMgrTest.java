@@ -47,7 +47,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -91,7 +95,11 @@ public class DatabaseTransactionMgrTest {
 
     @Before
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
+<<<<<<< HEAD
             InvocationTargetException, NoSuchMethodException, SecurityException, UserException {
+=======
+            InvocationTargetException, NoSuchMethodException, SecurityException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Config.label_keep_max_second = 10;
         fakeEditLog = new FakeEditLog();
         fakeGlobalStateMgr = new FakeGlobalStateMgr();
@@ -106,7 +114,11 @@ public class DatabaseTransactionMgrTest {
         lableToTxnId = addTransactionToTransactionMgr();
     }
 
+<<<<<<< HEAD
     public void prepareCommittedTransaction() throws UserException {
+=======
+    public void prepareCommittedTransaction() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long transactionId1 = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
                         Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -134,7 +146,11 @@ public class DatabaseTransactionMgrTest {
 
     }
 
+<<<<<<< HEAD
     public Map<String, Long> addTransactionToTransactionMgr() throws UserException {
+=======
+    public Map<String, Long> addTransactionToTransactionMgr() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveTxnId());
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
@@ -266,7 +282,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         assertEquals(8, masterDbTransMgr.getTransactionNum());
@@ -304,18 +324,30 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAbortTransactionWithAttachment() throws UserException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
         expectedEx.expect(UserException.class);
+=======
+    public void testAbortTransactionWithAttachment() throws StarRocksException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        expectedEx.expect(StarRocksException.class);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         expectedEx.expectMessage("transaction not found");
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
         masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", txnCommitAttachment);
     }
 
     @Test
+<<<<<<< HEAD
     public void testAbortTransaction() throws UserException {
+=======
+    public void testAbortTransaction() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
@@ -337,7 +369,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransactionTableRemove() throws UserException {
+=======
+    public void testFinishTransactionTableRemove() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         prepareCommittedTransaction();
         new MockUp<Database>() {
             @Mock
@@ -356,7 +392,11 @@ public class DatabaseTransactionMgrTest {
 
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransactionPartitionRemove() throws UserException {
+=======
+    public void testFinishTransactionPartitionRemove() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         prepareCommittedTransaction();
         new MockUp<OlapTable>() {
             @Mock
@@ -373,18 +413,30 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
     }
     @Test
+<<<<<<< HEAD
     public void testAbortTransactionWithNotFoundException() throws UserException {
+=======
+    public void testAbortTransactionWithNotFoundException() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
 
         long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+<<<<<<< HEAD
         expectedEx.expect(UserException.class);
+=======
+        expectedEx.expect(StarRocksException.class);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         expectedEx.expectMessage("transaction not found");
         masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", null);
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTransactionIdByCoordinateBe() throws UserException {
+=======
+    public void testGetTransactionIdByCoordinateBe() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         List<Pair<Long, Long>> transactionInfoList = masterDbTransMgr.getTransactionIdByCoordinateBe("be1", 10);
@@ -515,7 +567,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFinishTransactionBatch() throws UserException {
+=======
+    public void testFinishTransactionBatch() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
@@ -551,7 +607,11 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPublishVersionMissing() throws UserException {
+=======
+    public void testPublishVersionMissing() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);

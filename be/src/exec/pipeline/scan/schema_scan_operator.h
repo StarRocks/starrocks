@@ -59,6 +59,7 @@ private:
     void attach_chunk_source(int32_t source_index) override {}
     void detach_chunk_source(int32_t source_index) override {}
     bool has_shared_chunk_source() const override { return false; }
+<<<<<<< HEAD
     ChunkPtr get_chunk_from_buffer() override;
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
@@ -68,6 +69,9 @@ private:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
+=======
+    BalancedChunkBuffer& get_chunk_buffer() const override { return _ctx->get_chunk_buffer(); }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     workgroup::ScanSchedEntityType sched_entity_type() const override {
         return workgroup::ScanSchedEntityType::CONNECTOR;

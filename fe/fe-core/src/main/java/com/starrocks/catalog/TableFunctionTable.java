@@ -26,7 +26,11 @@ import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.fs.HdfsUtil;
@@ -245,7 +249,11 @@ public class TableFunctionTable extends Table {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NO_FILES_FOUND, path);
             }
             return files;
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("failed to parse files", e);
             throw new SemanticException("failed to parse files: " + e.getMessage());
         }
@@ -434,7 +442,11 @@ public class TableFunctionTable extends Table {
             for (String piece : ListUtils.emptyIfNull(pieces)) {
                 HdfsUtil.parseFile(piece, new BrokerDesc(properties), fileStatuses);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.error("parse files error", e);
             throw new DdlException("failed to parse files", e);
         }
@@ -472,7 +484,11 @@ public class TableFunctionTable extends Table {
             THdfsProperties hdfsProperties = new THdfsProperties();
             HdfsUtil.getTProperties(filelist.get(0).path, new BrokerDesc(properties), hdfsProperties);
             params.setHdfs_properties(hdfsProperties);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new TException("failed to parse files: " + e.getMessage());
         }
 

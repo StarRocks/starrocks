@@ -17,7 +17,11 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
@@ -146,7 +150,11 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
 
             epoch.onCommitted(binlogState);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             epoch.onFailed();
             // TODO(murphy) handle error
             LOG.warn("Failed to commit transaction for epoch {}", epoch);
@@ -163,7 +171,11 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason,
                     epoch.getCommitInfos(), epoch.getFailedInfos(), null);
             epoch.onFailed();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Abort transaction failed: {}", txnId);
         }
     }

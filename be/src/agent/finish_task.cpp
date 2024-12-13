@@ -18,6 +18,10 @@
 #include "agent/utils.h"
 #include "common/logging.h"
 #include "runtime/exec_env.h"
+<<<<<<< HEAD
+=======
+#include "testutil/sync_point.h"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -26,6 +30,11 @@ const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 
 void finish_task(const TFinishTaskRequest& finish_task_request) {
+<<<<<<< HEAD
+=======
+    TEST_SYNC_POINT_CALLBACK("FinishAgentTask::input",
+                             const_cast<void*>(static_cast<const void*>(&finish_task_request)));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // Return result to FE
     TMasterResult result;
     uint32_t try_time = 0;

@@ -57,6 +57,10 @@ setup(
         "sqlalchemy>=2.0",
         "sqlalchemy-utils>=0.41.2",
         "pymysql>=1.1.0",
+<<<<<<< HEAD
+=======
+        "alembic>=1.4.0"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     ],
     setup_requires=["pytest-runner"],
     tests_require=["pytest", "mock"],

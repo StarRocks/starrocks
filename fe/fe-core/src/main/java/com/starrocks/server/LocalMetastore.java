@@ -37,6 +37,10 @@ package com.starrocks.server;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -69,6 +73,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.FunctionSet;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Index;
@@ -110,7 +118,11 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -227,6 +239,10 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.system.Backend;
@@ -1612,6 +1628,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 // check if meta changed
                 checkIfMetaChange(olapTable, copiedTable, table.getName());
 
+<<<<<<< HEAD
+=======
+                if (olapTable.getPartition(partition.getId()) == null) {
+                    throw new DdlException("Partition[" + partition.getName() + "]' has been dropped.");
+                }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 for (PhysicalPartition subPartition : subPartitions) {
                     // add sub partition
                     partition.addSubPartition(subPartition);
@@ -1636,7 +1659,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
+<<<<<<< HEAD
             Partition partition = olapTable.getPartition(info.getPartitionId());
+=======
+            if (olapTable == null) {
+                LOG.warn("replay add sub partition failed, table is null, info: {}", info);
+                return;
+            }
+            Partition partition = olapTable.getPartition(info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay add sub partition failed, partition is null, info: {}", info);
+                return;
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             PhysicalPartition physicalPartition = info.getPhysicalPartition();
             partition.addSubPartition(physicalPartition);
             // the shardGrouId may invalid when upgrade from old version
@@ -2705,7 +2740,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * including SchemaChangeHandler and RollupHandler
      */
     @Override
+<<<<<<< HEAD
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+=======
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         AlterJobExecutor alterJobExecutor = new AlterJobExecutor();
         alterJobExecutor.process(stmt, context);
     }
@@ -2714,7 +2753,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * used for handling AlterViewStmt (the ALTER VIEW command).
      */
     @Override
+<<<<<<< HEAD
     public void alterView(AlterViewStmt stmt) throws UserException {
+=======
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         new AlterJobExecutor().process(stmt, ConnectContext.get());
     }
 
@@ -2806,7 +2849,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         // create partition info
+<<<<<<< HEAD
         PartitionInfo partitionInfo = buildPartitionInfo(stmt);
+=======
+        // add generate columns into base schema
+        PartitionInfo partitionInfo = buildPartitionInfo(stmt, baseSchema);
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
@@ -3028,7 +3077,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return randomInterval > 0 ? ThreadLocalRandom.current().nextLong(randomInterval) : randomInterval;
     }
 
+<<<<<<< HEAD
     public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
+=======
+    public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt,
+                                                   List<Column> baseSchema) throws DdlException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<Expr> partitionByExprs = stmt.getPartitionByExprs();
         PartitionType partitionType = stmt.getPartitionType();
         List<Column> mvPartitionColumns = stmt.getPartitionColumns();
@@ -3039,6 +3093,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             if (partitionType == PartitionType.LIST) {
+<<<<<<< HEAD
                 for (Expr partitionByExpr : partitionByExprs) {
                     if (!(partitionByExpr instanceof SlotRef)) {
                         throw new DdlException("List partition only support partition by slot ref column:"
@@ -3046,6 +3101,32 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 }
                 return new ListPartitionInfo(PartitionType.LIST, mvPartitionColumns);
+=======
+                Map<Integer, Column> generatedPartitionCols = stmt.getGeneratedPartitionCols();
+                List<Column> newPartitionColumns = new ArrayList<>();
+                Preconditions.checkNotNull(baseSchema);
+                for (int i = 0; i < partitionByExprs.size(); i++) {
+                    Expr partitionByExpr = partitionByExprs.get(i);
+                    Column mvPartitionColumn = mvPartitionColumns.get(i);
+                    if (!(partitionByExpr instanceof SlotRef || MvUtils.isFuncCallExpr(partitionByExpr,
+                            FunctionSet.DATE_TRUNC))) {
+                        throw new DdlException("List partition only support partition by slot ref column or date_trunc:"
+                                + partitionByExpr.toSql());
+                    }
+                    if (!(partitionByExpr instanceof SlotRef)) {
+                        Column generatedCol = generatedPartitionCols.get(i);
+                        if (generatedCol == null) {
+                            throw new DdlException("Partition expression for list must be a generated column: "
+                                    + partitionByExpr.toSql());
+                        }
+                        baseSchema.add(generatedCol);
+                        newPartitionColumns.add(generatedCol);
+                    } else {
+                        newPartitionColumns.add(mvPartitionColumn);
+                    }
+                }
+                return new ListPartitionInfo(PartitionType.LIST, newPartitionColumns);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             } else {
                 if (partitionByExprs.size() > 1) {
                     throw new DdlException("Only support one partition column for range partition");
@@ -3211,7 +3292,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
         boolean force = refreshMaterializedViewStatement.isForceRefresh();
         EitherOr<PartitionRangeDesc, Set<PListCell>> partitionDesc = refreshMaterializedViewStatement.getPartitionDesc();
+<<<<<<< HEAD
         return refreshMaterializedView(dbName, mvName, force, partitionDesc, Constants.TaskRunPriority.HIGH.value(),
+=======
+        int priority = refreshMaterializedViewStatement.getPriority() != null ?
+                refreshMaterializedViewStatement.getPriority() : Constants.TaskRunPriority.HIGH.value();
+        return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync());
     }
 
@@ -3519,7 +3606,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
+<<<<<<< HEAD
         Map<String, Object> results = validateToBeModifiedProps(properties, table);
+=======
+        Map<String, Object> results = validateToBeModifiedProps(properties, db, table);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         TableProperty tableProperty = table.getTableProperty();
         for (String key : results.keySet()) {
@@ -3589,22 +3680,85 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                 ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+<<<<<<< HEAD
         }
     }
 
     private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties, OlapTable table) throws DdlException {
         Map<String, Object> results = Maps.newHashMap();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+=======
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                String ttlRetentionCondition =
+                        propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION,
+                        ttlRetentionCondition);
+                tableProperty.setPartitionRetentionCondition(ttlRetentionCondition);
+                // register or remove ttl partition table
+                if (Strings.isNullOrEmpty(ttlRetentionCondition)) {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
+                            table.getId());
+                } else {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().registerTtlPartitionTable(db.getId(),
+                            table.getId());
+                }
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
+        }
+    }
+
+    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties,
+                                                          Database db, OlapTable table) throws DdlException {
+        Map<String, Object> results = Maps.newHashMap();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition live number.");
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+<<<<<<< HEAD
+=======
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition ttl.");
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
             if (ttlDuration == null) {
                 throw new DdlException("Invalid partition ttl duration");
             }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration);
         }
+<<<<<<< HEAD
+=======
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition live number.");
+            }
+            int partitionTTLNumber = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, partitionTTLNumber);
+        }
+        // partition retention condition
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            if (!table.getPartitionInfo().isPartitioned()) {
+                throw new DdlException("Table[" + table.getName() + "] is not partitioned. "
+                        + "no need to set partition retention condition.");
+            }
+            String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
+                    db, table, properties, true);
+            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
+                throw new DdlException("Invalid partition retention condition");
+            }
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             try {
                 DataProperty dataProperty = DataProperty.getInferredDefaultDataProperty();
@@ -4150,7 +4304,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // init here in case the stmt string from view.toSql() has some syntax error.
             try {
                 view.init();
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new DdlException("failed to init view stmt", e);
             }
 

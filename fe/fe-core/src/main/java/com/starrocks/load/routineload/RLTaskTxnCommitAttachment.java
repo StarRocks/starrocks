@@ -40,7 +40,10 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -172,6 +175,7 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         out.writeLong(taskExecutionTimeMs);
         progress.write(out);
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -182,4 +186,6 @@ public class RLTaskTxnCommitAttachment extends TxnCommitAttachment {
         taskExecutionTimeMs = in.readLong();
         progress = RoutineLoadProgress.read(in);
     }
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

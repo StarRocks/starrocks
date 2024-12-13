@@ -26,7 +26,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -273,7 +277,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+=======
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         normal.alterTable(context, stmt);
     }
 
@@ -352,7 +360,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+=======
+    public void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         normal.alterView(stmt);
     }
 

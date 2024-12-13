@@ -46,7 +46,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -283,7 +287,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws UserException {
+=======
+    public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadJob routineLoadJob = null;
         LoadDataSourceType type = LoadDataSourceType.valueOf(createRoutineLoadStmt.getTypeName());
         switch (type) {
@@ -294,7 +302,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 routineLoadJob = PulsarRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException("Unknown data source type: " + type);
+=======
+                throw new StarRocksException("Unknown data source type: " + type);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         routineLoadJob.setOrigStmt(createRoutineLoadStmt.getOrigStmt());
@@ -406,7 +418,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void pauseRoutineLoadJob(PauseRoutineLoadStmt pauseRoutineLoadStmt)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(pauseRoutineLoadStmt.getDbFullName(),
                 pauseRoutineLoadStmt.getName());
 
@@ -419,7 +435,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 "routine load job has been paused by user").build());
     }
 
+<<<<<<< HEAD
     public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws UserException {
+=======
+    public void resumeRoutineLoadJob(ResumeRoutineLoadStmt resumeRoutineLoadStmt) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(resumeRoutineLoadStmt.getDbFullName(),
                 resumeRoutineLoadStmt.getName());
 
@@ -436,7 +456,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     public void stopRoutineLoadJob(StopRoutineLoadStmt stopRoutineLoadStmt)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadJob routineLoadJob = checkPrivAndGetJob(stopRoutineLoadStmt.getDbFullName(),
                 stopRoutineLoadStmt.getName());
         routineLoadJob.updateState(RoutineLoadJob.JobState.STOPPED,
@@ -584,6 +608,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+<<<<<<< HEAD
     public boolean checkTaskInJob(UUID taskId) {
         readLock();
         try {
@@ -593,6 +618,15 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 }
             }
             return false;
+=======
+    public boolean checkTaskInJob(long jobId, UUID taskId) {
+        readLock();
+        try {
+            if (!idToRoutineLoadJob.containsKey(jobId)) {
+                return false;
+            }
+            return idToRoutineLoadJob.get(jobId).containsTask(taskId);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             readUnlock();
         }
@@ -669,7 +703,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         warehouseLoadStatusInfoBuilder.withRemovedJob(routineLoadJob);
     }
 
+<<<<<<< HEAD
     public void updateRoutineLoadJob() throws UserException {
+=======
+    public void updateRoutineLoadJob() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         readLock();
         try {
             for (RoutineLoadJob routineLoadJob : idToRoutineLoadJob.values()) {
@@ -693,7 +731,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         RoutineLoadJob job = getJob(operation.getId());
         try {
             job.updateState(operation.getJobState(), null, true /* is replay */);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.error("should not happened", e);
         }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, operation.getId())
@@ -722,7 +764,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     /**
      * Enter of altering a routine load job
      */
+<<<<<<< HEAD
     public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws UserException {
+=======
+    public void alterRoutineLoadJob(AlterRoutineLoadStmt stmt) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadJob job = checkPrivAndGetJob(stmt.getDbName(), stmt.getLabel());
         if (job.getState() != RoutineLoadJob.JobState.PAUSED) {
             throw new DdlException("Only supports modification of PAUSED jobs");
@@ -735,7 +781,11 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 stmt.getDataSourceProperties(), stmt.getOrigStmt(), false);
     }
 
+<<<<<<< HEAD
     public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws UserException, IOException {
+=======
+    public void replayAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) throws StarRocksException, IOException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadJob job = getJob(log.getJobId());
         Preconditions.checkNotNull(job, log.getJobId());
 

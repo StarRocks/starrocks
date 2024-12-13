@@ -81,13 +81,21 @@ public:
 
     Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
 
+<<<<<<< HEAD
+=======
+    size_t row_group_size() const { return _row_group_size; }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 private:
     int _chunk_size;
 
     std::shared_ptr<MetaHelper> _build_meta_helper();
 
+<<<<<<< HEAD
     Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
 
     Status _init_group_readers();
@@ -110,6 +118,11 @@ private:
     // exist=true: group meta contain statistics info
     Status _read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
                                ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
+<<<<<<< HEAD
+=======
+    Status _read_has_nulls(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
+                           std::vector<bool>* has_nulls);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
@@ -117,12 +130,15 @@ private:
     // get partition column idx in param.partition_columns
     int32_t _get_partition_column_idx(const std::string& col_name) const;
 
+<<<<<<< HEAD
     // Get parquet footer size
     StatusOr<uint32_t> _get_footer_read_size() const;
 
     // Validate the magic bytes and get the length of metadata
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     Status _build_split_tasks();
 
     RandomAccessFile* _file = nullptr;

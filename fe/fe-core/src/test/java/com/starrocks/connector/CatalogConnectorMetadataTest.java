@@ -18,7 +18,11 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
@@ -161,7 +165,11 @@ public class CatalogConnectorMetadataTest {
     }
 
     @Test
+<<<<<<< HEAD
     void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws UserException {
+=======
+    void testMetadataRouting(@Mocked ConnectorMetadata connectorMetadata) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
         ctx.setThreadLocalInfo();
         GetRemoteFilesParams getRemoteFilesParams =

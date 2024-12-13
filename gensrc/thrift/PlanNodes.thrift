@@ -315,6 +315,18 @@ struct TPaimonDeletionFile {
     3: optional i64 length
 }
 
+<<<<<<< HEAD
+=======
+// refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
+struct TDeletionVectorDescriptor {
+  1: optional string storageType
+  2: optional string pathOrInlineDv
+  3: optional i64 offset
+  4: optional i64 sizeInBytes
+  5: optional i64 cardinality
+}
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 // Hdfs scan range
 struct THdfsScanRange {
     // File name (not the full path).  The path is assumed to be relative to the
@@ -401,6 +413,11 @@ struct THdfsScanRange {
     29: optional Descriptors.THdfsPartition partition_value;
 
     30: optional Types.TTableId table_id;
+<<<<<<< HEAD
+=======
+
+    31:optional TDeletionVectorDescriptor deletion_vector_descriptor
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 struct TBinlogScanRange {
@@ -549,6 +566,22 @@ struct TVectorSearchOptions {
   10: optional double k_factor;
 }
 
+<<<<<<< HEAD
+=======
+enum SampleMethod {
+  BY_BLOCK,
+  BY_PAGE,
+}
+
+struct TTableSampleOptions {
+  1: optional bool enable_sampling;
+  2: optional SampleMethod sample_method;
+  3: optional i64 random_seed;
+  4: optional i64 probability_percent;
+    
+}
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 // If you find yourself changing this struct, see also TLakeScanNode
 struct TOlapScanNode {
   1: required Types.TTupleId tuple_id
@@ -581,6 +614,10 @@ struct TOlapScanNode {
   37: optional i64 schema_id
 
   40: optional TVectorSearchOptions vector_search_options
+<<<<<<< HEAD
+=======
+  41: optional TTableSampleOptions sample_options;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 struct TJDBCScanNode {
@@ -1153,6 +1190,14 @@ struct TProjectNode {
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
+<<<<<<< HEAD
+=======
+struct TSelectNode {
+     // used for common expressions compute result reuse
+    1: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+}
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 struct TMetaScanNode {
     // column id to column name
     1: optional map<i32, string> id_to_names
@@ -1315,6 +1360,11 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
+<<<<<<< HEAD
+=======
+
+  81: optional TSelectNode select_node; 
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

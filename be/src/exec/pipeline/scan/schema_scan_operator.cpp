@@ -58,6 +58,7 @@ ChunkSourcePtr SchemaScanOperator::create_chunk_source(MorselPtr morsel, int32_t
                                                std::move(morsel), _ctx);
 }
 
+<<<<<<< HEAD
 ChunkPtr SchemaScanOperator::get_chunk_from_buffer() {
     ChunkPtr chunk = nullptr;
     if (_ctx->get_chunk_buffer().try_get(_driver_sequence, &chunk)) {
@@ -98,4 +99,6 @@ void SchemaScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
 }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 } // namespace starrocks::pipeline

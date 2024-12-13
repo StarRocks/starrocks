@@ -84,6 +84,10 @@ public class CreateReplicaTask extends AgentTask {
     private boolean createSchemaFile = true;
     private boolean enableTabletCreationOptimization = false;
     private final TTabletSchema tabletSchema;
+<<<<<<< HEAD
+=======
+    private long timeoutMs = -1;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -144,6 +148,13 @@ public class CreateReplicaTask extends AgentTask {
         this.baseSchemaHash = baseSchemaHash;
     }
 
+<<<<<<< HEAD
+=======
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public TTabletType getTabletType() {
         return tabletType;
     }

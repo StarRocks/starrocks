@@ -17,12 +17,18 @@ package com.starrocks.statistic.sample;
 public class TabletStats {
 
     private final long tabletId;
+<<<<<<< HEAD
     private final long partitionId;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     private final long rowCount;
 
     public TabletStats(long tabletId, long partitionId, long rowCount) {
         this.tabletId = tabletId;
+<<<<<<< HEAD
         this.partitionId = partitionId;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         this.rowCount = rowCount;
     }
 
@@ -30,10 +36,13 @@ public class TabletStats {
         return tabletId;
     }
 
+<<<<<<< HEAD
     public long getPartitionId() {
         return partitionId;
     }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public long getRowCount() {
         return rowCount;
     }

@@ -130,6 +130,13 @@ public class InputDependenciesChecker implements PlanValidator.Checker {
                 predicateCols.except(ColumnRefSet.createByIds(optExpression.getRowOutputInfo()
                         .getOriginalColOutputInfo().keySet()));
                 usedCols.union(predicateCols);
+<<<<<<< HEAD
+=======
+                if (optExpression.getOp().getPredicateCommonOperators() != null) {
+                    // predicate cols may be also from common exprs
+                    inputCols.union(optExpression.getOp().getPredicateCommonOperators().keySet());
+                }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             checkInputCols(inputCols, usedCols, optExpression);
         }

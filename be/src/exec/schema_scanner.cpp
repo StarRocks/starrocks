@@ -19,6 +19,10 @@
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "common/statusor.h"
+<<<<<<< HEAD
+=======
+#include "exec/schema_scanner/schema_analyze_status.h"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "exec/schema_scanner/schema_be_bvars_scanner.h"
 #include "exec/schema_scanner/schema_be_cloud_native_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
@@ -31,6 +35,10 @@
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
 #include "exec/schema_scanner/schema_charsets_scanner.h"
 #include "exec/schema_scanner/schema_collations_scanner.h"
+<<<<<<< HEAD
+=======
+#include "exec/schema_scanner/schema_column_stats_usage_scanner.h"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "exec/schema_scanner/schema_columns_scanner.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
 #include "exec/schema_scanner/schema_fe_metrics_scanner.h"
@@ -213,6 +221,13 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+<<<<<<< HEAD
+=======
+    case TSchemaTableType::SCH_COLUMN_STATS_USAGE:
+        return std::make_unique<SchemaColumnStatsUsageScanner>();
+    case TSchemaTableType::SCH_ANALYZE_STATUS:
+        return std::make_unique<SchemaAnalyzeStatus>();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

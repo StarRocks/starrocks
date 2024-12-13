@@ -55,7 +55,11 @@ PROPERTIES(
   PROPERTIES(
       "aws.s3.access_key" = "XXXXXXXXXXXXXXXXX",
       "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyyyyyy",
+<<<<<<< HEAD
       "aws.s3.endpoint" = "s3.us-east-1.amazonaws.com"
+=======
+      "aws.s3.region" = "us-east-1"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
   );
   ```
 

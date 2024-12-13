@@ -62,7 +62,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
@@ -660,7 +664,11 @@ public class BackupJob extends AbstractJob {
                 BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                 try {
                     HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
                     return;
                 }

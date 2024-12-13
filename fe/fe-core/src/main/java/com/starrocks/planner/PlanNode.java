@@ -47,8 +47,13 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TreeNode;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.common.PermutationGenerator;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -545,7 +550,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      * Call this once on the root of the plan tree before calling toThrift().
      * Subclasses need to override this.
      */
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         for (PlanNode child : children) {
             child.finalizeStats(analyzer);
         }
@@ -581,7 +590,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return outputSmap;
     }
 
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     /**
@@ -621,7 +634,11 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
      *
      * @throws AnalysisException
      */
+<<<<<<< HEAD
     protected void createDefaultSmap(Analyzer analyzer) throws UserException {
+=======
+    protected void createDefaultSmap(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ExprSubstitutionMap combinedChildSmap = getCombinedChildSmap();
         outputSmap =
                 ExprSubstitutionMap.compose(outputSmap, combinedChildSmap, analyzer);

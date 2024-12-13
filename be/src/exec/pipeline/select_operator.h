@@ -25,8 +25,15 @@ namespace pipeline {
 class SelectOperator final : public Operator {
 public:
     SelectOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+<<<<<<< HEAD
                    const std::vector<ExprContext*>& conjunct_ctxs)
             : Operator(factory, id, "select", plan_node_id, false, driver_sequence), _conjunct_ctxs(conjunct_ctxs) {}
+=======
+                   const std::vector<ExprContext*>& conjunct_ctxs, const std::map<SlotId, ExprContext*>& common_exprs)
+            : Operator(factory, id, "select", plan_node_id, false, driver_sequence),
+              _conjunct_ctxs(conjunct_ctxs),
+              _common_exprs(common_exprs) {}
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     ~SelectOperator() override = default;
     Status prepare(RuntimeState* state) override;
@@ -53,19 +60,36 @@ private:
     ChunkPtr _pre_output_chunk = nullptr;
 
     const std::vector<ExprContext*>& _conjunct_ctxs;
+<<<<<<< HEAD
+=======
+    const std::map<SlotId, ExprContext*>& _common_exprs;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     bool _is_finished = false;
 };
 
 class SelectOperatorFactory final : public OperatorFactory {
 public:
+<<<<<<< HEAD
     SelectOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<ExprContext*>&& conjunct_ctxs)
             : OperatorFactory(id, "select", plan_node_id), _conjunct_ctxs(std::move(conjunct_ctxs)) {}
+=======
+    SelectOperatorFactory(int32_t id, int32_t plan_node_id, std::vector<ExprContext*>&& conjunct_ctxs,
+                          std::map<SlotId, ExprContext*>&& common_exprs)
+            : OperatorFactory(id, "select", plan_node_id),
+              _conjunct_ctxs(std::move(conjunct_ctxs)),
+              _common_exprs(std::move(common_exprs)) {}
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     ~SelectOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+<<<<<<< HEAD
         return std::make_shared<SelectOperator>(this, _id, _plan_node_id, driver_sequence, _conjunct_ctxs);
+=======
+        return std::make_shared<SelectOperator>(this, _id, _plan_node_id, driver_sequence, _conjunct_ctxs,
+                                                _common_exprs);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     Status prepare(RuntimeState* state) override;
@@ -73,6 +97,10 @@ public:
 
 private:
     std::vector<ExprContext*> _conjunct_ctxs;
+<<<<<<< HEAD
+=======
+    std::map<SlotId, ExprContext*> _common_exprs;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 };
 
 } // namespace pipeline

@@ -45,7 +45,11 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
@@ -127,7 +131,11 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormalPlan() throws UserException {
+=======
+    public void testNormalPlan() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -168,7 +176,11 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPartialUpdatePlan() throws UserException {
+=======
+    public void testPartialUpdatePlan() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, false);
         columns.add(c1);
@@ -211,7 +223,11 @@ public class StreamLoadPlannerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPartialUpdateMode() throws UserException {
+=======
+    public void testPartialUpdateMode() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadKvParams param = new StreamLoadKvParams(
                 Collections.singletonMap(HTTP_PARTIAL_UPDATE_MODE, "column"));
         UUID uuid = UUID.randomUUID();

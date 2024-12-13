@@ -30,6 +30,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+<<<<<<< HEAD
+=======
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 import java.util.ArrayList;
 import java.util.List;
@@ -996,6 +1001,21 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
     }
 
+<<<<<<< HEAD
+=======
+    // NOTE: for JUnit 5
+    @BeforeAll
+    public static void beforeAll() throws Exception {
+        beforeClass();
+    }
+
+    // NOTE: for JUnit 5
+    @AfterAll
+    public static void afterAll() throws Exception {
+        afterClass();
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
         String currentDb = starRocksAssert.getCtx().getDatabase();
         if (StringUtils.isNotEmpty(currentDb)) {

@@ -21,7 +21,11 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.metric.MetricRepo;
@@ -98,9 +102,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private static final int ABSENT_MAX_CPU_CORES = -1;
 
     private final QueryQueueManager manager = QueryQueueManager.getInstance();
+<<<<<<< HEAD
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
+=======
+
+    private final Map<Long, ResourceGroup> mockedGroups = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     private boolean prevQueueEnableSelect;
     private boolean prevQueueEnableStatistic;
@@ -178,7 +188,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         {
             //  Case 1: Coordinator needn't check queue.
             GlobalVariable.setEnableQueryQueueSelect(true);
+<<<<<<< HEAD
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
+=======
+            DefaultCoordinator coordinator =
+                    getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             manager.maybeWait(connectContext, coordinator);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
         }
@@ -202,7 +217,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         {
             // 2. ScanNodes only contain SchemaNode.
+<<<<<<< HEAD
             DefaultCoordinator coordinator = getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
+=======
+            DefaultCoordinator coordinator =
+                    getSchedulerWithQueryId("select TABLE_CATALOG from information_schema.tables");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertFalse(coordinator.getJobSpec().isNeedQueued());
         }
 
@@ -309,7 +329,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             threads.add(new Thread(() -> {
                 try {
                     manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                 } catch (UserException | InterruptedException e) {
+=======
+                } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     Throwable expected = queryIdToShouldThrow.get(coord.getQueryId());
                     if (expected == null) {
                         throw new RuntimeException(e);
@@ -328,7 +352,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         // 3. The coming queries exceed the query queue capacity.
         for (int i = 0; i < 10; i++) {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
             Assert.assertThrows("the number of pending queries exceeds capacity", UserException.class,
+=======
+            Assert.assertThrows("the number of pending queries exceeds capacity", StarRocksException.class,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     () -> manager.maybeWait(connectContext, coord));
         }
 
@@ -343,19 +371,34 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             int expectedAllocatedCoords = Math.min(numResetCoords, concurrencyLimit);
             // 5.1 `concurrencyLimit` queries become allocated.
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
+<<<<<<< HEAD
                     .until(() -> numResetCoords - expectedAllocatedCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+                    .until(() -> numResetCoords - expectedAllocatedCoords ==
+                            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             List<DefaultCoordinator> allocatedCoords =
                     coords.stream().filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED)
                             .collect(Collectors.toList());
             Assert.assertEquals(expectedAllocatedCoords, allocatedCoords.size());
 
             // 5.2 Cancel one pending query.
+<<<<<<< HEAD
             resetCoords = resetCoords.stream().filter(coord -> coord.getSlot().getState() != LogicalSlot.State.ALLOCATED)
                     .collect(Collectors.toList());
             resetCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
 
             if (!resetCoords.isEmpty()) {
                 queryIdToShouldThrow.put(resetCoords.get(0).getQueryId(), new UserException("Cancelled"));
+=======
+            resetCoords =
+                    resetCoords.stream().filter(coord -> coord.getSlot().getState() != LogicalSlot.State.ALLOCATED)
+                            .collect(Collectors.toList());
+            resetCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState()));
+
+            if (!resetCoords.isEmpty()) {
+                queryIdToShouldThrow.put(resetCoords.get(0).getQueryId(), new StarRocksException("Cancelled"));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 resetCoords.get(0).cancel("Cancel by test");
                 Assert.assertEquals(LogicalSlot.State.CANCELLED, resetCoords.get(0).getSlot().getState());
                 resetCoords.remove(0);
@@ -363,7 +406,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
             // 4.3 Finish these new allocated queries.
             allocatedCoords.forEach(DefaultCoordinator::onFinished);
+<<<<<<< HEAD
             allocatedCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
+=======
+            allocatedCoords.forEach(
+                    coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
@@ -445,7 +493,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 threads.add(new Thread(() -> {
                     try {
                         manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                     } catch (UserException | InterruptedException e) {
+=======
+                    } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         throw new RuntimeException(e);
                     }
                 }));
@@ -462,7 +514,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         // 3. The coming queries exceed the query queue capacity.
         for (int i = 0; i < 10; i++) {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
             Assert.assertThrows("the number of pending queries exceeds capacity", UserException.class,
+=======
+            Assert.assertThrows("the number of pending queries exceeds capacity", StarRocksException.class,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     () -> manager.maybeWait(connectContext, coord));
         }
 
@@ -477,18 +533,34 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             int expectedAllocatedCoords = Math.min(numResetCoords, concurrencyLimit);
             // 5.1 `concurrencyLimit` queries become allocated.
             Awaitility.await().atMost(10, TimeUnit.SECONDS)
+<<<<<<< HEAD
                     .until(() -> numResetCoords - expectedAllocatedCoords == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+                    .until(() -> numResetCoords - expectedAllocatedCoords ==
+                            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             List<DefaultCoordinator> allocatedCoords =
                     coords.stream().filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED)
                             .collect(Collectors.toList());
             Assert.assertEquals(expectedAllocatedCoords, allocatedCoords.size());
 
+<<<<<<< HEAD
             resetCoords = resetCoords.stream().filter(coord -> coord.getSlot().getState() != LogicalSlot.State.ALLOCATED)
                     .collect(Collectors.toList());
 
             // 5.2 Finish these new allocated queries.
             allocatedCoords.forEach(DefaultCoordinator::onFinished);
             allocatedCoords.forEach(coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
+=======
+            resetCoords =
+                    resetCoords.stream().filter(coord -> coord.getSlot().getState() != LogicalSlot.State.ALLOCATED)
+                            .collect(Collectors.toList());
+
+            // 5.2 Finish these new allocated queries.
+            allocatedCoords.forEach(DefaultCoordinator::onFinished);
+            allocatedCoords.forEach(
+                    coord -> Assert.assertEquals(LogicalSlot.State.RELEASED, coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
@@ -526,7 +598,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 threads.add(new Thread(() -> {
                     try {
                         manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                     } catch (UserException | InterruptedException e) {
+=======
+                    } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         throw new RuntimeException(e);
                     }
                 }));
@@ -549,7 +625,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 // In each loop, each group allocates `limit` slots.
                 int numAllocatedCoords = Math.min(limit, coords.size());
                 Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+<<<<<<< HEAD
                         coords.stream().filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED).count() ==
+=======
+                        coords.stream().filter(coord -> coord.getSlot().getState() == LogicalSlot.State.ALLOCATED)
+                                .count() ==
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                                 numAllocatedCoords);
 
                 List<DefaultCoordinator> allocatedCoords =
@@ -594,14 +675,26 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         {
             // 2.1 The coming query pending timeout, query_timeout (300) > pending_timeout (2).
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
             Assert.assertThrows("pending timeout", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+            Assert.assertThrows("pending timeout", StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         {
             // 2.2 The coming query pending timeout, query_timeout (2) < pending_timeout (300).
             GlobalVariable.setQueryQueuePendingTimeoutSecond(300);
+<<<<<<< HEAD
             DefaultCoordinator coord = getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
             Assert.assertThrows("pending timeout", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+            DefaultCoordinator coord =
+                    getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
+            Assert.assertThrows("pending timeout", StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         {
@@ -614,8 +707,15 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 }
             });
             GlobalVariable.setQueryQueuePendingTimeoutSecond(300);
+<<<<<<< HEAD
             DefaultCoordinator coord = getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
             Assert.assertThrows("pending timeout", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+            DefaultCoordinator coord =
+                    getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
+            Assert.assertThrows("pending timeout", StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             mockFrontendService(new MockFrontendServiceClient());
         }
         {
@@ -639,14 +739,23 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             scheduler.schedule(() -> {
                 coord.cancel("simulate timeout");
             }, 1, TimeUnit.SECONDS);
+<<<<<<< HEAD
 
             Assert.assertThrows("pending timeout", UserException.class,
+=======
+            Assert.assertThrows("pending timeout", StarRocksException.class,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     () -> manager.maybeWait(connectContext, coord));
         }
 
         // 3. Finish the first `concurrencyLimit` non-group queries.
         runningCoords.forEach(DefaultCoordinator::onFinished);
+<<<<<<< HEAD
         runningCoords.forEach(coordinator -> Assert.assertEquals(LogicalSlot.State.RELEASED, coordinator.getSlot().getState()));
+=======
+        runningCoords.forEach(
+                coordinator -> Assert.assertEquals(LogicalSlot.State.RELEASED, coordinator.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         // SlotManager should clear this expired pending query.
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
@@ -663,7 +772,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         // 1. Run `concurrencyLimit` queries first, and they shouldn't be queued.
         List<DefaultCoordinator> runningCoords = new ArrayList<>();
         for (int i = 0; i < concurrencyLimit; i++) {
+<<<<<<< HEAD
             DefaultCoordinator coord = getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
+=======
+            DefaultCoordinator coord =
+                    getSchedulerWithQueryId("select /*+SET_VAR(query_timeout=2)*/ count(1) from lineitem");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             manager.maybeWait(connectContext, coord);
             Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
             Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
@@ -675,7 +789,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
         manager.maybeWait(connectContext, coord);
 
+<<<<<<< HEAD
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
         // 3. Finish this query.
@@ -695,7 +814,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         GlobalVariable.setEnableQueryQueueSelect(true);
 
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
         Assert.assertThrows("mock-require-slot-async-exception", UserException.class,
+=======
+        Assert.assertThrows("mock-require-slot-async-exception", StarRocksException.class,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 () -> manager.maybeWait(connectContext, coord));
     }
 
@@ -728,7 +851,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             GlobalVariable.setEnableQueryQueueSelect(true);
 
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
             Assert.assertThrows("mock-not-invalid-method", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+            Assert.assertThrows("mock-not-invalid-method", StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
@@ -755,12 +883,21 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         Thread thread = new Thread(() -> {
             try {
                 manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
             } catch (UserException | InterruptedException e) {
+=======
+            } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new RuntimeException(e);
             }
         });
         thread.start();
+<<<<<<< HEAD
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue() > 0);
+=======
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+                MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue() > 0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
         // 2. The leader is changed, so the query can get slot from the new leader.
@@ -774,7 +911,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             }
         };
         changeLeader(FRONTENDS.get(1));
+<<<<<<< HEAD
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+                0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals(LogicalSlot.State.ALLOCATED, coord.getSlot().getState());
 
         // 3. Finish this query.
@@ -812,9 +954,17 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // 2. The coming query is pending.
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             Thread thread = new Thread(
+<<<<<<< HEAD
                     () -> Assert.assertThrows("Cancelled", UserException.class, () -> manager.maybeWait(connectContext, coord)));
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+                    () -> Assert.assertThrows("Cancelled", StarRocksException.class,
+                            () -> manager.maybeWait(connectContext, coord)));
+            thread.start();
+            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // 3. Cancel this query, and failed to releaseSlot due to exception.
@@ -826,7 +976,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             });
             coord.cancel("Cancel by test");
             mockFrontendService(new MockFrontendServiceClient());
+<<<<<<< HEAD
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+                    0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
         }
 
@@ -834,9 +989,17 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // 2. The coming query is pending.
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             Thread thread = new Thread(
+<<<<<<< HEAD
                     () -> Assert.assertThrows("Cancelled", UserException.class, () -> manager.maybeWait(connectContext, coord)));
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+                    () -> Assert.assertThrows("Cancelled", StarRocksException.class,
+                            () -> manager.maybeWait(connectContext, coord)));
+            thread.start();
+            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // 3. Cancel this query, and failed to releaseSlot due to error status without msg.
@@ -851,7 +1014,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             });
             coord.cancel("Cancel by test");
             mockFrontendService(new MockFrontendServiceClient());
+<<<<<<< HEAD
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
         }
 
@@ -859,9 +1027,17 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             // 2. The coming query is pending.
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             Thread thread = new Thread(
+<<<<<<< HEAD
                     () -> Assert.assertThrows("Cancelled", UserException.class, () -> manager.maybeWait(connectContext, coord)));
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+                    () -> Assert.assertThrows("Cancelled", StarRocksException.class,
+                            () -> manager.maybeWait(connectContext, coord)));
+            thread.start();
+            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // 3. Cancel this query, and failed to releaseSlot due to error status with msg.
@@ -877,7 +1053,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             });
             coord.cancel("Cancel by test");
             mockFrontendService(new MockFrontendServiceClient());
+<<<<<<< HEAD
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
         }
 
@@ -920,14 +1101,27 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             });
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             Thread thread = new Thread(
+<<<<<<< HEAD
                     () -> Assert.assertThrows("Cancelled", UserException.class, () -> manager.maybeWait(connectContext, coord)));
             thread.start();
             Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+                    () -> Assert.assertThrows("Cancelled", StarRocksException.class,
+                            () -> manager.maybeWait(connectContext, coord)));
+            thread.start();
+            Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                    .until(() -> 1 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals(LogicalSlot.State.REQUIRING, coord.getSlot().getState());
 
             // The slot should be removed after failing to `finishSlotRequirement`.
             Awaitility.await().atMost(5, TimeUnit.SECONDS)
+<<<<<<< HEAD
                     .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().size() == concurrencyLimit - 1);
+=======
+                    .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().size() ==
+                            concurrencyLimit - 1);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
             coord.cancel("Cancel by test");
         }
@@ -969,7 +1163,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
             coords.add(coord);
             threads.add(new Thread(
+<<<<<<< HEAD
                     () -> Assert.assertThrows("Cancelled", UserException.class, () -> manager.maybeWait(connectContext, coord))));
+=======
+                    () -> Assert.assertThrows("Cancelled", StarRocksException.class,
+                            () -> manager.maybeWait(connectContext, coord))));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
@@ -1044,7 +1243,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         });
 
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
         Assert.assertThrows("FeStartTime is not the latest", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+        Assert.assertThrows("FeStartTime is not the latest", StarRocksException.class,
+                () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals(0L, MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue().longValue());
         Assert.assertEquals(LogicalSlot.State.CANCELLED, coord.getSlot().getState());
     }
@@ -1074,7 +1278,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         };
 
         DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
+<<<<<<< HEAD
         Assert.assertThrows("pending timeout", UserException.class, () -> manager.maybeWait(connectContext, coord));
+=======
+        Assert.assertThrows("pending timeout", StarRocksException.class,
+                () -> manager.maybeWait(connectContext, coord));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Test
@@ -1134,7 +1343,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             threads.add(new Thread(() -> {
                 try {
                     manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                 } catch (UserException | InterruptedException e) {
+=======
+                } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     throw new RuntimeException(e);
                 }
             }));
@@ -1142,13 +1355,23 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         // 2. Queries are not queued anymore, after CPU usage doesn't exceed cpuUsagePermilleLimit.
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 1, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1184,7 +1407,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             threads.add(new Thread(() -> {
                 try {
                     manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                 } catch (UserException | InterruptedException e) {
+=======
+                } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     throw new RuntimeException(e);
                 }
             }));
@@ -1192,13 +1419,23 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         // 2. Queries are not queued anymore, after mem usage doesn't exceed cpuUsagePermilleLimit.
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1251,7 +1488,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 threads.add(new Thread(() -> {
                     try {
                         manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                     } catch (UserException | InterruptedException e) {
+=======
+                    } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         throw new RuntimeException(e);
                     }
                 }));
@@ -1260,7 +1501,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
+<<<<<<< HEAD
                 () -> numGroupsWithEffectiveMaxCores * numQueriesPerGroup == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+=======
+                () -> numGroupsWithEffectiveMaxCores * numQueriesPerGroup ==
+                        MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         // 2. Group #0 is not overloaded anymore.
         groupUsages = ImmutableList.of(
@@ -1314,7 +1560,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             threads.add(new Thread(() -> {
                 try {
                     manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                 } catch (UserException | InterruptedException e) {
+=======
+                } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     throw new RuntimeException(e);
                 }
             }));
@@ -1322,7 +1572,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         // 2. Queries are not queued anymore, because the overloaded BE doesn't report in resourceUsageIntervalMs.
         GlobalVariable.setQueryQueueResourceUsageIntervalMs(1000);
@@ -1330,7 +1585,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1366,7 +1626,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
             threads.add(new Thread(() -> {
                 try {
                     manager.maybeWait(connectContext, coord);
+<<<<<<< HEAD
                 } catch (UserException | InterruptedException e) {
+=======
+                } catch (StarRocksException | InterruptedException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     throw new RuntimeException(e);
                 }
             }));
@@ -1374,14 +1638,24 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         threads.forEach(Thread::start);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         // 2. Queries are not queued anymore, because the overloaded BE becomes dead.
         backends.get(0).setAlive(false);
         GlobalStateMgr.getCurrentState().getResourceUsageMonitor().notifyBackendDead();
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream()
+<<<<<<< HEAD
                         .allMatch(coord -> coord.getSlot() != null && LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+=======
+                        .allMatch(coord -> coord.getSlot() != null &&
+                                LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         coords.forEach(DefaultCoordinator::onFinished);
     }
 
@@ -1437,7 +1711,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 DefaultCoordinator coord = getSchedulerWithQueryId("select count(1) from lineitem");
                 coords.add(coord);
 
+<<<<<<< HEAD
                 threads.add(new Thread(() -> Assert.assertThrows("Cancelled", UserException.class,
+=======
+                threads.add(new Thread(() -> Assert.assertThrows("Cancelled", StarRocksException.class,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         () -> manager.maybeWait(connectContext, coord))));
             }
         }
@@ -1459,6 +1737,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
             final int groupIndex = 1;
             final int stateIndex = 5;
+<<<<<<< HEAD
             Map<String, Map<String, Integer>> groupToStateToCount = res.getResultRows().stream().collect(Collectors.groupingBy(
                     row -> row.get(groupIndex),
                     Collectors.groupingBy(
@@ -1466,6 +1745,16 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                             Collectors.summingInt(row -> 1)
                     )
             ));
+=======
+            Map<String, Map<String, Integer>> groupToStateToCount =
+                    res.getResultRows().stream().collect(Collectors.groupingBy(
+                            row -> row.get(groupIndex),
+                            Collectors.groupingBy(
+                                    row -> row.get(stateIndex),
+                                    Collectors.summingInt(row -> 1)
+                            )
+                    ));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Map<String, Map<String, Integer>> expectedGroupToStateToCount = ImmutableMap.of(
                     "0", ImmutableMap.of("RUNNING", 1, "PENDING", 2),
                     "1", ImmutableMap.of("PENDING", 2),
@@ -1493,13 +1782,23 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         TWorkGroup defaultGroup =
                 new TWorkGroup().setId(ResourceGroup.DEFAULT_WG_ID).setName(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         TWorkGroup defaultMvGroup =
+<<<<<<< HEAD
                 new TWorkGroup().setId(ResourceGroup.DEFAULT_MV_WG_ID).setName(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
+=======
+                new TWorkGroup().setId(ResourceGroup.DEFAULT_MV_WG_ID)
+                        .setName(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TWorkGroup group0 = new TWorkGroup().setId(10L).setName("wg0");
         TWorkGroup group1 = new TWorkGroup().setId(11L).setName("wg1");
         TWorkGroup group2 = new TWorkGroup().setId(12L).setName("wg2");
         TWorkGroup group3 = new TWorkGroup().setId(13L).setName("wg3");
         TWorkGroup nonGroup = new TWorkGroup().setId(LogicalSlot.ABSENT_GROUP_ID);
+<<<<<<< HEAD
         List<TWorkGroup> groups = ImmutableList.of(defaultGroup, defaultMvGroup, group0, group1, group2, group3, nonGroup);
+=======
+        List<TWorkGroup> groups =
+                ImmutableList.of(defaultGroup, defaultMvGroup, group0, group1, group2, group3, nonGroup);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         groups.forEach(this::mockResourceGroup);
 
         List<Backend> backends = ImmutableList.of(
@@ -1623,7 +1922,12 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
     private void mockResourceGroup(TWorkGroup group) {
         new MockUp<CoordinatorPreprocessor>() {
             @Mock
+<<<<<<< HEAD
             public TWorkGroup prepareResourceGroup(ConnectContext connect, ResourceGroupClassifier.QueryType queryType) {
+=======
+            public TWorkGroup prepareResourceGroup(ConnectContext connect,
+                                                   ResourceGroupClassifier.QueryType queryType) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return group;
             }
         };

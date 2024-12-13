@@ -82,7 +82,11 @@ CONF_String(mem_limit, "90%");
 
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
+<<<<<<< HEAD
 // Consider part of jemalloc memory as fragmentation: ratio * (RSS-allocated-metadata)
+=======
+// Alpha number of jemalloc memory fragmentation ratio, should in range (0, 1)
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 CONF_mDouble(jemalloc_fragmentation_ratio, "0.3");
 
 // The port heartbeat service used.
@@ -394,8 +398,12 @@ CONF_Int32(be_http_num_workers, "48");
 // Period to update rate counters and sampling counters in ms.
 CONF_mInt32(periodic_counter_update_period_ms, "500");
 
+<<<<<<< HEAD
 // Port to start debug Arrow Flight SQL server in BE
 CONF_Int32(be_arrow_port, "9419");
+=======
+CONF_Int32(arrow_flight_port, "-1");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 // Used for mini Load. mini load data file will be removed after this time.
 CONF_Int64(load_data_reserve_hours, "4");

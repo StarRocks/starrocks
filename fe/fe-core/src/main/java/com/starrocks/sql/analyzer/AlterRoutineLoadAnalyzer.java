@@ -16,7 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
@@ -57,7 +61,11 @@ public class AlterRoutineLoadAnalyzer {
             statement.setRoutineLoadDesc(CreateRoutineLoadStmt.buildLoadDesc(statement.getLoadPropertyList()));
             statement.checkJobProperties();
             statement.checkDataSourceProperties();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.error(e.getMessage(), e);
             throw new SemanticException(e.getMessage());
         }

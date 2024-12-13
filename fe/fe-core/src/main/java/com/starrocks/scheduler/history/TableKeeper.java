@@ -18,11 +18,19 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.statistic.columns.PredicateColumnsStorage;
+import jdk.jshell.spi.ExecutionControl;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,8 +54,13 @@ public class TableKeeper {
 
     private boolean databaseExisted = false;
     private boolean tableExisted = false;
+<<<<<<< HEAD
     private boolean tableCorrected = false;
     private Supplier<Integer> ttlSupplier;
+=======
+    private final boolean tableCorrected = false;
+    private final Supplier<Integer> ttlSupplier;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     public TableKeeper(String database,
                        String table,
@@ -71,7 +84,11 @@ public class TableKeeper {
             if (!tableExisted) {
                 createTable();
                 LOG.info("table created: {}", tableName);
+<<<<<<< HEAD
                 tableExisted = true;
+=======
+                tableExisted = checkTableExists();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             correctTable();
             if (tableExisted) {
@@ -93,7 +110,15 @@ public class TableKeeper {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
     }
 
+<<<<<<< HEAD
     public void createTable() throws UserException {
+=======
+    public boolean checkTableExists() {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(databaseName, tableName).isPresent();
+    }
+
+    public void createTable() throws ExecutionControl.UserException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RepoExecutor.getInstance().executeDDL(createTableSql);
     }
 
@@ -116,6 +141,12 @@ public class TableKeeper {
     }
 
     public void changeTTL() {
+<<<<<<< HEAD
+=======
+        if (ttlSupplier == null) {
+            return;
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Optional<OlapTable> table = mayGetTable();
         if (table.isEmpty()) {
             return;
@@ -211,6 +242,10 @@ public class TableKeeper {
 
             keeperList.add(TaskRunHistoryTable.createKeeper());
             keeperList.add(LoadsHistorySyncer.createKeeper());
+<<<<<<< HEAD
+=======
+            keeperList.add(PredicateColumnsStorage.createKeeper());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             // TODO: add FileListPipeRepo
             // TODO: add statistic table
         }

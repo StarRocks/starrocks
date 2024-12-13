@@ -38,6 +38,10 @@ public class ShowWarehousesStmt extends ShowStmt {
                     .addColumn(new Column("CreatedOn", ScalarType.createVarchar(20)))
                     .addColumn(new Column("ResumedOn", ScalarType.createVarchar(20)))
                     .addColumn(new Column("UpdatedOn", ScalarType.createVarchar(20)))
+<<<<<<< HEAD
+=======
+                    .addColumn(new Column("Property", ScalarType.createVarchar(256)))
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     .addColumn(new Column("Comment", ScalarType.createVarchar(256)))
                     .build();
     private final String pattern;

@@ -24,8 +24,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.Version;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -652,12 +657,20 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 return;
             }
             if (this.state != State.PREPARING) {
+<<<<<<< HEAD
                 throw new UserException("stream load task " + this.label
+=======
+                throw new StarRocksException("stream load task " + this.label
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         + " s state (" + this.state + ") is not preparing, can not prepare txn");
             }
             unprotectedWaitCoordFinish();
             if (!checkDataQuality()) {
+<<<<<<< HEAD
                 throw new UserException("abnormal data more than max filter rate, tracking_url: " +
+=======
+                throw new StarRocksException("abnormal data more than max filter rate, tracking_url: " +
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         this.trackingUrl);
             }
         } catch (Exception e) {
@@ -704,7 +717,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 label, dbName, tableName, txnId);
     }
 
+<<<<<<< HEAD
     public void commitTxn(TransactionResult resp) throws UserException {
+=======
+    public void commitTxn(TransactionResult resp) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long startTimeMs = System.currentTimeMillis();
         boolean exception = false;
         readLock();
@@ -756,7 +773,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         resp.setOKMsg("stream load " + label + " commit");
     }
 
+<<<<<<< HEAD
     public void manualCancelTask(TransactionResult resp) throws UserException {
+=======
+    public void manualCancelTask(TransactionResult resp) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long startTimeMs = System.currentTimeMillis();
         readLock();
         try {
@@ -782,7 +803,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return new DefaultCoordinator.Factory();
     }
 
+<<<<<<< HEAD
     public void unprotectedExecute(HttpHeaders headers) throws UserException {
+=======
+    public void unprotectedExecute(HttpHeaders headers) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         streamLoadParams = StreamLoadKvParams.fromHttpHeaders(headers);
         streamLoadInfo = StreamLoadInfo.fromHttpStreamLoadRequest(
                 loadId, txnId, Optional.of((int) timeoutMs / 1000), streamLoadParams);
@@ -813,11 +838,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             this.channelIdToBEHTTPAddress = coord.getChannelIdToBEHTTPMap();
             this.channelIdToBEHTTPPort = coord.getChannelIdToBEPortMap();
         } catch (Exception e) {
+<<<<<<< HEAD
             throw new UserException(e.getMessage());
         }
     }
 
     private void unprotectedFinishStreamLoadChannel(int channelId) throws UserException {
+=======
+            throw new StarRocksException(e.getMessage());
+        }
+    }
+
+    private void unprotectedFinishStreamLoadChannel(int channelId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TNetworkAddress address = channelIdToBEHTTPPort.get(channelId);
         try {
             TStreamLoadChannel streamLoadChannel = new TStreamLoadChannel();
@@ -834,11 +867,19 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             LOG.info("finish stream load channel label: {} channel id {}", label, channelId);
         } catch (Exception e) {
+<<<<<<< HEAD
             throw new UserException("failed to send finish stream load channel: " + e.getMessage(), e);
         }
     }
 
     private void unprotectedWaitCoordFinish() throws UserException {
+=======
+            throw new StarRocksException("failed to send finish stream load channel: " + e.getMessage(), e);
+        }
+    }
+
+    private void unprotectedWaitCoordFinish() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         try {
             int waitSecond = (int) (getLeftTimeMs() / 1000);
             if (waitSecond <= 0) {
@@ -871,7 +912,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 throw new LoadException("coordinator could not finished before job timeout");
             }
         } catch (Exception e) {
+<<<<<<< HEAD
             throw new UserException(e.getMessage());
+=======
+            throw new StarRocksException(e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
@@ -922,7 +967,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         return null;
     }
 
+<<<<<<< HEAD
     public void unprotectedBeginTxn(boolean replay) throws UserException {
+=======
+    public void unprotectedBeginTxn(boolean replay) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 dbId, Lists.newArrayList(tableId), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
@@ -930,7 +979,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 timeoutMs / 1000, warehouseId);
     }
 
+<<<<<<< HEAD
     public void unprotectedPrepareTxn() throws UserException {
+=======
+    public void unprotectedPrepareTxn() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -984,7 +1037,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
+<<<<<<< HEAD
     public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (!txnOperated) {
             return;
         }
@@ -1029,7 +1086,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     @Override
+<<<<<<< HEAD
     public void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException {
+=======
+    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (!txnOperated) {
             return;
         }
@@ -1146,7 +1207,11 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (!txnOperated) {
             return;
         }

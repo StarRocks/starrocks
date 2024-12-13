@@ -47,7 +47,11 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.thrift.TAnalyticNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalAnalyticNode;
@@ -125,7 +129,11 @@ public class AnalyticEvalNode extends PlanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override

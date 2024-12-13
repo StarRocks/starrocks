@@ -20,7 +20,11 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -98,7 +102,11 @@ public class IcebergScanNode extends ScanNode {
         return scanRangeSource.getOutputs((int) maxScanRangeLength);
     }
 
+<<<<<<< HEAD
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws UserException {
+=======
+    public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Preconditions.checkNotNull(snapshotId, "snapshot id is null");
         if (snapshotId.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getCatalogTableName()));

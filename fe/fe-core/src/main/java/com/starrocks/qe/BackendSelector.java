@@ -14,8 +14,15 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public interface BackendSelector {
     void computeScanRangeAssignment() throws UserException;
+=======
+import com.starrocks.common.StarRocksException;
+
+public interface BackendSelector {
+    void computeScanRangeAssignment() throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

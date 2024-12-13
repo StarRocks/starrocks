@@ -14,8 +14,13 @@
 
 package com.starrocks.catalog;
 
+<<<<<<< HEAD
 import com.starrocks.sql.ast.TableRelation;
 import org.apache.parquet.Strings;
+=======
+import com.google.common.base.Strings;
+import com.starrocks.sql.ast.TableRelation;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 import java.util.List;
 

@@ -18,6 +18,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Stopwatch;
+<<<<<<< HEAD
+=======
+import com.google.common.base.Strings;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -41,7 +45,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -90,7 +98,10 @@ import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+<<<<<<< HEAD
 import org.apache.parquet.Strings;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -711,12 +722,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             extraMessage.setNextPartitionValues(mvContext.getNextPartitionValues());
         });
 
+<<<<<<< HEAD
         // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
         // Otherwise this round of partition refreshing would be staved and never got finished
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.HIGHEST.value(), true, newProperties);
         LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}",
                 materializedView.getName(), materializedView.getId(),
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
+=======
+        // Partition refreshing task run should have the HIGHER priority, and be scheduled before other tasks
+        // Otherwise this round of partition refreshing would be staved and never got finished
+        int priority = mvContext.executeOption.getPriority() > Constants.TaskRunPriority.LOWEST.value() ?
+                mvContext.executeOption.getPriority() : Constants.TaskRunPriority.HIGHER.value();
+        ExecuteOption option = new ExecuteOption(priority, true, newProperties);
+        LOG.info("[MV] Generate a task to refresh next batches of partitions for MV {}-{}, start={}, end={}, " +
+                        "priority={}", materializedView.getName(), materializedView.getId(),
+                mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd(), priority);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         if (properties.containsKey(TaskRun.IS_TEST) && properties.get(TaskRun.IS_TEST).equalsIgnoreCase("true")) {
             // for testing
@@ -1009,8 +1031,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throws AnalysisException {
         if (mvRefreshParams.isForceCompleteRefresh()) {
             // Force refresh
+<<<<<<< HEAD
             int partitionTTLNumber = mvContext.getPartitionTTLNumber();
             return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce(partitionTTLNumber);
+=======
+            return mvRefreshPartitioner.getMVPartitionsToRefreshWithForce();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } else {
             return mvRefreshPartitioner.getMVPartitionsToRefresh(mvPartitionInfo, snapshotBaseTables,
                     mvRefreshParams, mvPotentialPartitionNames);
@@ -1121,7 +1147,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     }
                 }
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Materialized view compute partition change failed", DebugUtil.getRootStackTrace(e));
             return true;
         }
@@ -1162,7 +1192,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (mvContext.getTaskRun().isKilled()) {
             LOG.warn("[QueryId:{}] refresh materialized view {} is killed", ctx.getQueryId(),
                     materializedView.getName());
+<<<<<<< HEAD
             throw new UserException("User Cancelled");
+=======
+            throw new StarRocksException("User Cancelled");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
@@ -1311,7 +1345,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public Map<TableSnapshotInfo, Set<String>> getRefTableRefreshPartitions(Set<String> mvToRefreshedPartitions) {
         Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames = Maps.newHashMap();
         Map<String, Map<Table, Set<String>>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
+<<<<<<< HEAD
         if (mvToBaseNameRefs == null) {
+=======
+        if (mvToBaseNameRefs == null || mvToBaseNameRefs.isEmpty()) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             return refTableAndPartitionNames;
         }
         for (TableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {

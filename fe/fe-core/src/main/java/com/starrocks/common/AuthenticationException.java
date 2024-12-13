@@ -37,7 +37,11 @@ package com.starrocks.common;
 /**
  * Thrown for authorization errors encountered when accessing GlobalStateMgr objects.
  */
+<<<<<<< HEAD
 public class AuthenticationException extends UserException {
+=======
+public class AuthenticationException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public AuthenticationException(String msg, Throwable cause) {
         super(msg, cause);
     }

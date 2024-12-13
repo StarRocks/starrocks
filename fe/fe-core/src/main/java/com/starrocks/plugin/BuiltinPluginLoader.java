@@ -17,7 +17,11 @@
 
 package com.starrocks.plugin;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 import java.io.IOException;
 
@@ -30,13 +34,21 @@ public class BuiltinPluginLoader extends PluginLoader {
     }
 
     @Override
+<<<<<<< HEAD
     public void install() throws UserException, IOException {
+=======
+    public void install() throws StarRocksException, IOException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         pluginInstallValid();
         plugin.init(pluginInfo, pluginContext);
     }
 
     @Override
+<<<<<<< HEAD
     public void uninstall() throws IOException, UserException {
+=======
+    public void uninstall() throws IOException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (plugin != null) {
             pluginUninstallValid();
             plugin.close();

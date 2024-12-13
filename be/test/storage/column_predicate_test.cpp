@@ -18,7 +18,10 @@
 
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
+<<<<<<< HEAD
 #include "storage/column_or_predicate.h"
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -1957,6 +1960,7 @@ TEST(ColumnPredicateTest, test_not_null) {
     }
 }
 
+<<<<<<< HEAD
 // NOLINTNEXTLINE
 TEST(ColumnPredicateTest, test_or) {
     {
@@ -2026,6 +2030,8 @@ TEST(ColumnPredicateTest, test_or) {
     }
 }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #define ZMF(min, max) zone_map_filter(ZoneMapDetail(min, max))
 
 // NOLINTNEXTLINE

@@ -32,10 +32,17 @@ public interface StatisticStorage {
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
+<<<<<<< HEAD
     default void refreshTableStatistic(Table table) {
     }
 
     default void refreshTableStatisticSync(Table table) {
+=======
+    default void refreshTableStatistic(Table table, boolean isSync) {
+    }
+
+    default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     /**
@@ -59,10 +66,13 @@ public interface StatisticStorage {
         return null;
     }
 
+<<<<<<< HEAD
     default List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         return getColumnStatistics(table, columns);
     }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     default List<ConnectorTableColumnStats> getConnectorTableStatistics(Table table, List<String> columns) {
         return columns.stream().
                 map(col -> ConnectorTableColumnStats.unknown()).collect(Collectors.toList());
@@ -97,6 +107,12 @@ public interface StatisticStorage {
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
     }
 
+<<<<<<< HEAD
+=======
+    default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {
     }
 

@@ -100,6 +100,11 @@ struct TabletReaderParams {
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 
+<<<<<<< HEAD
+=======
+    TTableSampleOptions sample_options;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 public:
     std::string to_string() const;
 };

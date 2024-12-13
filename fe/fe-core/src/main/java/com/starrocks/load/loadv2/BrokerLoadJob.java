@@ -48,7 +48,11 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
@@ -237,7 +241,11 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+<<<<<<< HEAD
     private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws UserException {
+=======
+    private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // divide job into broker loading task by table
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.READ);
@@ -322,7 +330,11 @@ public class BrokerLoadJob extends BulkLoadJob {
                 TransactionState txnState =
                         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
                 if (txnState == null) {
+<<<<<<< HEAD
                     throw new UserException("txn does not exist: " + transactionId);
+=======
+                    throw new StarRocksException("txn does not exist: " + transactionId);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
                 txnState.addTableIndexes(table);
             }
@@ -487,14 +499,22 @@ public class BrokerLoadJob extends BulkLoadJob {
             } catch (CommitRateExceededException e) {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                 break;
             }
         }
     }
 
+<<<<<<< HEAD
     private void commitTransactionUnderDatabaseLock(Database db) throws UserException {
+=======
+    private void commitTransactionUnderDatabaseLock(Database db) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                 .add("txn_id", transactionId)
                 .add("msg", "Load job try to commit txn")

@@ -65,7 +65,11 @@ import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -506,7 +510,11 @@ public class SparkLoadPendingTask extends LoadTask {
         // check columns
         try {
             Load.initColumns(table, copiedColumnExprList, fileGroup.getColumnToHadoopFunction());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new LoadException(e.getMessage());
         }
         // add generated column mapping

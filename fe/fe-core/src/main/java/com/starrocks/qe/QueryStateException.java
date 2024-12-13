@@ -18,10 +18,17 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.qe.QueryState.MysqlStateType;
 
 public class QueryStateException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.QueryState.MysqlStateType;
+
+public class QueryStateException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     private QueryState queryState;
 
     public QueryStateException(MysqlStateType stateType, String msg) {

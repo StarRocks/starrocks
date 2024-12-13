@@ -29,7 +29,11 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -147,7 +151,11 @@ public class SetStmtAnalyzer {
                 checkRangeLongVariable(resolvedExpression, SessionVariable.EXEC_MEM_LIMIT,
                         SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new SemanticException(e.getMessage());
         }
 

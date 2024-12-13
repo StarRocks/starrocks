@@ -47,6 +47,16 @@ public class ReplaceColumnRefRewriter {
         return origin.clone().accept(rewriter, null);
     }
 
+<<<<<<< HEAD
+=======
+    public ScalarOperator rewriteWithoutClone(ScalarOperator origin) {
+        if (origin == null) {
+            return null;
+        }
+        return origin.accept(rewriter, null);
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     private class Rewriter extends ScalarOperatorVisitor<ScalarOperator, Void> {
         @Override
         public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
@@ -67,6 +77,12 @@ public class ReplaceColumnRefRewriter {
             // Rewiring predicate shouldn't change the origin project columnRefMap
 
             ScalarOperator mapperOperator = operatorMap.get(column);
+<<<<<<< HEAD
+=======
+            if (column.equals(mapperOperator)) {
+                return column;
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             if (!isRecursively) {
                 return mapperOperator.clone();
             } else {

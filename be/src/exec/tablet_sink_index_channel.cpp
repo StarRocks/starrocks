@@ -833,6 +833,10 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     }
 
     if (closure->result.has_load_channel_profile()) {
+<<<<<<< HEAD
+=======
+        SCOPED_TIMER(_ts_profile->update_load_channel_profile_timer);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         const auto* buf = (const uint8_t*)(closure->result.load_channel_profile().data());
         uint32_t len = closure->result.load_channel_profile().size();
         TRuntimeProfileTree thrift_profile;

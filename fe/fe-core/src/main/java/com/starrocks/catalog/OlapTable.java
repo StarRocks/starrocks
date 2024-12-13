@@ -110,7 +110,13 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.MetaUtils;
+<<<<<<< HEAD
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PListCell;
+import com.starrocks.sql.common.PRangeCell;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -296,6 +302,12 @@ public class OlapTable extends Table {
     // The flag is used to indicate whether the table is doing automatic bucketing.
     public AtomicBoolean isAutomaticBucketing = new AtomicBoolean(false);
 
+<<<<<<< HEAD
+=======
+    // It's not persisted but resolved in QueryAnalyzer, so only exists if it's in the context of query
+    public volatile String dbName;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -348,6 +360,20 @@ public class OlapTable extends Table {
         this.tableProperty = null;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public synchronized Optional<String> mayGetDatabaseName() {
+        return Optional.ofNullable(dbName);
+    }
+
+    public synchronized void maySetDatabaseName(String dbName) {
+        if (this.dbName == null) {
+            this.dbName = dbName;
+        }
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
@@ -415,6 +441,10 @@ public class OlapTable extends Table {
         if (this.curBinlogConfig != null) {
             olapTable.curBinlogConfig = new BinlogConfig(this.curBinlogConfig);
         }
+<<<<<<< HEAD
+=======
+        olapTable.dbName = this.dbName;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
@@ -3677,4 +3707,33 @@ public class OlapTable extends Table {
     public void updateLastCollectProfileTime() {
         this.lastCollectProfileTime = System.currentTimeMillis();
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * Return partition name and associate partition cell with specific partition columns.
+     * If partitionColumnsOpt is empty, return partition cell with all partition columns.
+     */
+    public Map<String, PCell> getPartitionCells(Optional<List<Column>> partitionColumnsOpt) {
+        PartitionInfo partitionInfo = this.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return null;
+        }
+        if (partitionInfo.isRangePartition()) {
+            Preconditions.checkArgument(partitionColumnsOpt.isEmpty() || partitionColumnsOpt.get().size() == 1);
+            Map<String, Range<PartitionKey>> rangeMap = getRangePartitionMap();
+            if (rangeMap == null) {
+                return null;
+            }
+            return rangeMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> new PRangeCell(x.getValue())));
+        } else if (partitionInfo.isListPartition()) {
+            Map<String, PListCell> listMap = getListPartitionItems(partitionColumnsOpt);
+            if (listMap == null) {
+                return null;
+            }
+            return listMap.entrySet().stream().collect(Collectors.toMap(x -> x.getKey(), x -> x.getValue()));
+        }
+        return null;
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

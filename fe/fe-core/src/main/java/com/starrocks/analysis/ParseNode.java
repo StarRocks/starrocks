@@ -35,7 +35,11 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -47,7 +51,11 @@ public interface ParseNode {
      * @param analyzer
      * @throws AnalysisException, InternalException
      */
+<<<<<<< HEAD
     default void analyze(Analyzer analyzer) throws UserException {
+=======
+    default void analyze(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         throw new RuntimeException("New AST not support analyze function");
     }
 

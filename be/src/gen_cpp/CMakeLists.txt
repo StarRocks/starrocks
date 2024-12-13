@@ -58,7 +58,10 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/descriptors.pb.cc
     ${GEN_CPP_DIR}/encryption.pb.cc
     ${GEN_CPP_DIR}/internal_service.pb.cc
+<<<<<<< HEAD
     ${GEN_CPP_DIR}/doris_internal_service.pb.cc
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     ${GEN_CPP_DIR}/types.pb.cc
     ${GEN_CPP_DIR}/snapshot.pb.cc
     ${GEN_CPP_DIR}/status.pb.cc

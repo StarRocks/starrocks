@@ -27,7 +27,11 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.thrift.TExplainLevel;
@@ -63,7 +67,11 @@ public class JDBCScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         createJDBCTableColumns();
         createJDBCTableFilters();
         computeStats(analyzer);

@@ -445,7 +445,11 @@ REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
       'partition_refresh_number' = '-1',
+<<<<<<< HEAD
       "partition_ttl_number" = "1",
+=======
+      "partition_retention_condition" = "dt > '2024-01-01'",
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
       'session.enable_insert_strict' = 'true',
       "replication_num" = "1"
 ) 
@@ -455,11 +459,20 @@ as select dt, province, sum(age) from t5 group by dt, province;
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
+<<<<<<< HEAD
 2024-01-02	guangdong	20
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
+=======
+None	None	None
+2024-01-02	guangdong	20
+-- !result
+function: print_table_partitions_num("test_mv1")
+-- result:
+2
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 -- !result
 function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
@@ -490,17 +503,26 @@ drop materialized view test_mv1;
 -- result:
 -- !result
 create materialized view test_mv1
+<<<<<<< HEAD
 partition by province
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
       "partition_ttl_number" = "1",
+=======
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+      "partition_retention_condition" = "dt > '2024-01-01'",
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
       'session.enable_insert_strict' = 'true',
       "replication_num" = "1"
 ) 
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
+<<<<<<< HEAD
 refresh materialized view  test_mv1 with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
@@ -511,6 +533,22 @@ function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
 -- !result
+=======
+refresh materialized view  test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
+-- result:
+None
+-- !result
+select * from test_mv1 order by 1, 2;
+-- result:
+None	None	None
+2024-01-02	guangdong	20
+-- !result
+function: print_table_partitions_num("test_mv1")
+-- result:
+2
+-- !result
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 function: check_hit_materialized_view("select dt, province, sum(age) from t5 group by dt, province order by 1, 2;", "test_mv1")
 -- result:
 None
@@ -539,6 +577,7 @@ None	None	None
 drop materialized view test_mv1;
 -- result:
 -- !result
+<<<<<<< HEAD
 create materialized view test_mv1
 partition by dt
 REFRESH DEFERRED MANUAL
@@ -592,6 +631,8 @@ None	None	None
 drop materialized view test_mv1;
 -- result:
 -- !result
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 drop table t3;
 -- result:
 -- !result

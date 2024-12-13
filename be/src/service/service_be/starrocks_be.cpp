@@ -263,11 +263,17 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto brpc_server = std::make_unique<brpc::Server>();
 
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
+<<<<<<< HEAD
     BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
     LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+=======
+    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
+
+    brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     brpc_server->AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
@@ -309,8 +315,15 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start Arrow Flight SQL server
     auto arrow_flight_sql_server = std::make_unique<ArrowFlightSqlServer>();
+<<<<<<< HEAD
     if (auto status = arrow_flight_sql_server->start(config::be_arrow_port); !status.ok()) {
         LOG(ERROR) << process_name << " arrow flight sql server did not start correctly, exiting: " << status.message();
+=======
+    if (auto status = arrow_flight_sql_server->start(config::arrow_flight_port); !status.ok()) {
+        LOG(ERROR) << process_name << " Arrow Flight Sql Server did not start correctly, exiting: " << status.message()
+                   << ". Its port might be occupied. You can modify `arrow_flight_port` in `be.conf` to an unused port "
+                      "or set it to -1 to disable it.";
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         shutdown_logging();
         exit(1);
     }
@@ -350,6 +363,13 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     heartbeat_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": heartbeat server exit successfully";
 
+<<<<<<< HEAD
+=======
+    arrow_flight_sql_server->stop();
+    arrow_flight_sql_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": Arrow Flight SQL server exit successfully";
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     http_server->stop();
     brpc_server->Stop(0);
     thrift_server->stop();

@@ -95,8 +95,13 @@ public class ErrorReport {
     }
 
     public static void reportUserException(ErrorCode errorCode, Object... objs)
+<<<<<<< HEAD
             throws UserException {
         throw new UserException(reportCommon(null, errorCode, objs));
+=======
+            throws StarRocksException {
+        throw new StarRocksException(reportCommon(null, errorCode, objs));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public static void reportTimeoutException(ErrorCode errorCode, Object... objs)
@@ -110,13 +115,21 @@ public class ErrorReport {
     }
 
     public interface DdlExecutor {
+<<<<<<< HEAD
         void apply() throws UserException;
+=======
+        void apply() throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public static void wrapWithRuntimeException(DdlExecutor fun) {
         try {
             fun.apply();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new RuntimeException(e);
         }
     }

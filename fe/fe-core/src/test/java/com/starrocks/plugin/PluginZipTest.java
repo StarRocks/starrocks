@@ -17,7 +17,11 @@
 
 package com.starrocks.plugin;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import mockit.Expectations;
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -112,7 +116,11 @@ public class PluginZipTest {
             Path zipPath = zip.downloadRemoteZip(PluginTestUtil.getTestPath("target"));
             assertFalse(Files.exists(zipPath));
         } catch (Exception e) {
+<<<<<<< HEAD
             assertTrue(e instanceof UserException);
+=======
+            assertTrue(e instanceof StarRocksException);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             assertTrue(e.getMessage().contains("MD5 check mismatch"));
         }
     }
@@ -155,7 +163,11 @@ public class PluginZipTest {
             Path p = util.downloadZip(PluginTestUtil.getTestPath("target"));
             assertTrue(Files.exists(p));
 
+<<<<<<< HEAD
         } catch (IOException | UserException e) {
+=======
+        } catch (IOException | StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             e.printStackTrace();
         }
 
@@ -172,7 +184,11 @@ public class PluginZipTest {
             Path p = util.downloadZip(PluginTestUtil.getTestPath("target"));
             assertNull(p);
 
+<<<<<<< HEAD
         } catch (IOException | UserException e) {
+=======
+        } catch (IOException | StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             e.printStackTrace();
         }
 

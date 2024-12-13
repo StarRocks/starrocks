@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
@@ -44,12 +45,30 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+=======
+import com.starrocks.analysis.SlotId;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TPlanNodeType;
+import com.starrocks.thrift.TSelectNode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 /**
  * Node that applies conjuncts and a limit clause. Has exactly one child.
  */
 public class SelectNode extends PlanNode {
     private static final Logger LOG = LogManager.getLogger(SelectNode.class);
+<<<<<<< HEAD
+=======
+    private Map<SlotId, Expr> commonSlotMap;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     public SelectNode(PlanNodeId id, PlanNode child, List<Expr> conjuncts) {
         super(id, child.getTupleIds(), "SELECT");
@@ -58,6 +77,7 @@ public class SelectNode extends PlanNode {
         this.conjuncts.addAll(conjuncts);
     }
 
+<<<<<<< HEAD
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.SELECT_NODE;
@@ -65,6 +85,23 @@ public class SelectNode extends PlanNode {
 
     @Override
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void setCommonSlotMap(Map<SlotId, Expr> commonSlotMap) {
+        this.commonSlotMap = commonSlotMap;
+    }
+
+    @Override
+    protected void toThrift(TPlanNode msg) {
+        msg.node_type = TPlanNodeType.SELECT_NODE;
+        msg.select_node = new TSelectNode();
+        if (commonSlotMap != null) {
+            commonSlotMap.forEach((key, value) -> msg.select_node.putToCommon_slot_map(key.asInt(), value.treeToThrift()));
+        }
+    }
+
+    @Override
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override
@@ -76,6 +113,16 @@ public class SelectNode extends PlanNode {
         StringBuilder output = new StringBuilder();
         if (!conjuncts.isEmpty()) {
             output.append(prefix + "predicates: " + getExplainString(conjuncts) + "\n");
+<<<<<<< HEAD
+=======
+            if (commonSlotMap != null && !commonSlotMap.isEmpty()) {
+                output.append(prefix + "  common sub expr:" + "\n");
+                for (Map.Entry<SlotId, Expr> entry : commonSlotMap.entrySet()) {
+                    output.append(prefix + "  <slot " + entry.getKey().toString() + "> : "
+                            + getExplainString(Arrays.asList(entry.getValue())) + "\n");
+                }
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         return output.toString();
     }

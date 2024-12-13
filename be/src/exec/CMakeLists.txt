@@ -116,11 +116,19 @@ set(EXEC_FILES
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     paimon/paimon_delete_file_builder.cpp
+<<<<<<< HEAD
+=======
+    schema_scanner/schema_analyze_status.cpp
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     schema_scanner/schema_tables_scanner.cpp
     schema_scanner/schema_dummy_scanner.cpp
     schema_scanner/schema_schemata_scanner.cpp
     schema_scanner/schema_variables_scanner.cpp
     schema_scanner/schema_columns_scanner.cpp
+<<<<<<< HEAD
+=======
+    schema_scanner/schema_column_stats_usage_scanner.cpp
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     schema_scanner/schema_charsets_scanner.cpp
     schema_scanner/schema_collations_scanner.cpp
     schema_scanner/schema_statistics_scanner.cpp

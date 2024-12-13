@@ -24,6 +24,10 @@ set(UTIL_FILES
   arrow/utils.cpp
   await.cpp
   bfd_parser.cpp
+<<<<<<< HEAD
+=======
+  base85.cpp
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compression.cpp

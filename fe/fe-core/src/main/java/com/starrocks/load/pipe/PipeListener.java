@@ -15,7 +15,11 @@
 package com.starrocks.load.pipe;
 
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.FrontendDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,7 +50,11 @@ public class PipeListener extends FrontendDaemon {
         }
     }
 
+<<<<<<< HEAD
     private void process() throws UserException {
+=======
+    private void process() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<Pipe> pipes = pipeManager.getRunnablePipes();
         for (Pipe pipe : pipes) {
             try {

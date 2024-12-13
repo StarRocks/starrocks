@@ -26,7 +26,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -137,6 +141,10 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -965,7 +973,11 @@ public class DDLStmtExecutor {
         public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
             try {
                 return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new RuntimeException(e);
             }
         }
@@ -1174,6 +1186,18 @@ public class DDLStmtExecutor {
             });
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                WarehouseManager warehouseMgr = context.getGlobalStateMgr().getWarehouseMgr();
+                warehouseMgr.alterWarehouse(stmt);
+            });
+            return null;
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
 }

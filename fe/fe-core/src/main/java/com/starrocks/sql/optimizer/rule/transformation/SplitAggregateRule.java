@@ -89,7 +89,11 @@ public abstract class SplitAggregateRule extends TransformationRule {
     // We should pass '20191111' to update and merge phase aggregator in BE both.
     protected static void appendConstantColumns(List<ScalarOperator> arguments, CallOperator aggregation) {
         if (aggregation.getChildren().size() > 1) {
+<<<<<<< HEAD
             aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
+=======
+            aggregation.getChildren().stream().filter(ScalarOperator::isConstant).forEach(arguments::add);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 

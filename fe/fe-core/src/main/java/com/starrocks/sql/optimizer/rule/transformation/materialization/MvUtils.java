@@ -436,6 +436,15 @@ public class MvUtils {
                 && !(operator instanceof LogicalJoinOperator)) {
             return false;
         }
+<<<<<<< HEAD
+=======
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         for (OptExpression child : root.getInputs()) {
             if (!isLogicalSPJ(child)) {
                 return false;
@@ -445,6 +454,15 @@ public class MvUtils {
     }
 
     public static boolean isLogicalSPJGOperator(Operator operator) {
+<<<<<<< HEAD
+=======
+        if (operator instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) operator;
+            if (olapScanOperator.isSample()) {
+                return false;
+            }
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return (operator instanceof LogicalScanOperator)
                 || (operator instanceof LogicalProjectOperator)
                 || (operator instanceof LogicalFilterOperator)
@@ -991,7 +1009,15 @@ public class MvUtils {
             return new BoolLiteral(true);
         }
         // to avoid duplicate values
+<<<<<<< HEAD
         return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+=======
+        if (values.size() == 1) {
+            return new BinaryPredicate(BinaryType.EQ, slotRef, values.get(0));
+        } else {
+            return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     /**
@@ -1433,9 +1459,22 @@ public class MvUtils {
         return Optional.of(matches.get(0).cast());
     }
 
+<<<<<<< HEAD
     public static boolean isStr2Date(Expr expr) {
         return expr instanceof FunctionCallExpr
                 && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+=======
+    public static boolean isFuncCallExpr(Expr expr, String expectFuncName) {
+        if (expr == null) {
+            return false;
+        }
+        return expr instanceof FunctionCallExpr
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+    }
+
+    public static boolean isStr2Date(Expr expr) {
+        return isFuncCallExpr(expr, FunctionSet.STR2DATE);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {

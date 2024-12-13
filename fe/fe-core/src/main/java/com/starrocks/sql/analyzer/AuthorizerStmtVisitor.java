@@ -214,6 +214,10 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -2785,4 +2789,20 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     PrivilegeType.USAGE.name(), ObjectType.WAREHOUSE.name(), warehouseName);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+        try {
+            Authorizer.checkWarehouseAction(context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.ALTER.name(), ObjectType.WAREHOUSE.name(), statement.getWarehouseName());
+        }
+        return null;
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

@@ -68,6 +68,11 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.QueryStatement;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -268,6 +273,23 @@ public class ConnectContext {
         threadLocalInfo.remove();
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isQueryStmt(StatementBase statement) {
+        if (statement instanceof QueryStatement) {
+            return true;
+        }
+        if (statement instanceof ExecuteStmt) {
+            ExecuteStmt executeStmt = (ExecuteStmt) statement;
+            PrepareStmtContext prepareStmtContext = getPreparedStmt(executeStmt.getStmtName());
+            if (prepareStmtContext != null) {
+                return prepareStmtContext.getStmt().getInnerStmt() instanceof QueryStatement;
+            }
+        }
+        return false;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public boolean isSend() {
         return this.isSend;
     }

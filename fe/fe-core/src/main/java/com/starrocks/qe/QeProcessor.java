@@ -17,7 +17,11 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -42,9 +46,15 @@ public interface QeProcessor {
     TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params, TNetworkAddress beAddr);
     TReportFragmentFinishResponse reportFragmentFinish(TReportFragmentFinishParams params);
 
+<<<<<<< HEAD
     void registerQuery(TUniqueId queryId, Coordinator coord) throws UserException;
 
     void registerQuery(TUniqueId queryId, QeProcessorImpl.QueryInfo info) throws UserException;
+=======
+    void registerQuery(TUniqueId queryId, Coordinator coord) throws StarRocksException;
+
+    void registerQuery(TUniqueId queryId, QeProcessorImpl.QueryInfo info) throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     void unregisterQuery(TUniqueId queryId);
 

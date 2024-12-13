@@ -183,4 +183,12 @@ OrdinalPageIndexIterator OrdinalIndexReader::seek_by_page_index(int page_index) 
     return {this, page_index};
 }
 
+<<<<<<< HEAD
+=======
+void OrdinalIndexReader::print_debug_info() {
+    LOG(INFO) << fmt::format("ordinals: {}", fmt::join(_ordinals.get(), _ordinals.get() + _num_pages, ", "));
+    LOG(INFO) << fmt::format("pages: {}", fmt::join(_pages.get(), _pages.get() + _num_pages, ", "));
+}
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 } // namespace starrocks

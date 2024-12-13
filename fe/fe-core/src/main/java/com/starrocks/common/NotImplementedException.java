@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Thrown for SQL statements that require as yet unimplemented functionality.
  */
+<<<<<<< HEAD
 public class NotImplementedException extends UserException {
+=======
+public class NotImplementedException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public NotImplementedException(String msg) {
         super(msg);
     }

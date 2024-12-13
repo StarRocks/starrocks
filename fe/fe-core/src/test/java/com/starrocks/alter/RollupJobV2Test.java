@@ -51,7 +51,11 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -109,7 +113,11 @@ public class RollupJobV2Test extends DDLTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testRunRollupJobConcurrentLimit() throws UserException {
+=======
+    public void testRunRollupJobConcurrentLimit() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);
@@ -129,7 +137,11 @@ public class RollupJobV2Test extends DDLTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAddSchemaChange() throws UserException {
+=======
+    public void testAddSchemaChange() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         MaterializedViewHandler materializedViewHandler = GlobalStateMgr.getCurrentState().getRollupHandler();
         ArrayList<AlterClause> alterClauses = new ArrayList<>();
         alterClauses.add(clause);

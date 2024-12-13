@@ -61,7 +61,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -842,7 +846,11 @@ public class RestoreJobTest {
 
         new MockUp<View>() {
             @Mock
+<<<<<<< HEAD
             public synchronized QueryStatement getQueryStatement() throws UserException {
+=======
+            public synchronized QueryStatement getQueryStatement() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return null;
             }
         };
@@ -868,7 +876,11 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
+<<<<<<< HEAD
                 public synchronized QueryStatement init() throws UserException {
+=======
+                public synchronized QueryStatement init() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     return null;
                 }
             };
@@ -907,7 +919,11 @@ public class RestoreJobTest {
         {
             new MockUp<View>() {
                 @Mock
+<<<<<<< HEAD
                 public synchronized QueryStatement init() throws UserException {
+=======
+                public synchronized QueryStatement init() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     return null;
                 }
             };

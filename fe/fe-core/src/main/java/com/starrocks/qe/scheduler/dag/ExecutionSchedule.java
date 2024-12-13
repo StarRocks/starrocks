@@ -14,7 +14,11 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.rpc.RpcException;
@@ -23,9 +27,15 @@ import com.starrocks.thrift.TUniqueId;
 public interface ExecutionSchedule {
     void prepareSchedule(Coordinator coordinator, Deployer deployer, ExecutionDAG dag);
 
+<<<<<<< HEAD
     void schedule(Coordinator.ScheduleOption option) throws RpcException, UserException;
 
     void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, UserException;
 
+=======
+    void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException;
+
+    void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     void cancel();
 }

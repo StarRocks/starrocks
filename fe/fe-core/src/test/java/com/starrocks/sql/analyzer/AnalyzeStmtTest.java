@@ -26,6 +26,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+<<<<<<< HEAD
+=======
+import com.starrocks.scheduler.history.TableKeeper;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -54,7 +58,13 @@ import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
+<<<<<<< HEAD
 import com.starrocks.statistic.StatsConstants;
+=======
+import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.statistic.StatsConstants;
+import com.starrocks.statistic.columns.PredicateColumnsStorage;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -103,13 +113,21 @@ public class AnalyzeStmtTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createStructTableSql);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Test
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+<<<<<<< HEAD
         Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+=======
+        Assert.assertEquals(4, analyzeStmt.getColumnNames().size());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Test
@@ -136,7 +154,11 @@ public class AnalyzeStmtTest {
 
         sql = "analyze table test.t0";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+<<<<<<< HEAD
         Assert.assertEquals(analyzeStmt.getColumnNames().size(), 0);
+=======
+        Assert.assertEquals(3, analyzeStmt.getColumnNames().size());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Test
@@ -202,6 +224,13 @@ public class AnalyzeStmtTest {
         sql = "analyze full table db.tbl with async mode";
         analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
         Assert.assertTrue(analyzeStmt.isAsync());
+<<<<<<< HEAD
+=======
+
+        sql = "analyze full table db.tbl partition(`tbl`) with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Test
@@ -468,4 +497,20 @@ public class AnalyzeStmtTest {
         analyzeFail("select * from tarray order by v5");
         analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAnalyzePredicateColumns() {
+        StatisticsMetaManager statistic = new StatisticsMetaManager();
+        statistic.createStatisticsTablesForTest();
+        TableKeeper keeper = PredicateColumnsStorage.createKeeper();
+        keeper.run();
+
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl all columns");
+        Assert.assertTrue(stmt.isAllColumns());
+        stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl predicate columns");
+        Assert.assertTrue(stmt.isUsePredicateColumns());
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

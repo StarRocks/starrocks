@@ -11,7 +11,11 @@ This statement is used to display the amount of data, the number of copies, and 
 Syntax:
 
 ```sql
+<<<<<<< HEAD
 SHOW DATA [FROM <db_name>[.<table_name>]]
+=======
+SHOW DATA [FROM [<db_name>.]<table_name>]
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 ```
 
 Note:

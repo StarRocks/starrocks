@@ -20,7 +20,11 @@
 
 namespace starrocks {
 
+<<<<<<< HEAD
 class ColumnOrPredicate : public ColumnPredicate {
+=======
+class ColumnOrPredicate final : public ColumnPredicate {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 public:
     explicit ColumnOrPredicate(const TypeInfoPtr& type_info, ColumnId cid) : ColumnPredicate(type_info, cid) {}
 
@@ -59,6 +63,11 @@ public:
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override;
 
+<<<<<<< HEAD
+=======
+    std::string debug_string() const override;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 private:
     Status _evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const;
 

@@ -22,6 +22,10 @@
 #include "exprs/dictmapping_expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/literal.h"
+<<<<<<< HEAD
+=======
+#include "exprs/min_max_predicate.h"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_layout.h"
 #include "gen_cpp/RuntimeFilter_types.h"
@@ -778,6 +782,7 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     }
 }
 
+<<<<<<< HEAD
 // ========================================================
 template <LogicalType Type>
 class MinMaxPredicate : public Expr {
@@ -885,6 +890,12 @@ void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotI
                                                          const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
     *min_max_predicate = nullptr;
     if (filter == nullptr || filter->has_null()) return;
+=======
+void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
+                                                         const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
+    *min_max_predicate = nullptr;
+    if (filter == nullptr) return;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
     auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
     *min_max_predicate = res;

@@ -18,7 +18,11 @@ package com.starrocks.common;
 /**
  * Thrown for SQL statements that Create while Exist.
  */
+<<<<<<< HEAD
 public class AlreadyExistsException extends UserException {
+=======
+public class AlreadyExistsException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public AlreadyExistsException(String msg) {
         super(msg);
     }

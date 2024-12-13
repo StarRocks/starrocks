@@ -18,6 +18,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.StmtExecutor;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.ExecuteStmt;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -84,6 +88,24 @@ public class PreparedStmtTest{
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testIsQuery() throws Exception {
+        String selectSql = "select * from demo.prepare_stmt";
+        QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSql, ctx);
+        Assert.assertEquals(true, ctx.isQueryStmt(queryStatement));
+
+        String prepareSql = "PREPARE stmt FROM select * from demo.prepare_stmt";
+        PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(prepareSql, ctx);
+        Assert.assertEquals(false, ctx.isQueryStmt(prepareStmt));
+
+        ctx.putPreparedStmt("stmt", new PrepareStmtContext(prepareStmt, ctx, null));
+        Assert.assertEquals(true, ctx.isQueryStmt(new ExecuteStmt("stmt", null)));
+        Assert.assertEquals(false, ctx.isQueryStmt(new ExecuteStmt("stmt1", null)));
+    }
+
+    @Test
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void testPrepareEnable() {
         ctx.getSessionVariable().setEnablePrepareStmt(false);
         String prepareSql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";

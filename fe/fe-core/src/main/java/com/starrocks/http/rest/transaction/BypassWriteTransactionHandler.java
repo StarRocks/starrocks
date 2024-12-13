@@ -17,7 +17,11 @@ package com.starrocks.http.rest.transaction;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
@@ -58,7 +62,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
     }
 
     @Override
+<<<<<<< HEAD
     public ResultWrapper handle(BaseRequest request, BaseResponse response) throws UserException {
+=======
+    public ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
         String dbName = txnOperationParams.getDbName();
         String tableName = txnOperationParams.getTableName();
@@ -69,14 +77,22 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         LOG.info("Handle bypass write transaction, label: {}", label);
 
         Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
+<<<<<<< HEAD
                 .orElseThrow(() -> new UserException(String.format("Database[%s] does not exist.", dbName)));
+=======
+                .orElseThrow(() -> new StarRocksException(String.format("Database[%s] does not exist.", dbName)));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         TransactionResult result;
         switch (txnOperation) {
             case TXN_BEGIN:
                 Table table = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore()
                                         .getTable(db.getFullName(), tableName))
+<<<<<<< HEAD
                             .orElseThrow(() -> new UserException(
+=======
+                            .orElseThrow(() -> new StarRocksException(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                                 String.format("Table[%s.%s] does not exist.", dbName, tableName)));
                 result = handleBeginTransaction(db, table, label, sourceType, timeoutMillis);
                 break;
@@ -97,7 +113,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                 );
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException("Unsupported operation: " + txnOperation);
+=======
+                throw new StarRocksException("Unsupported operation: " + txnOperation);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         return new ResultWrapper(result);
@@ -107,7 +127,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                                      Table table,
                                                      String label,
                                                      LoadJobSourceType sourceType,
+<<<<<<< HEAD
                                                      long timeoutMillis) throws UserException {
+=======
+                                                     long timeoutMillis) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long dbId = db.getId();
         long tableId = table.getId();
 
@@ -124,7 +148,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
     private TransactionResult handlePrepareTransaction(Database db,
                                                        String label,
                                                        List<TabletCommitInfo> committedTablets,
+<<<<<<< HEAD
                                                        List<TabletFailInfo> failedTablets) throws UserException {
+=======
+                                                       List<TabletFailInfo> failedTablets) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
         long txnId = txnState.getTransactionId();
@@ -145,7 +173,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException(String.format(
+=======
+                throw new StarRocksException(String.format(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         "Can not prepare %s transaction %d, label is %s", txnStatus, txnId, label));
         }
         return result;
@@ -153,7 +185,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
 
     private TransactionResult handleCommitTransaction(Database db,
                                                       String label,
+<<<<<<< HEAD
                                                       long timeoutMillis) throws UserException {
+=======
+                                                      long timeoutMillis) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
         long txnId = txnState.getTransactionId();
@@ -173,7 +209,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException(String.format(
+=======
+                throw new StarRocksException(String.format(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         "Can not commit %s transaction %s, label is %s", txnStatus, txnId, label));
         }
 
@@ -182,7 +222,11 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
 
     private TransactionResult handleRollbackTransaction(Database db,
                                                         String label,
+<<<<<<< HEAD
                                                         List<TabletFailInfo> failedTablets) throws UserException {
+=======
+                                                        List<TabletFailInfo> failedTablets) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
         long txnId = txnState.getTransactionId();
@@ -201,25 +245,41 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                 result.addResultEntry(TransactionResult.LABEL_KEY, label);
                 break;
             default:
+<<<<<<< HEAD
                 throw new UserException(String.format(
+=======
+                throw new StarRocksException(String.format(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         "Can not abort %s transaction %s, label is %s", txnStatus, txnId, label));
         }
 
         return result;
     }
 
+<<<<<<< HEAD
     private static TransactionState getTxnState(long dbId, String label) throws UserException {
         TransactionState txnState = GlobalStateMgr.getCurrentState()
                 .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
         if (null == txnState) {
             throw new UserException(String.format("No transaction found by label %s", label));
+=======
+    private static TransactionState getTxnState(long dbId, String label) throws StarRocksException {
+        TransactionState txnState = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getLabelTransactionState(dbId, label);
+        if (null == txnState) {
+            throw new StarRocksException(String.format("No transaction found by label %s", label));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         if (BYPASS_WRITE.equals(txnState.getSourceType())) {
             return txnState;
         }
 
+<<<<<<< HEAD
         throw new UserException(String.format(
+=======
+        throw new StarRocksException(String.format(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 "Transaction found by label %s isn't created in %s scenario.", label, BYPASS_WRITE.name()));
     }
 

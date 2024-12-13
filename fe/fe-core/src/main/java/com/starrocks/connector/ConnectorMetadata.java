@@ -26,7 +26,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -281,7 +285,11 @@ public interface ConnectorMetadata {
     default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
     }
 
+<<<<<<< HEAD
     default void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
+=======
+    default void alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
@@ -333,7 +341,11 @@ public interface ConnectorMetadata {
     default void createView(CreateViewStmt stmt) throws DdlException {
     }
 
+<<<<<<< HEAD
     default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+=======
+    default void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     default CloudConfiguration getCloudConfiguration() {

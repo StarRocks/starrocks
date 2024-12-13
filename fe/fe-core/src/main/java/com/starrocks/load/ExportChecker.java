@@ -36,7 +36,11 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
@@ -197,7 +201,11 @@ public final class ExportChecker extends FrontendDaemon {
         if (beHasErr) {
             try {
                 job.cancel(ExportFailMsg.CancelType.BE_STATUS_ERR, errMsg);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 LOG.warn("try to cancel a completed job. job: {}", job);
             }
             return true;

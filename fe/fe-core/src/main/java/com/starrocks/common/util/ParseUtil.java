@@ -97,6 +97,17 @@ public class ParseUtil {
         return replicaNumber;
     }
 
+<<<<<<< HEAD
+=======
+    public static long analyzeLongValue(String value) throws AnalysisException {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new AnalysisException("invalid number: " + value);
+        }
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public static boolean parseBooleanValue(String value, String name) {
         if (value.equalsIgnoreCase("ON")
                 || value.equalsIgnoreCase("TRUE")

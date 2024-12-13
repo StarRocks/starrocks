@@ -88,6 +88,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         LOG_IF(WARNING, !st.ok()) << "Fail to flush. txn_id: " << writer->txn_id()
                                   << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
     }
+<<<<<<< HEAD
+=======
+    writer->update_task_stat(num_tasks, pending_time_ns);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     StarRocksMetrics::instance()->async_delta_writer_execute_total.increment(1);
     StarRocksMetrics::instance()->async_delta_writer_task_total.increment(num_tasks);
     StarRocksMetrics::instance()->async_delta_writer_task_execute_duration_us.increment(watch.elapsed_time() / 1000);

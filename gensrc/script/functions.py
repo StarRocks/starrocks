@@ -290,6 +290,10 @@ vectorized_functions = [
     [30120, 'length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::length'],
     [30130, 'char_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
     [30131, 'character_length', True, False, 'INT', ['VARCHAR'], 'StringFunctions::utf8_length'],
+<<<<<<< HEAD
+=======
+    [30132, 'inet_aton', True, False, 'BIGINT', ['VARCHAR'], 'StringFunctions::inet_aton'],
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
     [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],

@@ -26,6 +26,10 @@ namespace starrocks {
 class ArrowFlightSqlServer : public arrow::flight::sql::FlightSqlServerBase {
 public:
     Status start(int port);
+<<<<<<< HEAD
+=======
+    void stop();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     arrow::Result<std::unique_ptr<arrow::flight::FlightInfo>> GetFlightInfoSchemas(
             const arrow::flight::ServerCallContext& context, const arrow::flight::sql::GetDbSchemas& command,
@@ -37,6 +41,11 @@ public:
 
 private:
     static arrow::Result<std::pair<std::string, std::string>> decode_ticket(const std::string& ticket);
+<<<<<<< HEAD
+=======
+
+    bool _running = false;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 };
 
 } // namespace starrocks

@@ -387,7 +387,11 @@ class ParserTest {
         SessionVariable sessionVariable = new SessionVariable();
         try {
             SqlParser.parse(sql, sessionVariable).get(0);
+<<<<<<< HEAD
             fail("sql should fail.");
+=======
+            fail("sql should fail: " + sql);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } catch (Exception e) {
             System.out.println(e.getMessage());
             assertContains(e.getMessage(), expecting);
@@ -561,7 +565,10 @@ class ParserTest {
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
                 ");", ")"));
+<<<<<<< HEAD
         arguments.add(Arguments.of("analyze table tt abc", "';'"));
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
         arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
         arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));

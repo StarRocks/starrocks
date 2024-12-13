@@ -24,7 +24,11 @@ import com.google.common.hash.Funnel;
 import com.google.common.hash.Hashing;
 import com.google.common.hash.PrimitiveSink;
 import com.starrocks.catalog.PartitionKey;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
@@ -237,7 +241,11 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     @Override
+<<<<<<< HEAD
     public void computeScanRangeAssignment() throws UserException {
+=======
+    public void computeScanRangeAssignment() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         computeGeneralAssignment();
         if (useIncrementalScanRanges) {
             boolean hasMore = scanNode.hasMoreScanRanges();
@@ -251,7 +259,12 @@ public class HDFSBackendSelector implements BackendSelector {
         }
     }
 
+<<<<<<< HEAD
     private List<TScanRangeLocations> computeForceScheduleLocalAssignment(long avgNodeScanRangeBytes) throws UserException {
+=======
+    private List<TScanRangeLocations> computeForceScheduleLocalAssignment(long avgNodeScanRangeBytes) throws
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // be host -> bes
         Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
         for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
@@ -281,7 +294,11 @@ public class HDFSBackendSelector implements BackendSelector {
         return unassigned;
     }
 
+<<<<<<< HEAD
     private void computeGeneralAssignment() throws UserException {
+=======
+    private void computeGeneralAssignment() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (locations.size() == 0) {
             return;
         }
@@ -314,7 +331,11 @@ public class HDFSBackendSelector implements BackendSelector {
             List<ComputeNode> backends = hashRing.get(scanRangeLocations, kCandidateNumber);
             ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
             if (node == null) {
+<<<<<<< HEAD
                 throw new UserException("Failed to find backend to execute");
+=======
+                throw new StarRocksException("Failed to find backend to execute");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             recordScanRangeAssignment(node, backends, scanRangeLocations);
         }

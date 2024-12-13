@@ -175,7 +175,13 @@ public class PseudoFrontend {
 
             try {
                 // init config
+<<<<<<< HEAD
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
+=======
+                Config config = new Config();
+                config.init(frontend.getRunningDir() + "/conf/fe.conf");
+                config.initMutable(frontend.getRunningDir() + "/conf/fe_mutable.conf");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 Config.statistic_collect_query_timeout = 60;
 
                 Log4jConfig.initLogging();

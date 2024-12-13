@@ -15,7 +15,11 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
 public class NoAliveBackendException extends UserException {
+=======
+public class NoAliveBackendException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public NoAliveBackendException(String msg, Throwable cause) {
         super(msg, cause);
     }

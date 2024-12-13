@@ -20,7 +20,11 @@ import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
@@ -145,7 +149,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBeginStreamLoadTask() throws UserException {
+=======
+    public void testBeginStreamLoadTask() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
@@ -174,7 +182,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testChannelIdEqualChannelNum() throws UserException {
+=======
+    public void testChannelIdEqualChannelNum() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
         
         String dbName = "test_db";
@@ -194,7 +206,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTaskByName() throws UserException {
+=======
+    public void testGetTaskByName() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -216,7 +232,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTaskByNameWithNullLabelName() throws UserException {
+=======
+    public void testGetTaskByNameWithNullLabelName() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -238,7 +258,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTaskByIdWhenMatched() throws UserException {
+=======
+    public void testGetTaskByIdWhenMatched() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -261,7 +285,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetTaskByIdWhenNotMatched() throws UserException {
+=======
+    public void testGetTaskByIdWhenNotMatched() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";
@@ -279,7 +307,11 @@ public class StreamLoadManagerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testStreamLoadTaskAfterCommit() throws UserException {
+=======
+    public void testStreamLoadTaskAfterCommit() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
 
         String dbName = "test_db";

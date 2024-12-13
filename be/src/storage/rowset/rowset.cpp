@@ -726,6 +726,10 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.tablet_schema = options.tablet_schema;
     seg_options.use_vector_index = options.use_vector_index;
     seg_options.vector_search_option = options.vector_search_option;
+<<<<<<< HEAD
+=======
+    seg_options.sample_options = options.sample_options;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());

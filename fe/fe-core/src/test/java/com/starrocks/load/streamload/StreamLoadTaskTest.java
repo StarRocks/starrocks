@@ -18,7 +18,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -62,7 +66,11 @@ public class StreamLoadTaskTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAfterCommitted() throws UserException {
+=======
+    public void testAfterCommitted() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         streamLoadTask.setCoordinator(coord);
         new Expectations() {
             {
@@ -82,7 +90,11 @@ public class StreamLoadTaskTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAfterAborted() throws UserException {
+=======
+    public void testAfterAborted() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         streamLoadTask.setCoordinator(coord);
         new Expectations() {
             {
@@ -120,9 +132,15 @@ public class StreamLoadTaskTest {
             }
         };
 
+<<<<<<< HEAD
         ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
         ExceptionChecker.expectThrowsWithMsg(UserException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+=======
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+                () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, ERR_NO_PARTITIONS_HAVE_DATA_LOAD.formatErrorMsg(),
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 () -> Deencapsulation.invoke(streamLoadTask, "unprotectedWaitCoordFinish"));
     }
 
@@ -171,7 +189,11 @@ public class StreamLoadTaskTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testBuildProfile() throws UserException {
+=======
+    public void testBuildProfile() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         streamLoadTask.setCoordinator(coord);
         streamLoadTask.setIsSyncStreamLoad(true);
         new Expectations() {

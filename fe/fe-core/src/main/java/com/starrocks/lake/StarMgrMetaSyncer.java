@@ -28,7 +28,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -105,7 +109,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                         .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, workerGroupId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
+<<<<<<< HEAD
             } catch (UserException ignored1) {
+=======
+            } catch (StarRocksException ignored1) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 // ignore error
             }
         }

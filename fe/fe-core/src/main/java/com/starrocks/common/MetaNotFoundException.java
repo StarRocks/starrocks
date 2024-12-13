@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Exception for meta info is null, like db table partition tablet replica job
  */
+<<<<<<< HEAD
 public class MetaNotFoundException extends UserException {
+=======
+public class MetaNotFoundException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public MetaNotFoundException(String msg) {
         super(msg);
     }

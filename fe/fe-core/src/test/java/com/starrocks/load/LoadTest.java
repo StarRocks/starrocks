@@ -37,7 +37,11 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
@@ -94,7 +98,11 @@ public class LoadTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInitColumnsPathColumns() throws UserException {
+=======
+    public void testInitColumnsPathColumns() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // columns
         String c0Name = "c0";
         columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));
@@ -139,7 +147,11 @@ public class LoadTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInitColumnsColumnInSchemaAndExprArgs() throws UserException {
+=======
+    public void testInitColumnsColumnInSchemaAndExprArgs() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         table = new OlapTable(1, "test", columns, KeysType.AGG_KEYS,
                 new SinglePartitionInfo(), new RandomDistributionInfo(3));
 
@@ -216,7 +228,11 @@ public class LoadTest {
      * set (C1 = year(c1))
      */
     @Test
+<<<<<<< HEAD
     public void testSourceColumnCaseSensitive() throws UserException {
+=======
+    public void testSourceColumnCaseSensitive() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // columns
         String c0Name = "c0";
         columns.add(new Column(c0Name, Type.INT, true, null, true, null, ""));

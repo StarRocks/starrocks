@@ -42,7 +42,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
@@ -78,7 +82,11 @@ public class RoutineLoadJobTest {
     public void testAfterAbortedReasonOffsetOutOfRange(@Mocked GlobalStateMgr globalStateMgr,
                                                        @Injectable TransactionState transactionState,
                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -112,7 +120,11 @@ public class RoutineLoadJobTest {
     @Test
     public void testAfterAborted(@Mocked RoutineLoadMgr routineLoadMgr,
                                  @Injectable TransactionState transactionState,
+<<<<<<< HEAD
                                  @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+=======
+                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -181,7 +193,11 @@ public class RoutineLoadJobTest {
     @Test
     public void testAfterCommitted(@Mocked RoutineLoadMgr routineLoadMgr,
                                  @Injectable TransactionState transactionState,
+<<<<<<< HEAD
                                  @Injectable KafkaTaskInfo routineLoadTaskInfo) throws UserException {
+=======
+                                 @Injectable KafkaTaskInfo routineLoadTaskInfo) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
         routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -271,7 +287,11 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testKafkaGetShowInfo() throws UserException {
+=======
+    public void testKafkaGetShowInfo() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         {
             // PAUSE state
             KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
@@ -346,7 +366,11 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testGetShowInfoSharedData(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                                           @Mocked WarehouseManager warehouseManager) throws UserException {
+=======
+                                          @Mocked WarehouseManager warehouseManager) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -377,7 +401,11 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+    public void testUpdateWhileDbDeleted(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -394,7 +422,11 @@ public class RoutineLoadJobTest {
 
     @Test
     public void testUpdateWhileTableDeleted(@Mocked GlobalStateMgr globalStateMgr,
+<<<<<<< HEAD
                                             @Injectable Database database) throws UserException {
+=======
+                                            @Injectable Database database) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -415,7 +447,11 @@ public class RoutineLoadJobTest {
     public void testUpdateWhilePartitionChanged(@Mocked GlobalStateMgr globalStateMgr,
                                                 @Injectable Database database,
                                                 @Injectable Table table,
+<<<<<<< HEAD
                                                 @Injectable KafkaProgress kafkaProgress) throws UserException {
+=======
+                                                @Injectable KafkaProgress kafkaProgress) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         new Expectations() {
             {
@@ -432,7 +468,11 @@ public class RoutineLoadJobTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties,
+<<<<<<< HEAD
                                                        long warehouseId) throws UserException {
+=======
+                                                       long warehouseId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return Lists.newArrayList(1, 2, 3);
             }
         };

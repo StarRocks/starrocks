@@ -54,6 +54,10 @@ import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 import java.time.Clock;
 import java.time.DateTimeException;
+<<<<<<< HEAD
+=======
+import java.time.LocalDateTime;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
@@ -161,6 +165,14 @@ public class TimeUtils {
         return TimeZone.getTimeZone(ZoneId.of(ZoneId.systemDefault().getId(), TIME_ZONE_ALIAS_MAP));
     }
 
+<<<<<<< HEAD
+=======
+    // Return now with system timezone
+    public static LocalDateTime getSystemNow() {
+        return LocalDateTime.now(getSystemTimeZone().toZoneId());
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // get time zone of given zone name, or return system time zone if name is null.
     public static TimeZone getOrSystemTimeZone(String timeZone) {
         if (timeZone == null) {
@@ -176,6 +188,13 @@ public class TimeUtils {
         return Clock.systemDefaultZone().instant().getEpochSecond();
     }
 
+<<<<<<< HEAD
+=======
+    public static long toEpochSeconds(LocalDateTime time) {
+        return time.atZone(getSystemTimeZone().toZoneId()).toInstant().getEpochSecond();
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {
         if (timeStamp <= 0L) {
             return FeConstants.NULL_STRING;

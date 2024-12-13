@@ -30,7 +30,11 @@ ARG GITHUB_TOKEN
 # the root directory to build the project
 ARG BUILD_ROOT=/build
 
+<<<<<<< HEAD
 FROM starrocks/toolchains-${distro}:main-20240831 as base
+=======
+FROM starrocks/toolchains-${distro}:main-20241206 as base
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /

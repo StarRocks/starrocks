@@ -158,6 +158,11 @@ public:
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
+<<<<<<< HEAD
+=======
+    virtual bool has_zone_map() const { return false; }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     /// Store the row ranges that satisfy the given predicates into |row_ranges|.
     /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
@@ -259,9 +264,20 @@ public:
 
     virtual Status null_count(size_t* count) { return Status::OK(); };
 
+<<<<<<< HEAD
 protected:
     ColumnIteratorOptions _opts;
     virtual ColumnReader* get_column_reader() { return nullptr; };
+=======
+    // RAW interface, should be used carefully
+    virtual ColumnReader* get_column_reader() {
+        CHECK(false) << "unreachable";
+        return nullptr;
+    }
+
+protected:
+    ColumnIteratorOptions _opts;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 };
 
 } // namespace starrocks

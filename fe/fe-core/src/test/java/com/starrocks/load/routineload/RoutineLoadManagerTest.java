@@ -46,7 +46,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -115,7 +119,11 @@ public class RoutineLoadManagerTest {
     @Test
     public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
                                  @Mocked ConnectContext connectContext,
+<<<<<<< HEAD
                                  @Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+                                 @Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String jobName = "job1";
         String dbName = "db1";
         LabelName labelName = new LabelName(dbName, jobName);
@@ -203,7 +211,11 @@ public class RoutineLoadManagerTest {
             Assert.fail();
         } catch (AnalysisException e) {
             LOG.info("Access deny");
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             e.printStackTrace();
         }
     }
@@ -695,7 +707,11 @@ public class RoutineLoadManagerTest {
     public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
+<<<<<<< HEAD
                                         @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -750,7 +766,11 @@ public class RoutineLoadManagerTest {
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
                                          @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database,
+<<<<<<< HEAD
                                          @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                         @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -787,7 +807,11 @@ public class RoutineLoadManagerTest {
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked Database database,
+<<<<<<< HEAD
                                        @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                       @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -927,7 +951,11 @@ public class RoutineLoadManagerTest {
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
+<<<<<<< HEAD
                                         @Mocked ConnectContext connectContext) throws UserException {
+=======
+                                        @Mocked ConnectContext connectContext) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
         Map<String, List<RoutineLoadJob>> nameToRoutineLoadJob = Maps.newHashMap();
@@ -1049,4 +1077,26 @@ public class RoutineLoadManagerTest {
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(1L));
         Assert.assertNotNull(restartedRoutineLoadManager.getJob(2L));
     }
+<<<<<<< HEAD
+=======
+
+
+    @Test
+    public void testCheckTaskInJob() throws Exception {
+
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "job1", 1L, 1L, null, "topic1");
+        Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
+        partitionIdToOffset.put(1, 100L);
+        partitionIdToOffset.put(2, 200L);
+        KafkaTaskInfo routineLoadTaskInfo = new KafkaTaskInfo(new UUID(1, 1), kafkaRoutineLoadJob, 20000,
+                System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
+        kafkaRoutineLoadJob.routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        RoutineLoadMgr routineLoadMgr = new RoutineLoadMgr();
+        routineLoadMgr.addRoutineLoadJob(kafkaRoutineLoadJob, "db");
+        boolean taskExist = routineLoadMgr.checkTaskInJob(kafkaRoutineLoadJob.getId(), routineLoadTaskInfo.getId());
+        Assert.assertTrue(taskExist);
+        boolean taskNotExist = routineLoadMgr.checkTaskInJob(-1L, routineLoadTaskInfo.getId());
+        Assert.assertFalse(taskNotExist);
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

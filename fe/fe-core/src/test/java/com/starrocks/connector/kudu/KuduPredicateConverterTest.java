@@ -17,6 +17,10 @@ package com.starrocks.connector.kudu;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -49,6 +53,11 @@ public class KuduPredicateConverterTest {
     private static final ColumnRefOperator F1 = new ColumnRefOperator(0, Type.VARCHAR, "f1", true, false);
     private static final ColumnRefOperator F3 = new ColumnRefOperator(0, Type.DATE, "f3", true, false);
     private static final ColumnRefOperator F4 = new ColumnRefOperator(0, Type.DATETIME, "f4", true, false);
+<<<<<<< HEAD
+=======
+    private static final CastOperator F0_CAST = new CastOperator(
+            Type.VARCHAR, new ColumnRefOperator(0, Type.INT, "f0", true, false));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     private static final KuduPredicateConverter CONVERTER = new KuduPredicateConverter(SCHEMA);
 
@@ -74,6 +83,17 @@ public class KuduPredicateConverterTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testEqCast() {
+        ConstantOperator value = ConstantOperator.createInt(5);
+        ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F0_CAST, value);
+        List<KuduPredicate> result = CONVERTER.convert(op);
+        Assert.assertEquals(result.size(), 0);
+    }
+
+    @Test
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void testEqDate() {
         ConstantOperator value = ConstantOperator.createDate(LocalDateTime.of(2024, 1, 1, 0, 0));
         ScalarOperator op = new BinaryPredicateOperator(BinaryType.EQ, F3, value);

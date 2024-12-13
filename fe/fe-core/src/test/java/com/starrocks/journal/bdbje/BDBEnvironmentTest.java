@@ -77,6 +77,10 @@ public class BDBEnvironmentTest {
     }
 
 
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     @Test
     public void testSetupStandalone() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -103,6 +107,10 @@ public class BDBEnvironmentTest {
     }
 
     // address already in use
+<<<<<<< HEAD
+=======
+    @Ignore
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     @Test(expected = JournalException.class)
     public void testSetupStandaloneMultitimes() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -193,6 +201,7 @@ public class BDBEnvironmentTest {
         BDBEnvironment.SLEEP_INTERVAL_SEC = 1;
     }
 
+<<<<<<< HEAD
     @Test
     public void testNormalCluster() throws Exception {
         long startMs = System.currentTimeMillis();
@@ -251,6 +260,8 @@ public class BDBEnvironmentTest {
         System.out.println("testNormalCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
     }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     /**
      * see https://github.com/StarRocks/starrocks/issues/4977
      *

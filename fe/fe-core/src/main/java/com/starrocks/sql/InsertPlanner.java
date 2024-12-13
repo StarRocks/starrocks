@@ -46,7 +46,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.planner.BlackHoleTableSink;
@@ -402,7 +406,11 @@ public class InsertPlanner {
                 try {
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
                     olapTableSink.complete();
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     throw new SemanticException(e.getMessage());
                 }
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {

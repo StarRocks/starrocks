@@ -24,7 +24,10 @@
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

@@ -56,7 +56,10 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.TableFunctionTable;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -65,7 +68,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
@@ -189,7 +196,11 @@ public class FileScanNode extends LoadScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         super.init(analyzer);
 
         this.analyzer = analyzer;
@@ -200,7 +211,11 @@ public class FileScanNode extends LoadScanNode {
                 try {
                     fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
                 } catch (AnalysisException e) {
+<<<<<<< HEAD
                     throw new UserException(e.getMessage());
+=======
+                    throw new StarRocksException(e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
                 brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
             }
@@ -272,7 +287,11 @@ public class FileScanNode extends LoadScanNode {
 
     // Called from init, construct source tuple information
     private void initParams(ParamCreateContext context)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TBrokerScanRangeParams params = new TBrokerScanRangeParams();
         params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
         context.params = params;
@@ -327,9 +346,15 @@ public class FileScanNode extends LoadScanNode {
      * exprMap: the expr from column mapping in load stmt.
      *
      * @param context
+<<<<<<< HEAD
      * @throws UserException
      */
     private void initColumns(ParamCreateContext context) throws UserException {
+=======
+     * @throws StarRocksException
+     */
+    private void initColumns(ParamCreateContext context) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         context.tupleDescriptor = analyzer.getDescTbl().createTupleDescriptor();
         // columns in column list is case insensitive
         context.slotDescByName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -350,7 +375,11 @@ public class FileScanNode extends LoadScanNode {
                 useVectorizedLoad, columnsFromPath);
     }
 
+<<<<<<< HEAD
     private void finalizeParams(ParamCreateContext context) throws UserException, AnalysisException {
+=======
+    private void finalizeParams(ParamCreateContext context) throws StarRocksException, AnalysisException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Map<String, SlotDescriptor> slotDescByName = context.slotDescByName;
         Map<String, Expr> exprMap = context.exprMap;
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
@@ -380,7 +409,11 @@ public class FileScanNode extends LoadScanNode {
                         if (SUPPORTED_DEFAULT_FNS.contains(column.getDefaultExpr().getExpr())) {
                             expr = column.getDefaultExpr().obtainExpr();
                         } else {
+<<<<<<< HEAD
                             throw new UserException("Column(" + column + ") has unsupported default value:"
+=======
+                            throw new StarRocksException("Column(" + column + ") has unsupported default value:"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                                     + column.getDefaultExpr().getExpr());
                         }
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
@@ -390,7 +423,11 @@ public class FileScanNode extends LoadScanNode {
                                 nullExprInAutoIncrement = false;
                             }
                         } else {
+<<<<<<< HEAD
                             throw new UserException("Unknown slot ref("
+=======
+                            throw new StarRocksException("Unknown slot ref("
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                                     + destSlotDesc.getColumn().getName() + ") in source file");
                         }
                     }
@@ -433,7 +470,11 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ComputeNode selectedBackend = nodes.get(nextBe++);
         nextBe = nextBe % nodes.size();
 
@@ -469,7 +510,11 @@ public class FileScanNode extends LoadScanNode {
         return locations.scan_range.broker_scan_range;
     }
 
+<<<<<<< HEAD
     private void getFileStatusAndCalcInstance() throws UserException {
+=======
+    private void getFileStatusAndCalcInstance() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (fileStatusesList == null || filesAdded == -1) {
             // FIXME(cmy): fileStatusesList and filesAdded can be set out of db lock when doing pull load,
             // but for now it is very difficult to set them out of db lock when doing broker query.
@@ -527,7 +572,11 @@ public class FileScanNode extends LoadScanNode {
         bytesPerInstance = (totalBytes + numInstances - 1) / (numInstances != 0 ? numInstances : 1);
     }
 
+<<<<<<< HEAD
     private void assignBackends() throws UserException {
+=======
+    private void assignBackends() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         nodes = Lists.newArrayList();
 
         // TODO: need to refactor after be split into cn + dn
@@ -548,7 +597,11 @@ public class FileScanNode extends LoadScanNode {
         }
 
         if (nodes.isEmpty()) {
+<<<<<<< HEAD
             throw new UserException("No available backends");
+=======
+            throw new StarRocksException("No available backends");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         Collections.shuffle(nodes, random);
     }
@@ -557,7 +610,11 @@ public class FileScanNode extends LoadScanNode {
     private void processFileGroup(
             ParamCreateContext context,
             List<TBrokerFileStatus> fileStatuses)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (fileStatuses == null || fileStatuses.isEmpty()) {
             return;
         }
@@ -631,7 +688,11 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void createScanRangeLocations(ParamCreateContext context, List<TBrokerFileStatus> fileStatuses)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Preconditions.checkState(locationsHeap.isEmpty(), "Locations heap is not empty");
 
         long totalBytes = 0;
@@ -648,7 +709,11 @@ public class FileScanNode extends LoadScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         locationsList = Lists.newArrayList();
         locationsHeap = new PriorityQueue<>(SCAN_RANGE_LOCATIONS_COMPARATOR);
 
@@ -661,7 +726,11 @@ public class FileScanNode extends LoadScanNode {
             try {
                 finalizeParams(context);
             } catch (AnalysisException e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
+=======
+                throw new StarRocksException(e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             processFileGroup(context, fileStatuses);
         }
@@ -697,7 +766,11 @@ public class FileScanNode extends LoadScanNode {
     public void updateScanRangeLocations() {
         try {
             assignBackends();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("assign backends failed.", e);
             // Just return, retry by LoadTask
             return;
@@ -719,7 +792,11 @@ public class FileScanNode extends LoadScanNode {
             try {
                 // Get new alive be and broker here, and params is not used, so set null
                 newLocations = newLocations(null, brokerDesc.getName(), brokerDesc.hasBroker());
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 LOG.warn("new locations failed.", e);
                 // Just return, retry by LoadTask
                 return;

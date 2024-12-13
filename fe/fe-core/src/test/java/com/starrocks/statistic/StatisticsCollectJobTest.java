@@ -59,7 +59,11 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Optional;
+=======
+import java.util.function.Function;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
@@ -227,6 +231,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(7, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
@@ -234,6 +239,15 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 fullStatisticsCollectJob.getColumnNames().toString()));
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertTrue("[v1, v2, v3, v4, v5]".contains(
+                fullStatisticsCollectJob.getColumnNames().toString()));
+        Assert.assertTrue(jobs.get(1) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(1);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertTrue("[v4, v5, v6]".contains(
                 fullStatisticsCollectJob.getColumnNames().toString()));
     }
@@ -248,12 +262,21 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(3, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
+        Assert.assertTrue(jobs.get(1) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(1);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumnNames().toString());
     }
 
@@ -267,8 +290,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("t0_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumnNames().toString());
 
@@ -281,8 +309,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("tprimary_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[pk, v1, v2]", fullStatisticsCollectJob.getColumnNames().toString());
 
@@ -294,8 +327,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("tunique_stats", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[pk]", fullStatisticsCollectJob.getColumnNames().toString());
     }
@@ -312,8 +350,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("struct_a", fullStatisticsCollectJob.getTable().getName());
         Assert.assertEquals("[b.a, b.c, d.c.a]", fullStatisticsCollectJob.getColumnNames().toString());
     }
@@ -329,8 +372,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("[v2]", fullStatisticsCollectJob.getColumnNames().toString());
     }
 
@@ -345,8 +393,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
         SampleStatisticsCollectJob sampleStatisticsCollectJob = (SampleStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob sampleStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("[v2]", sampleStatisticsCollectJob.getColumnNames().toString());
     }
 
@@ -411,6 +464,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
 
+<<<<<<< HEAD
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
         Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', %d, 'test.t0_stats', " +
@@ -418,33 +472,71 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "SELECT `v2` as column_key FROM `test`.`t0_stats` where rand() <= 0.1 and `v2` is not null  " +
                         "ORDER BY `v2` LIMIT 10000000) t",
                 t0StatsTableId, dbid), sql);
+=======
+        Config.histogram_enable_table_sample = false;
+        Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
+        String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %s, 'v2', %d, " +
+                        "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                        "NULL, NOW() FROM (   SELECT `v2` as column_key    FROM `test`.`t0_stats`     " +
+                        "WHERE  rand() <= 0.100000 and `v2` is not null    ORDER BY `v2` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         Map<String, String> mostCommonValues = new HashMap<>();
         mostCommonValues.put("1", "10");
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v2", Type.BIGINT);
+<<<<<<< HEAD
         Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', %d, 'test.t0_stats', " +
                 "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
                 "FROM (SELECT `v2` as column_key FROM `test`.`t0_stats` where rand() <= 0.1 and `v2` is not null  and `v2` " +
                 "not in (1,2) ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid), sql);
+=======
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', %d, " +
+                "'test" +
+                ".t0_stats'," +
+                " " +
+                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  '[[\"1\",\"10\"],[\"2\",\"20\"]]', NOW() " +
+                "FROM (   SELECT `v2` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v2` is not " +
+                "null " +
+                " and `v2` " +
+                "not in (1,2) ORDER BY `v2` LIMIT 10000000) t", t0StatsTableId, dbid)), normalize.apply(sql));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01", "10");
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4", Type.DATE);
+<<<<<<< HEAD
         Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %d, 'v4', %d, 'test.t0_stats', " +
                 "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                 "'[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', NOW() FROM " +
                 "(SELECT `v4` as column_key FROM `test`.`t0_stats` where rand() <= 0.1 and `v4` is not null  and `v4` " +
                 "not in (\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId, dbid), sql);
+=======
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v4', %d, " +
+                        "'test" +
+                        ".t0_stats', " +
+                "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                "'[[\"0000-01-01\",\"10\"],[\"1991-01-01\",\"20\"]]', NOW() FROM " +
+                        "( SELECT `v4` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v4` is not " +
+                        "null  " +
+                        "and `v4` " +
+                        "not in (\"0000-01-01\",\"1991-01-01\") ORDER BY `v4` LIMIT 10000000) t", t0StatsTableId,
+                        dbid)),
+                normalize.apply(sql));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         mostCommonValues.clear();
         mostCommonValues.put("0000-01-01 00:00:00", "10");
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+<<<<<<< HEAD
         Assert.assertEquals(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, 'test.t0_stats', " +
                         "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                         "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
@@ -459,6 +551,38 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 " as db_id, " + t0StatsTableId +
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t", sql);
+=======
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+                        "'test.t0_stats', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` where rand() <= 0.100000 and `v5` is not " +
+                        "null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+
+        Config.histogram_enable_table_sample = true;
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
+                db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+                        "'test.t0_stats', " +
+                        "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
+                        "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
+                        "( SELECT `v5` as column_key FROM `test`.`t0_stats` SAMPLE('percent'='10') where true and " +
+                        "`v5` is not null  and " +
+                        "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
+                t0StatsTableId, dbid)), normalize.apply(sql));
+
+        sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectMCV",
+                db, olapTable, 100L, "v2", 0.1);
+        Assert.assertEquals(normalize.apply("select cast(version as INT), cast(db_id as BIGINT), cast(table_id as " +
+                "BIGINT), " +
+                "cast(column_key as varchar), cast(column_value as varchar) from (select 2 as version, " + dbid +
+                " as db_id, " + t0StatsTableId +
+                " as table_id, `v2` as column_key, count(`v2`) as column_value from `test`.`t0_stats` sample" +
+                "('percent'='10') " +
+                "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t"), normalize.apply(sql));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Test
@@ -486,7 +610,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         statsConnectCtx.setThreadLocalInfo();
         StatisticExecutor statisticExecutor = new StatisticExecutor();
 
+<<<<<<< HEAD
         new MockUp<FullStatisticsCollectJob>() {
+=======
+        new MockUp<HyperStatisticsCollectJob>() {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             @Mock
             public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
             }
@@ -495,7 +623,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         nativeAnalyzeJob.run(statsConnectCtx, statisticExecutor);
         Assert.assertEquals(StatsConstants.ScheduleStatus.FINISH, nativeAnalyzeJob.getStatus());
 
+<<<<<<< HEAD
         new MockUp<FullStatisticsCollectJob>() {
+=======
+        new MockUp<HyperStatisticsCollectJob>() {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             @Mock
             public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
                 throw new RuntimeException("mock exception");
@@ -515,6 +647,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void createAnalyzeJobSimultaneously() throws Exception {
         new MockUp<StatisticsCollectJob>() {
             @Mock
@@ -562,6 +695,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void testExternalAnalyzeJob() {
         Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("hive0", "partitioned_db");
         Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
@@ -1298,8 +1433,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("t0_stats", fjb.getTable().getName());
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
 
@@ -1362,8 +1502,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
 
         BasicStatsMeta execMeta2 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
@@ -1426,8 +1571,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
         Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+=======
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+        HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
 
         Config.statistic_auto_collect_small_table_interval = 100;
@@ -1504,8 +1654,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
             Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
             FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+=======
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
         }
 
@@ -1520,8 +1675,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
             Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
             SampleStatisticsCollectJob fjb = (SampleStatisticsCollectJob) jobs.get(0);
+=======
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
         }
 
@@ -1542,8 +1702,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
             List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
             Assert.assertEquals(1, jobs.size());
+<<<<<<< HEAD
             Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
             FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+=======
+            Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+            HyperStatisticsCollectJob fjb = (HyperStatisticsCollectJob) jobs.get(0);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumnNames().toString());
         }
     }

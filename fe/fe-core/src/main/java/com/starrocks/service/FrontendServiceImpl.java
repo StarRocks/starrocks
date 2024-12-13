@@ -70,6 +70,11 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
+import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -89,10 +94,17 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.PatternMatcher;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.ThriftServerContext;
+import com.starrocks.common.ThriftServerEventProcessor;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
@@ -154,14 +166,26 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+=======
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.Property;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.StarRocksPlannerException;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.parser.NodePosition;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -173,6 +197,11 @@ import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TAnalyzeStatusReq;
+import com.starrocks.thrift.TAnalyzeStatusRes;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -180,6 +209,11 @@ import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TColumnStatsUsageReq;
+import com.starrocks.thrift.TColumnStatsUsageRes;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TCreatePartitionRequest;
@@ -346,7 +380,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+<<<<<<< HEAD
 import java.util.HashMap;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -707,6 +744,44 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return SysFeMemoryUsage.listFeMemoryUsage(request);
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+
+        TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
+        result.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return result;
+    }
+
+    @Override
+    public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
+        TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        res.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getDatabase_name(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return res;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // list MaterializedView table match pattern
     private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
                                                                          UserIdentity currentUser, TGetTablesParams params) {
@@ -1211,7 +1286,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setStatus_code(TStatusCode.LABEL_ALREADY_EXISTS);
             status.addToError_msgs(e.getMessage());
             result.setJob_status(e.getJobStatus());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("failed to begin: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1224,7 +1303,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws UserException {
+=======
+    private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                 request.getTbl(), request.getUser_ip());
 
@@ -1234,24 +1317,40 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             long txnNumBe = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionNumByCoordinateBe(clientIp);
             LOG.info("streamload check txn num, be: {}, txn_num: {}, limit: {}", clientIp, txnNumBe, limit);
             if (txnNumBe >= limit) {
+<<<<<<< HEAD
                 throw new UserException("streamload txn num per be exceeds limit, be: "
+=======
+                throw new StarRocksException("streamload txn num per be exceeds limit, be: "
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         + clientIp + ", txn_num: " + txnNumBe + ", limit: " + limit);
             }
         }
         // check label
         if (Strings.isNullOrEmpty(request.getLabel())) {
+<<<<<<< HEAD
             throw new UserException("empty label in begin request");
+=======
+            throw new StarRocksException("empty label in begin request");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         // check database
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         String dbName = request.getDb();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
+<<<<<<< HEAD
             throw new UserException("unknown database, database=" + dbName);
         }
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
         if (table == null) {
             throw new UserException("unknown table \"" + request.getDb() + "." + request.getTbl() + "\"");
+=======
+            throw new StarRocksException("unknown database, database=" + dbName);
+        }
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
+        if (table == null) {
+            throw new StarRocksException("unknown table \"" + request.getDb() + "." + request.getTbl() + "\"");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
@@ -1275,13 +1374,21 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 timeoutSecond * 1000, resp, false, warehouseId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
+<<<<<<< HEAD
             throw new UserException(resp.msg);
+=======
+            throw new StarRocksException(resp.msg);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         StreamLoadTask task = streamLoadManager.getTaskByLabel(request.getLabel());
         // this should't open
         if (task == null || task.getTxnId() == -1) {
+<<<<<<< HEAD
             throw new UserException(String.format("Load label: {} begin transacton failed", request.getLabel()));
+=======
+            throw new StarRocksException(String.format("Load label: {} begin transacton failed", request.getLabel()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         return task.getTxnId();
     }
@@ -1316,7 +1423,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setStatus_code(TStatusCode.SR_EAGAIN);
             status.addToError_msgs(e.getMessage());
             result.setRetry_interval_ms(Math.max(allowCommitTime - System.currentTimeMillis(), 0));
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1330,7 +1441,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
+<<<<<<< HEAD
     void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException, LockTimeoutException {
+=======
+    void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws StarRocksException, LockTimeoutException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1343,7 +1458,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String dbName = request.getDb();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
+<<<<<<< HEAD
             throw new UserException("unknown database, database=" + dbName);
+=======
+            throw new StarRocksException("unknown database, database=" + dbName);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
@@ -1476,7 +1595,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             loadTxnPrepareImpl(request);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("failed to prepare txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1489,7 +1612,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private void loadTxnPrepareImpl(TLoadTxnCommitRequest request) throws UserException {
+=======
+    private void loadTxnPrepareImpl(TLoadTxnCommitRequest request) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1502,7 +1629,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String dbName = request.getDb();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
+<<<<<<< HEAD
             throw new UserException("unknown database, database=" + dbName);
+=======
+            throw new StarRocksException("unknown database, database=" + dbName);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
@@ -1538,7 +1669,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.TXN_NOT_EXISTS);
             status.addToError_msgs(e.getMessage());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("failed to rollback txn {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1552,7 +1687,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return result;
     }
 
+<<<<<<< HEAD
     private void loadTxnRollbackImpl(TLoadTxnRollbackRequest request) throws UserException {
+=======
+    private void loadTxnRollbackImpl(TLoadTxnRollbackRequest request) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (request.isSetAuth_code()) {
             // TODO: find a way to check
         } else {
@@ -1621,7 +1760,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.TIMEOUT);
             status.addToError_msgs(e.getMessage());
+<<<<<<< HEAD
         } catch (UserException | StarRocksPlannerException e) {
+=======
+        } catch (StarRocksException | StarRocksPlannerException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
             status.addToError_msgs(e.getMessage());
@@ -1638,7 +1781,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new DefaultCoordinator.Factory();
     }
 
+<<<<<<< HEAD
     TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException, LockTimeoutException {
+=======
+    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws StarRocksException, LockTimeoutException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1648,11 +1795,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         String dbName = request.getDb();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
+<<<<<<< HEAD
             throw new UserException("unknown database, database=" + dbName);
+=======
+            throw new StarRocksException("unknown database, database=" + dbName);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), request.getTbl());
         if (table == null) {
+<<<<<<< HEAD
             throw new UserException("unknown table, table=" + request.getTbl());
         }
         if (!(table instanceof OlapTable)) {
@@ -1660,6 +1812,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         if (table instanceof MaterializedView) {
             throw new UserException(String.format(
+=======
+            throw new StarRocksException("unknown table, table=" + request.getTbl());
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new StarRocksException("load table type is not OlapTable, type=" + table.getClass());
+        }
+        if (table instanceof MaterializedView) {
+            throw new StarRocksException(String.format(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +
                             "and the data of materialized view must be consistent with the base table.",
                     table.getName(), table.getName()));
@@ -1684,7 +1845,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                     getSyncSteamLoadTaskByTxnId(request.getTxnId());
             if (streamLoadTask == null) {
+<<<<<<< HEAD
                 throw new UserException("can not find stream load task by txnId " + request.getTxnId());
+=======
+                throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
 
             streamLoadTask.setTUniqueId(request.getLoadId());
@@ -1700,7 +1865,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                             .getTransactionState(db.getId(), request.getTxnId());
             if (txnState == null) {
+<<<<<<< HEAD
                 throw new UserException("txn does not exist: " + request.getTxnId());
+=======
+                throw new StarRocksException("txn does not exist: " + request.getTxnId());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             txnState.addTableIndexes((OlapTable) table);
             plan.setImport_label(txnState.getLabel());
@@ -1870,11 +2039,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TSetConfigResponse setConfig(TSetConfigRequest request) throws TException {
         try {
             Preconditions.checkState(request.getKeys().size() == request.getValues().size());
+<<<<<<< HEAD
             Map<String, String> configs = new HashMap<>();
             for (int i = 0; i < request.getKeys().size(); i++) {
                 String key = request.getKeys().get(i);
                 String value = request.getValues().get(i);
                 configs.put(key, value);
+=======
+            for (int i = 0; i < request.getKeys().size(); i++) {
+                String key = request.getKeys().get(i);
+                String value = request.getValues().get(i);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 if ("mysql_server_version".equalsIgnoreCase(key)) {
                     if (!Strings.isNullOrEmpty(value)) {
                         GlobalVariable.version = value;
@@ -1882,7 +2057,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
 
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs);
+=======
+            String key = request.getKeys().stream().findFirst().orElse("");
+            String value = request.getValues().stream().findFirst().orElse("");
+            AdminSetConfigStmt stmt = new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND,
+                    new Property(key, value), NodePosition.ZERO);
+            GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(stmt);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1953,7 +2136,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     public synchronized TImmutablePartitionResult updateImmutablePartitionInternal(TImmutablePartitionRequest request)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
         TImmutablePartitionResult result = new TImmutablePartitionResult();
@@ -2127,7 +2314,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildTablets(PhysicalPartition physicalPartition, List<TTabletLocation> tablets,
+<<<<<<< HEAD
                                      OlapTable olapTable, long warehouseId) throws UserException {
+=======
+                                     OlapTable olapTable, long warehouseId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         int quorum = olapTable.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), olapTable.writeQuorum());
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                 MaterializedIndex.IndexExtState.ALL)) {
@@ -2139,7 +2330,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet);
                         tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(computeNode.getId())));
                     } catch (Exception exception) {
+<<<<<<< HEAD
                         throw new UserException("Check if any backend is down or not. tablet_id: " + tablet.getId());
+=======
+                        throw new StarRocksException("Check if any backend is down or not. tablet_id: " + tablet.getId());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     }
                 }
             } else {
@@ -2151,7 +2346,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             localTablet.getNormalReplicaBackendPathMap(
                                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
                     if (bePathsMap.keySet().size() < quorum) {
+<<<<<<< HEAD
                         throw new UserException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
+=======
+                        throw new StarRocksException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                                         "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
                                         "BeReplicaSize:%s, quorum:%s", tablet.getId(), localTablet.getReplicaInfos(),
                                 bePathsMap.size(), quorum));
@@ -2887,7 +3086,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setLocation(OlapTableSink.createLocation(dictTable, partitionParam, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
             semanticException.initCause(e);
             throw semanticException;

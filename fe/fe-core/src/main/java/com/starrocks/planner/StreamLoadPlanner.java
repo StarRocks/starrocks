@@ -52,7 +52,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
@@ -135,7 +139,11 @@ public class StreamLoadPlanner {
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
+<<<<<<< HEAD
     public TExecPlanFragmentParams plan(TUniqueId loadId) throws UserException {
+=======
+    public TExecPlanFragmentParams plan(TUniqueId loadId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         boolean isPrimaryKey = destTable.getKeysType() == KeysType.PRIMARY_KEYS;
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink

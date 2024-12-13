@@ -105,6 +105,7 @@ public class ProfileManagerTest {
 
         assertEquals(1, manager.getAllQueries().size());
 
+<<<<<<< HEAD
         Config.load_profile_info_reserved_num = 1;
 
         profile1 = buildRuntimeProfile("125", "Load");
@@ -115,6 +116,8 @@ public class ProfileManagerTest {
 
         assertEquals(2, manager.getAllQueries().size());
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         manager.clearProfiles();
     }
 }

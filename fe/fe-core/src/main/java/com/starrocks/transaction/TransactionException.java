@@ -17,9 +17,15 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class TransactionException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class TransactionException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     private long transactionId = -1;
 

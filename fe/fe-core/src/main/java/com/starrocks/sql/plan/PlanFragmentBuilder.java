@@ -65,7 +65,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -270,7 +274,11 @@ public class PlanFragmentBuilder {
         Collections.reverse(execPlan.getFragments());
 
         // Create a fake table sink here, replaced it after created the MV
+<<<<<<< HEAD
         PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt);
+=======
+        PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt, null);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createStmt.getTableName().getDb()).getId();
         MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
@@ -851,6 +859,10 @@ public class PlanFragmentBuilder {
             scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
+<<<<<<< HEAD
+=======
+            scanNode.setSample(node.getSample());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             currentExecGroup.add(scanNode);
             // set tablet
             try {
@@ -905,7 +917,11 @@ public class PlanFragmentBuilder {
                 }
                 scanNode.setSelectedPartitionIds(selectedNonEmptyPartitionIds);
                 scanNode.setTotalTabletsNum(totalTabletsNum);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new StarRocksPlannerException(
                         "Build Exec OlapScanNode fail, scan info is invalid", INTERNAL_ERROR, e);
             }
@@ -1265,7 +1281,11 @@ public class PlanFragmentBuilder {
             } catch (AnalysisException e) {
                 LOG.warn("Delta lake scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 LOG.warn("Delta scan node get scan range locations failed : " + e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1477,7 +1497,11 @@ public class PlanFragmentBuilder {
                     HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                     prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 }
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 LOG.warn("Iceberg scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
@@ -1837,7 +1861,11 @@ public class PlanFragmentBuilder {
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
                 scanNode.assignNodes();
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
             scanNode.setShardScanRanges(scanNode.computeShardLocations(node.getSelectedIndex()));
@@ -3286,6 +3314,29 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
+<<<<<<< HEAD
+=======
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
+            if (filter.getPredicateCommonOperators() != null) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : filter.getPredicateCommonOperators().entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                    filter.getPredicateCommonOperators()));
+
+                    commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+            }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3295,6 +3346,10 @@ public class PlanFragmentBuilder {
                     new SelectNode(context.getNextNodeId(), inputFragment.getPlanRoot(), predicates);
             selectNode.setLimit(filter.getLimit());
             selectNode.computeStatistics(optExpr.getStatistics());
+<<<<<<< HEAD
+=======
+            selectNode.setCommonSlotMap(commonSubOperatorMap);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             currentExecGroup.add(selectNode);
             inputFragment.setPlanRoot(selectNode);
             return inputFragment;
@@ -3762,7 +3817,11 @@ public class PlanFragmentBuilder {
             currentExecGroup.add(binlogScanNode, true);
             try {
                 binlogScanNode.computeScanRanges();
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new StarRocksPlannerException(
                         "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
             }
@@ -3833,7 +3892,11 @@ public class PlanFragmentBuilder {
             try {
                 BrokerFileGroup grp = new BrokerFileGroup(table, scanColumns);
                 fileGroups.add(grp);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);
@@ -3850,7 +3913,11 @@ public class PlanFragmentBuilder {
             try {
                 scanNode.init(analyzer);
                 scanNode.finalizeStats(analyzer);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new StarRocksPlannerException(
                         "Build Exec FileScanNode fail, scan info is invalid," + e.getMessage(),
                         INTERNAL_ERROR);

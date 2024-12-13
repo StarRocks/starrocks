@@ -17,7 +17,11 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TNetworkAddress;
@@ -60,7 +64,11 @@ public class NormalBackendSelector implements BackendSelector {
     }
 
     @Override
+<<<<<<< HEAD
     public void computeScanRangeAssignment() throws UserException {
+=======
+    public void computeScanRangeAssignment() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         HashMap<TNetworkAddress, Long> assignedRowCountPerHost = Maps.newHashMap();
         // sort the scan ranges by row count
         // only sort the scan range when it is load job

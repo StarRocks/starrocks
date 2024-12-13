@@ -22,6 +22,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.DdlException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
@@ -258,4 +262,15 @@ public class AlterTest {
             Assert.fail();
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAlterWarehouse() throws Exception {
+        Exception e = Assert.assertThrows(DdlException.class, () ->
+                starRocksAssert.ddl("alter warehouse default_warehouse set ('compute_replica'='2')")
+        );
+        Assert.assertEquals("Multi-Warehouse is not implemented", e.getMessage());
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

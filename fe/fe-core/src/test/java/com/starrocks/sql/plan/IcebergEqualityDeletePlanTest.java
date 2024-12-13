@@ -75,8 +75,12 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
 
     public IcebergEqualityDeletePlanTest() throws IOException {
     }
+<<<<<<< HEAD
 
     @Test
+=======
+    
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void testNormalPlan() throws Exception {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
         mockedNativeTableB.refresh();

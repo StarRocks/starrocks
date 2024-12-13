@@ -48,7 +48,12 @@ struct TBackendInfo {
     9: optional bool is_set_storage_path
 
     10: optional i64 mem_limit_bytes
+<<<<<<< HEAD
     11: optional Types.TPort be_arrow_port
+=======
+
+    11: optional Types.TPort arrow_flight_port
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 struct THeartbeatResult {

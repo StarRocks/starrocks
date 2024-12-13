@@ -17,7 +17,11 @@ package com.starrocks.qe.scheduler.assignment;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
@@ -59,7 +63,11 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
     }
 
     @Override
+<<<<<<< HEAD
     public void assignFragmentToWorker(ExecutionFragment execFragment) throws UserException {
+=======
+    public void assignFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         final PlanFragment fragment = execFragment.getPlanFragment();
 
         // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
@@ -85,7 +93,11 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         }
     }
 
+<<<<<<< HEAD
     private void assignGatherFragmentToWorker(ExecutionFragment execFragment) throws UserException {
+=======
+    private void assignGatherFragmentToWorker(ExecutionFragment execFragment) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         long workerId = workerProvider.selectNextWorker();
         FragmentInstance instance = new FragmentInstance(workerProvider.getWorkerById(workerId), execFragment);
         execFragment.addInstance(instance);

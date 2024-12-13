@@ -19,7 +19,11 @@ import com.google.re2j.Pattern;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
@@ -275,7 +279,11 @@ public class StreamLoadInfo {
 
     public static StreamLoadInfo fromHttpStreamLoadRequest(
             TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
                 params.getFileType().orElse(TFileType.FILE_STREAM),
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
@@ -283,14 +291,22 @@ public class StreamLoadInfo {
         String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         if (warehouse == null) {
+<<<<<<< HEAD
             throw new UserException(String.format("Warehouse [%s] does not exist", warehouseName));
+=======
+            throw new StarRocksException(String.format("Warehouse [%s] does not exist", warehouseName));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         streamLoadInfo.setWarehouseId(warehouse.getId());
         return streamLoadInfo;
     }
 
     public static StreamLoadInfo fromTStreamLoadPutRequest(TStreamLoadPutRequest request, Database db)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         StreamLoadThriftParams streamLoadParams = new StreamLoadThriftParams(request);
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(request.getLoadId(), request.getTxnId(),
                 streamLoadParams.getFileType().orElse(null), streamLoadParams.getFileFormatType().orElse(null));
@@ -310,7 +326,11 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
+<<<<<<< HEAD
     private void setOptionalFromStreamLoad(StreamLoadParams params) throws UserException {
+=======
+    private void setOptionalFromStreamLoad(StreamLoadParams params) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Optional<String> columns = params.getColumns();
         if (columns.isPresent()) {
             setColumnToColumnExpr(columns.get());
@@ -341,7 +361,11 @@ public class StreamLoadInfo {
             if (fileType == TFileType.FILE_STREAM) {
                 path = params.getFilePath().orElse(null);
             } else {
+<<<<<<< HEAD
                 throw new UserException("Unsupported file type, type=" + fileType);
+=======
+                throw new StarRocksException("Unsupported file type, type=" + fileType);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         }
 
@@ -375,12 +399,20 @@ public class StreamLoadInfo {
         if (compressionType.isPresent()) {
             payloadCompressionType = CompressionUtils.findTCompressionByName(compressionType.get());
             if (payloadCompressionType == null) {
+<<<<<<< HEAD
                 throw new UserException("Unsupported compression type: " + compressionType.get());
+=======
+                throw new StarRocksException("Unsupported compression type: " + compressionType.get());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         }
     }
 
+<<<<<<< HEAD
     public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
+=======
+    public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TUniqueId dummyId = new TUniqueId();
         TFileFormatType fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
         if (routineLoadJob.getFormat().equals("json")) {
@@ -396,7 +428,11 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
+<<<<<<< HEAD
     private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
+=======
+    private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // copy the columnExprDescs, cause it may be changed when planning.
         // so we keep the columnExprDescs in routine load job as origin.
         if (routineLoadJob.getColumnDescs() != null) {
@@ -436,7 +472,11 @@ public class StreamLoadInfo {
     }
 
     // used for stream load
+<<<<<<< HEAD
     private void setColumnToColumnExpr(String columns) throws UserException {
+=======
+    private void setColumnToColumnExpr(String columns) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String columnsSQL = "COLUMNS (" + columns + ")";
         ImportColumnsStmt columnsStmt;
         try {
@@ -446,7 +486,11 @@ public class StreamLoadInfo {
             throw e;
         } catch (Exception e) {
             LOG.warn("failed to parse columns header, sql={}", columnsSQL, e);
+<<<<<<< HEAD
             throw new UserException("parse columns header failed", e);
+=======
+            throw new StarRocksException("parse columns header failed", e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         if (columnsStmt.getColumns() != null && !columnsStmt.getColumns().isEmpty()) {
@@ -454,7 +498,11 @@ public class StreamLoadInfo {
         }
     }
 
+<<<<<<< HEAD
     private void setWhereExpr(String whereString) throws UserException {
+=======
+    private void setWhereExpr(String whereString) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ImportWhereStmt whereStmt;
         try {
             whereStmt = new ImportWhereStmt(com.starrocks.sql.parser.SqlParser.parseSqlToExpr(whereString,
@@ -464,12 +512,20 @@ public class StreamLoadInfo {
             throw e;
         } catch (Exception e) {
             LOG.warn("failed to parse where header, sql={}", whereString, e);
+<<<<<<< HEAD
             throw new UserException("parse columns header failed", e);
+=======
+            throw new StarRocksException("parse columns header failed", e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         whereExpr = whereStmt.getExpr();
     }
 
+<<<<<<< HEAD
     private void setMergeConditionExpr(String mergeConditionStr) throws UserException {
+=======
+    private void setMergeConditionExpr(String mergeConditionStr) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         this.mergeConditionStr = mergeConditionStr;
         // TODO:(caneGuy) use expr for update condition
     }

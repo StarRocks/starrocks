@@ -175,6 +175,12 @@ enum TSchemaTableType {
     SCH_PARTITIONS_META,
     SYS_FE_MEMORY_USAGE,
     SCH_TEMP_TABLES,
+<<<<<<< HEAD
+=======
+    
+    SCH_COLUMN_STATS_USAGE,
+    SCH_ANALYZE_STATUS,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 enum THdfsCompression {
@@ -288,6 +294,10 @@ struct TOlapTableIndexSchema {
     5: optional Exprs.TExpr where_clause
     6: optional i64 schema_id // schema id
     7: optional map<string, string> column_to_expr_value
+<<<<<<< HEAD
+=======
+    8: optional bool is_shadow
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 struct TOlapTableSchemaParam {
@@ -672,4 +682,8 @@ struct TIMTDescriptor {
   // For maintained IMT, some extra information are necessary
   11: optional Types.TUniqueId load_id
   12: optional i64 txn_id
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))

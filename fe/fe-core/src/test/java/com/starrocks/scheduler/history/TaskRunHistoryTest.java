@@ -46,7 +46,10 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+<<<<<<< HEAD
 import static org.junit.jupiter.api.Assertions.assertTrue;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 public class TaskRunHistoryTest {
 
@@ -183,7 +186,10 @@ public class TaskRunHistoryTest {
             }
         };
         keeper.run();
+<<<<<<< HEAD
         assertTrue(keeper.isTableExisted());
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         assertFalse(keeper.isTableCorrected());
 
         new MockUp<SystemInfoService>() {

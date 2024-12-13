@@ -85,6 +85,12 @@ public class PushDownPredicateScanRule extends TransformationRule {
         OptExpression scan = input.getInputs().get(0);
         LogicalScanOperator logicalScanOperator = (LogicalScanOperator) scan.getOp();
 
+<<<<<<< HEAD
+=======
+        ScalarOperator scanPredicate = logicalScanOperator.getPredicate();
+        ScalarOperator filterPredicate = lfo.getPredicate();
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ScalarOperatorRewriter scalarOperatorRewriter = new ScalarOperatorRewriter();
         ScalarOperator predicates = Utils.compoundAnd(lfo.getPredicate(), logicalScanOperator.getPredicate());
 

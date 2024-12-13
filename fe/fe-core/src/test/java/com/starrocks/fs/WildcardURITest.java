@@ -17,7 +17,11 @@
 
 package com.starrocks.fs;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.fs.hdfs.WildcardURI;
 import org.junit.Assert;
 import org.junit.Test;
@@ -54,7 +58,11 @@ public class WildcardURITest {
             path = "abfs://brokerload@smith.dfs.core.windows.net/file_table.orc";
             wildcardURI = new WildcardURI(path);
             Assert.assertEquals("brokerload@smith.dfs.core.windows.net", wildcardURI.getAuthority());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Assert.fail(e.getMessage());
         }
     }

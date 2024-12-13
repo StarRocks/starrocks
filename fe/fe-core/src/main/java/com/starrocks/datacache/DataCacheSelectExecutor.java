@@ -15,7 +15,11 @@
 package com.starrocks.datacache;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
@@ -70,7 +74,11 @@ public class DataCacheSelectExecutor {
 
         if (connectContext.getState().isError()) {
             // throw exception if StmtExecutor execute failed
+<<<<<<< HEAD
             throw new UserException(connectContext.getState().getErrorMessage());
+=======
+            throw new StarRocksException(connectContext.getState().getErrorMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         DataCacheSelectMetrics metrics = null;

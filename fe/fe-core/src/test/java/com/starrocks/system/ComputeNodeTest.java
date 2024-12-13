@@ -63,6 +63,10 @@ public class ComputeNodeTest {
 
         BackendHbResponse hbResponse = new BackendHbResponse();
         ComputeNode node = new ComputeNode();
+<<<<<<< HEAD
+=======
+        node.setArrowFlightPort(hbResponse.getArrowFlightPort());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         node.setBrpcPort(hbResponse.getBrpcPort()); // Don't return needSync by different BrpcPort.
         CoordinatorMonitor coordinatorMonitor = CoordinatorMonitor.getInstance();
 

@@ -88,6 +88,11 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(BeDataCacheMetricsTable.create());
             super.registerTableUnlocked(PartitionsMetaSystemTable.create());
             super.registerTableUnlocked(TemporaryTablesTable.create());
+<<<<<<< HEAD
+=======
+            super.registerTableUnlocked(ColumnStatsUsageSystemTable.create());
+            super.registerTableUnlocked(AnalyzeStatusSystemTable.create());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 

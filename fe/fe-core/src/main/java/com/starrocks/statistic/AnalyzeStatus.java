@@ -40,8 +40,21 @@ public interface AnalyzeStatus {
 
     String getCatalogName() throws MetaNotFoundException;
 
+<<<<<<< HEAD
     String getDbName() throws MetaNotFoundException;
 
+=======
+    default long getDbId() throws MetaNotFoundException {
+        throw new MetaNotFoundException("dbId not exists");
+    }
+
+    String getDbName() throws MetaNotFoundException;
+
+    default long getTableId() throws MetaNotFoundException {
+        throw new MetaNotFoundException("dbId not exists");
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     String getTableName() throws MetaNotFoundException;
 
     List<String> getColumns();

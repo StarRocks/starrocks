@@ -236,6 +236,10 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = _runtime_state->use_page_cache();
     _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
+<<<<<<< HEAD
+=======
+    _params.sample_options = thrift_olap_scan_node.sample_options;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     if (thrift_olap_scan_node.__isset.enable_prune_column_after_index_filter) {
         _params.prune_column_after_index_filter = thrift_olap_scan_node.enable_prune_column_after_index_filter;
     }
@@ -777,6 +781,26 @@ void OlapChunkSource::_update_counter() {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
     }
+<<<<<<< HEAD
+=======
+
+    // Data sampling
+    if (_params.sample_options.enable_sampling) {
+        _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
+        _runtime_profile->add_info_string("SamplePercent",
+                                          std::to_string(_params.sample_options.probability_percent) + "%");
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name),
+                       _reader->stats().sample_population_size);
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleBuildHistogramTime", parent_name),
+                       _reader->stats().sample_build_histogram_time_ns);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleSize", TUnit::UNIT, parent_name),
+                       _reader->stats().sample_size);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SamplePopulationSize", TUnit::UNIT, parent_name),
+                       _reader->stats().sample_population_size);
+        COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleBuildHistogramCount", TUnit::UNIT, parent_name),
+                       _reader->stats().sample_build_histogram_count);
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 } // namespace starrocks::pipeline

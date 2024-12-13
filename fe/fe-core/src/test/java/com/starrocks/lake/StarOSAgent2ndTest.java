@@ -28,7 +28,11 @@ import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -62,7 +66,12 @@ public class StarOSAgent2ndTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetBackendIdsByShardMissingStarletPort(@Mocked StarClient client) throws StarClientException, UserException {
+=======
+    public void testGetBackendIdsByShardMissingStarletPort(@Mocked StarClient client) throws StarClientException,
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         long beId = 123L;
@@ -178,7 +187,12 @@ public class StarOSAgent2ndTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testGetPrimaryComputeNodeIdByShard(@Mocked StarClient client) throws StarClientException, UserException {
+=======
+    public void testGetPrimaryComputeNodeIdByShard(@Mocked StarClient client) throws StarClientException,
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String workerHost = "127.0.0.1";
         int workerStarletPort = 9070;
         int workerHeartbeatPort = 9050;
@@ -230,8 +244,13 @@ public class StarOSAgent2ndTest {
         Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
         Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+<<<<<<< HEAD
         UserException exception =
                 Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+=======
+        StarRocksException exception =
+                Assert.assertThrows(StarRocksException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
     }
 
@@ -279,7 +298,11 @@ public class StarOSAgent2ndTest {
         }
     }
 
+<<<<<<< HEAD
     private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+=======
+    private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
     }
 }

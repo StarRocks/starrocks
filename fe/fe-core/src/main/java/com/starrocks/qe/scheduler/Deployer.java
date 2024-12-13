@@ -17,8 +17,13 @@ package com.starrocks.qe.scheduler;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -96,7 +101,11 @@ public class Deployer {
     }
 
     public void deployFragments(DeployState deployState)
+<<<<<<< HEAD
             throws RpcException, UserException {
+=======
+            throws RpcException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         if (!needDeploy) {
             return;
@@ -124,7 +133,12 @@ public class Deployer {
     }
 
     public interface FailureHandler {
+<<<<<<< HEAD
         void apply(Status status, FragmentInstanceExecState execution, Throwable failure) throws RpcException, UserException;
+=======
+        void apply(Status status, FragmentInstanceExecState execution, Throwable failure) throws RpcException,
+                StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     private void createFragmentInstanceExecStates(ExecutionFragment fragment,
@@ -222,7 +236,12 @@ public class Deployer {
         }
     }
 
+<<<<<<< HEAD
     private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException, UserException {
+=======
+    private void waitForDeploymentCompletion(List<FragmentInstanceExecState> executions) throws RpcException,
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (executions.isEmpty()) {
             return;
         }

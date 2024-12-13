@@ -118,4 +118,11 @@ public class SystemId {
     // Remain for other datacache manage table
 
     public static final long PARTITIONS_META_ID = 140L;
+<<<<<<< HEAD
+=======
+
+    // ====================  Statistics  =========================== //
+    public static final long COLUMN_STATS_USAGE = 150L;
+    public static final long ANALYZE_STATUS = 151L;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

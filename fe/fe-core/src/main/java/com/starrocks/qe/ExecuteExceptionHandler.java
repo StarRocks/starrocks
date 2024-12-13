@@ -18,7 +18,11 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorMetadata;
@@ -51,8 +55,13 @@ public class ExecuteExceptionHandler {
             handleRemoteFileNotFound((RemoteFileNotFoundException) e, context);
         } else if (e instanceof RpcException) {
             handleRpcException((RpcException) e, context);
+<<<<<<< HEAD
         } else if (e instanceof UserException) {
             handleUserException((UserException) e, context);
+=======
+        } else if (e instanceof StarRocksException) {
+            handleUserException((StarRocksException) e, context);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } else {
             throw e;
         }
@@ -122,7 +131,11 @@ public class ExecuteExceptionHandler {
         }
     }
 
+<<<<<<< HEAD
     private static void handleUserException(UserException e, RetryContext context) throws Exception {
+=======
+    private static void handleUserException(StarRocksException e, RetryContext context) throws Exception {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String msg = e.getMessage();
         if (context.parsedStmt instanceof QueryStatement) {
             for (String errMsg : SCHEMA_NOT_MATCH_ERROR) {

@@ -41,7 +41,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -160,7 +164,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
                 assert table instanceof OlapTable;
                 schemaChangeHandler.process(statement.getAlterClauseList(), db, (OlapTable) table);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new AlterJobException(e.getMessage());
             } finally {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
@@ -447,6 +455,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+<<<<<<< HEAD
+=======
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -464,7 +477,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
                 isSynchronous = false;
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new AlterJobException(e.getMessage(), e);
         }
         return null;

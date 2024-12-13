@@ -40,7 +40,11 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -99,7 +103,11 @@ public class CheckDecommissionAction extends RestBaseAction {
 
             GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler().process(
                     Lists.newArrayList(decommissionBackendClause), null, null);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new DdlException(e.getMessage());
         }
 

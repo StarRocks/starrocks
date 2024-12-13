@@ -98,10 +98,18 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
         return true;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public long getDbId() {
         return dbId;
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public long getTableId() {
         return tableId;
     }

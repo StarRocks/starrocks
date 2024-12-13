@@ -39,7 +39,11 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.ErrorReportException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.qe.SqlModeHelper;
@@ -70,7 +74,11 @@ public class SetPassVarTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws UserException {
+=======
+    public void testNormal() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         SetPassVar stmt;
 
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';

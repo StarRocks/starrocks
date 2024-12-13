@@ -100,7 +100,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         DISABLE,    // 0: disable query rewrite
         LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
         CHECKED,    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+<<<<<<< HEAD
         NOCHECK;   // 3: enable query rewrite, and rewrite without any check
+=======
+        NOCHECK,    // 3: enable query rewrite, and rewrite without any check
+        FORCE_MV;   // 4: force to use mv, if mv contains no ttl; otherwise, use mv for partitions are in ttl range and
+        // use base table for partitions are out of ttl range
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
             return CHECKED;
@@ -194,6 +200,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     private PeriodDuration partitionTTL = PeriodDuration.ZERO;
 
+<<<<<<< HEAD
+=======
+    // This property can be used to specify the retention condition of the partition table or materialized view,
+    // it's a SQL expression, and the partition will be deleted if the condition is not true.
+    private String partitionRetentionCondition = null;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
@@ -387,6 +400,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionTTL();
                 buildPartitionLiveNumber();
+<<<<<<< HEAD
+=======
+                buildPartitionRetentionCondition();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 buildDataCachePartitionDuration();
                 buildLocation();
                 buildStorageCoolDownTTL();
@@ -496,6 +513,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildPartitionRetentionCondition() {
+        partitionRetentionCondition = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, "");
+        return this;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public TableProperty buildResourceGroup() {
         resourceGroup = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_RESOURCE_GROUP,
                 null);
@@ -837,6 +862,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionTTL;
     }
 
+<<<<<<< HEAD
+=======
+    public String getPartitionRetentionCondition() {
+        return partitionRetentionCondition;
+    }
+
+    public void setPartitionRetentionCondition(String partitionRetentionCondition) {
+        this.partitionRetentionCondition = partitionRetentionCondition;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public int getAutoRefreshPartitionsLimit() {
         return autoRefreshPartitionsLimit;
     }
@@ -1083,6 +1119,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionLiveNumber();
+<<<<<<< HEAD
+=======
+        buildPartitionRetentionCondition();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         buildReplicatedStorage();
         buildBucketSize();
         buildEnableLoadProfile();

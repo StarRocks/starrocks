@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
@@ -128,17 +131,32 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+<<<<<<< HEAD
     public void refreshTableStatistic(Table table) {
+=======
+    public void refreshTableStatistic(Table table, boolean isSync) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
         for (Partition partition : table.getPartitions()) {
             statsCacheKeyList.add(new TableStatsCacheKey(table.getId(), partition.getId()));
         }
 
         try {
+<<<<<<< HEAD
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> completableFuture
                     = tableStatsCache.getAll(statsCacheKeyList);
             if (completableFuture.isDone()) {
                 completableFuture.get();
+=======
+            TableStatsCacheLoader loader = new TableStatsCacheLoader();
+            CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> future = loader.asyncLoadAll(statsCacheKeyList,
+                    statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<TableStatsCacheKey, Optional<Long>> result = future.get();
+                tableStatsCache.synchronous().putAll(result);
+            } else {
+                future.whenComplete((result, e) -> tableStatsCache.synchronous().putAll(result));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute refreshTableStatistic", e);
@@ -149,6 +167,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+<<<<<<< HEAD
     public void refreshTableStatisticSync(Table table) {
         List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
         for (Partition partition : table.getPartitions()) {
@@ -156,6 +175,36 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         }
 
         tableStatsCache.synchronous().getAll(statsCacheKeyList);
+=======
+    public void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId()) ||
+                !StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
+        }
+
+        List<ColumnStatsCacheKey> cacheKeys = new ArrayList<>();
+        long tableId = table.getId();
+        for (String column : columns) {
+            cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
+        }
+
+        try {
+            ColumnBasicStatsCacheLoader loader = new ColumnBasicStatsCacheLoader();
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = future.get();
+                columnStatistics.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> columnStatistics.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh getColumnStatistics", e);
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override
@@ -198,9 +247,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 realResult = result.get();
                 for (String column : columns) {
                     Optional<ConnectorTableColumnStats> columnStatistic =
+<<<<<<< HEAD
                             realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column), Optional.empty());
                     if (columnStatistic.isPresent()) {
                         columnStatistics.add(StatisticsUtils.estimateColumnStatistics(table, column, columnStatistic.get()));
+=======
+                            realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column),
+                                    Optional.empty());
+                    if (columnStatistic.isPresent()) {
+                        columnStatistics.add(
+                                StatisticsUtils.estimateColumnStatistics(table, column, columnStatistic.get()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     } else {
                         columnStatistics.add(ConnectorTableColumnStats.unknown());
                     }
@@ -263,6 +320,36 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
+        }
+
+        List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
+        for (String column : columns) {
+            cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        try {
+            ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
+            CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
+                    loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            if (isSync) {
+                Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
+                connectorTableCachedStatistics.synchronous().putAll(result);
+            } else {
+                future.whenComplete((res, e) -> connectorTableCachedStatistics.synchronous().putAll(res));
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to refresh getConnectorTableStatistics", e);
+        }
+    }
+
+    @Override
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public ColumnStatistic getColumnStatistic(Table table, String column) {
         Preconditions.checkState(table != null);
 
@@ -336,6 +423,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         }
     }
 
+<<<<<<< HEAD
     @Override
     public List<ColumnStatistic> getColumnStatisticsSync(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
@@ -376,6 +464,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         }
     }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     /**
      *
      */

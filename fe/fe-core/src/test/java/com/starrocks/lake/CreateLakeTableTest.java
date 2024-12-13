@@ -23,7 +23,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
@@ -96,7 +100,11 @@ public class CreateLakeTableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateLakeTable() throws UserException {
+=======
+    public void testCreateLakeTable() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
@@ -137,7 +145,11 @@ public class CreateLakeTableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateLakeTableWithStorageCache() throws UserException {
+=======
+    public void testCreateLakeTableWithStorageCache() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
@@ -317,7 +329,11 @@ public class CreateLakeTableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCreateLakeTableListPartition() throws UserException {
+=======
+    public void testCreateLakeTableListPartition() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // list partition
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.list_partition (dt date not null, key2 varchar(10))\n" +

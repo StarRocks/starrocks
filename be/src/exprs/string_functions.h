@@ -276,6 +276,16 @@ public:
     DEFINE_VECTORIZED_FN(get_char);
 
     /**
+<<<<<<< HEAD
+=======
+     * @param: [string_value]
+     * @paramType: [BinaryColumn]
+     * @return: BigIntColumn
+     */
+    DEFINE_VECTORIZED_FN(inet_aton);
+
+    /**
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
      * Return the index of the first occurrence of substring
      *
      * @param: [string_value, sub_string_value]

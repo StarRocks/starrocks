@@ -14,11 +14,19 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.rpc.RpcException;
 
 import java.util.Collection;
 
 public interface ScheduleNextTurnRunner {
+<<<<<<< HEAD
     Collection<FragmentInstanceExecState> doSchedule() throws RpcException, UserException;
+=======
+    Collection<FragmentInstanceExecState> doSchedule() throws RpcException, StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

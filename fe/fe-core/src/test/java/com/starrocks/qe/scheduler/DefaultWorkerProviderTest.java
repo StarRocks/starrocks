@@ -18,7 +18,11 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.Reference;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -218,7 +222,11 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectWorker() throws UserException {
+=======
+    public void testSelectWorker() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         DefaultWorkerProvider workerProvider =
                 new DefaultWorkerProvider(id2Backend, id2ComputeNode, availableId2Backend, availableId2ComputeNode,
                         true);
@@ -235,7 +243,11 @@ public class DefaultWorkerProviderTest {
 
     private static <C extends ComputeNode> void testSelectNextWorkerHelper(DefaultWorkerProvider workerProvider,
                                                                            Map<Long, C> id2Worker)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         Set<Long> selectedWorkers = new HashSet<>(id2Worker.size());
         for (int i = 0; i < id2Worker.size(); i++) {
@@ -249,7 +261,11 @@ public class DefaultWorkerProviderTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSelectNextWorker() throws UserException {
+=======
+    public void testSelectNextWorker() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         DefaultWorkerProvider workerProvider;
 
         workerProvider =

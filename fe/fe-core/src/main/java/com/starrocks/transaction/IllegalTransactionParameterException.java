@@ -17,9 +17,15 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class IllegalTransactionParameterException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class IllegalTransactionParameterException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     private static final long serialVersionUID = 1L;
 

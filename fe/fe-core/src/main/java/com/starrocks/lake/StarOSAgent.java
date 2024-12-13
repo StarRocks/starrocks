@@ -48,7 +48,11 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
@@ -590,30 +594,50 @@ public class StarOSAgent {
         return result;
     }
 
+<<<<<<< HEAD
     public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
         return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
     }
 
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+=======
+    public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+        return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
+    }
+
+    public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Set<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId, true);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
             // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
             // when all BEs become alive.
+<<<<<<< HEAD
             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+=======
+            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
     }
 
     public Set<Long> getAllNodeIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
             return getAllNodeIdsByShard(shardInfo, onlyPrimary);
         } catch (StarClientException e) {
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
@@ -684,7 +708,11 @@ public class StarOSAgent {
         return false; // return false if any error happens
     }
 
+<<<<<<< HEAD
     public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+=======
+    public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<Long> nodeIds = new ArrayList<>();
         prepare();
         try {
@@ -696,11 +724,19 @@ public class StarOSAgent {
             }
             return nodeIds;
         } catch (StarClientException e) {
+<<<<<<< HEAD
             throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
         }
     }
 
     public List<String> listWorkerGroupIpPort(long workerGroupId) throws UserException {
+=======
+            throw new StarRocksException("Failed to get workers by group id. error: " + e.getMessage());
+        }
+    }
+
+    public List<String> listWorkerGroupIpPort(long workerGroupId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<String> addresses = new ArrayList<>();
         prepare();
         try {
@@ -713,7 +749,11 @@ public class StarOSAgent {
             }
             return addresses;
         } catch (StarClientException e) {
+<<<<<<< HEAD
             throw new UserException("Fail to get workers by default group id, error: " + e.getMessage());
+=======
+            throw new StarRocksException("Fail to get workers by default group id, error: " + e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
@@ -734,7 +774,11 @@ public class StarOSAgent {
         }
     }
 
+<<<<<<< HEAD
     public long createWorkerGroup(String size) throws DdlException {
+=======
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -744,7 +788,11 @@ public class StarOSAgent {
         WorkerGroupDetailInfo result = null;
         try {
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
+<<<<<<< HEAD
                     Collections.emptyMap());
+=======
+                    Collections.emptyMap(), replicaNumber);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
@@ -752,6 +800,19 @@ public class StarOSAgent {
         return result.getGroupId();
     }
 
+<<<<<<< HEAD
+=======
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        prepare();
+        try {
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group. error: " + e.getMessage());
+        }
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void deleteWorkerGroup(long groupId) throws DdlException {
         prepare();
         try {

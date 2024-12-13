@@ -41,7 +41,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
@@ -175,7 +179,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     void scheduleOneTask(RoutineLoadTaskInfo routineLoadTaskInfo) throws Exception {
         routineLoadTaskInfo.setLastScheduledTime(System.currentTimeMillis());
         // check if task has been abandoned
+<<<<<<< HEAD
         if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getId())) {
+=======
+        if (!routineLoadManager.checkTaskInJob(routineLoadTaskInfo.getJobId(), routineLoadTaskInfo.getId())) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             // task has been abandoned while renew task has been added in queue
             // or database has been deleted
             LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_TASK, routineLoadTaskInfo.getId())
@@ -253,7 +261,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                             new ErrorReason(InternalErrorCode.META_NOT_FOUND_ERR, "meta not found: " + e.getMessage()),
                             false);
             throw e;
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             releaseBeSlot(routineLoadTaskInfo);
             routineLoadManager.getJob(routineLoadTaskInfo.getJobId())
                     .updateState(JobState.PAUSED,

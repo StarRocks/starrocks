@@ -25,6 +25,10 @@ import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.PartitionInfo;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -56,7 +60,10 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import static com.starrocks.connector.PartitionUtil.generateMVPartitionName;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES;
@@ -212,6 +219,7 @@ public class MVCompensationBuilder {
             if (mvBaseTableUpdateInfo == null) {
                 return null;
             }
+<<<<<<< HEAD
             Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
                     mvBaseTableUpdateInfo.getPartitionNameWithRanges();
             List<PartitionKey> partitionKeys = Lists.newArrayList();
@@ -227,6 +235,46 @@ public class MVCompensationBuilder {
                 return MVCompensation.createUnkownState(sessionVariable);
             }
             return ofExternalTableCompensation(refBaseTable, partitionKeys);
+=======
+            PartitionInfo partitionInfo = mvContext.getMv().getPartitionInfo();
+            if (partitionInfo.isRangePartition()) {
+                Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
+                        mvBaseTableUpdateInfo.getPartitionNameWithRanges();
+                List<PartitionKey> partitionKeys = Lists.newArrayList();
+                try {
+                    for (String partitionName : refTablePartitionNamesToRefresh) {
+                        Preconditions.checkState(refTablePartitionNameWithRanges.containsKey(partitionName));
+                        Range<PartitionKey> partitionKeyRange = refTablePartitionNameWithRanges.get(partitionName);
+                        partitionKeys.add(partitionKeyRange.lowerEndpoint());
+                    }
+                } catch (Exception e) {
+                    logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+                            DebugUtil.getStackTrace(e));
+                    return MVCompensation.createUnkownState(sessionVariable);
+                }
+                return ofExternalTableCompensation(refBaseTable, partitionKeys);
+            } else {
+                Preconditions.checkArgument(partitionInfo.isListPartition());
+                Map<String, PListCell> partitionNameWithLists = mvBaseTableUpdateInfo.getPartitionNameWithLists();
+                List<PartitionKey> partitionKeys = Lists.newArrayList();
+                try {
+                    List<Column> partitionCols = refBaseTable.getPartitionColumns();
+                    for (String partitionName : refTablePartitionNamesToRefresh) {
+                        Preconditions.checkState(partitionNameWithLists.containsKey(partitionName));
+                        PListCell pCell = partitionNameWithLists.get(partitionName);
+                        // TODO: we are assuming PListCell's cells' order is by partition's columns order, we may introduce
+                        // partition columns in PListCell.
+                        List<PartitionKey> keys = pCell.toPartitionKeys(partitionCols);
+                        partitionKeys.addAll(keys);
+                    }
+                } catch (Exception e) {
+                    logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+                            DebugUtil.getStackTrace(e));
+                    return MVCompensation.createUnkownState(sessionVariable);
+                }
+                return ofExternalTableCompensation(refBaseTable, partitionKeys);
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } else {
             return MVCompensation.createUnkownState(sessionVariable);
         }
@@ -304,6 +352,10 @@ public class MVCompensationBuilder {
                                                         Set<String> refTablePartitionNamesToRefresh,
                                                         LogicalScanOperator refScanOperator) {
         SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
+<<<<<<< HEAD
+=======
+        MaterializedView mv = mvContext.getMv();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         try {
             ScanOperatorPredicates scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
             Collection<Long> selectPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
@@ -311,7 +363,11 @@ public class MVCompensationBuilder {
             // For scan operator which support prune partitions with OptExternalPartitionPruner,
             // we could only compensate partitions which selected partitions need to refresh.
             if (SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(refScanOperator.getOpType())) {
+<<<<<<< HEAD
                 if (Objects.isNull(selectPartitionIds) || selectPartitionIds.isEmpty()) {
+=======
+                if (CollectionUtils.isEmpty(selectPartitionIds)) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     // see OptExternalPartitionPruner#computePartitionInfo:
                     // it's not the same meaning when selectPartitionIds is null and empty for hive and other tables
                     if (refScanOperator.getOpType() == OperatorType.LOGICAL_HIVE_SCAN) {
@@ -321,6 +377,7 @@ public class MVCompensationBuilder {
                     }
                 }
 
+<<<<<<< HEAD
                 if (selectPartitionKeys.stream()
                         .map(PartitionUtil::generateMVPartitionName)
                         .noneMatch(refTablePartitionNamesToRefresh::contains)) {
@@ -328,6 +385,24 @@ public class MVCompensationBuilder {
                 }
             }
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensate.
+=======
+                // NOTE: ref base table's partition keys may contain multi columns, but mv may only contain one column.
+                List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mv, refBaseTable);
+                if (colIndexes == null) {
+                    return MVCompensation.createUnkownState(sessionVariable);
+                }
+                List<PartitionKey> newPartitionKeys = selectPartitionKeys.stream()
+                        .map(partitionKey -> PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes))
+                        .collect(Collectors.toList());
+                Set<String> selectPartitionNames = newPartitionKeys.stream()
+                        .map(PartitionUtil::generateMVPartitionName)
+                        .collect(Collectors.toSet());
+                if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
+                    return MVCompensation.createNoCompensateState(sessionVariable);
+                }
+            }
+            // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
                     refTablePartitionNamesToRefresh, refScanOperator);
             if (toRefreshRefTablePartitions == null) {
@@ -386,7 +461,10 @@ public class MVCompensationBuilder {
             return getMVCompensatePartitionsOfExternalWithoutPartitionPruner(refBaseTable, refTablePartitionNamesToRefresh);
         }
     }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     private List<PartitionKey> getMVCompensatePartitionsOfExternalWithPartitionPruner(
             Set<String> refTablePartitionNamesToRefresh,
             LogicalScanOperator refScanOperator) {
@@ -405,10 +483,23 @@ public class MVCompensationBuilder {
         if (selectPartitionKeys.isEmpty() && refScanOperator.getOpType() != OperatorType.LOGICAL_HIVE_SCAN) {
             return null;
         }
+<<<<<<< HEAD
         for (PartitionKey partitionKey : selectPartitionKeys) {
             String partitionName = generateMVPartitionName(partitionKey);
             if (refTablePartitionNamesToRefresh.contains(partitionName)) {
                 refTableCompensatePartitionKeys.add(partitionKey);
+=======
+        Table refBaseTable = refScanOperator.getTable();
+        List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mvContext.getMv(), refBaseTable);
+        if (colIndexes == null) {
+            return null;
+        }
+        for (PartitionKey partitionKey : selectPartitionKeys) {
+            PartitionKey newPartitionKey = PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes);
+            String partitionName = generateMVPartitionName(newPartitionKey);
+            if (refTablePartitionNamesToRefresh.contains(partitionName)) {
+                refTableCompensatePartitionKeys.add(newPartitionKey);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         }
         return refTableCompensatePartitionKeys;
@@ -421,8 +512,13 @@ public class MVCompensationBuilder {
         if (baseTableUpdateInfo == null) {
             return null;
         }
+<<<<<<< HEAD
 
         Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getNameToPartKeys();
+=======
+        // use update info's partition to cells since it's accurate.
+        Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitonToCells();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<PartitionKey> partitionKeys = Lists.newArrayList();
         try {
             for (String partitionName : refTablePartitionNamesToRefresh) {
@@ -434,7 +530,12 @@ public class MVCompensationBuilder {
                     partitionKeys.add(((PRangeCell) pCell).getRange().lowerEndpoint());
                 } else if (pCell instanceof PListCell) {
                     List<Column> partitionColumns = refBaseTable.getPartitionColumns();
+<<<<<<< HEAD
                     partitionKeys.add(createPartitionKey(((PListCell) pCell).getPartitionItems().get(0), partitionColumns));
+=======
+                    List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
+                    partitionKeys.addAll(keys);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             }
         } catch (Exception e) {

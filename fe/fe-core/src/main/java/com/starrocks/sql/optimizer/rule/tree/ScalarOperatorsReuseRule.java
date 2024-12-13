@@ -18,11 +18,21 @@ package com.starrocks.sql.optimizer.rule.tree;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.Projection;
+=======
+import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+<<<<<<< HEAD
+=======
+import java.util.HashMap;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.util.Map;
 
 
@@ -41,6 +51,20 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             if (opt.getOp().getProjection() != null) {
                 opt.getOp().setProjection(rewriteProject(opt, context));
             }
+<<<<<<< HEAD
+=======
+            if (opt.getOp().getOpType() == OperatorType.PHYSICAL_FILTER) {
+                if (opt.getOp().getPredicate() != null) {
+                    Projection result = rewritePredicate(opt, context);
+                    if (!result.getCommonSubOperatorMap().isEmpty()) {
+                        PhysicalFilterOperator filter = (PhysicalFilterOperator) opt.getOp();
+                        ScalarOperator newPredicate = result.getColumnRefMap().values().iterator().next();
+                        filter.setPredicate(newPredicate);
+                        filter.setPredicateCommonOperators(result.getCommonSubOperatorMap());
+                    }
+                }
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
             for (OptExpression input : opt.getInputs()) {
                 input.getOp().accept(this, input, context);
@@ -70,6 +94,21 @@ public class ScalarOperatorsReuseRule implements TreeRewriteRule {
             return projection;
         }
 
+<<<<<<< HEAD
+=======
+        Projection rewritePredicate(OptExpression input, TaskContext context) {
+            ScalarOperator predicate = input.getOp().getPredicate();
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+            ColumnRefFactory columnRefFactory = context.getOptimizerContext().getColumnRefFactory();
+            columnRefMap.put(new ColumnRefOperator(
+                    columnRefFactory.getNextUniqueId(), predicate.getType(), "predicate", predicate.isNullable()),
+                    predicate);
+            Projection result = ScalarOperatorsReuse.rewriteProjectionOrLambdaExpr(
+                    new Projection(columnRefMap), columnRefFactory);
+            return result;
+        }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         void rewriteLambdaFunction(Map<ColumnRefOperator, ScalarOperator> operatorMap, ColumnRefFactory factory) {
             if (operatorMap.isEmpty()) {
                 return;

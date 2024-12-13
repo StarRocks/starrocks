@@ -70,6 +70,10 @@ public enum RuleType {
     TF_PUSH_DOWN_PREDICATE_REPEAT,
     TF_PUSH_DOWN_AGG_TO_META_SCAN,
     TF_PUSH_DOWN_FLAT_JSON_TO_META_SCAN,
+<<<<<<< HEAD
+=======
+    TF_PULL_UP_PREDICATE_SCAN,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     TF_MERGE_PREDICATE_SCAN,
     TF_MERGE_TWO_FILTERS,
     TF_PUSH_DOWN_PREDICATE_CTE_CONSUME,

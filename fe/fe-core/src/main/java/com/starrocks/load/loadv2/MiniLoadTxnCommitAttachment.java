@@ -23,7 +23,10 @@ import com.starrocks.thrift.TMiniLoadTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
+<<<<<<< HEAD
 import java.io.DataInput;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -74,6 +77,7 @@ public class MiniLoadTxnCommitAttachment extends TxnCommitAttachment {
         }
 
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
@@ -83,4 +87,6 @@ public class MiniLoadTxnCommitAttachment extends TxnCommitAttachment {
             errorLogUrl = Text.readString(in);
         }
     }
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

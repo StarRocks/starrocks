@@ -40,7 +40,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
@@ -111,7 +115,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean readyToExecute() throws UserException {
+=======
+    public boolean readyToExecute() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (checkReadyToExecuteFast()) {
             return true;
         }
@@ -162,7 +170,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     @Override
+<<<<<<< HEAD
     public TRoutineLoadTask createRoutineLoadTask() throws UserException {
+=======
+    public TRoutineLoadTask createRoutineLoadTask() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         KafkaRoutineLoadJob routineLoadJob = (KafkaRoutineLoadJob) job;
 
         // init tRoutineLoadTask and create plan fragment
@@ -236,7 +248,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         return latestPartOffset;
     }
 
+<<<<<<< HEAD
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
+=======
+    private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);

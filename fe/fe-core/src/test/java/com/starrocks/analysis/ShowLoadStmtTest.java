@@ -36,7 +36,11 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.common.AnalysisException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -85,7 +89,11 @@ public class ShowLoadStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNoDb() throws UserException, AnalysisException {
+=======
+    public void testNoDb() throws StarRocksException, AnalysisException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         AnalyzeTestUtil.getStarRocksAssert().useDatabase(null);
         analyzeFail("SHOW LOAD", "No database selected");
     }
@@ -110,7 +118,11 @@ public class ShowLoadStmtTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testWhere() throws UserException, AnalysisException {
+=======
+    public void testWhere() throws StarRocksException, AnalysisException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM `testCluster:testDb` WHERE `label` = 'abc' LIMIT 10");
         Assert.assertEquals(10, stmt.getLimit());

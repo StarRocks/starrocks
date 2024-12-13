@@ -325,6 +325,12 @@ public class PartitionPruneRuleTest {
             {
                 olapTable.getPartitionInfo();
                 result = partitionInfo;
+<<<<<<< HEAD
+=======
+                
+                partitionInfo.isListPartition();
+                result = true;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
                 partitionInfo.getType();
                 result = PartitionType.LIST;
@@ -411,6 +417,12 @@ public class PartitionPruneRuleTest {
                 partitionInfo.getLiteralExprValues();
                 result = literalExprValues;
 
+<<<<<<< HEAD
+=======
+                partitionInfo.isListPartition();
+                result = true;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 olapTable.getPartitions();
                 result = Lists.newArrayList(part1, part2);
                 minTimes = 0;

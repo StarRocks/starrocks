@@ -37,7 +37,11 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -83,7 +87,11 @@ public class CancelStreamLoad extends RestBaseAction {
 
         try {
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), label, "user cancel");
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new DdlException(e.getMessage());
         }
 

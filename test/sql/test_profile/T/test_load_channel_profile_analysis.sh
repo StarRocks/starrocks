@@ -39,5 +39,9 @@ EOF
 )
 
 output=$(${mysql_cmd} -e "$sql")
+<<<<<<< HEAD
 check_keywords "$output" "LoadChannel" "1"
+=======
+check_keywords "$output" "LoadChannel:" "1"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 check_keywords "$output" "Index (id=" "3"

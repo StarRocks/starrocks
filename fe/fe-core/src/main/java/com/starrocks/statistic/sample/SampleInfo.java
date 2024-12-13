@@ -25,11 +25,14 @@ import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAM
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class SampleInfo {
+<<<<<<< HEAD
 
     private final String dbName;
 
     private final String tableName;
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     private final double tabletSampleRatio;
 
     private final long sampleRowCount;
@@ -46,14 +49,31 @@ public class SampleInfo {
 
     private final List<TabletStats> lowWeightTablets;
 
+<<<<<<< HEAD
+=======
+    public SampleInfo() {
+        this.tabletSampleRatio = 1;
+        this.sampleRowCount = 1;
+        this.totalRowCount = 1;
+        this.rowSampleRatio = 1;
+        this.highWeightTablets = null;
+        this.mediumHighWeightTablets = null;
+        this.mediumLowWeightTablets = null;
+        this.lowWeightTablets = null;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public SampleInfo(String dbName, String tableName, double tabletSampleRatio,
                       long sampleRowCount, long totalRowCount,
                       List<TabletStats> highWeightTablets,
                       List<TabletStats> mediumHighWeightTablets,
                       List<TabletStats> mediumLowWeightTablets,
                       List<TabletStats> lowWeightTablets) {
+<<<<<<< HEAD
         this.dbName = dbName;
         this.tableName = tableName;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         this.tabletSampleRatio = tabletSampleRatio;
         this.sampleRowCount = sampleRowCount;
         this.totalRowCount = totalRowCount;
@@ -64,22 +84,51 @@ public class SampleInfo {
         this.lowWeightTablets = lowWeightTablets;
     }
 
-    public double getTabletSampleRatio() {
-        return tabletSampleRatio;
-    }
-
-    public double getRowSampleRatio() {
-        return rowSampleRatio;
-    }
-
-    public long getSampleRowCount() {
-        return sampleRowCount;
-    }
-
+<<<<<<< HEAD
+=======
     public long getTotalRowCount() {
         return totalRowCount;
     }
 
+    public List<TabletStats> getHighWeightTablets() {
+        return highWeightTablets;
+    }
+
+    public List<TabletStats> getMediumHighWeightTablets() {
+        return mediumHighWeightTablets;
+    }
+
+    public List<TabletStats> getMediumLowWeightTablets() {
+        return mediumLowWeightTablets;
+    }
+
+    public List<TabletStats> getLowWeightTablets() {
+        return lowWeightTablets;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
+    public double getTabletSampleRatio() {
+        return tabletSampleRatio;
+    }
+
+<<<<<<< HEAD
+    public double getRowSampleRatio() {
+        return rowSampleRatio;
+    }
+
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
+    public long getSampleRowCount() {
+        return sampleRowCount;
+    }
+
+<<<<<<< HEAD
+    public long getTotalRowCount() {
+        return totalRowCount;
+    }
+
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public int getMaxSampleTabletNum() {
         int max = highWeightTablets.size();
         max = Math.max(max, mediumHighWeightTablets.size());

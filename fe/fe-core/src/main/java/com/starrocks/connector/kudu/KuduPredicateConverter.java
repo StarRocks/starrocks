@@ -202,7 +202,11 @@ public class KuduPredicateConverter extends ScalarOperatorVisitor<List<KuduPredi
     }
 
     private String getColumnName(ScalarOperator operator) {
+<<<<<<< HEAD
         if (operator == null) {
+=======
+        if (operator == null || operator instanceof CastOperator) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             return null;
         }
 

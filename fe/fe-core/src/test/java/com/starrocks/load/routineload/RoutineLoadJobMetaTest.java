@@ -18,7 +18,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
@@ -77,7 +81,11 @@ public class RoutineLoadJobMetaTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_auto");
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "rj", db.getId(), table.getId(), "", "");
 
+<<<<<<< HEAD
         Exception e = Assert.assertThrows(UserException.class,
+=======
+        Exception e = Assert.assertThrows(StarRocksException.class,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 () -> routineLoadJob.plan(new TUniqueId(1, 2), 1, ""));
     }
 }

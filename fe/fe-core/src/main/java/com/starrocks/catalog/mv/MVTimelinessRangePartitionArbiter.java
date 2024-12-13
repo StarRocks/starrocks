@@ -15,7 +15,10 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.Range;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -23,6 +26,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
+<<<<<<< HEAD
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
@@ -32,6 +36,13 @@ import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.RangePartitionDiffResult;
+=======
+import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.scheduler.TableWithPartitions;
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PartitionDiff;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -54,6 +65,10 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
     public MVTimelinessRangePartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
         super(mv, isQueryRewrite);
+<<<<<<< HEAD
+=======
+        this.differ = new RangePartitionDiffer(mv, isQueryRewrite, null);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override
@@ -86,6 +101,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         Preconditions.checkArgument(partitionExprOpt.isPresent(),
                 "Materialized view %s has no partition expr.", mv.getName());
         Expr partitionExpr = partitionExprOpt.get();
+<<<<<<< HEAD
         Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap =
                 RangePartitionDiffer.syncBaseTablePartitionInfos(mv);
 
@@ -104,12 +120,28 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null,
                 basePartitionNameToRangeMap, isQueryRewrite);
         if (differ == null) {
+=======
+        Map<Table, Map<String, PCell>> basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
+        if (basePartitionNameToRangeMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        }
+
+        // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
+        // otherwise base table(mv) may lose partition names of the real base table changed partitions.
+        collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), basePartitionNameToRangeMap);
+
+        // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
+        PartitionDiff diff = getChangedPartitionDiff(mv, basePartitionNameToRangeMap);
+        if (diff == null) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
                     mv.getName()));
         }
 
         // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
         Set<String> mvToRefreshPartitionNames = Sets.newHashSet();
+<<<<<<< HEAD
         Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = differ.mvRangePartitionMap;
         RangePartitionDiff rangePartitionDiff = differ.rangePartitionDiff;
 
@@ -129,6 +161,25 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                 .generateBaseRefMap(basePartitionNameToRangeMap, refBaseTablePartitionExprs, mvPartitionNameToRangeMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
                 .generateMvRefMap(mvPartitionNameToRangeMap, refBaseTablePartitionExprs, basePartitionNameToRangeMap);
+=======
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+
+        // remove ref base table's deleted partitions from `mvPartitionMap`
+        mvToRefreshPartitionNames.addAll(diff.getDeletes().keySet());
+        mvToRefreshPartitionNames.addAll(diff.getAdds().keySet());
+
+        diff.getDeletes().keySet().stream().forEach(mvPartitionToCells::remove);
+        // add all ref base table's added partitions to `mvPartitionMap`
+        diff.getAdds().entrySet().stream()
+                        .forEach(e -> mvPartitionToCells.put(e.getKey(), e.getValue()));
+        // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
+        mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionToCells);
+
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+                differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionToCells);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+                differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
@@ -140,7 +191,11 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                     .map(e -> new TableWithPartitions(e.getKey(), e.getValue()))
                     .collect(Collectors.toList());
             if (mv.isCalcPotentialRefreshPartition(baseTableWithPartitions,
+<<<<<<< HEAD
                     basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionNameToRangeMap)) {
+=======
+                    basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionToCells)) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 // because the relation of partitions between materialized view and base partition table is n: m,
                 // should calculate the candidate partitions recursively.
                 SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,
@@ -151,6 +206,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         mvTimelinessInfo.addMvToRefreshPartitionNames(mvToRefreshPartitionNames);
         return mvTimelinessInfo;
     }
+<<<<<<< HEAD
 
     @Override
     protected MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
@@ -182,4 +238,6 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         return mvUpdateInfo;
     }
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

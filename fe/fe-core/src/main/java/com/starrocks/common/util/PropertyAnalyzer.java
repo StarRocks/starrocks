@@ -45,6 +45,10 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.DateLiteral;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Expr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -72,6 +76,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.SqlModeHelper;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
@@ -83,6 +91,11 @@ import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.common.MetaUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
+import com.starrocks.sql.parser.SqlParser;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
@@ -191,6 +204,11 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_TTL = "partition_ttl";
     public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
+<<<<<<< HEAD
+=======
+    public static final String PROPERTIES_PARTITION_RETENTION_CONDITION = "partition_retention_condition";
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
@@ -417,6 +435,44 @@ public class PropertyAnalyzer {
         return partitionLiveNumber;
     }
 
+<<<<<<< HEAD
+=======
+    public static String analyzePartitionRetentionCondition(Database db,
+                                                            OlapTable olapTable,
+                                                            Map<String, String> properties,
+                                                            boolean removeProperties) {
+        String partitionRetentionCondition = "";
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
+                throw new SemanticException("Illegal partition retention condition: " + partitionRetentionCondition);
+            }
+            // parse retention condition
+            Expr whereExpr = null;
+            try {
+                whereExpr = SqlParser.parseSqlToExpr(partitionRetentionCondition, SqlModeHelper.MODE_DEFAULT);
+                if (whereExpr == null) {
+                    throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+                }
+            } catch (Exception e) {
+                throw new SemanticException("Failed to parse retention condition: " + partitionRetentionCondition);
+            }
+            // validate retention condition
+            TableName tableName = new TableName(db.getFullName(), olapTable.getName());
+            ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
+            try {
+                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false);
+            } catch (Exception e) {
+                throw new SemanticException("Failed to validate retention condition: " + e.getMessage());
+            }
+            if (removeProperties) {
+                properties.remove(PROPERTIES_PARTITION_RETENTION_CONDITION);
+            }
+        }
+        return partitionRetentionCondition;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public static long analyzeBucketSize(Map<String, String> properties) {
         long bucketSize = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BUCKET_SIZE)) {
@@ -1426,6 +1482,21 @@ public class PropertyAnalyzer {
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
                 materializedView.getTableProperty().setPartitionTTL(ttlDuration.second);
             }
+<<<<<<< HEAD
+=======
+            // partition retention condition
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                if (isNonPartitioned) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION
+                            + " is only supported by partitioned materialized-view");
+                }
+                String ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, materializedView,
+                        properties, true);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
+                materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
             // partition ttl number
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
@@ -1433,9 +1504,15 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
+<<<<<<< HEAD
                 if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
                             + " does not support non-partitioned materialized view.");
+=======
+                if (!materializedView.getPartitionInfo().isRangePartition()) {
+                    throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
+                            + " does not support non-range-partitioned materialized view.");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             }
             // partition auto refresh partitions limit
@@ -1446,7 +1523,11 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
                 if (isNonPartitioned) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
+<<<<<<< HEAD
                             + " does not support non-partitioned materialized view.");
+=======
+                            + " does not support non-range-partitioned materialized view.");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             }
             // partition refresh number

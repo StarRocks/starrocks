@@ -15,7 +15,11 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.compaction.Quantiles;
@@ -136,9 +140,15 @@ public class TransactionStateBatch implements Writable {
         return transactionStates.size();
     }
 
+<<<<<<< HEAD
     public TransactionState index(int index) throws UserException {
         if (index < 0 || index >= transactionStates.size()) {
             throw new UserException("index out of bound");
+=======
+    public TransactionState index(int index) throws StarRocksException {
+        if (index < 0 || index >= transactionStates.size()) {
+            throw new StarRocksException("index out of bound");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         return transactionStates.get(index);
     }

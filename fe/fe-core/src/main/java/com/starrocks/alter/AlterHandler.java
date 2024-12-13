@@ -39,8 +39,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
@@ -182,7 +187,11 @@ public abstract class AlterHandler extends FrontendDaemon {
      * entry function. handle alter ops
      */
     public abstract ShowResultSet process(List<AlterClause> alterClauses, Database db, OlapTable olapTable)
+<<<<<<< HEAD
             throws UserException;
+=======
+            throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     /*
      * cancel alter ops

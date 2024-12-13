@@ -46,8 +46,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.TraceManager;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
@@ -345,6 +350,7 @@ public class TransactionState implements Writable {
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
+<<<<<<< HEAD
         if (Config.lock_manager_enable_using_fine_granularity_lock) {
             txnLock.writeLock().lock();
         }
@@ -354,6 +360,13 @@ public class TransactionState implements Writable {
         if (Config.lock_manager_enable_using_fine_granularity_lock) {
             txnLock.writeLock().unlock();
         }
+=======
+        txnLock.writeLock().lock();
+    }
+
+    public void writeUnlock() {
+        txnLock.writeLock().unlock();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public TransactionState() {
@@ -622,7 +635,11 @@ public class TransactionState implements Writable {
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
                                     TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // after status changed
         if (callback != null) {
             switch (transactionStatus) {
@@ -885,7 +902,12 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
+<<<<<<< HEAD
             List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+=======
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);

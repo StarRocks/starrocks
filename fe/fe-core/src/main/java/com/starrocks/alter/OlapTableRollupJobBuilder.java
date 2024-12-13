@@ -25,7 +25,11 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.Util;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -43,7 +47,11 @@ public class OlapTableRollupJobBuilder extends AlterJobV2Builder {
     }
 
     @Override
+<<<<<<< HEAD
     public AlterJobV2 build() throws UserException {
+=======
+    public AlterJobV2 build() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         int baseSchemaHash = olapTable.getSchemaHashByIndexId(baseIndexId);
         // mvSchemaVersion will keep same with the src MaterializedIndex
         int mvSchemaVersion = olapTable.getIndexMetaByIndexId(baseIndexId).getSchemaVersion();

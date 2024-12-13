@@ -51,6 +51,10 @@ struct OlapTableIndexSchema {
     OlapTableColumnParam* column_param;
     ExprContext* where_clause = nullptr;
     std::map<std::string, std::string> column_to_expr_value;
+<<<<<<< HEAD
+=======
+    bool is_shadow = false;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     void to_protobuf(POlapTableIndexSchema* pindex) const;
 };
@@ -81,6 +85,10 @@ public:
         return _proto_schema;
     }
 
+<<<<<<< HEAD
+=======
+    int64_t shadow_index_size() const { return _shadow_indexes; }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     std::string debug_string() const;
 
 private:
@@ -92,6 +100,11 @@ private:
     mutable POlapTableSchemaParam* _proto_schema = nullptr;
     std::vector<OlapTableIndexSchema*> _indexes;
     mutable ObjectPool _obj_pool;
+<<<<<<< HEAD
+=======
+
+    int64_t _shadow_indexes = 0;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 };
 
 using OlapTableIndexTablets = TOlapTableIndexTablets;

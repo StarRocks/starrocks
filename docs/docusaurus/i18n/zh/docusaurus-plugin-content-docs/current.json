@@ -1,6 +1,10 @@
 {
   "version.label": {
+<<<<<<< HEAD
     "message": "Candidate-3.4",
+=======
+    "message": "current",
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     "description": "The label for version current"
   },
   "sidebar.docs.category.Introduction to StarRocks": {

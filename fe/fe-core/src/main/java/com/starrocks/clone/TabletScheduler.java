@@ -1795,11 +1795,26 @@ public class TabletScheduler extends FrontendDaemon {
                 // no more tablets
                 break;
             }
+<<<<<<< HEAD
             // ignore tablets that will expire and erase soon
             if (checkIfTabletExpired(tablet)) {
                 continue;
             }
             list.add(tablet);
+=======
+            try {
+                // ignore tablets that will expire and erase soon
+                if (checkIfTabletExpired(tablet)) {
+                    continue;
+                }
+                list.add(tablet);
+            } catch (Exception e) {
+                LOG.warn("got unexpected exception, discard this schedule. tablet: {}",
+                        tablet.getTabletId(), e);
+                finalizeTabletCtx(tablet, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+                continue;
+            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             count--;
         }
         return list;

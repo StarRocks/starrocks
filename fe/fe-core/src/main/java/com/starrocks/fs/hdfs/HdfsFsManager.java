@@ -22,7 +22,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -377,11 +381,19 @@ public class HdfsFsManager {
      * @return BrokerFileSystem with different FileSystem based on scheme
      */
     public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String scheme = pathUri.getUri().getScheme();
         if (Strings.isNullOrEmpty(scheme)) {
             throw new UserException("invalid path. scheme is null");
+=======
+            throws StarRocksException {
+        WildcardURI pathUri = new WildcardURI(path);
+        String scheme = pathUri.getUri().getScheme();
+        if (Strings.isNullOrEmpty(scheme)) {
+            throw new StarRocksException("invalid path. scheme is null");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         switch (scheme) {
             case HDFS_SCHEME:
@@ -430,7 +442,11 @@ public class HdfsFsManager {
      * to the broker conf directory.
      */
     public HdfsFs getDistributedFileSystem(String scheme, String path, Map<String, String> loadProperties,
+<<<<<<< HEAD
                                            THdfsProperties tProperties) throws UserException {
+=======
+                                           THdfsProperties tProperties) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         WildcardURI pathUri = new WildcardURI(path);
         String host = scheme + "://" + pathUri.getAuthority();
         if (Strings.isNullOrEmpty(pathUri.getAuthority())) {
@@ -439,7 +455,11 @@ public class HdfsFsManager {
                 LOG.info("no schema and authority in path. use fs.defaultFs");
             } else {
                 LOG.warn("invalid hdfs path. authority is null,path:" + path);
+<<<<<<< HEAD
                 throw new UserException("invalid hdfs path. authority is null");
+=======
+                throw new StarRocksException("invalid hdfs path. authority is null");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         }
         String username = loadProperties.getOrDefault(USER_NAME_KEY, "");
@@ -451,19 +471,31 @@ public class HdfsFsManager {
         String disableCacheLowerCase = disableCache.toLowerCase();
         if (!(disableCacheLowerCase.equals("true") || disableCacheLowerCase.equals("false"))) {
             LOG.warn("invalid disable cache: " + disableCache);
+<<<<<<< HEAD
             throw new UserException("invalid disable cache: " + disableCache);
+=======
+            throw new StarRocksException("invalid disable cache: " + disableCache);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         if (!dfsNameServices.equals("")) {
             LOG.warn("Invalid load_properties, namenode HA should be set in hdfs/core-site.xml for" +
                     "broker load without broke. For broker load with broker, you can set namenode HA in the load_properties");
+<<<<<<< HEAD
             throw new UserException("invalid load_properties, namenode HA should be set in hdfs/core-site.xml" +
+=======
+            throw new StarRocksException("invalid load_properties, namenode HA should be set in hdfs/core-site.xml" +
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
         if (!authentication.equals("") && !authentication.equals("simple")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
+<<<<<<< HEAD
             throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
+=======
+            throw new StarRocksException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
@@ -520,7 +552,11 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e.getMessage());
+=======
+            throw new StarRocksException(e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -533,7 +569,11 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -605,14 +645,22 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
     }
 
     public HdfsFs getS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
@@ -623,7 +671,11 @@ public class HdfsFsManager {
      * Support abfs://, abfs://, adl://, wasb://, wasbs://
      */
     public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
         loadProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
 
@@ -637,7 +689,11 @@ public class HdfsFsManager {
      * Support gs://
      */
     public HdfsFs getGoogleFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
@@ -650,7 +706,11 @@ public class HdfsFsManager {
      */
     private HdfsFs getFileSystemByCloudConfiguration(CloudConfiguration cloudConfiguration, String path,
                                                      THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Preconditions.checkArgument(cloudConfiguration != null);
         WildcardURI pathUri = new WildcardURI(path);
 
@@ -716,7 +776,11 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -729,7 +793,11 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -793,7 +861,11 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -806,7 +878,11 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -871,7 +947,11 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -883,19 +963,31 @@ public class HdfsFsManager {
      * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
      */
     public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         String disableCacheHDFS = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
         String disableCacheHDFSLowerCase = disableCacheHDFS.toLowerCase();
         if (!(disableCacheHDFSLowerCase.equals("true") || disableCacheHDFSLowerCase.equals("false"))) {
             LOG.warn("invalid disable cache: " + disableCacheHDFS);
+<<<<<<< HEAD
             throw new UserException("invalid disable cache: " + disableCacheHDFS);
+=======
+            throw new StarRocksException("invalid disable cache: " + disableCacheHDFS);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         String disableCacheS3 = loadProperties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
         String disableCacheS3LowerCase = disableCacheS3.toLowerCase();
         if (!(disableCacheS3LowerCase.equals("true") || disableCacheS3LowerCase.equals("false"))) {
             LOG.warn("invalid disable cache: " + disableCacheS3);
+<<<<<<< HEAD
             throw new UserException("invalid disable cache: " + disableCacheS3);
+=======
+            throw new StarRocksException("invalid disable cache: " + disableCacheS3);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         // skip xxx:// first
@@ -947,7 +1039,11 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -960,7 +1056,11 @@ public class HdfsFsManager {
      * accessKey_secretKey
      */
     public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -1025,7 +1125,11 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -1037,7 +1141,11 @@ public class HdfsFsManager {
      * for cos
      */
     public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -1101,7 +1209,11 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
@@ -1113,7 +1225,11 @@ public class HdfsFsManager {
      * for tos
      */
     public HdfsFs getTOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
@@ -1131,6 +1247,7 @@ public class HdfsFsManager {
         String region = loadProperties.getOrDefault(FS_TOS_REGION, "");
         if (accessKey.equals("")) {
             LOG.warn("Invalid load_properties, TOS must provide access_key");
+<<<<<<< HEAD
             throw new UserException("Invalid load_properties, TOS must provide access_key");
         }
         if (secretKey.equals("")) {
@@ -1140,6 +1257,17 @@ public class HdfsFsManager {
         if (endpoint.equals("")) {
             LOG.warn("Invalid load_properties, TOS must provide endpoint");
             throw new UserException("Invalid load_properties, TOS must provide endpoint");
+=======
+            throw new StarRocksException("Invalid load_properties, TOS must provide access_key");
+        }
+        if (secretKey.equals("")) {
+            LOG.warn("Invalid load_properties, TOS must provide secret_key");
+            throw new StarRocksException("Invalid load_properties, TOS must provide secret_key");
+        }
+        if (endpoint.equals("")) {
+            LOG.warn("Invalid load_properties, TOS must provide endpoint");
+            throw new StarRocksException("Invalid load_properties, TOS must provide endpoint");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will
@@ -1186,18 +1314,30 @@ public class HdfsFsManager {
             return fileSystem;
         } catch (Exception e) {
             LOG.error("errors while connect to " + path, e);
+<<<<<<< HEAD
             throw new UserException(e);
+=======
+            throw new StarRocksException(e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             fileSystem.getLock().unlock();
         }
     }
 
     public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+<<<<<<< HEAD
             throws UserException {
         getFileSystem(path, loadProperties, tProperties);
     }
 
     public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws UserException {
+=======
+            throws StarRocksException {
+        getFileSystem(path, loadProperties, tProperties);
+    }
+
+    public List<FileStatus> listFileMeta(String path, Map<String, String> properties) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, properties, null);
         Path pathPattern = new Path(pathUri.getPath());
@@ -1206,6 +1346,7 @@ public class HdfsFsManager {
             return files != null ? Lists.newArrayList(files) : Lists.newArrayList();
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
+<<<<<<< HEAD
             throw new UserException("file not found: " + path, e);
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
@@ -1214,11 +1355,25 @@ public class HdfsFsManager {
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("Fail to get file status: " + e.getMessage(), e);
+=======
+            throw new StarRocksException("file not found: " + path, e);
+        } catch (InterruptedIOException e) {
+            Thread.interrupted(); // clear interrupted flag
+            LOG.error("Interrupted while get file status: " + path, e);
+            throw new StarRocksException("Failed to get file status: " + path, e); // throw unified user exception
+        } catch (Exception e) {
+            LOG.error("errors while get file status ", e);
+            throw new StarRocksException("Fail to get file status: " + e.getMessage(), e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1251,24 +1406,43 @@ public class HdfsFsManager {
             }
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
+<<<<<<< HEAD
             throw new UserException("file not found: " + path, e);
         } catch (IllegalArgumentException e) {
             LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
                     "the arguments like region, IAM, instance profile and so on.");
             throw new UserException("The arguments of blob store(S3/Azure) may be wrong. " +
+=======
+            throw new StarRocksException("file not found: " + path, e);
+        } catch (IllegalArgumentException e) {
+            LOG.error("The arguments of blob store(S3/Azure) may be wrong. You can check " +
+                    "the arguments like region, IAM, instance profile and so on.");
+            throw new StarRocksException("The arguments of blob store(S3/Azure) may be wrong. " +
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     "You can check the arguments like region, IAM, instance profile and so on.", e);
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while list path: " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to list path: " + path, e); // throw unified user exception
         } catch (Exception e) {
             LOG.error("errors while get file status ", e);
             throw new UserException("Fail to get file status: " + e.getMessage(), e);
+=======
+            throw new StarRocksException("Failed to list path: " + path, e); // throw unified user exception
+        } catch (Exception e) {
+            LOG.error("errors while get file status ", e);
+            throw new StarRocksException("Fail to get file status: " + e.getMessage(), e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         return resultFileStatus;
     }
 
+<<<<<<< HEAD
     public void deletePath(String path, Map<String, String> loadProperties) throws UserException {
+=======
+    public void deletePath(String path, Map<String, String> loadProperties) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
@@ -1277,6 +1451,7 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while delete path: " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to delete path: " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while delete path " + path, e);
@@ -1285,17 +1460,36 @@ public class HdfsFsManager {
     }
 
     public void renamePath(String srcPath, String destPath, Map<String, String> loadProperties) throws UserException {
+=======
+            throw new StarRocksException("Failed to delete path: " + path, e); // throw unified user exception
+        } catch (IOException e) {
+            LOG.error("errors while delete path " + path, e);
+            throw new StarRocksException("delete path " + path + "error", e);
+        }
+    }
+
+    public void renamePath(String srcPath, String destPath, Map<String, String> loadProperties) throws
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         WildcardURI srcPathUri = new WildcardURI(srcPath);
         WildcardURI destPathUri = new WildcardURI(destPath);
 
         boolean srcAuthorityNull = (srcPathUri.getAuthority() == null);
         boolean destAuthorityNull = (destPathUri.getAuthority() == null);
         if (srcAuthorityNull != destAuthorityNull) {
+<<<<<<< HEAD
             throw new UserException("Different authority info between srcPath: " + srcPath + " and destPath: " + destPath);
         }
         if (!srcAuthorityNull && !destAuthorityNull &&
                 !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
             throw new UserException("only allow rename in same file system");
+=======
+            throw new StarRocksException("Different authority info between srcPath: " + srcPath + " and destPath: " + destPath);
+        }
+        if (!srcAuthorityNull && !destAuthorityNull &&
+                !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
+            throw new StarRocksException("only allow rename in same file system");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         }
 
@@ -1305,12 +1499,17 @@ public class HdfsFsManager {
         try {
             boolean isRenameSuccess = fileSystem.getDFSFileSystem().rename(srcfilePath, destfilePath);
             if (!isRenameSuccess) {
+<<<<<<< HEAD
                 throw new UserException("failed to rename path from " + srcPath + " to " + destPath);
+=======
+                throw new StarRocksException("failed to rename path from " + srcPath + " to " + destPath);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while rename path from " + srcPath + " to " + destPath, e);
             // throw unified user exception
+<<<<<<< HEAD
             throw new UserException("Failed to rename path from " + srcPath + " to " + destPath, e);
         } catch (IOException e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
@@ -1319,6 +1518,16 @@ public class HdfsFsManager {
     }
 
     public boolean checkPathExist(String path, Map<String, String> loadProperties) throws UserException {
+=======
+            throw new StarRocksException("Failed to rename path from " + srcPath + " to " + destPath, e);
+        } catch (IOException e) {
+            LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
+            throw new StarRocksException("errors while rename " + srcPath + "to " + destPath, e);
+        }
+    }
+
+    public boolean checkPathExist(String path, Map<String, String> loadProperties) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
@@ -1327,6 +1536,7 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while check path exist: " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to check path exist: " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path, e);
@@ -1335,6 +1545,17 @@ public class HdfsFsManager {
     }
 
     public TBrokerFD openReader(String path, long startOffset, Map<String, String> loadProperties) throws UserException {
+=======
+            throw new StarRocksException("Failed to check path exist: " + path, e); // throw unified user exception
+        } catch (IOException e) {
+            LOG.error("errors while check path exist: " + path, e);
+            throw new StarRocksException("errors while check if path " + path + " exist", e);
+        }
+    }
+
+    public TBrokerFD openReader(String path, long startOffset, Map<String, String> loadProperties) throws
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         WildcardURI pathUri = new WildcardURI(path);
         Path inputFilePath = new Path(pathUri.getPath());
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1348,6 +1569,7 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while open file " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to open file " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while open path", e);
@@ -1356,6 +1578,16 @@ public class HdfsFsManager {
     }
 
     public byte[] pread(TBrokerFD fd, long offset, long length) throws UserException {
+=======
+            throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
+        } catch (IOException e) {
+            LOG.error("errors while open path", e);
+            throw new StarRocksException("could not open file " + path, e);
+        }
+    }
+
+    public byte[] pread(TBrokerFD fd, long offset, long length) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         FSDataInputStream fsDataInputStream = ioStreamManager.getFsDataInputStream(fd);
         synchronized (fsDataInputStream) {
             long currentStreamOffset;
@@ -1365,10 +1597,17 @@ public class HdfsFsManager {
                 Thread.interrupted(); // clear interrupted flag
                 LOG.error("Interrupted while get file pos from output stream", e);
                 // throw unified user exception
+<<<<<<< HEAD
                 throw new UserException("Failed to get file pos from output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while get file pos from output stream", e);
                 throw new UserException("errors while get file pos from output stream");
+=======
+                throw new StarRocksException("Failed to get file pos from output stream", e);
+            } catch (IOException e) {
+                LOG.error("errors while get file pos from output stream", e);
+                throw new StarRocksException("errors while get file pos from output stream");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             if (currentStreamOffset != offset) {
                 // it's ok, when reading some format like parquet, it is not a sequential read
@@ -1381,9 +1620,15 @@ public class HdfsFsManager {
                     Thread.interrupted(); // clear interrupted flag
                     LOG.error("Interrupted while seek file pos from output stream", e);
                     // throw unified user exception
+<<<<<<< HEAD
                     throw new UserException("Failed to seek file pos from output stream", e);
                 } catch (IOException e) {
                     throw new UserException("current read offset " + currentStreamOffset + " is not equal to "
+=======
+                    throw new StarRocksException("Failed to seek file pos from output stream", e);
+                } catch (IOException e) {
+                    throw new StarRocksException("current read offset " + currentStreamOffset + " is not equal to "
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                             + offset + ", and could not seek to it");
                 }
             }
@@ -1396,7 +1641,11 @@ public class HdfsFsManager {
             try {
                 int readLength = readByteArrayFully(fsDataInputStream, buf);
                 if (readLength < 0) {
+<<<<<<< HEAD
                     throw new UserException("end of file reached");
+=======
+                    throw new StarRocksException("end of file reached");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(
@@ -1412,10 +1661,17 @@ public class HdfsFsManager {
             } catch (InterruptedIOException e) {
                 Thread.interrupted(); // clear interrupted flag
                 LOG.error("Interrupted while read data from stream", e);
+<<<<<<< HEAD
                 throw new UserException("Failed to read data from stream", e); // throw unified user exception
             } catch (IOException e) {
                 LOG.error("errors while read data from stream", e);
                 throw new UserException("errors while read data from stream", e);
+=======
+                throw new StarRocksException("Failed to read data from stream", e); // throw unified user exception
+            } catch (IOException e) {
+                LOG.error("errors while read data from stream", e);
+                throw new StarRocksException("errors while read data from stream", e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         }
     }
@@ -1424,7 +1680,11 @@ public class HdfsFsManager {
         throw new NotImplementedException("seek this method is not supported");
     }
 
+<<<<<<< HEAD
     public void closeReader(TBrokerFD fd) throws UserException {
+=======
+    public void closeReader(TBrokerFD fd) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         FSDataInputStream fsDataInputStream = ioStreamManager.getFsDataInputStream(fd);
         synchronized (fsDataInputStream) {
             try {
@@ -1432,17 +1692,28 @@ public class HdfsFsManager {
             } catch (InterruptedIOException e) {
                 Thread.interrupted(); // clear interrupted flag
                 LOG.error("Interrupted while close file input stream", e);
+<<<<<<< HEAD
                 throw new UserException("Failed to close file input stream", e); // throw unified user exception
             } catch (IOException e) {
                 LOG.error("errors while close file input stream", e);
                 throw new UserException("errors while close file input stream", e);
+=======
+                throw new StarRocksException("Failed to close file input stream", e); // throw unified user exception
+            } catch (IOException e) {
+                LOG.error("errors while close file input stream", e);
+                throw new StarRocksException("errors while close file input stream", e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             } finally {
                 ioStreamManager.removeInputStream(fd);
             }
         }
     }
 
+<<<<<<< HEAD
     public TBrokerFD openWriter(String path, Map<String, String> loadProperties) throws UserException {
+=======
+    public TBrokerFD openWriter(String path, Map<String, String> loadProperties) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         WildcardURI pathUri = new WildcardURI(path);
         Path inputFilePath = new Path(pathUri.getPath());
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -1457,6 +1728,7 @@ public class HdfsFsManager {
         } catch (InterruptedIOException e) {
             Thread.interrupted(); // clear interrupted flag
             LOG.error("Interrupted while open file " + path, e);
+<<<<<<< HEAD
             throw new UserException("Failed to open file " + path, e); // throw unified user exception
         } catch (IOException e) {
             LOG.error("errors while open path", e);
@@ -1465,11 +1737,25 @@ public class HdfsFsManager {
     }
 
     public void pwrite(TBrokerFD fd, long offset, byte[] data) throws UserException {
+=======
+            throw new StarRocksException("Failed to open file " + path, e); // throw unified user exception
+        } catch (IOException e) {
+            LOG.error("errors while open path", e);
+            throw new StarRocksException("could not open file " + path, e);
+        }
+    }
+
+    public void pwrite(TBrokerFD fd, long offset, byte[] data) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         FSDataOutputStream fsDataOutputStream = ioStreamManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             long currentStreamOffset = fsDataOutputStream.getPos();
             if (currentStreamOffset != offset) {
+<<<<<<< HEAD
                 throw new UserException("current outputstream offset is " + currentStreamOffset
+=======
+                throw new StarRocksException("current outputstream offset is " + currentStreamOffset
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         + " not equal to request " + offset);
             }
             try {
@@ -1478,15 +1764,26 @@ public class HdfsFsManager {
                 Thread.interrupted(); // clear interrupted flag
                 LOG.error("Interrupted while write file " + fd + " to output stream", e);
                 // throw unified user exception
+<<<<<<< HEAD
                 throw new UserException("Failed to write file " + fd + " to output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while write file " + fd + " to output stream", e);
                 throw new UserException("errors while write data to output stream", e);
+=======
+                throw new StarRocksException("Failed to write file " + fd + " to output stream", e);
+            } catch (IOException e) {
+                LOG.error("errors while write file " + fd + " to output stream", e);
+                throw new StarRocksException("errors while write data to output stream", e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         }
     }
 
+<<<<<<< HEAD
     public void closeWriter(TBrokerFD fd) throws UserException {
+=======
+    public void closeWriter(TBrokerFD fd) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         FSDataOutputStream fsDataOutputStream = ioStreamManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             try {
@@ -1496,10 +1793,17 @@ public class HdfsFsManager {
                 Thread.interrupted(); // clear interrupted flag
                 LOG.error("Interrupted while close file " + fd + " output stream", e);
                 // throw unified user exception
+<<<<<<< HEAD
                 throw new UserException("Failed to close file " + fd + " output stream", e);
             } catch (IOException e) {
                 LOG.error("errors while close file " + fd + " output stream", e);
                 throw new UserException("errors while close file output stream", e);
+=======
+                throw new StarRocksException("Failed to close file " + fd + " output stream", e);
+            } catch (IOException e) {
+                LOG.error("errors while close file " + fd + " output stream", e);
+                throw new StarRocksException("errors while close file output stream", e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             } finally {
                 ioStreamManager.removeOutputStream(fd);
             }

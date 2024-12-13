@@ -18,7 +18,11 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportJob;
@@ -89,7 +93,12 @@ public class ExportHandleTest {
         };
         new MockUp<HdfsUtil>() {
             @Mock
+<<<<<<< HEAD
             public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws UserException {
+=======
+            public void getTProperties(String path, BrokerDesc brokerDesc, THdfsProperties tProperties) throws
+                    StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         };
         // let ExportChecker never run this job

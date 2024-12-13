@@ -18,6 +18,10 @@ import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.catalog.Column;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.ScalarType;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.information.BeConfigsSystemTable;
@@ -140,6 +144,14 @@ public class SystemTable extends Table {
             return column(name, type, true);
         }
 
+<<<<<<< HEAD
+=======
+        public Builder column(String name, Type type, String comment) {
+            columns.add(new Column(name, type, false, null, true, null, comment));
+            return this;
+        }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         public Builder column(String name, Type type, boolean nullable) {
             columns.add(new Column(name, type, false, null, nullable, null, ""));
             return this;
@@ -186,4 +198,11 @@ public class SystemTable extends Table {
     public static boolean needQueryFromLeader(String tableName) {
         return QUERY_FROM_LEADER_TABLES.contains(tableName);
     }
+<<<<<<< HEAD
+=======
+
+    public static ScalarType createNameType() {
+        return ScalarType.createVarchar(NAME_CHAR_LEN);
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

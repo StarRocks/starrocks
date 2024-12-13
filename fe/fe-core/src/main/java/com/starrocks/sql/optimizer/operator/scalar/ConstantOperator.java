@@ -510,6 +510,12 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         ConstantOperator res = null;
+<<<<<<< HEAD
+=======
+        if (desc.isFixedPointType() && type.isFloatingPointType()) {
+            childString = childString.split("\\.")[0];
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         try {
             if (desc.isBoolean()) {
                 if ("FALSE".equalsIgnoreCase(childString) || "0".equalsIgnoreCase(childString)) {

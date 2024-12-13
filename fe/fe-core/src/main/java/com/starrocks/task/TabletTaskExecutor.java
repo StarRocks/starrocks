@@ -80,10 +80,19 @@ public class TabletTaskExecutor {
             // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
             // Here we assume that all partitions have the same number of indexes.
             int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
+<<<<<<< HEAD
             try {
                 LOG.info("build partitions sequentially, send task one by one, all tasks timeout {}s",
                         Math.min(timeout, maxTimeout));
                 sendCreateReplicaTasksAndWaitForFinished(tasks, Math.min(timeout, maxTimeout));
+=======
+            int maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
+            tasks.forEach(task -> task.setTimeoutMs(maxWaitTimeSeconds * 1000L));
+            try {
+                LOG.info("build partitions sequentially, send task one by one, all tasks timeout {}s",
+                        maxWaitTimeSeconds);
+                sendCreateReplicaTasksAndWaitForFinished(tasks, maxWaitTimeSeconds);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 LOG.info("build partitions sequentially, all tasks finished, took {}ms",
                         System.currentTimeMillis() - start);
                 tasks.clear();
@@ -103,6 +112,10 @@ public class TabletTaskExecutor {
         int numIndexes = partitions.stream().mapToInt(
                 partition -> partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
+<<<<<<< HEAD
+=======
+        long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         boolean enableTabletCreationOptimization = table.isCloudNativeTableOrMaterializedView()
                 && Config.lake_enable_tablet_creation_optimization;
         if (enableTabletCreationOptimization) {
@@ -114,7 +127,10 @@ public class TabletTaskExecutor {
             int numFinishedTasks;
             int numSendedTasks = 0;
             long startTime = System.currentTimeMillis();
+<<<<<<< HEAD
             long maxWaitTimeMs = Math.min(timeout, maxTimeout) * 1000L;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             for (PhysicalPartition partition : partitions) {
                 if (!countDownLatch.getStatus().ok()) {
                     break;
@@ -125,6 +141,13 @@ public class TabletTaskExecutor {
                     List<Long> signatures =
                             taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
                     signatures.add(task.getSignature());
+<<<<<<< HEAD
+=======
+                    // set timeout to 2 * maxWaitTimeSeconds because this for loop can wait for maxWaitTimeSeconds
+                    // to limit the number of tasks that can be sent at the same time, and outside the loop it can
+                    // wait for maxWaitTimeSeconds again. So the total waiting time is 2 * maxWaitTimeSeconds.
+                    task.setTimeoutMs(maxWaitTimeSeconds * 1000 * 2);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
                 sendCreateReplicaTasks(tasks, countDownLatch);
                 numSendedTasks += tasks.size();
@@ -138,7 +161,11 @@ public class TabletTaskExecutor {
                 while (numSendedTasks - numFinishedTasks > 200 * numBackends) {
                     long currentTime = System.currentTimeMillis();
                     // Add timeout check
+<<<<<<< HEAD
                     if (currentTime > startTime + maxWaitTimeMs) {
+=======
+                    if (currentTime > startTime + maxWaitTimeSeconds * 1000) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         throw new TimeoutException("Wait in buildPartitionsConcurrently exceeded timeout");
                     }
                     ThreadUtil.sleepAtLeastIgnoreInterrupts(100);
@@ -146,8 +173,13 @@ public class TabletTaskExecutor {
                 }
             }
             LOG.info("build partitions concurrently for {}, waiting for all tasks finish with timeout {}s",
+<<<<<<< HEAD
                     table.getName(), Math.min(timeout, maxTimeout));
             waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+=======
+                    table.getName(), maxWaitTimeSeconds);
+            waitForFinished(countDownLatch, maxWaitTimeSeconds);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.info("build partitions concurrently for {}, all tasks finished, took {}ms",
                     table.getName(), System.currentTimeMillis() - start);
 

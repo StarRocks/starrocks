@@ -22,6 +22,10 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -94,6 +98,19 @@ public class WarehouseAnalyzer {
         public Void visitShowWarehousesStatement(ShowWarehousesStmt node, ConnectContext context) {
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            String whName = statement.getWarehouseName();
+            if (Strings.isNullOrEmpty(whName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_WAREHOUSE_NAME);
+            }
+
+            return null;
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
 }

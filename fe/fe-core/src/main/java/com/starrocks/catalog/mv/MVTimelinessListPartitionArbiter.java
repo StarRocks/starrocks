@@ -15,13 +15,17 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.google.common.collect.Maps;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.common.ListPartitionDiff;
@@ -29,11 +33,21 @@ import com.starrocks.sql.common.ListPartitionDiffResult;
 import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PCell;
 import com.starrocks.sql.common.PListCell;
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.common.ListPartitionDiffer;
+import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PartitionDiff;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -44,6 +58,10 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
 
     public MVTimelinessListPartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
         super(mv, isQueryRewrite);
+<<<<<<< HEAD
+=======
+        differ = new ListPartitionDiffer(mv, isQueryRewrite);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override
@@ -68,6 +86,7 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         MvUpdateInfo mvTimelinessInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL);
         Map<Table, Set<String>> baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                 mvTimelinessInfo);
+<<<<<<< HEAD
         Map<Table, Map<String, PListCell>> refBaseTablePartitionMap = Maps.newHashMap();
         Map<String, PListCell> allBasePartitionItems = Maps.newHashMap();
 
@@ -91,11 +110,27 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         ListPartitionDiffResult result = ListPartitionDiffer.computeListPartitionDiff(mv, refBaseTablePartitionMap,
                 allBasePartitionItems, isQueryRewrite);
         if (result == null) {
+=======
+
+        // collect base table's partition infos
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
+        if (refBaseTablePartitionMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        }
+        // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
+        // otherwise base table(mv) may lose partition names of the real base table changed partitions.
+        collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), refBaseTablePartitionMap);
+
+        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+        if (diff == null) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             logMVPrepare(mv, "Partitioned mv compute list diff failed");
             return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
         }
 
         // update into mv's to refresh partitions
+<<<<<<< HEAD
         Set<String> mvToRefreshPartitionNames = mvTimelinessInfo.getMvToRefreshPartitionNames();
         final ListPartitionDiff listPartitionDiff = result.listPartitionDiff;
         mvToRefreshPartitionNames.addAll(listPartitionDiff.getDeletes().keySet());
@@ -105,10 +140,23 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         // refresh ref base table's new added partitions
         mvToRefreshPartitionNames.addAll(listPartitionDiff.getAdds().keySet());
         mvPartitionNameToListMap.putAll(listPartitionDiff.getAdds());
+=======
+        final Set<String> mvToRefreshPartitionNames = mvTimelinessInfo.getMvToRefreshPartitionNames();
+        mvToRefreshPartitionNames.addAll(diff.getDeletes().keySet());
+        mvToRefreshPartitionNames.addAll(diff.getAdds().keySet());
+
+        // remove ref base table's deleted partitions from `mvPartitionMap`
+        // refresh ref base table's new added partitions
+        Map<String, PCell> mvPartitionNameToListMap = mv.getPartitionCells(Optional.empty());
+        diff.getDeletes().keySet().forEach(mvPartitionNameToListMap::remove);
+        mvPartitionNameToListMap.putAll(diff.getAdds());
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Map<String, PCell> mvPartitionNameToCell = mvPartitionNameToListMap.entrySet().stream()
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue()));
         mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToCell);
 
+<<<<<<< HEAD
         Map<Table, Map<String, Set<String>>> baseToMvNameRef = ListPartitionDiffer
                 .generateBaseRefMap(refBaseTablePartitionMap, mvPartitionNameToListMap);
         Map<String, Map<Table, Set<String>>> mvToBaseNameRef = ListPartitionDiffer
@@ -117,10 +165,20 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
 
+=======
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+                differ.generateBaseRefMap(refBaseTablePartitionMap, mvPartitionNameToListMap);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+                differ.generateMvRefMap(mvPartitionNameToListMap, refBaseTablePartitionMap);
+        mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
+        mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
 
         return mvTimelinessInfo;
     }
+<<<<<<< HEAD
 
     @Override
     public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
@@ -151,4 +209,6 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         addEmptyPartitionsToRefresh(mvUpdateInfo);
         return mvUpdateInfo;
     }
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

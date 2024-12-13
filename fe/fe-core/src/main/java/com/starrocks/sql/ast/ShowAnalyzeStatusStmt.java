@@ -49,7 +49,11 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         this.predicate = predicate;
     }
 
+<<<<<<< HEAD
     private static final ShowResultSetMetaData META_DATA =
+=======
+    public static final ShowResultSetMetaData META_DATA =
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Id", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Database", ScalarType.createVarchar(60)))

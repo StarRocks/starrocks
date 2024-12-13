@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 
 #include <gtest/gtest.h>
@@ -26,6 +27,15 @@
 
 #include "common/configbase.h"
 #include "common/logging.h"
+=======
+#include "types/large_int_value.h"
+
+#include <gtest/gtest.h>
+
+#include <string>
+
+#include "common/configbase.h"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "types/constexpr.h"
 
 namespace starrocks {

@@ -23,7 +23,11 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
@@ -50,7 +54,11 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
     }
 
     @Override
+<<<<<<< HEAD
     public AlterJobV2 build() throws UserException {
+=======
+    public AlterJobV2 build() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         /*
          * create all rollup indexes. and set state.
          * After setting, Tables' state will be ROLLUP

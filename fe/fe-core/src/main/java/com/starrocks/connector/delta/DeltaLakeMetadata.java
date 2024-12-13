@@ -20,8 +20,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -39,7 +42,10 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.sql.common.ErrorType;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -238,6 +244,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 Row scanFileRow = scanFileRows.next();
 
                 DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
+<<<<<<< HEAD
                 if (dv != null) {
                     ErrorReport.reportValidateException(ErrorCode.ERR_BAD_TABLE_ERROR, ErrorType.UNSUPPORTED,
                             "Delta table feature [deletion vectors] is not supported");
@@ -246,6 +253,10 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair =
                         ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, estimateRowSize);
                 return pair;
+=======
+                return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow,
+                                estimateRowSize, dv);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
 
             private void ensureOpen() {

@@ -48,8 +48,13 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
@@ -144,7 +149,11 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSinglePartition() throws UserException {
+=======
+    public void testSinglePartition() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -177,7 +186,11 @@ public class OlapTableSinkTest {
     @Test
     public void testRangePartition(
             @Injectable RangePartitionInfo partInfo,
+<<<<<<< HEAD
             @Injectable MaterializedIndex index) throws UserException {
+=======
+            @Injectable MaterializedIndex index) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TupleDescriptor tuple = getTuple();
 
         HashDistributionInfo distInfo = new HashDistributionInfo(
@@ -211,17 +224,28 @@ public class OlapTableSinkTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
             sink.complete();
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         }
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 
+<<<<<<< HEAD
     @Test(expected = UserException.class)
     public void testRangeUnknownPartition(
             @Injectable RangePartitionInfo partInfo,
             @Injectable MaterializedIndex index) throws UserException {
+=======
+    @Test(expected = StarRocksException.class)
+    public void testRangeUnknownPartition(
+            @Injectable RangePartitionInfo partInfo,
+            @Injectable MaterializedIndex index) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TupleDescriptor tuple = getTuple();
 
         long unknownPartId = 12345L;
@@ -421,7 +445,11 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testSingleListPartition() throws UserException {
+=======
+    public void testSingleListPartition() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                 Lists.newArrayList(new Column("province", Type.STRING)));
@@ -459,7 +487,11 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testImmutablePartition() throws UserException {
+=======
+    public void testImmutablePartition() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
@@ -499,7 +531,11 @@ public class OlapTableSinkTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testInitialOpenPartition() throws UserException {
+=======
+    public void testInitialOpenPartition() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);

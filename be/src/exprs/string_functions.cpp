@@ -43,9 +43,15 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
+=======
+#include "runtime/runtime_state.h"
+#include "storage/olap_define.h"
+#include "types/large_int_value.h"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"

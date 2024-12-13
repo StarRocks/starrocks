@@ -47,6 +47,10 @@ public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~SelectNode() override;
 
+<<<<<<< HEAD
+=======
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
@@ -55,6 +59,11 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
+<<<<<<< HEAD
+=======
+    std::map<SlotId, ExprContext*> _common_expr_ctxs;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     RuntimeProfile::Counter* _conjunct_evaluate_timer = nullptr;
 };
 

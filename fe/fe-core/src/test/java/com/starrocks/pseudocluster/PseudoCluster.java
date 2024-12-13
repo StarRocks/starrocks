@@ -33,7 +33,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.StarOSAgent;
@@ -245,12 +249,20 @@ public class PseudoCluster {
         }
 
         @Override
+<<<<<<< HEAD
         public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+=======
+        public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
 
         @Override
+<<<<<<< HEAD
         public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+=======
+        public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
     }

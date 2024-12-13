@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+<<<<<<< HEAD
 import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
@@ -48,6 +49,13 @@ import com.starrocks.thrift.TTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 
 import java.io.DataInput;
+=======
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.loadv2.MiniLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.thrift.TTxnCommitAttachment;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.io.DataOutput;
 import java.io.IOException;
 
@@ -55,16 +63,22 @@ public abstract class TxnCommitAttachment implements Writable {
 
     @SerializedName("s")
     protected TransactionState.LoadJobSourceType sourceType;
+<<<<<<< HEAD
     protected boolean isTypeRead = false;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     public TxnCommitAttachment(TransactionState.LoadJobSourceType sourceType) {
         this.sourceType = sourceType;
     }
 
+<<<<<<< HEAD
     public void setTypeRead(boolean isTypeRead) {
         this.isTypeRead = isTypeRead;
     }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public static TxnCommitAttachment fromThrift(TTxnCommitAttachment txnCommitAttachment) {
         if (txnCommitAttachment != null) {
             switch (txnCommitAttachment.getLoadType()) {
@@ -85,6 +99,7 @@ public abstract class TxnCommitAttachment implements Writable {
         }
     }
 
+<<<<<<< HEAD
     public static TxnCommitAttachment read(DataInput in) throws IOException {
         TxnCommitAttachment attachment = null;
         LoadJobSourceType type = LoadJobSourceType.valueOf(Text.readString(in));
@@ -115,11 +130,14 @@ public abstract class TxnCommitAttachment implements Writable {
         return attachment;
     }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     @Override
     public void write(DataOutput out) throws IOException {
         // ATTN: must write type first
         Text.writeString(out, sourceType.name());
     }
+<<<<<<< HEAD
 
     public void readFields(DataInput in) throws IOException {
         if (!isTypeRead) {
@@ -127,4 +145,6 @@ public abstract class TxnCommitAttachment implements Writable {
             isTypeRead = true;
         }
     }
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

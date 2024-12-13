@@ -20,7 +20,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.OriginStatement;
 
 import java.util.HashMap;
@@ -190,5 +194,9 @@ public abstract class AlterJobV2Builder {
         return this;
     }
 
+<<<<<<< HEAD
     public abstract AlterJobV2 build() throws UserException;
+=======
+    public abstract AlterJobV2 build() throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

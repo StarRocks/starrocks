@@ -15,12 +15,20 @@
 package com.starrocks.common.util;
 
 import com.starrocks.common.NoAliveBackendException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 
 public class AutoInferUtil {
+<<<<<<< HEAD
     public static int calDefaultReplicationNum() throws UserException {
+=======
+    public static int calDefaultReplicationNum() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (RunMode.isSharedDataMode()) {
             return 1;
         }

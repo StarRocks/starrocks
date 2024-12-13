@@ -27,7 +27,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -245,12 +249,20 @@ public class PseudoClusterTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
+<<<<<<< HEAD
             public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
+=======
+            public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
+<<<<<<< HEAD
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
+=======
+            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
@@ -260,7 +272,11 @@ public class PseudoClusterTest {
             }
 
             @Mock
+<<<<<<< HEAD
             public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws UserException {
+=======
+            public List<Long> getWorkersByWorkerGroup(long workerGroupId) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 // the worker id is a random number
                 return new ArrayList<>(Arrays.asList(10001L));
             }

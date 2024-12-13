@@ -34,7 +34,11 @@
 
 package com.starrocks.transaction;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 public interface TxnStateChangeCallback {
 
@@ -63,7 +67,11 @@ public interface TxnStateChangeCallback {
      *
      * @param txnState
      */
+<<<<<<< HEAD
     void afterCommitted(TransactionState txnState, boolean txnOperated) throws UserException;
+=======
+    void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     void replayOnCommitted(TransactionState txnState);
 
@@ -75,7 +83,11 @@ public interface TxnStateChangeCallback {
      * @return
      */
     void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+<<<<<<< HEAD
             throws UserException;
+=======
+            throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     void replayOnAborted(TransactionState txnState);
 
@@ -85,7 +97,11 @@ public interface TxnStateChangeCallback {
 
     void beforePrepared(TransactionState txnState) throws TransactionException;
 
+<<<<<<< HEAD
     void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException;
+=======
+    void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     void replayOnPrepared(TransactionState txnState);
 }

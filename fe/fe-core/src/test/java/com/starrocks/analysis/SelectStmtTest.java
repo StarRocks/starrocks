@@ -297,7 +297,11 @@ public class SelectStmtTest {
                 "select * from db1.tbl1 where not(k1 <=> k2)",
                 "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
         };
+<<<<<<< HEAD
         Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
+=======
+        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*", Pattern.CASE_INSENSITIVE);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());

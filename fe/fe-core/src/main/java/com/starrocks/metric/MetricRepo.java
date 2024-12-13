@@ -50,8 +50,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
@@ -727,7 +732,11 @@ public final class MetricRepo {
             List<PKafkaOffsetProxyResult> offsetProxyResults;
             try {
                 offsetProxyResults = KafkaUtil.getBatchOffsets(requests);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 LOG.warn("get batch offsets failed", e);
                 return;
             }

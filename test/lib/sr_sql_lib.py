@@ -1982,7 +1982,12 @@ class StarrocksSQLApiLib(object):
         """
         assert mv_name is hit in query
         """
+<<<<<<< HEAD
         tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % mv_name)
+=======
+        plan = str(res)
+        tools.assert_true(plan.find(mv_name) > 0, "assert mv %s is not found in plan: %s" % (mv_name, plan))
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     def check_hit_materialized_view(self, query, *expects):
         """
@@ -1996,7 +2001,11 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(res["status"])
         plan = str(res["result"])
         for expect in expects:
+<<<<<<< HEAD
             tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan" % (expect))
+=======
+            tools.assert_true(plan.find(expect) > 0, "assert expect %s is not found in plan: %s" % (expect, plan))
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     def print_hit_materialized_view(self, query, *expects) -> bool:
         """
@@ -2077,8 +2086,14 @@ class StarrocksSQLApiLib(object):
         if not res["status"]:
             print(res)
         tools.assert_true(res["status"])
+<<<<<<< HEAD
         for expect in expects:
             tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
+=======
+        plan = str(res["result"])
+        for expect in expects:
+            tools.assert_false(plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan))
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
@@ -2664,7 +2679,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         sql = "show stats meta %s" % predicate
         res = self.execute_sql(sql, True)
         for expect in expects:
+<<<<<<< HEAD
             meta_string = "\n".join(item[0] for item in res["result"])
+=======
+            # Concatenate all tuples in res['result'] into a single string
+            meta_string = "\n".join("\t".join(item) for item in res["result"])
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in show stats meta:\n %s" % (expect, meta_string))
 
     def assert_trace_values_contains(self, query, *expects):
@@ -2723,6 +2743,15 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         else:
             tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
 
+<<<<<<< HEAD
+=======
+    def print_table_partitions_num(self, table_name) -> str:
+        res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
+        tools.assert_true(res["status"], "show schema change task error")
+        ans = res["result"]
+        return str(len(ans))
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     def assert_table_partitions_num(self, table_name, expect_num):
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
         tools.assert_true(res["status"], "show schema change task error")

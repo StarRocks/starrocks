@@ -14,7 +14,11 @@
 
 package com.starrocks.scheduler;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -54,7 +58,11 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
 
             if (ctx.getState().isError()) {
                 // throw exception if StmtExecutor execute failed
+<<<<<<< HEAD
                 throw new UserException(ctx.getState().getErrorMessage());
+=======
+                throw new StarRocksException(ctx.getState().getErrorMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
 
             // Cache select's metrics is held by sub StmtExecutor
@@ -76,17 +84,29 @@ public class DataCacheSelectProcessor extends BaseTaskRunProcessor {
     }
 
     @NotNull
+<<<<<<< HEAD
     private static DataCacheSelectMetrics getDataCacheSelectMetrics(StmtExecutor executor) throws UserException {
         List<StmtExecutor> subExecutors = executor.getSubStmtExecutors();
 
         if (subExecutors.size() != 1) {
             throw new UserException("No sub executor in DataCache Select");
+=======
+    private static DataCacheSelectMetrics getDataCacheSelectMetrics(StmtExecutor executor) throws StarRocksException {
+        List<StmtExecutor> subExecutors = executor.getSubStmtExecutors();
+
+        if (subExecutors.size() != 1) {
+            throw new StarRocksException("No sub executor in DataCache Select");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         DataCacheSelectMetrics metrics = subExecutors.get(0).getCoordinator().getDataCacheSelectMetrics();
 
         if (metrics == null) {
+<<<<<<< HEAD
             throw new UserException("Can't retrieve DataCache select metrics");
+=======
+            throw new StarRocksException("Can't retrieve DataCache select metrics");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         return metrics;
     }

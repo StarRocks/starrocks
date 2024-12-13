@@ -22,7 +22,11 @@ import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTablet;
@@ -33,6 +37,10 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -152,7 +160,11 @@ public class WarehouseManager implements Writable {
 
         try {
             return GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());
             return new ArrayList<>();
         }
@@ -323,6 +335,13 @@ public class WarehouseManager implements Writable {
         throw new DdlException("Multi-Warehouse is not implemented");
     }
 
+<<<<<<< HEAD
+=======
+    public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
+        throw new DdlException("Multi-Warehouse is not implemented");
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public Set<String> getAllWarehouseNames() {
         return Sets.newHashSet(DEFAULT_WAREHOUSE_NAME);
     }

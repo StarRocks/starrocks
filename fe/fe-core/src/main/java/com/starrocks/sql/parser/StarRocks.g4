@@ -316,6 +316,10 @@ statement
     | showWarehousesStatement
     | showClustersStatement
     | showNodesStatement
+<<<<<<< HEAD
+=======
+    | alterWarehouseStatement
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     // Unsupported Statement
     | unsupportedStatement
@@ -674,7 +678,11 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
+<<<<<<< HEAD
     : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)?
+=======
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION (partitionRangeDesc | listPartitionValues))? FORCE? (WITH (SYNC | ASYNC) MODE)? (WITH PRIORITY priority=INTEGER_VALUE)?
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -1132,6 +1140,10 @@ addPartitionClause
 dropPartitionClause
     : DROP TEMPORARY? (PARTITION (IF EXISTS)? identifier | PARTITIONS (IF EXISTS)? identifierList) FORCE?
     | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
+<<<<<<< HEAD
+=======
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? WHERE where=expression FORCE?
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     ;
 
 truncatePartitionClause
@@ -1263,17 +1275,35 @@ showStreamLoadStatement
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
+<<<<<<< HEAD
     : ANALYZE (FULL | SAMPLE)? TABLE qualifiedName ('(' qualifiedName  (',' qualifiedName)* ')')?
+=======
+    : ANALYZE (FULL | SAMPLE)? TABLE tableName analyzeColumnClause? partitionNames?
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         (WITH (SYNC | ASYNC) MODE)?
         properties?
     ;
 
+<<<<<<< HEAD
+=======
+analyzeColumnClause
+    : '(' qualifiedName  (',' qualifiedName)* ')'               #regularColumns
+    | qualifiedName  (',' qualifiedName)*                       #regularColumns
+    | ALL COLUMNS                                               #allColumns
+    | PREDICATE COLUMNS                                         #predicateColumns
+    ;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 dropStatsStatement
     : DROP STATS qualifiedName
     ;
 
 histogramStatement:
+<<<<<<< HEAD
     ANALYZE TABLE qualifiedName UPDATE HISTOGRAM ON qualifiedName (',' qualifiedName)*
+=======
+    ANALYZE TABLE tableName UPDATE HISTOGRAM ON analyzeColumnClause
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         (WITH bucket=INTEGER_VALUE BUCKETS)?
         properties?
     ;
@@ -2037,6 +2067,13 @@ showNodesStatement
     | SHOW NODES FROM WAREHOUSE identifier
     ;
 
+<<<<<<< HEAD
+=======
+alterWarehouseStatement
+    : ALTER WAREHOUSE warehouseName=identifierOrString modifyPropertiesClause
+    ;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -2140,7 +2177,11 @@ relation
     ;
 
 relationPrimary
+<<<<<<< HEAD
     : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? (
+=======
+    : qualifiedName queryPeriod? partitionNames? tabletList? replicaList? sampleClause? (
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         AS? alias=identifier)? bracketHint? (BEFORE ts=string)?                          #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -2168,6 +2209,13 @@ pivotValue
     : (literalExpression | literalExpressionList) (AS? (identifier | string))?
     ;
 
+<<<<<<< HEAD
+=======
+sampleClause
+    : SAMPLE propertyList?
+    ;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 argumentList
     : expressionList
     | namedArgumentList
@@ -2805,6 +2853,13 @@ qualifiedName
     : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
+<<<<<<< HEAD
+=======
+tableName
+    : qualifiedName
+    ;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 writeBranch
     : FOR? VERSION AS OF identifier
     ;
@@ -2885,7 +2940,11 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
+<<<<<<< HEAD
     | PERCENT_RANK | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+=======
+    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES

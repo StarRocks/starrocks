@@ -85,7 +85,11 @@ public class Constants {
     // Used to determine the scheduling order of Pending TaskRun to Running TaskRun
     // The bigger the priority, the higher the priority, the default value is LOWEST
     public enum TaskRunPriority {
+<<<<<<< HEAD
         LOWEST(0), LOW(20), NORMAL(50), HIGH(80), HIGHEST(100);
+=======
+        LOWEST(0), LOW(20), NORMAL(50), HIGH(80), HIGHER(90), HIGHEST(100);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         private final int value;
 

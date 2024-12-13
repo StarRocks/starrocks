@@ -146,6 +146,7 @@ public class BestMvSelector {
     public static class CandidateContextComparator implements Comparator<CandidateContext> {
         @Override
         public int compare(CandidateContext context1, CandidateContext context2) {
+<<<<<<< HEAD
             // compare group by key num
             int ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
             if (ret != 0) {
@@ -154,6 +155,10 @@ public class BestMvSelector {
 
             // larger is better
             ret = Integer.compare(context2.sortScore, context1.sortScore);
+=======
+            // larger is better
+            int ret = Integer.compare(context2.sortScore, context1.sortScore);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             if (ret != 0) {
                 return ret;
             }
@@ -165,6 +170,15 @@ public class BestMvSelector {
                 return ret;
             }
 
+<<<<<<< HEAD
+=======
+            // compare group by key num
+            ret = Integer.compare(context1.getGroupbyColumnNum(), context2.getGroupbyColumnNum());
+            if (ret != 0) {
+                return ret;
+            }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             // compare by schema column num
             ret = Integer.compare(context1.getSchemaColumnNum(), context2.getSchemaColumnNum());
             if (ret != 0) {

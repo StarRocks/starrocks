@@ -661,8 +661,11 @@ message PStreamLoadResponse {
     optional string json_result = 1;
 }
 
+<<<<<<< HEAD
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
     rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);

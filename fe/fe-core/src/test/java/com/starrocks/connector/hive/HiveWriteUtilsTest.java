@@ -96,4 +96,12 @@ public class HiveWriteUtilsTest {
                 "Failed to create directory",
                 () -> HiveWriteUtils.createDirectory(path, new Configuration()));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testFileCreateByQuery() {
+        Assert.assertFalse(HiveWriteUtils.fileCreatedByQuery("000000_0", "aaaa-bbbb"));
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

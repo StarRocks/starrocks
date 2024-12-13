@@ -72,6 +72,10 @@ public:
     typedef typename std::set<T>::iterator iterator_type;
     ColumnValueRange();
     ColumnValueRange(std::string col_name, LogicalType type, T min, T max);
+<<<<<<< HEAD
+=======
+    ColumnValueRange(std::string col_name, LogicalType type, T type_min, T type_max, T min, T max);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
 

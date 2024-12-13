@@ -19,6 +19,7 @@ import com.starrocks.catalog.Table;
 import java.util.Map;
 import java.util.Set;
 
+<<<<<<< HEAD
 public abstract class PartitionDiffResult {
     // For external table, the mapping of base table partition to mv partition:
     // <base table, <base table partition name, mv partition name>>
@@ -26,6 +27,27 @@ public abstract class PartitionDiffResult {
 
     public PartitionDiffResult(Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap) {
         this.refBaseTableMVPartitionMap = refBaseTableMVPartitionMap;
+=======
+public class PartitionDiffResult {
+    // For external table, the mapping of base table partition to mv partition:
+    // <base table, <base table partition name, mv partition name>>
+    public final Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap;
+    // The partition range of the base tables: <base table, <base table partition name, base table partition range>>
+    public final Map<Table, Map<String, PCell>> refBaseTablePartitionMap;
+    // The partition range of the materialized view: <mv partition name, mv partition range>
+    public final Map<String, PCell> mvPartitionToCells;
+    // The diff result of partition range between materialized view and base tables
+    public final PartitionDiff diff;
+
+    public PartitionDiffResult(Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMap,
+                               Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
+                               Map<String, PCell> mvPartitionToCells,
+                               PartitionDiff diff) {
+        this.refBaseTableMVPartitionMap = refBaseTableMVPartitionMap;
+        this.refBaseTablePartitionMap = refBaseTablePartitionMap;
+        this.diff = diff;
+        this.mvPartitionToCells = mvPartitionToCells;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public Map<Table, Map<String, Set<String>>> getRefBaseTableMVPartitionMap() {

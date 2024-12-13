@@ -1457,6 +1457,13 @@ public class QueryAnalyzer {
                 }
             }
 
+<<<<<<< HEAD
+=======
+            if (table instanceof OlapTable) {
+                ((OlapTable) table).maySetDatabaseName(db.getFullName());
+            }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

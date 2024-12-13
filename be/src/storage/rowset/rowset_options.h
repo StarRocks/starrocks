@@ -94,6 +94,11 @@ public:
     bool use_vector_index = false;
 
     VectorSearchOptionPtr vector_search_option = nullptr;
+<<<<<<< HEAD
+=======
+
+    TTableSampleOptions sample_options;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 };
 
 } // namespace starrocks

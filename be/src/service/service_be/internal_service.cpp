@@ -254,5 +254,8 @@ void BackendInternalServiceImpl<T>::local_tablet_reader_scan_get_next(google::pr
 }
 
 template class BackendInternalServiceImpl<PInternalService>;
+<<<<<<< HEAD
 template class BackendInternalServiceImpl<doris::PBackendService>;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 } // namespace starrocks

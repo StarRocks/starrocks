@@ -151,6 +151,10 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -1071,5 +1075,14 @@ public class Analyzer {
         public Void visitShowNodesStatement(ShowNodesStmt statement, ConnectContext context) {
             return null;
         }
+<<<<<<< HEAD
+=======
+
+        @Override
+        public Void visitAlterWarehouseStatement(AlterWarehouseStmt statement, ConnectContext context) {
+            WarehouseAnalyzer.analyze(statement, context);
+            return null;
+        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 }

@@ -75,9 +75,15 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.QueryDumpLog;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.TimeoutException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.Version;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -673,13 +679,18 @@ public class StmtExecutor {
                             // to this failed execution.
                             String queryId = DebugUtil.printId(context.getExecutionId());
                             ProfileManager.getInstance().removeProfile(queryId);
+<<<<<<< HEAD
                         }
 
                         if (context instanceof ArrowFlightSqlConnectContext) {
+=======
+                        } else if (context instanceof ArrowFlightSqlConnectContext) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                             isAsync = true;
                             tryProcessProfileAsync(execPlan, i);
                         } else if (context.isProfileEnabled()) {
                             isAsync = tryProcessProfileAsync(execPlan, i);
+<<<<<<< HEAD
                         }
 
                         if (parsedStmt.isExplain() &&
@@ -691,6 +702,19 @@ public class StmtExecutor {
                             }
                             handleExplainStmt(ExplainAnalyzer.analyze(
                                     ProfilingExecPlan.buildFrom(execPlan), profile, null));
+=======
+                            if (parsedStmt.isExplain() &&
+                                    StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                if (coord != null && coord.isShortCircuit()) {
+                                    throw new StarRocksException(
+                                            "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                    "you can set it off by using  set enable_short_circuit=false");
+                                }
+                                handleExplainStmt(ExplainAnalyzer.analyze(
+                                        ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                        context.getSessionVariable().getColorExplainOutput()));
+                            }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         }
 
                         if (context.getState().isError()) {
@@ -701,11 +725,17 @@ public class StmtExecutor {
                         }
 
                         if (isAsync) {
+<<<<<<< HEAD
                             int timeout = context.getSessionVariable().getQueryTimeoutS();
                             QeProcessorImpl.INSTANCE
                                     .monitorQuery(context.getExecutionId(),
                                             System.currentTimeMillis() + timeout * 1000L +
                                                     context.getSessionVariable().getProfileTimeout() * 1000L);
+=======
+                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
+                                    System.currentTimeMillis() +
+                                            context.getSessionVariable().getProfileTimeout() * 1000L);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         } else {
                             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
@@ -777,7 +807,11 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
@@ -1322,7 +1356,11 @@ public class StmtExecutor {
                 sendFields(colNames, outputExprs);
             }
         }
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (batch != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {
@@ -1465,7 +1503,11 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
+<<<<<<< HEAD
     private void handleAnalyzeProfileStmt() throws IOException, UserException {
+=======
+    private void handleAnalyzeProfileStmt() throws IOException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         AnalyzeProfileStmt analyzeProfileStmt = (AnalyzeProfileStmt) parsedStmt;
         String queryId = analyzeProfileStmt.getQueryId();
         List<Integer> planNodeIds = analyzeProfileStmt.getPlanNodeIds();
@@ -1474,13 +1516,21 @@ public class StmtExecutor {
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {
+<<<<<<< HEAD
             throw new UserException(
+=======
+            throw new StarRocksException(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     "short circuit point query doesn't suppot analyze profile stmt, " +
                             "you can set it off by using  set enable_short_circuit=false");
         }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
                 RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
+<<<<<<< HEAD
                 planNodeIds));
+=======
+                planNodeIds, context.getSessionVariable().getColorExplainOutput()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
@@ -1492,6 +1542,10 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
+<<<<<<< HEAD
+=======
+        statsConnectCtx.setStatisticsConnection(true);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         try {
             executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
         } finally {
@@ -1539,7 +1593,11 @@ public class StmtExecutor {
                 StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                         StatsConstants.AnalyzeType.FULL;
                 statisticExecutor.collectStatistics(statsConnectCtx,
+<<<<<<< HEAD
                         StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+=======
+                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, analyzeStmt.getPartitionIds(),
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                                 analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(),
                                 analyzeType,
@@ -1670,13 +1728,21 @@ public class StmtExecutor {
         }
     }
 
+<<<<<<< HEAD
     private void handleAddBackendBlackListStmt() throws UserException {
+=======
+    private void handleAddBackendBlackListStmt() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
         Authorizer.check(addBackendBlackListStmt, context);
         for (Long beId : addBackendBlackListStmt.getBackendIds()) {
             SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             if (sis.getBackend(beId) == null) {
+<<<<<<< HEAD
                 throw new UserException("Not found backend: " + beId);
+=======
+                throw new StarRocksException("Not found backend: " + beId);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             SimpleScheduler.getHostBlacklist().addByManual(beId);
         }
@@ -1690,11 +1756,19 @@ public class StmtExecutor {
         }
     }
 
+<<<<<<< HEAD
     private void handleExecAsStmt() throws UserException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
     private void handleExecScriptStmt() throws IOException, UserException {
+=======
+    private void handleExecAsStmt() throws StarRocksException {
+        ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
+    }
+
+    private void handleExecScriptStmt() throws IOException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ShowResultSet resultSet = ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
         if (isProxy) {
             proxyResultSet = resultSet;
@@ -1704,11 +1778,19 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
+<<<<<<< HEAD
     private void handleSetRole() throws PrivilegeException, UserException {
         SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
     }
 
     private void handleSetDefaultRole() throws PrivilegeException, UserException {
+=======
+    private void handleSetRole() throws PrivilegeException, StarRocksException {
+        SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
+    }
+
+    private void handleSetDefaultRole() throws PrivilegeException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         SetDefaultRoleExecutor.execute((SetDefaultRoleStmt) parsedStmt, context);
     }
 
@@ -2038,7 +2120,11 @@ public class StmtExecutor {
         DeallocateStmt deallocateStmt = (DeallocateStmt) parsedStmt;
         String stmtName = deallocateStmt.getStmtName();
         if (context.getPreparedStmt(stmtName) == null) {
+<<<<<<< HEAD
             throw new UserException("PrepareStatement `" + stmtName + "` not exist");
+=======
+            throw new StarRocksException("PrepareStatement `" + stmtName + "` not exist");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         context.removePreparedStmt(stmtName);
         context.getState().setOk();
@@ -2188,7 +2274,12 @@ public class StmtExecutor {
                 isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+<<<<<<< HEAD
                     handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
+=======
+                    handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan),
+                            profile, null, context.getSessionVariable().getColorExplainOutput()));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             }
             if (isAsync) {
@@ -2647,7 +2738,11 @@ public class StmtExecutor {
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
             }
+<<<<<<< HEAD
             throw new UserException(t.getMessage(), t);
+=======
+            throw new StarRocksException(t.getMessage(), t);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             if (insertError) {
@@ -2824,7 +2919,11 @@ public class StmtExecutor {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
 
+<<<<<<< HEAD
         boolean isQuery = parsedStmt instanceof QueryStatement;
+=======
+        boolean isQuery = context.isQueryStmt(parsedStmt);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(context.getQueryId()),
                 isQuery,

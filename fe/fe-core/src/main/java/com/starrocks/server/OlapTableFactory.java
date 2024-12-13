@@ -654,16 +654,26 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setCompressionLevel(compressionLevel);
 
             // partition live number
+<<<<<<< HEAD
             int partitionLiveNumber;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
                 partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+=======
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 
             // analyze partition ttl duration
+<<<<<<< HEAD
             Pair<String, PeriodDuration> ttlDuration = null;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                 ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+=======
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 if (ttlDuration == null) {
                     throw new DdlException("Invalid partition ttl duration");
                 }
@@ -671,6 +681,20 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().setPartitionTTL(ttlDuration.second);
             }
 
+<<<<<<< HEAD
+=======
+            // analyze partition retention condition
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                String ttlCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, table, properties, true);
+                if (ttlCondition == null) {
+                    throw new DdlException("Invalid partition retention condition");
+                }
+                table.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlCondition);
+                table.getTableProperty().setPartitionRetentionCondition(ttlCondition);
+            }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             try {
                 processConstraint(db, table, properties);
             } catch (AnalysisException e) {

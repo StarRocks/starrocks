@@ -24,7 +24,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.SetMultimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.OlapScanNode;
@@ -82,7 +86,11 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
     }
 
     @Override
+<<<<<<< HEAD
     public void exec() throws UserException {
+=======
+    public void exec() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (result != null) {
             return;
         }
@@ -227,7 +235,11 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         return backend2Tablets;
     }
 
+<<<<<<< HEAD
     private SetMultimap<TNetworkAddress, TExecShortCircuitParams> createRequests() throws UserException {
+=======
+    private SetMultimap<TNetworkAddress, TExecShortCircuitParams> createRequests() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         SetMultimap<TNetworkAddress, TExecShortCircuitParams> toSendRequests = HashMultimap.create();
         Optional<PlanNode> planNode = getOlapScanNode();
         if (planNode.isEmpty()) {

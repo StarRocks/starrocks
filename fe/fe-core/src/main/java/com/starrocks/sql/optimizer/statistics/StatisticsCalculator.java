@@ -151,6 +151,10 @@ import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import com.starrocks.statistic.StatisticUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -222,6 +226,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
+<<<<<<< HEAD
+=======
+        PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
+                context.getOptExpression());
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
         if (null != predicate && !predicate.isNotEvalEstimate()) {
@@ -347,6 +357,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                      Collection<Long> selectedPartitionIds,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
+<<<<<<< HEAD
+=======
+
+        PredicateColumnsMgr.getInstance().recordScanColumns(colRefToColumnMetaMap, table, context.getOptExpression());
+        PredicateColumnsMgr.getInstance()
+                .recordPredicateColumns(node.getPredicate(), optimizerContext.getColumnRefFactory(),
+                        context.getOptExpression());
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // 1. get table row count
         long tableRowCount = StatisticsCalcUtils.getTableRowCount(table, node, optimizerContext);
         // 2. get required columns statistics
@@ -976,6 +995,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         //Update the statistics of the GroupBy column
         Map<ColumnRefOperator, ColumnStatistic> groupStatisticsMap = new HashMap<>();
         double rowCount = computeGroupByStatistics(groupBys, inputStatistics, groupStatisticsMap);
+<<<<<<< HEAD
+=======
+        PredicateColumnsMgr.getInstance()
+                .recordGroupByColumns(aggregations, groupBys, optimizerContext.getColumnRefFactory(),
+                        context.getOptExpression());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         //Update Node Statistics
         builder.addColumnStatistics(groupStatisticsMap);
@@ -1081,6 +1106,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
                 rightStatistics.getUsedColumns(), allJoinPredicate);
 
+<<<<<<< HEAD
+=======
+        PredicateColumnsMgr.getInstance().recordJoinPredicate(eqOnPredicates, optimizerContext.getColumnRefFactory(),
+                context.getOptExpression());
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Statistics crossJoinStats = crossBuilder.build();
         double innerRowCount = -1;
         // For unknown column Statistics
@@ -1691,11 +1722,21 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalAnalytic(LogicalWindowOperator node, ExpressionContext context) {
+<<<<<<< HEAD
+=======
+        PredicateColumnsMgr.getInstance().recordWindowPartitionBy(node.getPartitionExpressions(),
+                optimizerContext.getColumnRefFactory(), context.getOptExpression());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return computeAnalyticNode(context, node.getWindowCall());
     }
 
     @Override
     public Void visitPhysicalAnalytic(PhysicalWindowOperator node, ExpressionContext context) {
+<<<<<<< HEAD
+=======
+        PredicateColumnsMgr.getInstance().recordWindowPartitionBy(node.getPartitionExpressions(),
+                optimizerContext.getColumnRefFactory(), context.getOptExpression());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return computeAnalyticNode(context, node.getAnalyticCall());
     }
 

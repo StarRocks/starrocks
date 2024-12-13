@@ -42,8 +42,17 @@ public:
                                     const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
                                     std::vector<std::string>& min_values, std::vector<std::string>& max_values);
 
+<<<<<<< HEAD
+=======
+    static Status get_has_nulls(const tparquet::ColumnMetaData* column_meta, std::vector<bool>& has_nulls);
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     static bool has_correct_min_max_stats(const FileMetaData* file_metadata,
                                           const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order);
 };
 
+<<<<<<< HEAD
 } // namespace starrocks::parquet
+=======
+} // namespace starrocks::parquet
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))

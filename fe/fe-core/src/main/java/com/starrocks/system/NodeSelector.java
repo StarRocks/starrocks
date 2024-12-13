@@ -22,7 +22,11 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.commons.collections.CollectionUtils;
@@ -65,19 +69,31 @@ public class NodeSelector {
                 v -> !v.checkDiskExceedLimitForCreate(storageMedium));
     }
 
+<<<<<<< HEAD
     public Long seqChooseBackendOrComputeId() throws UserException {
+=======
+    public Long seqChooseBackendOrComputeId() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<Long> backendIds = seqChooseBackendIds(1, true, false, null);
         if (CollectionUtils.isNotEmpty(backendIds)) {
             return backendIds.get(0);
         }
         if (RunMode.isSharedNothingMode()) {
+<<<<<<< HEAD
             throw new UserException("No backend alive.");
+=======
+            throw new StarRocksException("No backend alive.");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
         if (CollectionUtils.isNotEmpty(computeNodes)) {
             return computeNodes.get(0);
         }
+<<<<<<< HEAD
         throw new UserException("No backend or compute node alive.");
+=======
+        throw new StarRocksException("No backend or compute node alive.");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable,

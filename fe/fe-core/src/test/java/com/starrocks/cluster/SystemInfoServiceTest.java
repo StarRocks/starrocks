@@ -40,7 +40,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
@@ -447,7 +451,11 @@ public class SystemInfoServiceTest {
         Assert.assertEquals(1, computeNods.size());
 
         // test seqChooseBackendOrComputeId func
+<<<<<<< HEAD
         Exception exception = Assertions.assertThrows(UserException.class, () -> {
+=======
+        Exception exception = Assertions.assertThrows(StarRocksException.class, () -> {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend alive."));
@@ -466,7 +474,11 @@ public class SystemInfoServiceTest {
             }
         };
 
+<<<<<<< HEAD
         exception = Assert.assertThrows(UserException.class, () -> {
+=======
+        exception = Assert.assertThrows(StarRocksException.class, () -> {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector().seqChooseBackendOrComputeId();
         });
         Assert.assertTrue(exception.getMessage().contains("No backend or compute node alive."));

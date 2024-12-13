@@ -18,6 +18,10 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -347,6 +351,11 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 "WHERE l_shipdate='1998-01-03'\n" +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainContains(mvName);
+<<<<<<< HEAD
+=======
+
+        FeConstants.enablePruneEmptyOutputScan = true;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
                 "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "WHERE l_shipdate='1998-01-01'\n" +
@@ -357,6 +366,10 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 "WHERE l_shipdate='1998-01-05'\n" +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainWithout(mvName);
+<<<<<<< HEAD
+=======
+        FeConstants.enablePruneEmptyOutputScan = false;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         dropMv("test", "hive_partitioned_mv");
     }

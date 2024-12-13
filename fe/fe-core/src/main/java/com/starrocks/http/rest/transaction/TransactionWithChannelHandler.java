@@ -15,7 +15,11 @@
 package com.starrocks.http.rest.transaction;
 
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
@@ -41,7 +45,11 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
     }
 
     @Override
+<<<<<<< HEAD
     public ResultWrapper handle(BaseRequest request, BaseResponse response) throws UserException {
+=======
+    public ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
         String dbName = txnOperationParams.getDbName();
         String tableName = txnOperationParams.getTableName();
@@ -84,7 +92,11 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 }
                 return new ResultWrapper(redirectAddr);
             default:
+<<<<<<< HEAD
                 throw new UserException("Unsupported operation: " + txnOperation);
+=======
+                throw new StarRocksException("Unsupported operation: " + txnOperation);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 }

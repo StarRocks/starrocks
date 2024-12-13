@@ -20,6 +20,10 @@ add_library(Types STATIC
     date_value.cpp
     hll.cpp
     hll_sketch.cpp
+<<<<<<< HEAD
+=======
+    large_int_value.cpp
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     logical_type.cpp
     map_type_info.cpp
     struct_type_info.cpp

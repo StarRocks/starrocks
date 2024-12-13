@@ -30,7 +30,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionKeyDiscreteDomain;
 import com.starrocks.catalog.PrimitiveType;
+<<<<<<< HEAD
 import com.starrocks.catalog.RangePartitionInfo;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -71,6 +74,7 @@ public class PartitionColPredicateEvaluator {
     private final Column partitionColumn;
 
     public PartitionColPredicateEvaluator(List<Column> partitionColumns,
+<<<<<<< HEAD
                                           RangePartitionInfo rangePartitionInfo, List<Long> candidatePartitions) {
         this.candidatePartitions = candidatePartitions;
         candidateNum = candidatePartitions.size();
@@ -80,6 +84,15 @@ public class PartitionColPredicateEvaluator {
             candidateRanges.add(rangePartitionInfo.getIdToRange(false).get(id));
         }
         exprToCandidateRanges = Maps.newHashMap();
+=======
+                                          List<Long> candidatePartitions,
+                                          List<Range<PartitionKey>> candidateRanges) {
+        this.candidatePartitions = candidatePartitions;
+        this.candidateNum = candidatePartitions.size();
+        this.partitionColumn = partitionColumns.get(0);
+        this.candidateRanges = candidateRanges;
+        this.exprToCandidateRanges = Maps.newHashMap();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public List<Long> prunePartitions(PartitionColPredicateExtractor extractor, ScalarOperator predicates) {

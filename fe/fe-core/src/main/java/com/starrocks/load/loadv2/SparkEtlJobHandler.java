@@ -45,7 +45,11 @@ import com.starrocks.catalog.SparkResource;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
 import com.starrocks.common.util.Util;
@@ -141,7 +145,11 @@ public class SparkEtlJobHandler {
             } else {
                 HdfsUtil.writeFile(configData, jobConfigHdfsPath, brokerDesc);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new LoadException(e.getMessage());
         }
 
@@ -196,7 +204,11 @@ public class SparkEtlJobHandler {
             if (state == State.KILLED) {
                 try {
                     killYarnApplication(appId, loadJobId, resource);
+<<<<<<< HEAD
                 } catch (UserException e) {
+=======
+                } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     LOG.warn(errMsg, e);
                 }
             }
@@ -216,7 +228,11 @@ public class SparkEtlJobHandler {
     }
 
     public void killYarnApplication(String appId, long loadJobId, SparkResource resource)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (!resource.isYarnMaster()) {
             return;
         }
@@ -242,7 +258,11 @@ public class SparkEtlJobHandler {
     }
 
     public EtlStatus getEtlJobStatus(SparkLoadAppHandle handle, String appId, long loadJobId, String etlOutputPath,
+<<<<<<< HEAD
                                      SparkResource resource, BrokerDesc brokerDesc) throws UserException {
+=======
+                                     SparkResource resource, BrokerDesc brokerDesc) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         EtlStatus status = new EtlStatus();
 
         Preconditions.checkState(appId != null && !appId.isEmpty());
@@ -321,7 +341,11 @@ public class SparkEtlJobHandler {
                         status.setFailMsg(dppResult.failedReason);
                     }
                 }
+<<<<<<< HEAD
             } catch (UserException | JsonSyntaxException e) {
+=======
+            } catch (StarRocksException | JsonSyntaxException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 LOG.warn("read broker file failed. path: {}", dppResultFilePath, e);
             }
         }
@@ -330,7 +354,11 @@ public class SparkEtlJobHandler {
     }
 
     public void killEtlJob(SparkLoadAppHandle handle, String appId, long loadJobId, SparkResource resource)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (resource.isYarnMaster()) {
             // The appId may be empty when the load job is in PENDING phase. This is because the appId is
             // parsed from the spark launcher process's output (spark launcher process submit job and then
@@ -362,7 +390,11 @@ public class SparkEtlJobHandler {
             } else {
                 HdfsUtil.parseFile(etlFilePaths, brokerDesc, fileStatuses);
             }
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             throw new Exception(e);
         }
 
@@ -393,7 +425,11 @@ public class SparkEtlJobHandler {
                 HdfsUtil.deletePath(outputPath, brokerDesc);
             }
             LOG.info("delete path success. path: {}", outputPath);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("delete path failed. path: {}", outputPath, e);
         }
     }

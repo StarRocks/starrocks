@@ -25,6 +25,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -123,6 +127,17 @@ public class ColumnRefFactory {
         return columnRefToColumns.get(columnRef);
     }
 
+<<<<<<< HEAD
+=======
+    public Pair<Table, Column> getTableAndColumn(ColumnRefOperator columnRef) {
+        Column column = getColumn(columnRef);
+        if (column == null) {
+            return null;
+        }
+        return Pair.create(columnRefToTable.get(columnRef), column);
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void updateColumnToRelationIds(int columnId, int tableId) {
         columnToRelationIds.put(columnId, tableId);
     }

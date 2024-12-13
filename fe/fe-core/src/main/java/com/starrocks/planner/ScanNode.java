@@ -39,7 +39,11 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
@@ -113,7 +117,11 @@ public abstract class ScanNode extends PlanNode {
     /**
      * cast expr to SlotDescriptor type
      */
+<<<<<<< HEAD
     protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws UserException {
+=======
+    protected Expr castToSlot(SlotDescriptor slotDesc, Expr expr) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (!slotDesc.getType().matchesType(expr.getType())) {
             return expr.castTo(slotDesc.getType());
         } else {

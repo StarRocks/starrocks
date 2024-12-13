@@ -39,8 +39,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -134,7 +139,11 @@ public class LoadLoadingTask extends LoadTask {
         this.warehouseId = builder.warehouseId;
     }
 
+<<<<<<< HEAD
     public void prepare() throws UserException {
+=======
+    public void prepare() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusList, fileNum);

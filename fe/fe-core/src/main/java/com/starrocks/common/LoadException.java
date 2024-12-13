@@ -20,7 +20,11 @@ package com.starrocks.common;
 /**
  * Exception for load
  */
+<<<<<<< HEAD
 public class LoadException extends UserException {
+=======
+public class LoadException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     private static final long serialVersionUID = 1L;
 

@@ -17,7 +17,11 @@ package com.starrocks.pseudocluster;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.AlreadyExistsException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletStat;
@@ -43,7 +47,11 @@ public class BeTabletManager {
         tabletIdsByPartition = Maps.newHashMap();
     }
 
+<<<<<<< HEAD
     public synchronized Tablet createTablet(TCreateTabletReq request) throws UserException {
+=======
+    public synchronized Tablet createTablet(TCreateTabletReq request) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (tablets.get(request.tablet_id) != null) {
             throw new AlreadyExistsException("Tablet already exists");
         }
@@ -51,7 +59,11 @@ public class BeTabletManager {
         if (request.base_tablet_id > 0) {
             Tablet baseTablet = getTablet(request.base_tablet_id);
             if (baseTablet == null) {
+<<<<<<< HEAD
                 throw new UserException("Base tablet not found");
+=======
+                throw new StarRocksException("Base tablet not found");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
             isSchemaChange = true;
         }

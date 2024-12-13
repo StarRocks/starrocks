@@ -62,6 +62,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Optional;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -268,6 +272,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         throw new NotImplementedException();
     }
 
+<<<<<<< HEAD
+=======
+    public Optional<String> mayGetDatabaseName() {
+        return Optional.empty();
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public String getName() {
         return name;
     }
@@ -472,6 +483,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return nameToColumn.get(columnId.getId());
     }
 
+<<<<<<< HEAD
+=======
+    public Column getColumnByUniqueId(long uniqueId) {
+        return fullSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst().get();
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public boolean containColumn(String columnName) {
         return nameToColumn.containsKey(columnName);
     }

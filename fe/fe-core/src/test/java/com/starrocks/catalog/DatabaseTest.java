@@ -36,7 +36,11 @@ package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
@@ -159,7 +163,11 @@ public class DatabaseTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAddFunction() throws UserException {
+=======
+    public void testAddFunction() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         // Add addIntInt function to database
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
@@ -176,7 +184,11 @@ public class DatabaseTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAddFunctionGivenFunctionAlreadyExists() throws UserException {
+=======
+    public void testAddFunctionGivenFunctionAlreadyExists() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
         final Type[] argTypes = {Type.INT, Type.INT};
@@ -186,11 +198,19 @@ public class DatabaseTest {
         db.addFunction(f);
 
         // Attempt to add the same UDF again, expecting an exception
+<<<<<<< HEAD
         Assert.assertThrows(UserException.class, () -> db.addFunction(f));
     }
 
     @Test
     public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws UserException {
+=======
+        Assert.assertThrows(StarRocksException.class, () -> db.addFunction(f));
+    }
+
+    @Test
+    public void testAddFunctionGivenFunctionAlreadyExistsAndAllowExisting() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         FunctionName name = new FunctionName(null, "addIntInt");
         name.setDb(db.getCatalogName());
         final Type[] argTypes = {Type.INT, Type.INT};

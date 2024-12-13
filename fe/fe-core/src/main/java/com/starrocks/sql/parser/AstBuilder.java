@@ -444,6 +444,10 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.TableSampleClause;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -474,6 +478,10 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -886,7 +894,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (context.identifierList() == null) {
             if (context.partitionExpr() != null) {
+<<<<<<< HEAD
                 List<ParseNode> multiDescList = Lists.newArrayList(); 
+=======
+                List<ParseNode> multiDescList = Lists.newArrayList();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 for (StarRocksParser.PartitionExprContext partitionExpr : context.partitionExpr()) {
                     if (partitionExpr.identifier() != null) {
                         Identifier identifier = (Identifier) visit(partitionExpr.identifier());
@@ -2109,7 +2121,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
         return new RefreshMaterializedViewStatement(mvName, new EitherOr(rangePartitionDesc, cells),
+<<<<<<< HEAD
                 context.FORCE() != null, context.SYNC() != null, createPos(context));
+=======
+                context.FORCE() != null, context.SYNC() != null,
+                context.priority != null ? Integer.parseInt(context.priority.getText()) : null,
+                createPos(context));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override
@@ -2610,12 +2628,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return columns;
     }
 
+<<<<<<< HEAD
     @Override
     public ParseNode visitAnalyzeStatement(StarRocksParser.AnalyzeStatementContext context) {
         List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
                 collect(toList());
         TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
         List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
+=======
+    private Pair<Boolean, List<Expr>> visitAnalyzeColumnClause(StarRocksParser.AnalyzeColumnClauseContext context) {
+        boolean usePredicateColumns = false;
+        List<Expr> columns = Lists.newArrayList();
+        if (context == null) {
+            // noop
+        } else if (context instanceof StarRocksParser.AllColumnsContext) {
+            // noop
+        } else if (context instanceof StarRocksParser.PredicateColumnsContext) {
+            usePredicateColumns = true;
+        } else if (context instanceof StarRocksParser.RegularColumnsContext) {
+            StarRocksParser.RegularColumnsContext regularColumnsContext =
+                    (StarRocksParser.RegularColumnsContext) context;
+            List<QualifiedName> names = regularColumnsContext.qualifiedName().stream()
+                    .map(this::getQualifiedName).collect(toList());
+            columns = getAnalyzeColumns(names);
+        } else {
+            Preconditions.checkState(false, "unreachable");
+        }
+
+        return Pair.create(usePredicateColumns, columns);
+    }
+
+    @Override
+    public ParseNode visitAnalyzeStatement(StarRocksParser.AnalyzeStatementContext context) {
+        PartitionNames partitionNames = null;
+        if (context.partitionNames() != null) {
+            partitionNames = (PartitionNames) visit(context.partitionNames());
+        }
+
+        TableName tableName = qualifiedNameToTableName(getQualifiedName(context.tableName().qualifiedName()));
+        Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2625,9 +2677,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+<<<<<<< HEAD
         return new AnalyzeStmt(tableName, columns, properties,
                 context.SAMPLE() != null,
                 context.ASYNC() != null,
+=======
+        return new AnalyzeStmt(tableName, analyzeColumn.second, partitionNames, properties,
+                context.SAMPLE() != null,
+                context.ASYNC() != null,
+                analyzeColumn.first,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 new AnalyzeBasicDesc(), createPos(context));
     }
 
@@ -2721,10 +2780,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private AnalyzeStmt histogramStatement(StarRocksParser.HistogramStatementContext context) {
+<<<<<<< HEAD
         List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
                 collect(toList());
         TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
         List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
+=======
+        TableName tableName = getTableName(context.tableName().qualifiedName());
+
+        Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2741,8 +2806,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             bucket = Config.histogram_buckets_size;
         }
 
+<<<<<<< HEAD
         return new AnalyzeStmt(tableName, columns, properties, true,
                 false, new AnalyzeHistogramDesc(bucket), createPos(context));
+=======
+        return new AnalyzeStmt(tableName, analyzeColumn.second, null, properties, true,
+                false, analyzeColumn.first, new AnalyzeHistogramDesc(bucket), createPos(context));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override
@@ -4729,6 +4799,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (identifier != null) {
             String partitionName = ((Identifier) visit(context.identifier())).getValue();
             return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+<<<<<<< HEAD
+=======
+        } else if (context.where != null) {
+            Expr whereExpr = (Expr) visitIfPresent(context.where);
+            return new DropPartitionClause(exists, whereExpr, temp, force, createPos(context));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         } else {
             if (CollectionUtils.isNotEmpty(identifierList)) {
                 List<String> partitionNames = identifierList.stream().map(i -> i.getValue()).collect(toList());
@@ -5015,6 +5091,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowNodesStmt(warehouseName, pattern, createPos(context));
     }
 
+<<<<<<< HEAD
+=======
+    @Override
+    public ParseNode visitAlterWarehouseStatement(StarRocksParser.AlterWarehouseStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String whName = identifier.getValue();
+        Map<String, String> properties = new HashMap<>();
+        if (context.modifyPropertiesClause() != null) {
+            ModifyTablePropertiesClause clause = (ModifyTablePropertiesClause) visit(context.modifyPropertiesClause());
+            properties = clause.getProperties();
+        }
+        return new AlterWarehouseStmt(whName, properties, createPos(context));
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // ------------------------------------------- Query Statement -----------------------------------------------------
 
     @Override
@@ -5494,10 +5585,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+<<<<<<< HEAD
+=======
+        if (context.sampleClause() != null) {
+            tableRelation.setSampleClause(visitSampleClause(context.sampleClause()));
+        }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return tableRelation;
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TableSampleClause visitSampleClause(StarRocksParser.SampleClauseContext context) {
+        TableSampleClause result = new TableSampleClause(createPos(context));
+        if (context.propertyList() != null) {
+            Map<String, String> properties = getPropertyList(context.propertyList());
+            try {
+                result.analyzeProperties(properties);
+            } catch (AnalysisException e) {
+                throw new ParsingException(e.getMessage(), createPos(context));
+            }
+        }
+        return result;
+    }
+
+    @Override
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public ParseNode visitQueryPeriod(StarRocksParser.QueryPeriodContext context) {
         if (context.periodType() == null || context.end == null) {
             return null;
@@ -8052,6 +8167,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return ((Identifier) visit(context)).getValue();
     }
 
+<<<<<<< HEAD
+=======
+    private TableName getTableName(StarRocksParser.QualifiedNameContext context) {
+        return qualifiedNameToTableName(getQualifiedName(context));
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
         List<String> parts = new ArrayList<>();
         NodePosition pos = createPos(context);

@@ -15,6 +15,10 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Expr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
@@ -28,6 +32,10 @@ public class DropPartitionClause extends AlterTableClause {
     private final boolean forceDrop;
     private final MultiRangePartitionDesc multiRangePartitionDesc;
     private final List<String> partitionNames;
+<<<<<<< HEAD
+=======
+    private final Expr dropWhereExpr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     //Object Resolved by Analyzer
     private List<String> resolvedPartitionNames;
@@ -45,6 +53,10 @@ public class DropPartitionClause extends AlterTableClause {
         this.forceDrop = forceDrop;
         this.multiRangePartitionDesc = null;
         this.partitionNames = null;
+<<<<<<< HEAD
+=======
+        this.dropWhereExpr = null;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public DropPartitionClause(boolean ifExists, List<String> partitionNames, boolean isTempPartition,
@@ -56,6 +68,10 @@ public class DropPartitionClause extends AlterTableClause {
         this.forceDrop = forceDrop;
         this.multiRangePartitionDesc = null;
         this.partitionNames = partitionNames;
+<<<<<<< HEAD
+=======
+        this.dropWhereExpr = null;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public DropPartitionClause(boolean ifExists, MultiRangePartitionDesc multiRangePartitionDesc, boolean isTempPartition,
@@ -67,6 +83,26 @@ public class DropPartitionClause extends AlterTableClause {
         this.forceDrop = forceDrop;
         this.multiRangePartitionDesc = multiRangePartitionDesc;
         this.partitionNames = null;
+<<<<<<< HEAD
+=======
+        this.dropWhereExpr = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, Expr whereExpr, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.forceDrop = forceDrop;
+        this.multiRangePartitionDesc = null;
+        this.partitionNames = null;
+        this.dropWhereExpr = whereExpr;
+    }
+
+    public Expr getDropWhereExpr() {
+        return dropWhereExpr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public List<String> getResolvedPartitionNames() {

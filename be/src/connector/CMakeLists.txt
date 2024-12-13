@@ -31,4 +31,8 @@ add_library(Connector STATIC
         utils.cpp
         async_flush_stream_poller.cpp
         sink_memory_manager.cpp
+<<<<<<< HEAD
+=======
+        deletion_vector/deletion_vector.cpp
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 )

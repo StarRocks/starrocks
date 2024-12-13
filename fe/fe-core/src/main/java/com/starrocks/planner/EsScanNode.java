@@ -43,7 +43,11 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.EsTable;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
 import com.starrocks.connector.elasticsearch.QueryBuilders;
@@ -90,7 +94,11 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         super.init(analyzer);
 
         assignNodes();
@@ -106,7 +114,11 @@ public class EsScanNode extends ScanNode {
     }
 
     @Override
+<<<<<<< HEAD
     public void finalizeStats(Analyzer analyzer) throws UserException {
+=======
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     /**
@@ -165,7 +177,11 @@ public class EsScanNode extends ScanNode {
         msg.es_scan_node = esScanNode;
     }
 
+<<<<<<< HEAD
     public void assignNodes() throws UserException {
+=======
+    public void assignNodes() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         nodeMap = HashMultimap.create();
         nodeList = Lists.newArrayList();
 
@@ -190,7 +206,11 @@ public class EsScanNode extends ScanNode {
             }
         }
         if (nodeMap.isEmpty()) {
+<<<<<<< HEAD
             throw new UserException("No Alive backends or compute nodes");
+=======
+            throw new StarRocksException("No Alive backends or compute nodes");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 

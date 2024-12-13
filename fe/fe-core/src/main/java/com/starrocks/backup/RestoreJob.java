@@ -83,7 +83,11 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -888,7 +892,11 @@ public class RestoreJob extends AbstractJob {
         for (Function fn : functions) {
             try {
                 db.addFunction(fn, true, false);
+<<<<<<< HEAD
             } catch (UserException e) {
+=======
+            } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + fn.signatureString() +
                         " failed when restore");
             }
@@ -1356,7 +1364,11 @@ public class RestoreJob extends AbstractJob {
                         BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
                         try {
                             HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+<<<<<<< HEAD
                         } catch (UserException e) {
+=======
+                        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                             status = new Status(ErrCode.COMMON_ERROR,
                                     "Get properties from " + repo.getLocation() + " error.");
                             return;

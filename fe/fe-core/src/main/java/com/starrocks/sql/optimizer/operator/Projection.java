@@ -81,6 +81,16 @@ public class Projection {
         return usedColumns;
     }
 
+<<<<<<< HEAD
+=======
+    public ScalarOperator resolveColumnRef(ColumnRefOperator ref) {
+        if (columnRefMap.containsKey(ref)) {
+            return columnRefMap.get(ref);
+        }
+        return commonSubOperatorMap.get(ref);
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         return columnRefMap;
     }

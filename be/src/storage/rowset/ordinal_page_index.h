@@ -122,12 +122,16 @@ public:
         }
     }
 
+<<<<<<< HEAD
     void print_debug_info() {
         for (int i = 0; i < _num_pages; i++) {
             LOG(INFO) << "ordinals" << i << _ordinals.get()[i];
             LOG(INFO) << "pages" << i << _pages.get()[i];
         }
     }
+=======
+    void print_debug_info();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 private:
     friend OrdinalPageIndexIterator;

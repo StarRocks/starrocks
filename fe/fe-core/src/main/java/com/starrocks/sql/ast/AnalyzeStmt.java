@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
@@ -21,6 +24,10 @@ import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.parser.NodePosition;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections4.CollectionUtils;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 import java.util.List;
 import java.util.Map;
@@ -28,6 +35,7 @@ import java.util.stream.Collectors;
 
 public class AnalyzeStmt extends StatementBase {
     private final TableName tbl;
+<<<<<<< HEAD
     private List<Expr> columns;
     private List<String> columnNames = Lists.newArrayList();
     private final boolean isSample;
@@ -38,12 +46,38 @@ public class AnalyzeStmt extends StatementBase {
 
     public AnalyzeStmt(TableName tbl, List<Expr> columns, Map<String, String> properties,
                        boolean isSample, boolean isAsync,
+=======
+    private final boolean isSample;
+    private boolean isAsync;
+    private boolean isExternal = false;
+    private final PartitionNames partitionNames;
+    private List<Long> partitionIds = null;
+    private Map<String, String> properties;
+    private final AnalyzeTypeDesc analyzeTypeDesc;
+
+    // Mode 1: specified columns
+    private List<Expr> columns;
+    private List<String> columnNames = Lists.newArrayList();
+    // Mode 2: predicate columns
+    private final boolean usePredicateColumns;
+    // Mode 3: all columns, identical to empty columns
+
+    public AnalyzeStmt(TableName tbl, List<Expr> columns, PartitionNames partitionNames, Map<String, String> properties,
+                       boolean isSample, boolean isAsync, boolean usePredicateColumns,
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                        AnalyzeTypeDesc analyzeTypeDesc, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
         this.columns = columns;
+<<<<<<< HEAD
         this.isSample = isSample;
         this.isAsync = isAsync;
+=======
+        this.partitionNames = partitionNames;
+        this.isSample = isSample;
+        this.isAsync = isAsync;
+        this.usePredicateColumns = usePredicateColumns;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         this.properties = properties;
         this.analyzeTypeDesc = analyzeTypeDesc;
     }
@@ -76,6 +110,17 @@ public class AnalyzeStmt extends StatementBase {
         return isAsync;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isAllColumns() {
+        return CollectionUtils.isEmpty(columns);
+    }
+
+    public boolean isUsePredicateColumns() {
+        return usePredicateColumns;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void setIsAsync(boolean value) {
         this.isAsync = value;
     }
@@ -100,6 +145,21 @@ public class AnalyzeStmt extends StatementBase {
         this.isExternal = isExternal;
     }
 
+<<<<<<< HEAD
+=======
+    public PartitionNames getPartitionNames() {
+        return partitionNames;
+    }
+
+    public void setPartitionIds(List<Long> partitionIds) {
+        this.partitionIds = partitionIds;
+    }
+
+    public List<Long> getPartitionIds() {
+        return partitionIds;
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_WITH_SYNC;

@@ -80,7 +80,11 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
     }
 
     @Override
+<<<<<<< HEAD
     protected MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
+=======
+    public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<Partition> partitions = Lists.newArrayList(mv.getPartitions());
         if (partitions.size() > 0 && partitions.get(0).getDefaultPhysicalPartition().getVisibleVersion() <= 1) {
             // the mv is newly created, can not use it to rewrite query.
@@ -88,4 +92,13 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
         }
         return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
+        // for force mv mode, always no need to refresh for non-partitioned mv.
+        return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }

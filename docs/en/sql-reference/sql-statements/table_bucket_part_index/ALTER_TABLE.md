@@ -106,7 +106,11 @@ Currently, column comments cannot be modified.
 
 #### ADD PARTITION(S)
 
+<<<<<<< HEAD
 You can choose to add range partitions or list partitions.
+=======
+You can choose to add range partitions or list partitions. Adding expression partitions is not supported.
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 Syntax：
 

@@ -798,12 +798,15 @@ public class Config extends ConfigBase {
     public static int rpc_port = 9020;
 
     /**
+<<<<<<< HEAD
      * Arrow Flight SQL server port
      */
     @ConfField
     public static int arrow_flight_port = 9408;
 
     /**
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
      * The connection timeout and socket timeout config for thrift server
      * The value for thrift_client_timeout_ms is set to be larger than zero to prevent
      * some hang up problems in java.net.SocketInputStream.socketRead0
@@ -2018,6 +2021,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
+    public static long statistic_predicate_columns_persist_interval_sec = 60L;
+
+    @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
+            "columns after this period")
+    public static long statistic_predicate_columns_ttl_hours = 24;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     /**
      * Num of thread to handle statistic collect(analyze command)
      */
@@ -2120,6 +2133,12 @@ public class Config extends ConfigBase {
             "we would use sample statistics instead of full statistics")
     public static double statistic_sample_collect_ratio_threshold_of_first_load = 0.1;
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true)
+    public static boolean statistic_use_meta_statistics = true;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     /**
      * default bucket size of histogram statistics
      */
@@ -2144,6 +2163,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long histogram_max_sample_row_count = 10000000;
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true, comment = "Use table sample instead of row-level bernoulli sample")
+    public static boolean histogram_enable_table_sample = true;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     @ConfField(mutable = true)
     public static long connector_table_query_trigger_analyze_small_table_rows = 10000000; // 10M
 
@@ -2745,6 +2770,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true)
+    public static int lake_warehouse_max_compute_replica = 3;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
     public static String lake_compaction_disable_tables = "";
@@ -2873,10 +2904,18 @@ public class Config extends ConfigBase {
     public static int profile_info_reserved_num = 500;
 
     /**
+<<<<<<< HEAD
      * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
      * Default value: 500
      */
     @ConfField(mutable = true)
+=======
+     * Deprecated
+     * Number of stream load profile infos reserved by `ProfileManager` for recently executed stream load and routine load task.
+     * Default value: 500
+     */
+    @ConfField(mutable = true, comment = "Deprecated")
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public static int load_profile_info_reserved_num = 500;
 
     /**
@@ -3213,12 +3252,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lock_manager_enable_resolve_deadlock = false;
 
+<<<<<<< HEAD
     /**
      * Whether to use table level lock
      */
     @ConfField
     public static boolean lock_manager_enable_using_fine_granularity_lock = true;
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
     /**
@@ -3332,6 +3374,15 @@ public class Config extends ConfigBase {
 
     public static int batch_write_executor_threads_num = 4096;
 
+<<<<<<< HEAD
+=======
+    /**
+     * Enable Arrow Flight SQL server only when the port is set to positive value.
+     */
+    @ConfField
+    public static int arrow_flight_port = -1;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
 

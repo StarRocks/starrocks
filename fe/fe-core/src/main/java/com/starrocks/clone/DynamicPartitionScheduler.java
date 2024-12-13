@@ -34,10 +34,15 @@
 
 package com.starrocks.clone;
 
+<<<<<<< HEAD
 import com.google.api.client.util.Preconditions;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+=======
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TimestampArithmeticExpr;
@@ -47,18 +52,27 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+=======
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.FrontendDaemon;
@@ -85,10 +99,14 @@ import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
+<<<<<<< HEAD
 import org.threeten.extra.PeriodDuration;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+=======
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -97,11 +115,16 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.Objects;
 import java.util.Set;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
+=======
+import java.util.Set;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 /**
  * This class is used to periodically add or drop partition on an olapTable which specify dynamic partition properties
  * Config.dynamic_partition_enable determine whether this feature is enable, Config.dynamic_partition_check_interval_seconds
@@ -115,6 +138,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     public static final String CREATE_PARTITION_MSG = "createPartitionMsg";
     public static final String DROP_PARTITION_MSG = "dropPartitionMsg";
 
+<<<<<<< HEAD
     private static final String DEFAULT_RUNTIME_VALUE = FeConstants.NULL_STRING;
 
     // runtime information for dynamic partitions key -> <tableName -> value>
@@ -123,6 +147,14 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     private final Set<Pair<Long, Long>> dynamicPartitionTableInfo = Sets.newConcurrentHashSet();
     // (DbId, TableId) for a collection of objects marked with partition_ttl_number > 0 on the table
     private final Set<Pair<Long, Long>> ttlPartitionInfo = Sets.newConcurrentHashSet();
+=======
+    // (DbId, TableId) for a collection of objects marked with "dynamic_partition.enable" = "true" on the table
+    private final Set<Pair<Long, Long>> dynamicPartitionTableInfo = Sets.newConcurrentHashSet();
+    // Scheduler runtime information
+    private final SchedulerRuntimeInfoCollector runtimeInfoCollector = new SchedulerRuntimeInfoCollector();
+    // Partition ttl scheduler
+    private final PartitionTTLScheduler ttlPartitionScheduler = new PartitionTTLScheduler(runtimeInfoCollector);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     private long lastFindingTime = -1;
 
@@ -147,15 +179,24 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     public void registerTtlPartitionTable(Long dbId, Long tableId) {
+<<<<<<< HEAD
         ttlPartitionInfo.add(new Pair<>(dbId, tableId));
     }
 
     public void removeTtlPartitionTable(Long dbId, Long tableId) {
         ttlPartitionInfo.remove(new Pair<>(dbId, tableId));
+=======
+        ttlPartitionScheduler.registerTtlPartitionTable(dbId, tableId);
+    }
+
+    public void removeTtlPartitionTable(Long dbId, Long tableId) {
+        ttlPartitionScheduler.removeTtlPartitionTable(dbId, tableId);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @VisibleForTesting
     public Set<Pair<Long, Long>> getTtlPartitionInfo() {
+<<<<<<< HEAD
         return ttlPartitionInfo;
     }
 
@@ -187,6 +228,21 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         defaultRuntimeInfo.put(CREATE_PARTITION_MSG, DEFAULT_RUNTIME_VALUE);
         defaultRuntimeInfo.put(DROP_PARTITION_MSG, DEFAULT_RUNTIME_VALUE);
         return defaultRuntimeInfo;
+=======
+        return ttlPartitionScheduler.getTtlPartitionInfo();
+    }
+
+    public String getRuntimeInfo(String tableName, String key) {
+        return runtimeInfoCollector.getRuntimeInfo(tableName, key);
+    }
+
+    public void removeRuntimeInfo(String tableName) {
+        runtimeInfoCollector.removeRuntimeInfo(tableName);
+    }
+
+    public void createOrUpdateRuntimeInfo(String tableName, String key, String value) {
+        runtimeInfoCollector.createOrUpdateRuntimeInfo(tableName, key, value);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     private ArrayList<AddPartitionClause> getAddPartitionClause(Database db, OlapTable olapTable,
@@ -246,9 +302,16 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     }
                     isPartitionExists = true;
                     if (addPartitionKeyRange.equals(partitionKeyRange)) {
+<<<<<<< HEAD
                         clearCreatePartitionFailedMsg(olapTable.getName());
                     } else {
                         recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), e.getMessage());
+=======
+                        runtimeInfoCollector.clearCreatePartitionFailedMsg(olapTable.getName());
+                    } else {
+                        runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(),
+                                olapTable.getName(), e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     }
                     break;
                 }
@@ -410,7 +473,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
                 String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
                             "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
+<<<<<<< HEAD
                 recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
+=======
+                runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 skipAddPartition = true;
             }
 
@@ -437,7 +504,11 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 tableName = olapTable.getName();
             } catch (Exception e) {
                 LOG.warn("create or drop partition failed", e);
+<<<<<<< HEAD
                 recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), e.getMessage());
+=======
+                runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return false;
             }
         }
@@ -457,9 +528,15 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 analyzer.analyze(ctx, dropPartitionClause);
 
                 GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
+<<<<<<< HEAD
                 clearDropPartitionFailedMsg(tableName);
             } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
+=======
+                runtimeInfoCollector.clearDropPartitionFailedMsg(tableName);
+            } catch (DdlException e) {
+                runtimeInfoCollector.recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
@@ -473,15 +550,22 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
 
                     GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(ctx,
                                 db, tableName, addPartitionClause);
+<<<<<<< HEAD
                     clearCreatePartitionFailedMsg(tableName);
                 } catch (Exception e) {
                     recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
+=======
+                    runtimeInfoCollector.clearCreatePartitionFailedMsg(tableName);
+                } catch (Exception e) {
+                    runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             }
         }
         return false;
     }
 
+<<<<<<< HEAD
     private void scheduleTTLPartition() {
         Iterator<Pair<Long, Long>> iterator = ttlPartitionInfo.iterator();
         while (iterator.hasNext()) {
@@ -681,6 +765,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         createOrUpdateRuntimeInfo(tableName, DROP_PARTITION_MSG, DEFAULT_RUNTIME_VALUE);
     }
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     private void findSchedulableTables() {
         Map<String, List<String>> dynamicPartitionTables = new HashMap<>();
         Map<String, List<String>> ttlPartitionTables = new HashMap<>();
@@ -747,6 +833,10 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         // single column range partitioning(including expr partitioning, e.g. ... partition by date_trunc('month', col).
         // partition_ttl_number and partition_ttl work for mv with
         // single column range partitioning(including expr partitioning).
+<<<<<<< HEAD
         scheduleTTLPartition();
+=======
+        ttlPartitionScheduler.scheduleTTLPartition();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 }

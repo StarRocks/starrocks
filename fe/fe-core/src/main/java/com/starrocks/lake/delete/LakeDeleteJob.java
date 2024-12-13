@@ -29,7 +29,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
@@ -189,7 +193,11 @@ public class LakeDeleteJob extends DeleteJob {
     }
 
     @Override
+<<<<<<< HEAD
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+=======
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .commitAndPublishTransaction(db, getTransactionId(), getTabletCommitInfos(), getTabletFailInfos(),
                         timeoutMs);

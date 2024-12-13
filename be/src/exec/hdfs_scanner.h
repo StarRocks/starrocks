@@ -178,6 +178,11 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+<<<<<<< HEAD
+=======
+    // the table location
+    std::string table_location;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -213,6 +218,11 @@ struct HdfsScannerParams {
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
+<<<<<<< HEAD
+=======
+    std::shared_ptr<TDeletionVectorDescriptor> deletion_vector_descriptor = nullptr;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     const TIcebergSchema* iceberg_schema = nullptr;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;

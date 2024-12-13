@@ -22,7 +22,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -61,7 +65,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(dbStmt.getFullDbName());
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Failed to create database ", e);
             return false;
         }
@@ -117,7 +125,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Failed to create sample statistics, ", e);
             return false;
         }
@@ -149,7 +161,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Failed to create full statistics table", e);
             return false;
         }
@@ -180,7 +196,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Failed to create histogram statistics table", e);
             return false;
         }
@@ -218,7 +238,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Failed to create full statistics table", e);
             return false;
         }
@@ -248,7 +272,11 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
             Analyzer.analyze(stmt, context);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             LOG.warn("Failed to create external histogram statistics table", e);
             return false;
         }

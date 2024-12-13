@@ -15,7 +15,11 @@ package com.starrocks.qe;
 
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
@@ -25,7 +29,11 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class SetDefaultRoleExecutor {
+<<<<<<< HEAD
     public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
+=======
+    public static void execute(SetDefaultRoleStmt stmt, ConnectContext context) throws StarRocksException, PrivilegeException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         UserIdentity user = stmt.getUserIdentity();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);

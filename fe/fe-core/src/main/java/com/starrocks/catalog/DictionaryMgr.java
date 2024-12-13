@@ -24,9 +24,15 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
@@ -104,16 +110,28 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
 
     private final ExecutorService executor =
             ThreadPoolManager.newDaemonFixedThreadPool(
+<<<<<<< HEAD
                 Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool", true);
 
     public DictionaryMgr() {}
+=======
+                    Config.refresh_dictionary_cache_thread_num, Integer.MAX_VALUE, "refresh-dictionary-cache-pool",
+                    true);
+
+    public DictionaryMgr() {
+    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     public void syncDictionaryMeta(List<Dictionary> dictionaries) {
         if (dictionaries.size() == 0 || !GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
 
+<<<<<<< HEAD
         logModify(this.nextTxnId, this.nextDictionaryId, dictionaries);        
+=======
+        logModify(this.nextTxnId, this.nextDictionaryId, dictionaries);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     public void scheduleTasks() {
@@ -130,8 +148,13 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 // regular schedule
                 if ((dictionary.getNextSchedulableTime() <= System.currentTimeMillis() &&
                         !unfinishedRefreshTasks.contains(id)) ||
+<<<<<<< HEAD
                             // follower -> leader when dictionary is refreshing.
                             (dictionary.isRefreshing() && !runningRefreshTasks.contains(id))) {
+=======
+                        // follower -> leader when dictionary is refreshing.
+                        (dictionary.isRefreshing() && !runningRefreshTasks.contains(id))) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     unfinishedRefreshTasks.add(id);
                     dictionary.setRefreshing();
                     dictionary.updateNextSchedulableTime(dictionary.getRefreshInterval());
@@ -166,7 +189,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             nodes.add(backend.getBrpcAddress());
         }
 
+<<<<<<< HEAD
         List<ComputeNode> computeNodes = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+=======
+        List<ComputeNode> computeNodes =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodes();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         for (ComputeNode cn : computeNodes) {
             nodes.add(cn.getBrpcAddress());
         }
@@ -203,14 +231,23 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             }
         }
         LOG.info("finish processDictionaryCache dictionary id: {}, request type: {}",
+<<<<<<< HEAD
                  request.dictId, request.txnId, request.type);
+=======
+                request.dictId, request.txnId, request.type);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return false;
     }
 
     public void createDictionary(CreateDictionaryStmt stmt, String catalogName, String dbName) throws DdlException {
         Dictionary dictionary = new Dictionary(getAndIncrementDictionaryId(), stmt.getDictionaryName(),
+<<<<<<< HEAD
                                                stmt.getQueryableObject(), catalogName, dbName, stmt.getDictionaryKeys(),
                                                stmt.getDictionaryValues(), stmt.getProperties());
+=======
+                stmt.getQueryableObject(), catalogName, dbName, stmt.getDictionaryKeys(),
+                stmt.getDictionaryValues(), stmt.getProperties());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         dictionary.buildDictionaryProperties();
         GlobalStateMgr.getCurrentState().getEditLog().logCreateDictionary(dictionary);
         addDictionary(dictionary);
@@ -226,7 +263,12 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
     public void dropDictionary(String dictionaryName, boolean isCacheOnly, boolean isReplay) throws MetaNotFoundException {
+=======
+    public void dropDictionary(String dictionaryName, boolean isCacheOnly, boolean isReplay)
+            throws MetaNotFoundException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (!isReplay && !isCacheOnly) {
             DropDictionaryInfo info = new DropDictionaryInfo(dictionaryName);
             GlobalStateMgr.getCurrentState().getEditLog().logDropDictionary(info);
@@ -238,7 +280,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             if (dictionary == null) {
                 throw new MetaNotFoundException("refreshed dictionary not found");
             }
+<<<<<<< HEAD
             
+=======
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             if (!isCacheOnly) {
                 dictionariesMapById.remove(dictionary.getDictionaryId());
                 dictionariesIdMapByName.remove(dictionary.getDictionaryName());
@@ -282,7 +328,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
     }
 
+<<<<<<< HEAD
     public void clearDictionaryCache(Dictionary dictionary, boolean cancel) {     
+=======
+    public void clearDictionaryCache(Dictionary dictionary, boolean cancel) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         PProcessDictionaryCacheRequest request = new PProcessDictionaryCacheRequest();
         request.dictId = dictionary.getDictionaryId();
         request.isCancel = cancel;
@@ -442,7 +492,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 allInfo.add(dictionary.getInfo());
 
                 Map<TNetworkAddress, PProcessDictionaryCacheResult> resultMap = getDictionaryStatistic(dictionary);
+<<<<<<< HEAD
                 
+=======
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 String memoryUsage = "";
                 for (Map.Entry<TNetworkAddress, PProcessDictionaryCacheResult> result : resultMap.entrySet()) {
                     TNetworkAddress address = result.getKey();
@@ -491,13 +545,27 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         // only replay for the follower sync
         if (!GlobalStateMgr.isCheckpointThread() &&
                 (GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.FOLLOWER ||
+<<<<<<< HEAD
                  GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.OBSERVER) &&
                     dictionaries != null && !dictionaries.isEmpty()) {
+=======
+                        GlobalStateMgr.getCurrentState().getFeType() == FrontendNodeType.OBSERVER) &&
+                dictionaries != null && !dictionaries.isEmpty()) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             lock.lock();
             try {
                 for (Dictionary dictionary : dictionaries) {
                     // update dictionary object state
+<<<<<<< HEAD
                     dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+=======
+                    if (dictionariesMapById.containsKey(dictionary.getDictionaryId())) {
+                        dictionariesMapById.put(dictionary.getDictionaryId(), dictionary);
+                    } else {
+                        LOG.warn("dictionary {}, id {} has been deleted",
+                                dictionary.getDictionaryName(), dictionary.getDictionaryId());
+                    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             } finally {
                 lock.unlock();
@@ -510,7 +578,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         writer.writeJson(this);
         writer.close();
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         DictionaryMgr data = reader.readJson(DictionaryMgr.class);
@@ -535,7 +607,11 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 entry.getValue().resetState();
             }
         } finally {
+<<<<<<< HEAD
             lock.unlock(); 
+=======
+            lock.unlock();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
@@ -625,8 +701,14 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
             List<PlanFragment> fragments = execPlan.getFragments();
             List<ScanNode> scanNodes = execPlan.getScanNodes();
             DescriptorTable descTable = execPlan.getDescTbl();
+<<<<<<< HEAD
             Coordinator coord = getCoordinatorFactory().createRefreshDictionaryCacheScheduler(context, queryId, descTable,
                                                                                               fragments, scanNodes);
+=======
+            Coordinator coord =
+                    getCoordinatorFactory().createRefreshDictionaryCacheScheduler(context, queryId, descTable,
+                            fragments, scanNodes);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
             QeProcessorImpl.INSTANCE.registerQuery(queryId, coord);
             int leftTimeSecond = context.getExecTimeout();
@@ -638,10 +720,17 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 if (!status.ok()) {
                     error = true;
                     LOG.warn("execute dictionary cache sink failed " + status.getErrorMsg());
+<<<<<<< HEAD
                     throw new UserException(status.getErrorMsg());
                 }
             } else {
                 throw new UserException("refresh dictionary cache timeout");
+=======
+                    throw new StarRocksException(status.getErrorMsg());
+                }
+            } else {
+                throw new StarRocksException("refresh dictionary cache timeout");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
 
             LOG.info("execute dictionary cache sink success, dictionary id: {}", dictionary.getDictionaryId());
@@ -702,10 +791,18 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
                 GlobalStateMgr.getCurrentState().getDictionaryMgr().updateLastSuccessTxnId(dictionaryId, txnId);
                 dictionary.setFinished();
                 dictionary.setErrorMsg(""); // reset error msg
+<<<<<<< HEAD
             } else if (dictionary.getIgnoreFailedRefresh() && dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
                 dictionary.resetStateBeforeRefresh();
                 dictionary.setErrorMsg("Cancelled and rollback to previous state, errMsg: " +
                                        errMsg);
+=======
+            } else if (dictionary.getIgnoreFailedRefresh() &&
+                    dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
+                dictionary.resetStateBeforeRefresh();
+                dictionary.setErrorMsg("Cancelled and rollback to previous state, errMsg: " +
+                        errMsg);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             } else {
                 dictionary.setCancelled();
                 dictionary.setErrorMsg(errMsg);

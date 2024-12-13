@@ -98,6 +98,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // All references to Column should use columnId instead of name.
     @SerializedName(value = "columnId")
     private ColumnId columnId;
+<<<<<<< HEAD
+=======
+    @SerializedName(value = "uniqueId")
+    private int uniqueId;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     @SerializedName(value = "type")
     private Type type;
@@ -135,8 +140,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
+<<<<<<< HEAD
     @SerializedName(value = "uniqueId")
     private int uniqueId;
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // physicalName is used to store the physical name of the column in the storage layer.
     // for example, the physical name of a column in a parquet file.
     // used in delta lake column mapping name mode

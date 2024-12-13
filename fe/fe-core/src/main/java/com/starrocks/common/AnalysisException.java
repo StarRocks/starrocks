@@ -22,7 +22,11 @@ package com.starrocks.common;
  * Use SemanticException instead
  */
 @Deprecated
+<<<<<<< HEAD
 public class AnalysisException extends UserException {
+=======
+public class AnalysisException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public AnalysisException(String msg, Throwable cause) {
         super(msg, cause);
     }

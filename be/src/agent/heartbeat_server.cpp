@@ -133,7 +133,11 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_http_port(config::be_http_port);
         heartbeat_result.backend_info.__set_be_rpc_port(-1);
         heartbeat_result.backend_info.__set_brpc_port(config::brpc_port);
+<<<<<<< HEAD
         heartbeat_result.backend_info.__set_be_arrow_port(config::be_arrow_port);
+=======
+        heartbeat_result.backend_info.__set_arrow_flight_port(config::arrow_flight_port);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #ifdef USE_STAROS
         heartbeat_result.backend_info.__set_starlet_port(config::starlet_port);
         if (StorageEngine::instance()->get_store_num() != 0) {

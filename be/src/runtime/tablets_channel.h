@@ -57,7 +57,11 @@ public:
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+<<<<<<< HEAD
                            PTabletWriterAddBatchResult* response) = 0;
+=======
+                           PTabletWriterAddBatchResult* response, bool* close_channel_ptr) = 0;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     virtual void cancel() = 0;
 
@@ -68,6 +72,11 @@ public:
     // timeout: in microseconds
     virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
 
+<<<<<<< HEAD
+=======
+    virtual void update_profile() = 0;
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 protected:
     // counter of remaining senders
     std::atomic<int> _num_remaining_senders = 0;

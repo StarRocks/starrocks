@@ -20,7 +20,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -78,13 +82,21 @@ public class SparkRepositoryTest {
         new MockUp<BrokerUtil>() {
             @Mock
             boolean checkPathExist(String remotePath, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return true;
             }
 
             @Mock
             void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 fileStatuses.addAll(files);
             }
         };
@@ -134,19 +146,31 @@ public class SparkRepositoryTest {
         new MockUp<BrokerUtil>() {
             @Mock
             boolean checkPathExist(String remotePath, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return false;
             }
 
             @Mock
             void writeFile(String srcFilePath, String destFilePath, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return;
             }
 
             @Mock
             void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return;
             }
         };
@@ -199,31 +223,51 @@ public class SparkRepositoryTest {
         new MockUp<BrokerUtil>() {
             @Mock
             boolean checkPathExist(String remotePath, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return true;
             }
 
             @Mock
             void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 fileStatuses.addAll(files);
             }
 
             @Mock
             void deletePath(String path, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return;
             }
 
             @Mock
             void writeFile(String srcFilePath, String destFilePath, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return;
             }
 
             @Mock
             void rename(String origFilePath, String destFilePath, BrokerDesc brokerDesc)
+<<<<<<< HEAD
                     throws UserException {
+=======
+                    throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 return;
             }
         };

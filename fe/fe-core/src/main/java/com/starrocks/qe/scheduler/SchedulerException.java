@@ -14,9 +14,15 @@
 
 package com.starrocks.qe.scheduler;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class SchedulerException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class SchedulerException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public SchedulerException(String msg) {
         super(msg);
     }

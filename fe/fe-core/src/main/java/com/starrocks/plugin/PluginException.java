@@ -17,9 +17,15 @@
 
 package com.starrocks.plugin;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 
 public class PluginException extends UserException {
+=======
+import com.starrocks.common.StarRocksException;
+
+public class PluginException extends StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     public PluginException(String msg) {
         super(msg);
     }

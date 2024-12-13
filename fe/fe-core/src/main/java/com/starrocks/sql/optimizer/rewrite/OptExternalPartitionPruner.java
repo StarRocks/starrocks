@@ -312,7 +312,14 @@ public class OptExternalPartitionPruner {
                     LOG.warn("Partition pruning is invalid. queryId: {}", DebugUtil.printId(context.getQueryId()));
                     throw new AnalysisException("Partition pruning is invalid, please check: "
                             + "1. The partition predicate must be included. "
+<<<<<<< HEAD
                             + "2. The left and right children of the partition predicate cannot be function parameters.");
+=======
+                            + "2. The left and right children of the partition predicate cannot be function parameters. "
+                            + "Table: " + table.getCatalogName() + "." + table.getCatalogDBName()
+                            + "." + table.getCatalogTableName() + " " + "Partition columns: "
+                            + partitionColumns.stream().map(Column::getName).collect(Collectors.joining(", ")));
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
 
                 // get partition names
@@ -335,7 +342,11 @@ public class OptExternalPartitionPruner {
                 List<Long> ids = new ArrayList<>();
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
+<<<<<<< HEAD
                     PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
+=======
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     keys.add(partitionKey);
                     ids.add(context.getNextUniquePartitionId());
                 }

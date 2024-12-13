@@ -14,7 +14,11 @@
 
 package com.starrocks.pseudocluster;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletVersionPair;
@@ -55,7 +59,12 @@ public class BeTxnManager {
         this.backend = backend;
     }
 
+<<<<<<< HEAD
     public synchronized void commit(long txnId, long partitionId, Tablet tablet, Rowset rowset) throws UserException {
+=======
+    public synchronized void commit(long txnId, long partitionId, Tablet tablet, Rowset rowset) throws
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         TxnInfo tinfo = txns.computeIfAbsent(txnId, k -> new TxnInfo(k));
         Map<Long, TxnTabletInfo> tablets = tinfo.partitions.computeIfAbsent(partitionId, k -> new HashMap<>());
         TxnTabletInfo tabletInfo = tablets.get(tablet.id);
@@ -96,7 +105,11 @@ public class BeTxnManager {
                 if (tablet == null) {
                     errorTabletIds.add(tabletInfo.tabletId);
                     if (e == null) {
+<<<<<<< HEAD
                         e = new UserException(
+=======
+                        e = new StarRocksException(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                                 "publish version failed txn:" + txnId + " partition:" + pInfo.partition_id + " tablet:" +
                                         tabletInfo.tabletId + " not found");
                     }

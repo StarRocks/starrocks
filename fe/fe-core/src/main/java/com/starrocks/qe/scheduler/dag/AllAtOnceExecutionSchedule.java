@@ -14,7 +14,11 @@
 
 package com.starrocks.qe.scheduler.dag;
 
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.Deployer;
 import com.starrocks.qe.scheduler.slot.DeployState;
@@ -55,7 +59,11 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
                 for (DeployState state : states) {
                     deployer.deployFragments(state);
                 }
+<<<<<<< HEAD
             } catch (UserException | RpcException e) {
+=======
+            } catch (StarRocksException | RpcException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 throw new RuntimeException(e);
             }
             // jvm should use tail optimization.
@@ -79,7 +87,11 @@ public class AllAtOnceExecutionSchedule implements ExecutionSchedule {
     }
 
     @Override
+<<<<<<< HEAD
     public void schedule(Coordinator.ScheduleOption option) throws RpcException, UserException {
+=======
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<DeployState> states = new ArrayList<>();
         for (List<ExecutionFragment> executionFragments : dag.getFragmentsInTopologicalOrderFromRoot()) {
             final DeployState deployState = deployer.createFragmentExecStates(executionFragments);

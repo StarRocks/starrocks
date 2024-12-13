@@ -22,7 +22,11 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -60,7 +64,11 @@ public class SystemHandlerTest {
     }
 
     @Test(expected = RuntimeException.class)
+<<<<<<< HEAD
     public void testModifyBackendAddressLogic() throws UserException {
+=======
+    public void testModifyBackendAddressLogic() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ModifyBackendClause clause = new ModifyBackendClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
@@ -68,7 +76,11 @@ public class SystemHandlerTest {
     }
 
     @Test(expected = NullPointerException.class)
+<<<<<<< HEAD
     public void testModifyFrontendAddressLogic() throws UserException {
+=======
+    public void testModifyFrontendAddressLogic() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.1", "sandbox-fqdn");
         List<AlterClause> clauses = new ArrayList<>();
         clauses.add(clause);
@@ -76,7 +88,11 @@ public class SystemHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testDecommissionInvalidBackend() throws UserException {
+=======
+    public void testDecommissionInvalidBackend() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<String> hostAndPorts = Lists.newArrayList("192.168.1.11:1234");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
@@ -87,7 +103,11 @@ public class SystemHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testDecommissionBackendsReplicasRequirement() throws UserException {
+=======
+    public void testDecommissionBackendsReplicasRequirement() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
@@ -98,7 +118,11 @@ public class SystemHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testDecommissionBackendsSpaceRequirement() throws UserException {
+=======
+    public void testDecommissionBackendsSpaceRequirement() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());
@@ -120,7 +144,11 @@ public class SystemHandlerTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testDecommissionBackends() throws UserException {
+=======
+    public void testDecommissionBackends() throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         List<String> hostAndPorts = Lists.newArrayList("host1:123");
         DecommissionBackendClause decommissionBackendClause = new DecommissionBackendClause(hostAndPorts);
         Analyzer.analyze(new AlterSystemStmt(decommissionBackendClause), new ConnectContext());

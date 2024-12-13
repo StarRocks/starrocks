@@ -18,7 +18,11 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -79,15 +83,25 @@ public abstract class PluginLoader {
         this.pluginContext = new PluginContext();
     }
 
+<<<<<<< HEAD
     public abstract void install() throws UserException, IOException;
 
     public abstract void uninstall() throws IOException, UserException;
+=======
+    public abstract void install() throws StarRocksException, IOException;
+
+    public abstract void uninstall() throws IOException, StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     public boolean isDynamicPlugin() {
         return false;
     }
 
+<<<<<<< HEAD
     public PluginInfo getPluginInfo() throws IOException, UserException {
+=======
+    public PluginInfo getPluginInfo() throws IOException, StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return pluginInfo;
     }
 
@@ -108,6 +122,7 @@ public abstract class PluginLoader {
         return status;
     }
 
+<<<<<<< HEAD
     public void pluginInstallValid() throws UserException {
 
     }
@@ -116,6 +131,16 @@ public abstract class PluginLoader {
         // check plugin flags
         if (plugin != null && (plugin.flags() & Plugin.PLUGIN_NOT_DYNAMIC_UNINSTALL) > 0) {
             throw new UserException("plugin " + pluginInfo + " not allow dynamic uninstall");
+=======
+    public void pluginInstallValid() throws StarRocksException {
+
+    }
+
+    public void pluginUninstallValid() throws StarRocksException {
+        // check plugin flags
+        if (plugin != null && (plugin.flags() & Plugin.PLUGIN_NOT_DYNAMIC_UNINSTALL) > 0) {
+            throw new StarRocksException("plugin " + pluginInfo + " not allow dynamic uninstall");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 

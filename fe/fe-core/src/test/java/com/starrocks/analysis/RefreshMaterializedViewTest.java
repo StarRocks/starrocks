@@ -1247,6 +1247,7 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                     {
                         String sql = "REFRESH MATERIALIZED VIEW test_mv1 PARTITION (('20240101', 'beijing'), ('20240101', " +
                                 "'nanjing')) FORCE;";
+<<<<<<< HEAD
                         RefreshMaterializedViewStatement statement =
                                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
                         Assert.assertTrue(statement.isForceRefresh());
@@ -1256,6 +1257,16 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                                 new PListCell(ImmutableList.of(ImmutableList.of("20240101", "nanjing")))
                         );
                         Assert.assertEquals(expect, statement.getPartitionListDesc());
+=======
+                        try {
+                            RefreshMaterializedViewStatement statement =
+                                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+                            Assert.fail();
+                        } catch (Exception e) {
+                           Assert.assertTrue(e.getMessage().contains("Partition column size 1 is not match with input partition"
+                                   + " value's size 2"));
+                        }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     }
                 });
     }
@@ -1323,7 +1334,11 @@ public class RefreshMaterializedViewTest extends MvRewriteTestBase {
                 .useDatabase("drop_mv_db")
                 .withMaterializedView("CREATE MATERIALIZED VIEW test_mv\n"
                         + "DISTRIBUTED BY HASH(`k2`)\n"
+<<<<<<< HEAD
                         + "REFRESH ASYNC\n"
+=======
+                        + "REFRESH DEFERRED ASYNC\n"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                         + "AS select k1, k2, v1  from drop_db.tbl_with_mv;");
 
         executeInsertSql(connectContext, "insert into drop_db.tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");

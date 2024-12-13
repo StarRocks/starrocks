@@ -48,7 +48,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
@@ -606,11 +610,20 @@ public class Database extends MetaObject implements Writable {
         return catalogName;
     }
 
+<<<<<<< HEAD
     public synchronized void addFunction(Function function) throws UserException {
         addFunction(function, false, false);
     }
 
     public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws UserException {
+=======
+    public synchronized void addFunction(Function function) throws StarRocksException {
+        addFunction(function, false, false);
+    }
+
+    public synchronized void addFunction(Function function, boolean allowExists, boolean createIfNotExists) throws
+            StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         addFunctionImpl(function, false, allowExists, createIfNotExists);
         GlobalStateMgr.getCurrentState().getEditLog().logAddFunction(function);
     }
@@ -618,7 +631,11 @@ public class Database extends MetaObject implements Writable {
     public synchronized void replayAddFunction(Function function) {
         try {
             addFunctionImpl(function, true, false, false);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Preconditions.checkArgument(false);
         }
     }
@@ -633,12 +650,20 @@ public class Database extends MetaObject implements Writable {
     }
 
     private void addFunctionImpl(Function function, boolean isReplay, boolean allowExists, boolean createIfNotExists)
+<<<<<<< HEAD
             throws UserException {
+=======
+            throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String functionName = function.getFunctionName().getFunction();
         List<Function> existFuncs = name2Function.getOrDefault(functionName, ImmutableList.of());
         if (allowExists && createIfNotExists) {
             // In most DB system (like MySQL, Oracle, Snowflake etc.), these two conditions are now allowed to use together
+<<<<<<< HEAD
             throw new UserException(
+=======
+            throw new StarRocksException(
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     "\"IF NOT EXISTS\" and \"OR REPLACE\" cannot be used together in the same CREATE statement");
         }
         if (!isReplay) {
@@ -648,7 +673,11 @@ public class Database extends MetaObject implements Writable {
                         LOG.info("create function [{}] which already exists", functionName);
                         return;
                     } else if (!allowExists) {
+<<<<<<< HEAD
                         throw new UserException("function already exists");
+=======
+                        throw new StarRocksException("function already exists");
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                     }
                 }
             }
@@ -657,7 +686,11 @@ public class Database extends MetaObject implements Writable {
         name2Function.put(functionName, GlobalFunctionMgr.addOrReplaceFunction(function, existFuncs));
     }
 
+<<<<<<< HEAD
     public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+=======
+    public synchronized void dropFunction(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         dropFunctionImpl(function, dropIfExists);
         GlobalStateMgr.getCurrentState().getEditLog().logDropFunction(function);
     }
@@ -667,14 +700,22 @@ public class Database extends MetaObject implements Writable {
                                                            function.hasVarArgs());
         try {
             dropFunctionImpl(fnDesc, true);
+<<<<<<< HEAD
         } catch (UserException ignore) {
+=======
+        } catch (StarRocksException ignore) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
     }
 
     public synchronized void replayDropFunction(FunctionSearchDesc functionSearchDesc) {
         try {
             dropFunctionImpl(functionSearchDesc, false);
+<<<<<<< HEAD
         } catch (UserException e) {
+=======
+        } catch (StarRocksException e) {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             Preconditions.checkArgument(false);
         }
     }
@@ -704,7 +745,11 @@ public class Database extends MetaObject implements Writable {
         return func;
     }
 
+<<<<<<< HEAD
     private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws UserException {
+=======
+    private void dropFunctionImpl(FunctionSearchDesc function, boolean dropIfExists) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String functionName = function.getName().getFunction();
         List<Function> existFuncs = name2Function.get(functionName);
         if (existFuncs == null) {
@@ -712,7 +757,11 @@ public class Database extends MetaObject implements Writable {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
+<<<<<<< HEAD
             throw new UserException("Unknown function, function=" + function.toString());
+=======
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         boolean isFound = false;
         List<Function> newFunctions = new ArrayList<>();
@@ -728,7 +777,11 @@ public class Database extends MetaObject implements Writable {
                 LOG.info("drop function [{}] which does not exist", functionName);
                 return;
             }
+<<<<<<< HEAD
             throw new UserException("Unknown function, function=" + function.toString());
+=======
+            throw new StarRocksException("Unknown function, function=" + function.toString());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
         if (newFunctions.isEmpty()) {
             name2Function.remove(functionName);
@@ -770,6 +823,22 @@ public class Database extends MetaObject implements Writable {
         return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
     }
 
+<<<<<<< HEAD
+=======
+    public static boolean isSystemDatabase(String fullQualifiedName) {
+        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                fullQualifiedName.equalsIgnoreCase(SysDb.DATABASE_NAME);
+    }
+
+    public static boolean isStatisticsDatabase(String fullQualifiedName) {
+        return fullQualifiedName.equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME);
+    }
+
+    public static boolean isSystemOrInternalDatabase(String dbName) {
+        return isSystemDatabase(dbName) || isStatisticsDatabase(dbName);
+    }
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;

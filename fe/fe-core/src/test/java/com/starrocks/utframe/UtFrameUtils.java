@@ -306,6 +306,10 @@ public class UtFrameUtils {
                         retry++ < 600) {
                 Thread.sleep(100);
             }
+<<<<<<< HEAD
+=======
+            FeConstants.enableUnitStatistics = true;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             CREATED_MIN_CLUSTER.set(true);
         } catch (Exception e) {
             e.printStackTrace();

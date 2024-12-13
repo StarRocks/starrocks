@@ -14,14 +14,23 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+<<<<<<< HEAD
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
+=======
+import java.io.DataInputStream;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import java.io.DataOutputStream;
 import java.io.IOException;
 
@@ -36,10 +45,16 @@ public class CompactionTxnCommitAttachmentTest {
 
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bout);
+<<<<<<< HEAD
         attachment2.write((DataOutput) out);
 
         DataInputStream in = new DataInputStream(new ByteArrayInputStream(bout.toByteArray()));
         attachment.readFields((DataInput) in);
+=======
+        Text.writeString(out, GsonUtils.GSON.toJson(attachment2));
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(bout.toByteArray()));
+        attachment = GsonUtils.GSON.fromJson(Text.readString(in), CompactionTxnCommitAttachment.class);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Assert.assertTrue(attachment.getForceCommit());
     }
 }

@@ -1157,9 +1157,18 @@ public:
         if (capacity_ > 127) {
             destroy_slots();
         } else if (capacity_) {
+<<<<<<< HEAD
             for (size_t i = 0; i != capacity_; ++i) {
                 if (IsFull(ctrl_[i])) {
                     PolicyTraits::destroy(&alloc_ref(), slots_ + i);
+=======
+            PHMAP_IF_CONSTEXPR((!std::is_trivially_destructible<typename PolicyTraits::value_type>::value ||
+                                std::is_same<typename Policy::is_flat, std::false_type>::value)) {
+                for (size_t i = 0; i != capacity_; ++i) {
+                    if (IsFull(ctrl_[i])) {
+                        PolicyTraits::destroy(&alloc_ref(), slots_ + i);
+                    }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             }
             size_ = 0;
@@ -1837,9 +1846,18 @@ private:
 
     void destroy_slots() {
         if (!capacity_) return;
+<<<<<<< HEAD
         for (size_t i = 0; i != capacity_; ++i) {
             if (IsFull(ctrl_[i])) {
                 PolicyTraits::destroy(&alloc_ref(), slots_ + i);
+=======
+        PHMAP_IF_CONSTEXPR((!std::is_trivially_destructible<typename PolicyTraits::value_type>::value ||
+                            std::is_same<typename Policy::is_flat, std::false_type>::value)) {
+            for (size_t i = 0; i != capacity_; ++i) {
+                if (IsFull(ctrl_[i])) {
+                    PolicyTraits::destroy(&alloc_ref(), slots_ + i);
+                }
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             }
         }
         auto layout = MakeLayout(capacity_);
@@ -3745,6 +3763,10 @@ struct FlatHashSetPolicy {
     using key_type = T;
     using init_type = T;
     using constant_iterators = std::true_type;
+<<<<<<< HEAD
+=======
+    using is_flat = std::true_type;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     template <class Allocator, class... Args>
     static void construct(Allocator* alloc, slot_type* slot, Args&&... args) {
@@ -3782,6 +3804,10 @@ struct FlatHashMapPolicy {
     using key_type = K;
     using mapped_type = V;
     using init_type = std::pair</*non const*/ key_type, mapped_type>;
+<<<<<<< HEAD
+=======
+    using is_flat = std::true_type;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     template <class Allocator, class... Args>
     static void construct(Allocator* alloc, slot_type* slot, Args&&... args) {
@@ -3858,6 +3884,10 @@ struct NodeHashSetPolicy : phmap::priv::node_hash_policy<T&, NodeHashSetPolicy<T
     using key_type = T;
     using init_type = T;
     using constant_iterators = std::true_type;
+<<<<<<< HEAD
+=======
+    using is_flat = std::false_type;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     template <class Allocator, class... Args>
     static T* new_element(Allocator* alloc, Args&&... args) {
@@ -3896,6 +3926,10 @@ public:
     using key_type = Key;
     using mapped_type = Value;
     using init_type = std::pair</*non const*/ key_type, mapped_type>;
+<<<<<<< HEAD
+=======
+    using is_flat = std::false_type;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
     template <class Allocator, class... Args>
     static value_type* new_element(Allocator* alloc, Args&&... args) {

@@ -39,6 +39,10 @@ public class WarehouseProcDir implements ProcDirInterface {
             .add("CreatedOn")
             .add("ResumedOn")
             .add("UpdatedOn")
+<<<<<<< HEAD
+=======
+            .add("Property")
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             .add("Comment")
             .build();
 

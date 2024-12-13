@@ -28,7 +28,10 @@
 #include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
@@ -97,6 +100,10 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_rpc_timer = nullptr;
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
+<<<<<<< HEAD
+=======
+    RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 };
 
 // map index_id to TabletBEMap(map tablet_id to backend id)

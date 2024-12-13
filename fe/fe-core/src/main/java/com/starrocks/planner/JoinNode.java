@@ -50,7 +50,11 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
@@ -438,7 +442,11 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     }
 
     @Override
+<<<<<<< HEAD
     public void init(Analyzer analyzer) throws UserException {
+=======
+    public void init(Analyzer analyzer) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
     }
 
     @Override

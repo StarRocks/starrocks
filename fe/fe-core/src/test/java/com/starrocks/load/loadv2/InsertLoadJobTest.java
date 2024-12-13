@@ -82,6 +82,7 @@ public class InsertLoadJobTest {
     public void testUpdateProgress(@Mocked GlobalStateMgr globalStateMgr,
                                    @Injectable Database database,
                                    @Injectable Table table) throws MetaNotFoundException {
+<<<<<<< HEAD
         new Expectations() {
             {
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
@@ -93,6 +94,8 @@ public class InsertLoadJobTest {
             }
         };
 
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         {
             InsertLoadJob loadJob = new InsertLoadJob("label", 1L,
                     1L, 1000, "", "", null);

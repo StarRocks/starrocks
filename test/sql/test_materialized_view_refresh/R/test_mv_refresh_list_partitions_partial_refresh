@@ -417,13 +417,20 @@ partition by dt
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
+<<<<<<< HEAD
 'partition_refresh_number' = '-1',
 "replication_num" = "1",
 "partition_ttl_number" = "1"
+=======
+      'partition_refresh_number' = '-1',
+      "replication_num" = "1",
+      "partition_retention_condition" = "dt > '2024-01-01'"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 ) 
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
+<<<<<<< HEAD
 refresh materialized view  test_mv1 partition('2024-01-01') with sync mode;
 select * from test_mv1 order by 1, 2;
 -- result:
@@ -431,6 +438,16 @@ select * from test_mv1 order by 1, 2;
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
+=======
+refresh materialized view test_mv1 with sync mode;
+select * from test_mv1 order by 1, 2;
+-- result:
+2024-01-02	guangdong	20
+-- !result
+function: print_table_partitions_num("test_mv1")
+-- result:
+1
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 -- !result
 function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
@@ -457,6 +474,7 @@ drop materialized view test_mv1;
 -- result:
 -- !result
 create materialized view test_mv1
+<<<<<<< HEAD
 partition by province
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
@@ -500,27 +518,46 @@ drop materialized view test_mv1;
 -- result:
 -- !result
 create materialized view test_mv1
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 partition by dt
 REFRESH DEFERRED MANUAL
 distributed by hash(dt, province) buckets 10 
 PROPERTIES (
+<<<<<<< HEAD
 "replication_num" = "1",
 "partition_ttl_number" = "1"
+=======
+      "replication_num" = "1",
+      "partition_retention_condition" = "dt > '2024-01-01'"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 ) 
 as select dt, province, sum(age) from t5 group by dt, province;
 -- result:
 -- !result
+<<<<<<< HEAD
 refresh materialized view  test_mv1 partition('2024-01-01');
+=======
+refresh materialized view test_mv1;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
 -- result:
 None
 -- !result
 select * from test_mv1 order by 1, 2;
 -- result:
+<<<<<<< HEAD
 -- !result
 function: assert_table_partitions_num("test_mv1", 1)
 -- result:
 None
+=======
+2024-01-02	guangdong	20
+-- !result
+function: print_table_partitions_num("test_mv1")
+-- result:
+1
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 -- !result
 function: print_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
 -- result:
@@ -528,7 +565,11 @@ False
 -- !result
 select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
+<<<<<<< HEAD
 2024-01-01	beijing	120
+=======
+2024-01-01	beijing	100
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 2024-01-01	guangdong	20
 -- !result
 INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
@@ -540,7 +581,11 @@ None
 -- !result
 select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
 -- result:
+<<<<<<< HEAD
 2024-01-01	beijing	140
+=======
+2024-01-01	beijing	120
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 2024-01-01	guangdong	20
 -- !result
 drop materialized view test_mv1;

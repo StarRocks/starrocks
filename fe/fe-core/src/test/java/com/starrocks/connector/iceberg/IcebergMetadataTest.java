@@ -36,7 +36,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -1168,7 +1172,11 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws UserException {
+=======
+    public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
                 Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
 

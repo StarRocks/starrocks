@@ -16,14 +16,36 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.compensa
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.SlotRef;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
+<<<<<<< HEAD
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.server.GlobalStateMgr;
+=======
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.Table;
+import com.starrocks.connector.TableVersionRange;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -32,7 +54,16 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import org.apache.iceberg.Snapshot;
 
 import java.util.List;
@@ -40,6 +71,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_PARTITION_PRUNED;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.convertPartitionKeysToListPredicate;
@@ -121,6 +156,7 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
         }
         List<Column> refBaseTablePartitionCols = refBaseTablePartitionColumns.get(refBaseTable);
         Preconditions.checkState(refBaseTablePartitionCols != null);
+<<<<<<< HEAD
         List<ScalarOperator> partitionColumnRefs = refBaseTablePartitionCols
                 .stream()
                 .map(col -> scanOperator.getColumnReference(col))
@@ -132,6 +168,9 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
         Preconditions.checkState(externalExtraPredicate != null);
         ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), externalExtraPredicate);
         builder.setPredicate(finalPredicate);
+=======
+        ScalarOperator externalExtraPredicate = null;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
             // refresh iceberg table's metadata
             IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
@@ -148,7 +187,82 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                     Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
                             .map(Snapshot::snapshotId));
             builder.setTableVersionRange(versionRange);
+<<<<<<< HEAD
         }
+=======
+            PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
+            if (mvPartitionInfo.isListPartition()) {
+                List<Column> mvPartitionCols = mv.getPartitionColumns();
+                // to iceberg, `partitionKeys` are using LocalTime as partition values which cannot be used to prune iceberg
+                // partitions directly because iceberg uses UTC time in its partition metadata.
+                // convert `partitionKeys` to iceberg utc time here.
+                // Please see MVPCTRefreshListPartitioner#genPartitionPredicate for more details.
+                List<ColumnRefOperator> refPartitionColRefs = refBaseTablePartitionCols
+                        .stream()
+                        .map(col -> scanOperator.getColumnReference(col))
+                        .collect(Collectors.toList());
+                Map<Table, List<SlotRef>> refBaseTablePartitionSlotRefs = mv.getRefBaseTablePartitionSlots();
+                Preconditions.checkArgument(refBaseTablePartitionSlotRefs.containsKey(currentTable));
+                List<SlotRef> refBaseTableSlotRefs = refBaseTablePartitionSlotRefs.get(currentTable);
+
+                ExpressionMapping expressionMapping =
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
+                                Lists.newArrayList());
+                for (int i = 0; i < refPartitionColRefs.size(); i++) {
+                    ColumnRefOperator refPartitionColRef = refPartitionColRefs.get(i);
+                    SlotRef refBaseTablePartitionExpr = refBaseTableSlotRefs.get(i);
+                    expressionMapping.put(refBaseTablePartitionExpr, refPartitionColRef);
+                }
+                AnalyzeState analyzeState = new AnalyzeState();
+                Scope scope = new Scope(RelationId.anonymous(), new RelationFields(
+                        refBaseTable.getBaseSchema().stream()
+                                .map(col -> new Field(col.getName(),
+                                        col.getType(), refTableName, null))
+                                .collect(Collectors.toList())));
+                List<ScalarOperator> externalPredicates = Lists.newArrayList();
+                for (PartitionKey partitionKey : partitionKeys) {
+                    List<LiteralExpr> literalExprs = partitionKey.getKeys();
+                    Preconditions.checkState(literalExprs.size() == refBaseTablePartitionCols.size());
+                    List<ScalarOperator> predicates = Lists.newArrayList();
+                    for (int i = 0; i < literalExprs.size(); i++) {
+                        Column mvColumn = mvPartitionCols.get(i);
+                        LiteralExpr literalExpr = literalExprs.get(i);
+                        Column refColumn = refBaseTablePartitionCols.get(i);
+                        ColumnRefOperator refPartitionColRef = refPartitionColRefs.get(i);
+                        ConstantOperator expectPartitionVal =
+                                (ConstantOperator) SqlToScalarOperatorTranslator.translate(literalExpr);
+                        if (!mvColumn.isGeneratedColumn()) {
+                            ScalarOperator eq = new BinaryPredicateOperator(BinaryType.EQ, refPartitionColRef,
+                                    expectPartitionVal);
+                            predicates.add(eq);
+                        } else {
+                            SlotRef refBaseTablePartitionExpr = refBaseTableSlotRefs.get(i);
+                            Expr predicateExpr = getIcebergTablePartitionPredicateExpr((IcebergTable) currentTable,
+                                    refColumn.getName(), refBaseTablePartitionExpr, literalExpr);
+                            ExpressionAnalyzer.analyzeExpression(predicateExpr, analyzeState, scope, ConnectContext.get());
+                            ScalarOperator predicate = SqlToScalarOperatorTranslator.translate(predicateExpr, expressionMapping,
+                                    optimizerContext.getColumnRefFactory());
+                            predicates.add(predicate);
+                        }
+                        externalPredicates.add(Utils.compoundAnd(predicates));
+                    }
+                    externalExtraPredicate = Utils.compoundOr(externalPredicates);
+                }
+            }
+        }
+        if (externalExtraPredicate == null) {
+            List<ScalarOperator> refPartitionColRefs = refBaseTablePartitionCols
+                    .stream()
+                    .map(col -> scanOperator.getColumnReference(col))
+                    .collect(Collectors.toList());
+            externalExtraPredicate = convertPartitionKeysToListPredicate(refPartitionColRefs, partitionKeys);
+        }
+        Preconditions.checkState(externalExtraPredicate != null);
+        externalExtraPredicate.setRedundant(true);
+        ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), externalExtraPredicate);
+        builder.setPredicate(finalPredicate);
+
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         return builder.build();
     }
 

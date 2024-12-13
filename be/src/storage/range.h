@@ -489,11 +489,26 @@ inline std::ostream& operator<<(std::ostream& os, const SparseRange<T>& range) {
 
 template class Range<>;
 template class Range<ordinal_t>;
+<<<<<<< HEAD
 
 template class SparseRange<>;
 template class SparseRange<ordinal_t>;
 
 template class SparseRangeIterator<>;
 template class SparseRangeIterator<ordinal_t>;
+=======
+using RowIdRange = Range<rowid_t>;
+using OridinalRange = Range<ordinal_t>;
+
+template class SparseRange<>;
+template class SparseRange<ordinal_t>;
+using RowIdSparseRange = SparseRange<rowid_t>;
+using OridinalSparseRange = SparseRange<ordinal_t>;
+
+template class SparseRangeIterator<>;
+template class SparseRangeIterator<ordinal_t>;
+using RowIdSparseRangeIterator = SparseRangeIterator<rowid_t>;
+using OrdinalSparseRangeIterator = SparseRangeIterator<ordinal_t>;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 } // namespace starrocks

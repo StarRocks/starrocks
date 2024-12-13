@@ -122,6 +122,7 @@ bool OlapScanOperator::has_shared_chunk_source() const {
     return _ctx->has_active_input();
 }
 
+<<<<<<< HEAD
 size_t OlapScanOperator::num_buffered_chunks() const {
     return _ctx->get_chunk_buffer().size(_driver_sequence);
 }
@@ -160,6 +161,10 @@ bool OlapScanOperator::is_buffer_full() const {
 
 void OlapScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
+=======
+BalancedChunkBuffer& OlapScanOperator::get_chunk_buffer() const {
+    return _ctx->get_chunk_buffer();
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 }
 
 } // namespace starrocks::pipeline

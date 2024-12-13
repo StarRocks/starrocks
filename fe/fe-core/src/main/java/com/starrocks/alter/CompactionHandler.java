@@ -23,7 +23,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
@@ -52,7 +56,11 @@ public class CompactionHandler  {
 
     // add synchronized to avoid process 2 or more stmts at same time
     public static synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db,
+<<<<<<< HEAD
                                                      OlapTable olapTable) throws UserException {
+=======
+                                                     OlapTable olapTable) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         Preconditions.checkState(alterClause instanceof CompactionClause);
@@ -95,7 +103,11 @@ public class CompactionHandler  {
                     }
                 }
             } catch (Exception e) {
+<<<<<<< HEAD
                 throw new UserException(e.getMessage());
+=======
+                throw new StarRocksException(e.getMessage());
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
             } finally {
                 locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             }

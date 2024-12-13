@@ -15,7 +15,11 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
@@ -51,7 +55,11 @@ public class QueryQueueManager {
         return QueryQueueManager.SingletonHolder.INSTANCE;
     }
 
+<<<<<<< HEAD
     public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws UserException, InterruptedException {
+=======
+    public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws StarRocksException, InterruptedException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         SlotProvider slotProvider = coord.getJobSpec().getSlotProvider();
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
@@ -77,7 +85,11 @@ public class QueryQueueManager {
                             GlobalVariable.getQueryQueuePendingTimeoutSecond(),
                             GlobalVariable.QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
                     ResourceGroupMetricMgr.increaseTimeoutQueuedQuery(context, 1L);
+<<<<<<< HEAD
                     throw new UserException(errMsg);
+=======
+                    throw new StarRocksException(errMsg);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
 
                 Future<LogicalSlot> slotFuture = slotProvider.requireSlot(slotRequirement);
@@ -90,7 +102,11 @@ public class QueryQueueManager {
                     if (e.getCause() instanceof RecoverableException) {
                         continue;
                     }
+<<<<<<< HEAD
                     throw new UserException("Failed to allocate resource to query: " + e.getMessage(), e);
+=======
+                    throw new StarRocksException("Failed to allocate resource to query: " + e.getMessage(), e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 } catch (TimeoutException e) {
                     // Check timeout in the next loop.
                 } catch (CancellationException e) {
@@ -99,7 +115,11 @@ public class QueryQueueManager {
                     if (slotRequirement.isPendingTimeout()) {
                         continue;
                     }
+<<<<<<< HEAD
                     throw new UserException("Cancelled", e);
+=======
+                    throw new StarRocksException("Cancelled", e);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
                 }
             }
         } finally {
@@ -112,11 +132,19 @@ public class QueryQueueManager {
         }
     }
 
+<<<<<<< HEAD
     private LogicalSlot createSlot(ConnectContext context, DefaultCoordinator coord) throws UserException {
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
         Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(selfIpAndPort.first);
         if (frontend == null) {
             throw new UserException("cannot get frontend from the local host: " + selfIpAndPort.first);
+=======
+    private LogicalSlot createSlot(ConnectContext context, DefaultCoordinator coord) throws StarRocksException {
+        Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(selfIpAndPort.first);
+        if (frontend == null) {
+            throw new StarRocksException("cannot get frontend from the local host: " + selfIpAndPort.first);
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         }
 
         TWorkGroup group = coord.getJobSpec().getResourceGroup();

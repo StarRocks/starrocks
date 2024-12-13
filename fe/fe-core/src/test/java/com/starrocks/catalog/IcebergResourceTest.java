@@ -16,7 +16,11 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -42,7 +46,11 @@ public class IcebergResourceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String name = "iceberg0";
         String type = "iceberg";
         String catalogType = "HIVE";
@@ -72,7 +80,11 @@ public class IcebergResourceTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
+=======
+    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr) throws StarRocksException {
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";

@@ -17,7 +17,10 @@
 #include "column/chunk.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/InternalService_types.h"
+<<<<<<< HEAD
 #include "gen_cpp/doris_internal_service.pb.h"
+=======
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/runtime_state.h"
 #include "util/reusable_closure.h"

@@ -41,8 +41,13 @@ DIAGNOSTIC_POP
 #include <exec/arrow_type_traits.h>
 
 #include "column/column_helper.h"
+<<<<<<< HEAD
 #include "runtime/large_int_value.h"
 #include "storage/tablet_schema_helper.h"
+=======
+#include "storage/tablet_schema_helper.h"
+#include "types/large_int_value.h"
+>>>>>>> 291562ac40 ([Enhancement] Optimize the Chunk destructor (#53898))
 
 namespace starrocks {
 struct StarRocksColumnToArrowTest : public testing::Test {};
