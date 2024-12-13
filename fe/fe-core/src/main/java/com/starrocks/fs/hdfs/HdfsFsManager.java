@@ -1203,7 +1203,7 @@ public class HdfsFsManager {
         Path pathPattern = new Path(pathUri.getPath());
         try {
             FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
-            return Lists.newArrayList(files);
+            return files != null ? Lists.newArrayList(files) : Lists.newArrayList();
         } catch (FileNotFoundException e) {
             LOG.info("file not found: " + path, e);
             throw new StarRocksException("file not found: " + path, e);
