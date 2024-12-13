@@ -292,7 +292,7 @@ TEST_F(ChunkPredicateBuilderTest, in_runtime_filter_has_null) {
 
     _expr_containers.emplace_back(BoxedExprContext(expr_ctx));
 
-    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, expr_containers, true);
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> pred_builder(_opts, _expr_containers, true);
     auto ret = pred_builder.parse_conjuncts();
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value());
