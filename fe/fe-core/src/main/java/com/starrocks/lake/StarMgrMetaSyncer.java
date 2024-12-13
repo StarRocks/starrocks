@@ -95,6 +95,19 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     public static void dropTabletAndDeleteShard(List<Long> shardIds, StarOSAgent starOSAgent) {
         Preconditions.checkNotNull(starOSAgent);
+        // a short-cut in case actual data deletion is too slow
+        if (Config.meta_sync_force_delete_shard_meta) {
+            try {
+                if (!shardIds.isEmpty()) {
+                    Set<Long> shards = new HashSet<Long>(shardIds);
+                    starOSAgent.deleteShards(shards);
+                }
+            } catch (DdlException e) {
+                LOG.warn("failed to delete shard from starMgr");
+            }
+            return;
+        }
+
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
         // group shards by be
         for (long shardId : shardIds) {
@@ -123,7 +136,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             DeleteTabletRequest request = new DeleteTabletRequest();
             request.tabletIds = Lists.newArrayList(shards);
 
-            boolean forceDelete = Config.meta_sync_force_delete_shard_meta;
             try {
                 LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
                 DeleteTabletResponse response = lakeService.deleteTablet(request).get();
@@ -132,7 +144,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     LOG.info("Fail to delete tablet. StatusCode: {}, failedTablets: {}", stCode, response.failedTablets);
 
                     // ignore INVALID_ARGUMENT error, treat it as success
-                    if (stCode != TStatusCode.INVALID_ARGUMENT && !forceDelete) {
+                    if (stCode != TStatusCode.INVALID_ARGUMENT) {
                         response.failedTablets.forEach(shards::remove);
                     }
                 }
@@ -140,9 +152,6 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 LOG.error(e.getMessage(), e);
                 if (e instanceof InterruptedException) {
                     Thread.currentThread().interrupt();
-                }
-                if (!forceDelete) {
-                    continue;
                 }
             }
 
