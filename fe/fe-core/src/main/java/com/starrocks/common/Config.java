@@ -2012,6 +2012,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
+    @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
+    public static long statistic_predicate_columns_persist_interval_sec = 60L;
+
+    @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
+            "columns after this period")
+    public static long statistic_predicate_columns_ttl_hours = 24;
+
     /**
      * Num of thread to handle statistic collect(analyze command)
      */

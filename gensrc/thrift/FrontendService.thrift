@@ -1751,6 +1751,53 @@ struct TFeMemoryRes {
     1: optional list<TFeMemoryItem> items
 }
 
+struct TColumnStatsUsageReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TColumnStatsUsage {
+    1: optional string table_catalog
+    2: optional string table_database
+    3: optional string table_name
+    4: optional string column_name
+    5: optional string usage
+    6: optional i64 last_used
+    7: optional i64 created
+}
+
+struct TColumnStatsUsageRes {
+    1: optional list<TColumnStatsUsage> items;
+}
+
+struct TAnalyzeStatusReq {
+    1: optional TAuthInfo auth_info
+    2: optional string table_catalog
+    3: optional string table_database
+    4: optional string table_name
+}
+
+struct TAnalyzeStatusItem {
+    1: optional string id
+    2: optional string catalog_name
+    3: optional string database_name
+    4: optional string table_name
+    5: optional string columns
+    6: optional string type
+    7: optional string schedule
+    8: optional string status
+    9: optional string start_time
+    10: optional string end_time
+    11: optional string properties
+    12: optional string reason
+}
+
+struct TAnalyzeStatusRes {
+    1: optional list<TAnalyzeStatusItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1984,6 +2031,11 @@ service FrontendService {
 
     // sys.fe_memory_usage
     TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
+
+    // information_schema.column_stats_uage
+    TColumnStatsUsageRes getColumnStatsUsage(1: TColumnStatsUsageReq request)
+    // information_schema.analyze_status
+    TAnalyzeStatusRes getAnalyzeStatus(1: TAnalyzeStatusReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)

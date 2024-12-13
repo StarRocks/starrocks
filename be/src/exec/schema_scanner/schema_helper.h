@@ -110,6 +110,12 @@ public:
     static Status get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
                                       TGetPartitionsMetaResponse* var_result);
 
+    static Status get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
+                                         TColumnStatsUsageRes* var_result);
+
+    static Status get_analyze_status(const SchemaScannerState& state, const TAnalyzeStatusReq& var_params,
+                                     TAnalyzeStatusRes* var_result);
+
 private:
     static Status _call_rpc(const SchemaScannerState& state,
                             std::function<void(ClientConnection<FrontendServiceClient>&)> callback);

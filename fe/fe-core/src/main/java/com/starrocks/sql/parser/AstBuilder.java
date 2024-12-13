@@ -2614,16 +2614,37 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return columns;
     }
 
+    private Pair<Boolean, List<Expr>> visitAnalyzeColumnClause(StarRocksParser.AnalyzeColumnClauseContext context) {
+        boolean usePredicateColumns = false;
+        List<Expr> columns = Lists.newArrayList();
+        if (context == null) {
+            // noop
+        } else if (context instanceof StarRocksParser.AllColumnsContext) {
+            // noop
+        } else if (context instanceof StarRocksParser.PredicateColumnsContext) {
+            usePredicateColumns = true;
+        } else if (context instanceof StarRocksParser.RegularColumnsContext) {
+            StarRocksParser.RegularColumnsContext regularColumnsContext =
+                    (StarRocksParser.RegularColumnsContext) context;
+            List<QualifiedName> names = regularColumnsContext.qualifiedName().stream()
+                    .map(this::getQualifiedName).collect(toList());
+            columns = getAnalyzeColumns(names);
+        } else {
+            Preconditions.checkState(false, "unreachable");
+        }
+
+        return Pair.create(usePredicateColumns, columns);
+    }
+
     @Override
     public ParseNode visitAnalyzeStatement(StarRocksParser.AnalyzeStatementContext context) {
-        List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
-                collect(toList());
-        TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
-        List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
         PartitionNames partitionNames = null;
         if (context.partitionNames() != null) {
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
+
+        TableName tableName = qualifiedNameToTableName(getQualifiedName(context.tableName().qualifiedName()));
+        Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2633,9 +2654,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        return new AnalyzeStmt(tableName, columns, partitionNames, properties,
+        return new AnalyzeStmt(tableName, analyzeColumn.second, partitionNames, properties,
                 context.SAMPLE() != null,
                 context.ASYNC() != null,
+                analyzeColumn.first,
                 new AnalyzeBasicDesc(), createPos(context));
     }
 
@@ -2729,10 +2751,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private AnalyzeStmt histogramStatement(StarRocksParser.HistogramStatementContext context) {
-        List<QualifiedName> qualifiedNames = context.qualifiedName().stream().map(this::getQualifiedName).
-                collect(toList());
-        TableName tableName = qualifiedNameToTableName(qualifiedNames.get(0));
-        List<Expr> columns = getAnalyzeColumns(qualifiedNames.subList(1, qualifiedNames.size()));
+        TableName tableName = getTableName(context.tableName().qualifiedName());
+
+        Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2749,8 +2770,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             bucket = Config.histogram_buckets_size;
         }
 
-        return new AnalyzeStmt(tableName, columns, null, properties, true,
-                false, new AnalyzeHistogramDesc(bucket), createPos(context));
+        return new AnalyzeStmt(tableName, analyzeColumn.second, null, properties, true,
+                false, analyzeColumn.first, new AnalyzeHistogramDesc(bucket), createPos(context));
     }
 
     @Override
@@ -8091,6 +8112,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     private String getIdentifierName(StarRocksParser.IdentifierContext context) {
         return ((Identifier) visit(context)).getValue();
+    }
+
+    private TableName getTableName(StarRocksParser.QualifiedNameContext context) {
+        return qualifiedNameToTableName(getQualifiedName(context));
     }
 
     private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {

@@ -70,6 +70,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.information.AnalyzeStatusSystemTable;
+import com.starrocks.catalog.system.information.ColumnStatsUsageSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.catalog.system.information.TasksSystemTable;
 import com.starrocks.catalog.system.sys.GrantsTo;
@@ -176,6 +178,8 @@ import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
 import com.starrocks.thrift.TAllocateAutoIncrementIdResult;
+import com.starrocks.thrift.TAnalyzeStatusReq;
+import com.starrocks.thrift.TAnalyzeStatusRes;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -183,6 +187,8 @@ import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
+import com.starrocks.thrift.TColumnStatsUsageReq;
+import com.starrocks.thrift.TColumnStatsUsageRes;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
 import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TCreatePartitionRequest;
@@ -707,6 +713,41 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
         return SysFeMemoryUsage.listFeMemoryUsage(request);
+    }
+
+    @Override
+    public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+
+        TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
+        result.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return result;
+    }
+
+    @Override
+    public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
+        TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
+        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        res.getItems().removeIf(item -> {
+            try {
+                Authorizer.checkTableAction(currentUser, null, item.getDatabase_name(), item.getTable_name(),
+                        PrivilegeType.SELECT);
+                return false;
+            } catch (AccessDeniedException e) {
+                return true;
+            }
+        });
+
+        return res;
     }
 
     // list MaterializedView table match pattern

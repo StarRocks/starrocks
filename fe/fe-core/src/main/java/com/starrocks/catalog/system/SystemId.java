@@ -118,4 +118,8 @@ public class SystemId {
     // Remain for other datacache manage table
 
     public static final long PARTITIONS_META_ID = 140L;
+
+    // ====================  Statistics  =========================== //
+    public static final long COLUMN_STATS_USAGE = 150L;
+    public static final long ANALYZE_STATUS = 151L;
 }
