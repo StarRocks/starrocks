@@ -73,6 +73,7 @@ import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -622,6 +623,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         if (span != null) {
             span.end();
         }
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("schema change job finished: {}", jobId);
     }
 
@@ -967,6 +969,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         writeEditLog(this);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("Lake schema change job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;

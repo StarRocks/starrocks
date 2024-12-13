@@ -102,6 +102,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -733,6 +734,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.finishedTimeMs = System.currentTimeMillis();
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("rollup job finished: {}", jobId);
         this.span.end();
     }
@@ -793,6 +795,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;

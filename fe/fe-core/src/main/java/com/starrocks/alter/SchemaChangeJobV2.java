@@ -108,6 +108,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -802,6 +803,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
         EditLog.waitInfinity(journalTask);
 
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
     }
@@ -972,6 +974,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.finishedTimeMs = System.currentTimeMillis();
         LOG.info("cancel {} job {}, err: {}", this.type, jobId, errMsg);
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         span.setStatus(StatusCode.ERROR, errMsg);
         span.end();
         return true;

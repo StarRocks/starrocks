@@ -206,6 +206,10 @@ public abstract class AlterJobV2 implements Writable {
         }
     }
 
+    public long getWarehouseId() {
+        return warehouseId;
+    }
+
     /**
      * The keyword 'synchronized' only protects 2 methods:
      * run() and cancel()

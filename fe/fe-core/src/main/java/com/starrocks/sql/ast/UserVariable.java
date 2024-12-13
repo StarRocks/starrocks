@@ -95,7 +95,7 @@ public class UserVariable extends SetListItem {
         QueryStatement queryStatement = ((Subquery) unevaluatedExpression).getQueryStatement();
         ExecPlan execPlan = StatementPlanner.plan(queryStatement,
                 ConnectContext.get(), TResultSinkType.MYSQL_PROTOCAL);
-        StmtExecutor executor = new StmtExecutor(ctx, queryStatement);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(ctx, queryStatement);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(ctx, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException(sqlResult.second.getErrorMsg());

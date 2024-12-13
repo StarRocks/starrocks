@@ -57,6 +57,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -411,6 +412,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         if (span != null) {
             span.end();
         }
+
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("roll up job finished: {}", jobId);
     }
 
@@ -446,6 +449,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
 
         writeEditLog(this);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
         LOG.info("Lake Rollup job canceled, jobId: {}, error: {}", jobId, errMsg);
 
         return true;

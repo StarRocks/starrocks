@@ -55,6 +55,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -714,5 +715,20 @@ public class StreamLoadMgr implements MemoryTrackable {
             readUnlock();
         }
         return latestTime;
+    }
+
+    public Map<Long, Long> getRunningTaskCount() {
+        readLock();
+        try {
+            Map<Long, Long> result = new HashMap<>();
+            for (StreamLoadTask task : idToStreamLoadTask.values()) {
+                if (!task.isFinalState()) {
+                    result.compute(task.getCurrentWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+                }
+            }
+            return result;
+        } finally {
+            readUnlock();
+        }
     }
 }
