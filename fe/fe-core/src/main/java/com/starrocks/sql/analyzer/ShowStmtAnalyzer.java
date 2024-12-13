@@ -139,7 +139,6 @@ public class ShowStmtAnalyzer {
             return visitShowTableStatement(node, context);
         }
 
-
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt node, ConnectContext context) {
             ShowTabletStmtAnalyzer.analyze(node, context);
