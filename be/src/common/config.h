@@ -82,7 +82,7 @@ CONF_String(mem_limit, "90%");
 
 // Enable the jemalloc tracker, which is responsible for reserving memory
 CONF_Bool(enable_jemalloc_memory_tracker, "true");
-// Consider part of jemalloc memory as fragmentation: ratio * (RSS-allocated-metadata)
+// Alpha number of jemalloc memory fragmentation ratio, should in range (0, 1)
 CONF_mDouble(jemalloc_fragmentation_ratio, "0.3");
 
 // The port heartbeat service used.
