@@ -18,6 +18,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.sql.common.PCell;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Map;
 import java.util.Set;
@@ -144,7 +145,11 @@ public class MvUpdateInfo {
         if (mvToRefreshType == MvToRefreshType.FULL) {
             return null;
         }
+<<<<<<< HEAD
         if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
+=======
+        if (CollectionUtils.sizeIsEmpty(mvPartToBasePartNames)) {
+>>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
             return null;
         }
         // MV's partition names to refresh are not only affected by the ref base table, but also other base tables.
