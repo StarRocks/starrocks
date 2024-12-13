@@ -42,10 +42,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.SystemInfoService;
 
-<<<<<<< HEAD
-=======
 import java.util.Arrays;
->>>>>>> 1e402d6f5a ([Enhancement] Add histogram metric and node info metric in json metric (#53735))
 import java.util.Collections;
 import java.util.List;
 
