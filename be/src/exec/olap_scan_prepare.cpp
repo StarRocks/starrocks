@@ -618,7 +618,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_join_runtime_filter(const SlotD
 
                 if (pred->null_in_set()) {
                     std::vector<BoxedExpr> containers;
-                    auto* new_in_pred = down_cast<VectorizedInConstPredicate<SlotType>*>(root_expr->clone(_opts.obj_pool));
+                    auto* new_in_pred =
+                            down_cast<VectorizedInConstPredicate<SlotType>*>(root_expr->clone(_opts.obj_pool));
                     const auto& childs = root_expr->children();
                     for (const auto& child : childs) {
                         new_in_pred->add_child(child);
